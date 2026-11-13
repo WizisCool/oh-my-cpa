@@ -403,18 +403,14 @@ func (h *Handler) readProviderItemsCore(ctx context.Context, client *management.
 				}
 			}
 			items := projectProviderItemsFromRaw(input.families, input.openAI, customNames, customWebsites, testModels)
-			h.enrichAndArchiveProviders(ctx, items)
-			return items, env.Version, !stillAnyFailure
+			complete := !stillAnyFailure
+			h.enrichAndArchiveProviders(ctx, items, complete)
+			return items, env.Version, complete
 		}
 	}
 	items, known := h.readProviderItemsUpstreamWithStatus(ctx, client)
-	h.enrichAndArchiveProviders(ctx, items)
+	h.enrichAndArchiveProviders(ctx, items, known)
 	return items, 0, known
-}
-
-func (h *Handler) readProviderItemsUpstream(ctx context.Context, client *management.Client) []ProviderItemDTO {
-	items, _ := h.readProviderItemsUpstreamWithStatus(ctx, client)
-	return items
 }
 
 func (h *Handler) readProviderItemsUpstreamWithStatus(ctx context.Context, client *management.Client) ([]ProviderItemDTO, bool) {

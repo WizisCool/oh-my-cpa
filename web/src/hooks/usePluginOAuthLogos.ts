@@ -63,6 +63,6 @@ export function usePluginProviderOwnership(providerKeys: readonly (string | unde
   });
   return {
     isOwned: isPluginOwnedInDirectory(query.data, providerKeys),
-    isUnknown: isEnabled && !query.data,
+    isUnknown: isEnabled && (!query.data || !query.data.catalog_status.plugins_known),
   };
 }

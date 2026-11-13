@@ -83,10 +83,27 @@ function matchesArchivedFileName(archivedName: string, rawResourceName: string):
   if (!cleanArchived || !cleanRaw) return false;
   if (cleanArchived === cleanRaw) return true;
   if (!cleanArchived.includes(ACCOUNT_MASK)) return false;
-  const segments = cleanArchived
-    .split(ACCOUNT_MASK)
-    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  return new RegExp(`^${segments.join('.+')}$`, 'iu').test(cleanRaw);
+  // Linear O(n) prefix/infix/suffix scan without dynamic RegExp compilation to eliminate ReDoS risk.
+  const segments = cleanArchived.split(ACCOUNT_MASK);
+  const lowerRaw = cleanRaw.toLowerCase();
+  const lowerSegs = segments.map((seg) => seg.toLowerCase());
+  const first = lowerSegs[0];
+  if (!lowerRaw.startsWith(first)) return false;
+  if (lowerSegs.length === 1) return lowerRaw.length === first.length;
+  const last = lowerSegs[lowerSegs.length - 1];
+  if (!lowerRaw.endsWith(last)) return false;
+  const rawEnd = lowerRaw.length - last.length;
+  let pos = first.length;
+  for (let i = 1; i < lowerSegs.length - 1; i++) {
+    const seg = lowerSegs[i];
+    // Each ACCOUNT_MASK placeholder stands for at least one masked character (`pos + 1`).
+    const minIdx = pos + 1;
+    if (minIdx > rawEnd) return false;
+    const found = seg ? lowerRaw.indexOf(seg, minIdx) : minIdx;
+    if (found < 0 || found + seg.length > rawEnd) return false;
+    pos = found + seg.length;
+  }
+  return rawEnd >= pos + 1;
 }
 
 /**
@@ -538,7 +555,12 @@ export function resolveProviderInfo(
   // read and does not claim the record - a provider someone deleted, or a request the console
   // never configured. It is only unproven when the catalog could not be read at all: then the
   // name printed is a placeholder until the read settles, and an export must not save it.
-  const recorded = resolveRecordedProviderMark(event.provider || '', providerName, sources);
+  // Conflicting live claims must never borrow archived icons.
+  const recorded = resolveRecordedProviderMark(
+    event.provider || '',
+    providerName,
+    lookup.kind === 'ambiguous' ? { ...sources, archivedProviderIcons: undefined } : sources,
+  );
 
   return {
     isOAuth: false,

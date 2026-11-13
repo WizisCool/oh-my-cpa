@@ -1888,6 +1888,7 @@ test('archived providers and credentials preserve names, custom marks, portals, 
     archive,
   );
   assert.equal(conflictedResolved.title, 'openai-compatible-inception');
+  assert.notEqual(conflictedResolved.iconId, 'custom:inc-mark', 'conflicting live providers must not borrow archived custom artwork');
 
   // Merged plugin logos preserve a null prototype so keys like "constructor" remain usable.
   const { buildMergedPluginLogos } = await import('../../src/hooks/useIdentityDirectory.ts');

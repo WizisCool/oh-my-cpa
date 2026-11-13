@@ -184,15 +184,22 @@ export function useIdentityDirectory() {
 
   const archivedProviderIcons = useMemo(() => {
     const map = new Map<string, string>();
+    const ambiguousKeys = new Set<string>();
     for (const item of data?.archived_providers ?? []) {
-      if (!item.is_ambiguous && item.icon_id?.trim()) {
-        map.set(item.provider_key.trim().toLowerCase(), item.icon_id.trim());
+      const key = item.provider_key.trim().toLowerCase();
+      if (!key) continue;
+      if (item.is_ambiguous) {
+        ambiguousKeys.add(key);
+      } else if (item.icon_id?.trim()) {
+        map.set(key, item.icon_id.trim());
       }
     }
     for (const item of data?.archived_credentials ?? []) {
       if (item.kind === 'apikey' && !item.is_ambiguous && item.icon_id?.trim() && item.provider_key?.trim()) {
         const key = item.provider_key.trim().toLowerCase();
-        if (!map.has(key)) map.set(key, item.icon_id.trim());
+        if (!ambiguousKeys.has(key) && !map.has(key)) {
+          map.set(key, item.icon_id.trim());
+        }
       }
     }
     return map;

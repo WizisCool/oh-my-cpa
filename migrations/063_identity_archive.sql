@@ -7,6 +7,8 @@
 -- console surface keep naming and drawing disabled, rotated, or deleted identities consistently
 -- without persisting raw secrets or unmasked account addresses.
 
+-- Note: ROWID is kept intentionally on archived_credentials so the read-only Agent SQL policy
+-- can redact `key_fingerprint` in-place while leaving sanitized presentation columns queryable.
 CREATE TABLE IF NOT EXISTS archived_credentials (
     instance_id TEXT NOT NULL REFERENCES cpa_instances(id) ON DELETE CASCADE,
     auth_index TEXT NOT NULL,
@@ -26,11 +28,7 @@ CREATE TABLE IF NOT EXISTS archived_credentials (
     is_ambiguous INTEGER NOT NULL DEFAULT 0 CHECK (is_ambiguous IN (0, 1)),
     updated_at_ms INTEGER NOT NULL,
     PRIMARY KEY (instance_id, auth_index)
-) WITHOUT ROWID;
-
-CREATE INDEX IF NOT EXISTS idx_archived_credentials_key_fp
-    ON archived_credentials(instance_id, key_fingerprint)
-    WHERE key_fingerprint <> '';
+);
 
 CREATE TABLE IF NOT EXISTS archived_providers (
     instance_id TEXT NOT NULL REFERENCES cpa_instances(id) ON DELETE CASCADE,

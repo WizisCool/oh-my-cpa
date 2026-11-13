@@ -565,4 +565,40 @@ test('insights label resolver handles deleted OAuth credentials, deleted OpenAI-
     t: (key) => key,
   });
   assert.equal(ambiguousLabels.label('credential', 'idx-inception-1'), 'idx-inception-1');
+
+  // Comparison rows (previous_rows) also participate in provider claim attribution and conflict detection.
+  const compareConflictCube = decodeInsightsCube({
+    ...rawCube,
+    dims: {
+      ...rawCube.dims,
+      providers: ['codex', 'claude'],
+      credentials: [
+        ...rawCube.dims.credentials,
+        { auth_index: 'eeee5555ffff6666', auth_type: 'oauth' },
+      ],
+    },
+    rows: [
+      [0, 0, 0, 0, 0, 2, 5, 0, 500, 0, 0, 0, 0, 0, 500, 400, 0, 0, 500_000, 5, 5],
+    ],
+    previous_rows: [
+      [-1, 0, 0, 0, 1, 2, 3, 0, 300, 0, 0, 0, 0, 0, 300, 200, 0, 0, 300_000, 3, 3],
+      [-1, 0, 0, 0, 1, 3, 2, 0, 200, 0, 0, 0, 0, 0, 200, 100, 0, 0, 200_000, 2, 2],
+    ],
+  });
+  const compareLabels = createInsightsLabelResolver({
+    cube: compareConflictCube,
+    credentialFiles: new Map(),
+    configuredProviders: [],
+    t: (key) => key,
+  });
+  assert.equal(
+    compareLabels.label('credential', 'cccc3333dddd4444'),
+    '#cccc3333',
+    'conflicting providers across current and previous windows drop provider attribution',
+  );
+  assert.equal(
+    compareLabels.label('credential', 'eeee5555ffff6666'),
+    'Claude (#eeee5555)',
+    'credential present only in comparison window still resolves its unambiguous provider',
+  );
 });

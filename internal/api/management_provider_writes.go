@@ -261,8 +261,8 @@ func gatedProviderListWrite[T any](
 	// auth_indexes and new custom names/icons) immediately so subsequent reads do not race.
 	if client, clientErr := h.capabilityClient(ctx); clientErr == nil {
 		refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), providerPostWriteRefreshTimeout)
-		items := h.readProviderItemsUpstream(refreshCtx, client)
-		h.enrichAndArchiveProviders(refreshCtx, items)
+		items, known := h.readProviderItemsUpstreamWithStatus(refreshCtx, client)
+		h.enrichAndArchiveProviders(refreshCtx, items, known)
 		cancel()
 	}
 	return nil

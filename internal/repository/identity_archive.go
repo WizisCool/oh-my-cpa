@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -147,6 +148,12 @@ func (r *Repository) UpsertArchivedCredentials(ctx context.Context, instanceID s
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	conflictGuard := `(archived_credentials.is_ambiguous = 1
+		OR excluded.is_ambiguous = 1
+		OR archived_credentials.kind <> excluded.kind
+		OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
+		OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key))`
+
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO archived_credentials (
 			instance_id, auth_index, kind, provider_key, oauth_provider, provider_family,
@@ -154,125 +161,70 @@ func (r *Repository) UpsertArchivedCredentials(ctx context.Context, instanceID s
 			masked_account, key_mask, key_fingerprint, is_ambiguous, updated_at_ms
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (instance_id, auth_index) DO UPDATE SET
-			is_ambiguous = CASE
-				WHEN excluded.is_ambiguous = 1
-					OR archived_credentials.kind <> excluded.kind
-					OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
-					OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key)
-				THEN 1
-				ELSE 0
-			END,
-			kind = excluded.kind,
+			is_ambiguous = CASE WHEN `+conflictGuard+` THEN 1 ELSE 0 END,
+			kind = CASE WHEN `+conflictGuard+` THEN archived_credentials.kind ELSE excluded.kind END,
 			provider_key = CASE
-				WHEN excluded.is_ambiguous = 1
-					OR archived_credentials.kind <> excluded.kind
-					OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
-					OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key)
-				THEN ''
+				WHEN `+conflictGuard+` THEN ''
 				WHEN excluded.provider_key <> '' THEN excluded.provider_key
 				ELSE archived_credentials.provider_key
 			END,
 			oauth_provider = CASE
-				WHEN excluded.is_ambiguous = 1
-					OR archived_credentials.kind <> excluded.kind
-					OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
-					OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key)
-				THEN ''
+				WHEN `+conflictGuard+` THEN ''
 				WHEN excluded.kind = 'oauth' THEN excluded.oauth_provider
 				ELSE ''
 			END,
 			provider_family = CASE
-				WHEN excluded.is_ambiguous = 1
-					OR archived_credentials.kind <> excluded.kind
-					OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
-					OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key)
-				THEN ''
+				WHEN `+conflictGuard+` THEN ''
 				WHEN excluded.provider_family <> '' THEN excluded.provider_family
 				ELSE archived_credentials.provider_family
 			END,
 			provider_name = CASE
-				WHEN excluded.is_ambiguous = 1
-					OR archived_credentials.kind <> excluded.kind
-					OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
-					OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key)
-				THEN ''
+				WHEN `+conflictGuard+` THEN ''
 				WHEN excluded.kind = 'apikey' THEN excluded.provider_name
 				ELSE ''
 			END,
 			upstream_name = CASE
-				WHEN excluded.is_ambiguous = 1
-					OR archived_credentials.kind <> excluded.kind
-					OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
-					OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key)
-				THEN ''
+				WHEN `+conflictGuard+` THEN ''
 				WHEN excluded.kind = 'apikey' AND excluded.upstream_name <> '' THEN excluded.upstream_name
 				WHEN excluded.kind = 'apikey' THEN archived_credentials.upstream_name
 				ELSE ''
 			END,
 			base_url = CASE
-				WHEN excluded.is_ambiguous = 1
-					OR archived_credentials.kind <> excluded.kind
-					OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
-					OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key)
-				THEN ''
+				WHEN `+conflictGuard+` THEN ''
 				WHEN excluded.kind = 'apikey' AND excluded.base_url <> '' THEN excluded.base_url
 				WHEN excluded.kind = 'apikey' THEN archived_credentials.base_url
 				ELSE ''
 			END,
 			icon_id = CASE
-				WHEN excluded.is_ambiguous = 1
-					OR archived_credentials.kind <> excluded.kind
-					OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
-					OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key)
-				THEN ''
+				WHEN `+conflictGuard+` THEN ''
 				WHEN excluded.kind = 'apikey' THEN excluded.icon_id
 				ELSE ''
 			END,
 			file_name = CASE
-				WHEN excluded.is_ambiguous = 1
-					OR archived_credentials.kind <> excluded.kind
-					OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
-					OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key)
-				THEN ''
+				WHEN `+conflictGuard+` THEN ''
 				WHEN excluded.kind = 'oauth' AND excluded.file_name <> '' THEN excluded.file_name
 				WHEN excluded.kind = 'oauth' THEN archived_credentials.file_name
 				ELSE ''
 			END,
 			display_name = CASE
-				WHEN excluded.is_ambiguous = 1
-					OR archived_credentials.kind <> excluded.kind
-					OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
-					OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key)
-				THEN ''
+				WHEN `+conflictGuard+` THEN ''
 				WHEN excluded.kind = 'oauth' THEN excluded.display_name
 				ELSE ''
 			END,
 			masked_account = CASE
-				WHEN excluded.is_ambiguous = 1
-					OR archived_credentials.kind <> excluded.kind
-					OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
-					OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key)
-				THEN ''
+				WHEN `+conflictGuard+` THEN ''
 				WHEN excluded.kind = 'oauth' AND excluded.masked_account <> '' THEN excluded.masked_account
 				WHEN excluded.kind = 'oauth' THEN archived_credentials.masked_account
 				ELSE ''
 			END,
 			key_mask = CASE
-				WHEN excluded.is_ambiguous = 1
-					OR archived_credentials.kind <> excluded.kind
-					OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
-					OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key)
-				THEN ''
+				WHEN `+conflictGuard+` THEN ''
 				WHEN excluded.kind = 'apikey' AND excluded.key_mask <> '' THEN excluded.key_mask
 				WHEN excluded.kind = 'apikey' THEN archived_credentials.key_mask
 				ELSE ''
 			END,
 			key_fingerprint = CASE
-				WHEN excluded.is_ambiguous = 1
-					OR archived_credentials.kind <> excluded.kind
-					OR (archived_credentials.provider_family <> '' AND excluded.provider_family <> '' AND archived_credentials.provider_family <> excluded.provider_family)
-					OR (archived_credentials.provider_key <> '' AND excluded.provider_key <> '' AND archived_credentials.provider_key <> excluded.provider_key)
-				THEN ''
+				WHEN `+conflictGuard+` THEN ''
 				WHEN excluded.kind = 'apikey' AND excluded.key_fingerprint <> '' THEN excluded.key_fingerprint
 				WHEN excluded.kind = 'apikey' THEN archived_credentials.key_fingerprint
 				ELSE ''
@@ -326,22 +278,46 @@ func (r *Repository) UpsertArchivedProviders(ctx context.Context, instanceID str
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	provConflictGuard := `(archived_providers.is_ambiguous = 1
+		OR excluded.is_ambiguous = 1
+		OR archived_providers.kind <> excluded.kind)`
+
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO archived_providers (
 			instance_id, provider_key, kind, name, upstream_name, family,
 			base_url, icon_id, logo, is_multi_portal, is_plugin_owned, is_ambiguous, updated_at_ms
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (instance_id, provider_key) DO UPDATE SET
-			kind = excluded.kind,
-			name = CASE WHEN excluded.name <> '' THEN excluded.name ELSE archived_providers.name END,
-			upstream_name = CASE WHEN excluded.upstream_name <> '' THEN excluded.upstream_name ELSE archived_providers.upstream_name END,
-			family = CASE WHEN excluded.family <> '' THEN excluded.family ELSE archived_providers.family END,
-			base_url = CASE WHEN excluded.base_url <> '' THEN excluded.base_url ELSE archived_providers.base_url END,
-			icon_id = excluded.icon_id,
-			logo = CASE WHEN excluded.logo <> '' THEN excluded.logo ELSE archived_providers.logo END,
-			is_multi_portal = excluded.is_multi_portal,
-			is_plugin_owned = excluded.is_plugin_owned,
-			is_ambiguous = excluded.is_ambiguous,
+			is_ambiguous = CASE WHEN `+provConflictGuard+` THEN 1 ELSE 0 END,
+			kind = CASE WHEN `+provConflictGuard+` THEN archived_providers.kind ELSE excluded.kind END,
+			name = CASE
+				WHEN `+provConflictGuard+` THEN ''
+				WHEN excluded.name <> '' THEN excluded.name
+				ELSE archived_providers.name
+			END,
+			upstream_name = CASE
+				WHEN `+provConflictGuard+` THEN ''
+				WHEN excluded.upstream_name <> '' THEN excluded.upstream_name
+				ELSE archived_providers.upstream_name
+			END,
+			family = CASE
+				WHEN `+provConflictGuard+` THEN ''
+				WHEN excluded.family <> '' THEN excluded.family
+				ELSE archived_providers.family
+			END,
+			base_url = CASE
+				WHEN `+provConflictGuard+` THEN ''
+				WHEN excluded.base_url <> '' THEN excluded.base_url
+				ELSE archived_providers.base_url
+			END,
+			icon_id = CASE WHEN `+provConflictGuard+` THEN '' ELSE excluded.icon_id END,
+			logo = CASE
+				WHEN `+provConflictGuard+` THEN ''
+				WHEN excluded.logo <> '' THEN excluded.logo
+				ELSE archived_providers.logo
+			END,
+			is_multi_portal = CASE WHEN `+provConflictGuard+` THEN 0 ELSE excluded.is_multi_portal END,
+			is_plugin_owned = CASE WHEN `+provConflictGuard+` THEN 0 ELSE excluded.is_plugin_owned END,
 			updated_at_ms = excluded.updated_at_ms
 	`)
 	if err != nil {
@@ -378,14 +354,16 @@ func (r *Repository) UpsertArchivedProviders(ctx context.Context, instanceID str
 }
 
 // ResolveArchivedAuthIndexesByFingerprints maps keyed-HMAC provider key fingerprints
-// back to their unambiguous runtime auth_index so disabled OpenAI-compatible
-// providers (for which CPA omits auth-index) retain traffic and key attribution.
+// back to all verified runtime auth_index generations belonging to that exact provider
+// identity (ordered newest first) so disabled OpenAI-compatible providers retain both
+// current and prior-generation traffic/key attribution across repeated disable/re-enable
+// cycles while still refusing competing claims from distinct provider identities.
 func (r *Repository) ResolveArchivedAuthIndexesByFingerprints(
 	ctx context.Context,
 	instanceID string,
 	fingerprints []string,
-) (map[string]string, error) {
-	result := make(map[string]string)
+) (map[string][]string, error) {
+	result := make(map[string][]string)
 	if r == nil || r.SQL() == nil || strings.TrimSpace(instanceID) == "" || len(fingerprints) == 0 {
 		return result, nil
 	}
@@ -405,6 +383,11 @@ func (r *Repository) ResolveArchivedAuthIndexesByFingerprints(
 	if len(unique) == 0 {
 		return result, nil
 	}
+	type fpIdentity struct {
+		family      string
+		providerKey string
+	}
+	identities := make(map[string]fpIdentity)
 	ambiguous := make(map[string]bool)
 	for start := 0; start < len(unique); start += maxSQLiteParameters {
 		chunk := unique[start:min(start+maxSQLiteParameters, len(unique))]
@@ -415,16 +398,17 @@ func (r *Repository) ResolveArchivedAuthIndexesByFingerprints(
 		}
 		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(chunk)), ",")
 		rows, err := r.SQL().QueryContext(ctx, `
-			SELECT key_fingerprint, auth_index, is_ambiguous
+			SELECT key_fingerprint, auth_index, provider_family, provider_key, is_ambiguous
 			FROM archived_credentials
-			WHERE instance_id = ? AND kind = 'apikey' AND key_fingerprint IN (`+placeholders+`)`, args...)
+			WHERE instance_id = ? AND kind = 'apikey' AND key_fingerprint IN (`+placeholders+`)
+			ORDER BY updated_at_ms DESC, auth_index DESC`, args...)
 		if err != nil {
 			return nil, fmt.Errorf("query archived key fingerprints: %w", err)
 		}
 		for rows.Next() {
-			var fp, authIndex string
+			var fp, authIndex, family, providerKey string
 			var isAmb int
-			if errScan := rows.Scan(&fp, &authIndex, &isAmb); errScan != nil {
+			if errScan := rows.Scan(&fp, &authIndex, &family, &providerKey, &isAmb); errScan != nil {
 				rows.Close()
 				return nil, fmt.Errorf("scan archived key fingerprint: %w", errScan)
 			}
@@ -433,12 +417,16 @@ func (r *Repository) ResolveArchivedAuthIndexesByFingerprints(
 				ambiguous[fp] = true
 				continue
 			}
-			if existing, exists := result[fp]; exists && existing != authIndex {
+			ident := fpIdentity{family: family, providerKey: providerKey}
+			if prev, exists := identities[fp]; exists && prev != ident {
 				delete(result, fp)
 				ambiguous[fp] = true
 				continue
 			}
-			result[fp] = authIndex
+			identities[fp] = ident
+			if !slices.Contains(result[fp], authIndex) {
+				result[fp] = append(result[fp], authIndex)
+			}
 		}
 		errRows := rows.Err()
 		rows.Close()

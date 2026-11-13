@@ -68,7 +68,7 @@ export function createInsightsLabelResolver(input: InsightsLabelResolverInput): 
 
   const cubeCredentialProviders = new Map<string, string>();
   if (cube) {
-    for (const row of cube.rows) {
+    for (const row of [...cube.rows, ...cube.previous]) {
       const credIdx = cube.values.credential[row.dims[4]] ?? '';
       const provKey = cube.values.provider[row.dims[3]] ?? '';
       if (!credIdx || !provKey) continue;

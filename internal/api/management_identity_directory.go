@@ -167,9 +167,15 @@ func (h *Handler) publishStateSync(scopes ...string) {
 }
 
 // enrichAndArchiveProviders recovers auth_indexes omitted by CPA on disabled
-// OpenAI-compatible providers via keyed-HMAC fingerprints, then persists the
-// sanitized presentation archive whenever observations change.
-func (h *Handler) enrichAndArchiveProviders(ctx context.Context, items []ProviderItemDTO) {
+// OpenAI-compatible providers via keyed-HMAC fingerprints, and persists the
+// sanitized presentation archive only when the provider catalog read is complete.
+func (h *Handler) enrichAndArchiveProviders(ctx context.Context, items []ProviderItemDTO, catalogComplete bool) {
+	if !catalogComplete {
+		if h != nil && h.repo != nil && len(items) > 0 {
+			h.recoverDisabledProviderAuthIndexes(ctx, items)
+		}
+		return
+	}
 	_ = h.enrichAndArchiveProvidersStrict(ctx, items)
 }
 
@@ -222,20 +228,29 @@ func (h *Handler) recoverDisabledProviderAuthIndexes(ctx context.Context, items 
 		if fpCountsInLive[p.fp] > 1 {
 			continue
 		}
-		recoveredIdx := strings.TrimSpace(resolved[p.fp])
-		if recoveredIdx == "" {
+		recoveredList := resolved[p.fp]
+		if len(recoveredList) == 0 {
 			continue
 		}
-		items[p.itemIdx].runtimeKeys[p.keyIdx].authIndex = recoveredIdx
-		already := false
-		for _, existing := range items[p.itemIdx].AuthIndexes {
-			if existing == recoveredIdx {
-				already = true
-				break
-			}
+		latestIdx := strings.TrimSpace(recoveredList[0])
+		if latestIdx != "" {
+			items[p.itemIdx].runtimeKeys[p.keyIdx].authIndex = latestIdx
 		}
-		if !already {
-			items[p.itemIdx].AuthIndexes = append(items[p.itemIdx].AuthIndexes, recoveredIdx)
+		for _, rawIdx := range recoveredList {
+			recoveredIdx := strings.TrimSpace(rawIdx)
+			if recoveredIdx == "" {
+				continue
+			}
+			already := false
+			for _, existing := range items[p.itemIdx].AuthIndexes {
+				if existing == recoveredIdx {
+					already = true
+					break
+				}
+			}
+			if !already {
+				items[p.itemIdx].AuthIndexes = append(items[p.itemIdx].AuthIndexes, recoveredIdx)
+			}
 		}
 	}
 }
@@ -633,21 +648,42 @@ func (h *Handler) snapshotProvidersBeforeDelete(ctx context.Context, client *man
 			}
 		}
 		if !hasRequired {
-			// Verify whether the target family itself is readable (for example, legitimately empty)
-			// or unreachable so deletion never proceeds past an unreadable snapshot.
+			// Verify whether the target family itself is readable (and legitimately empty)
+			// or whether it has entries that failed during the initial snapshot read.
+			targetCount := 0
 			if strings.EqualFold(requiredFamily, openAICompatibilityFamily) {
-				if _, err := client.EditableOpenAICompatibility(ctx); err != nil {
-					if _, runErr := client.OpenAICompatibility(ctx); runErr != nil {
-						return err
-					}
+				if entries, err := client.EditableOpenAICompatibility(ctx); err == nil {
+					targetCount = len(entries)
+				} else if runtime, runErr := client.OpenAICompatibility(ctx); runErr == nil {
+					targetCount = len(runtime.Entries)
+				} else {
+					return runErr
 				}
 			} else if spec, ok := lookupProviderConfigFamily(requiredFamily); ok {
-				if _, err := client.EditableConfigAPIKeys(ctx, spec.Family); err != nil {
-					if _, runErr := client.ConfigAPIKeys(ctx, spec.Family); runErr != nil {
-						return err
-					}
+				if entries, err := client.EditableConfigAPIKeys(ctx, spec.Family); err == nil {
+					targetCount = len(entries)
+				} else if runtimeEntries, runErr := client.ConfigAPIKeys(ctx, spec.Family); runErr == nil {
+					targetCount = len(runtimeEntries)
+				} else {
+					return runErr
 				}
 			}
+			if targetCount > 0 {
+				return newProviderWriteErrorWithCode(
+					http.StatusInternalServerError,
+					"failed to archive provider metadata before deletion",
+					providerArchiveFailedCode,
+				)
+			}
+		}
+		// Even when the target family was present in items, another family failed during
+		// the snapshot read: refuse archiving an incomplete catalog as unambiguous.
+		if len(items) > 0 {
+			return newProviderWriteErrorWithCode(
+				http.StatusInternalServerError,
+				"failed to archive provider metadata before deletion",
+				providerArchiveFailedCode,
+			)
 		}
 	}
 	if len(items) == 0 {

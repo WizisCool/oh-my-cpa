@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -347,6 +348,29 @@ func TestIdentityDirectoryLifecycleAcrossToggleDisableAndDeletion(t *testing.T) 
 		t.Fatalf("expected refreshed runtime auth_index idx-inception-v2, got %+v", dirReenabled.Providers[0].AuthIndexes)
 	}
 
+	// Step 3b: Disable Inception a second time. Fingerprint recovery must restore BOTH
+	// generations (idx-inception-v2 and idx-inception-v1) rather than treating same-key
+	// index rotation as a cross-provider conflict!
+	toggleOffAgainResp, toggleOffAgainBody := doJSON(t, client, http.MethodPatch,
+		server.URL+"/omc/api/v1/management/providers/status",
+		`{"family":"openai-compatibility","index":0,"disabled":true,"expected_name":"inception"}`,
+	)
+	if toggleOffAgainResp.StatusCode != http.StatusOK {
+		t.Fatalf("PATCH second disable status = %d: %s", toggleOffAgainResp.StatusCode, toggleOffAgainBody)
+	}
+	if err := handler.stateCoord.FlushNow(context.Background()); err != nil {
+		t.Fatalf("FlushNow second disable failed: %v", err)
+	}
+	_ = awaitStateSync()
+	dirDisabledTwice := readDirectory()
+	if !dirDisabledTwice.Providers[0].Disabled {
+		t.Fatal("expected provider to be disabled on second toggle")
+	}
+	if !slices.Contains(dirDisabledTwice.Providers[0].AuthIndexes, "idx-inception-v2") ||
+		!slices.Contains(dirDisabledTwice.Providers[0].AuthIndexes, "idx-inception-v1") {
+		t.Fatalf("second disable lost multi-generation recovered auth_indexes: %+v", dirDisabledTwice.Providers[0].AuthIndexes)
+	}
+
 	// Step 4: Delete Inception provider, OAuth credential file, and Qoder plugin.
 	delProvResp, delProvBody := doJSON(t, client, http.MethodDelete, server.URL+"/omc/api/v1/management/providers/openai-compat-0", "")
 	if delProvResp.StatusCode != http.StatusOK {
@@ -544,6 +568,18 @@ func TestProviderDeletionArchiveRefusalAndNamespaceIsolation(t *testing.T) {
 		ProviderFamily: "openai-compatibility",
 		ProviderName:   "Relay",
 		KeyMask:        "test-key••••••••1111",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A third observation for the colliding auth_index must NOT clear the sticky conflict tombstone!
+	if err := repo.UpsertArchivedCredentials(context.Background(), "default", []repository.ArchivedCredential{{
+		AuthIndex:      "shared-idx",
+		Kind:           "apikey",
+		ProviderKey:    "openai-compatible-relay",
+		ProviderFamily: "openai-compatibility",
+		ProviderName:   "Relay Retry",
+		KeyMask:        "test-key••••••••2222",
 	}}); err != nil {
 		t.Fatal(err)
 	}

@@ -185,7 +185,7 @@ export const RequestExportDialog: React.FC<RequestExportDialogProps> = ({
       (mark) => resolveMarkArtworks(mark, {
         baseURL: import.meta.env.BASE_URL, customIconURL: api.customIconURL, customIcons,
         isPluginOwned: isPluginOwnedInDirectory(identityDir.data, mark.providerKeys ?? []),
-        isOwnershipUnknown: Boolean(mark.providerKeys?.length) && !identityDir.data,
+        isOwnershipUnknown: Boolean(mark.providerKeys?.length) && (!identityDir.data || !identityDir.data.catalog_status.plugins_known),
       }),
       imagesRef.current,
       () => paintRef.current === paint,
