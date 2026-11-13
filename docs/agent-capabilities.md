@@ -66,18 +66,17 @@ proof that the data stayed local.
 
 Quota windows retain upstream percentages, native amounts and reset times. Recorded
 `usage.cost_nanos` is API-equivalent consumption; compare `usage.priced_requests`
-with `usage.requests` to identify a partial cost total. Optional `model_forecasts` describe
-remaining cost, requests and tokens for directly observed models and service tiers, with
-sample request counts, consumed percentage and observation times; when
-`sample_priced_requests` is below `sample_requests`, `remaining_cost_nanos` extrapolates
-only the priced subset rather than the full sample. Forecasts are
-conditioned on similar request sizes and cache rates in the current window;
-`rounding_error_percent` bounds meter rounding, not future workload variation.
-`forecast_unavailable` identifies missing or unattributable evidence.
+with `usage.requests` to identify a partial cost total. Optional `capacity` estimates the
+100% full-window cost, requests and tokens by scaling recorded window consumption by the
+upstream used percentage (`basis: "current_window"`), or carries forward the last
+completed same-plan cycle's estimate (`basis: "previous_window"`) while a fresh window has
+no usage yet. When `sample_priced_requests` is below `sample_requests`, `cost_nanos`
+extrapolates the priced subset. `capacity_unavailable` names missing boundary, reading or
+traffic evidence.
 
-The console, Agent and MCP share these projections. The existing
+The console, Agent and MCP share these projections. The
 `GET /api/v1/management/quota/{authIndex}/capacity?window=` details route returns
-recorded current/previous-cycle consumption and the same current-window forecasts.
+recorded current/previous-cycle consumption and the same full-window capacity estimate.
 
 ## Read-only SQL
 

@@ -538,14 +538,14 @@ func TestQueryCapacityUsage(t *testing.T) {
 	}
 	want := quota.WindowUsage{
 		FromMS: 1000, ToMS: 2000, Requests: 2, PricedRequests: 1,
-		Tokens: 150, PricedTokens: 100, CostNanos: 2_000,
+		Tokens: 150, CostNanos: 2_000,
 	}
 	if usage != want {
 		t.Fatalf("usage = %+v, want %+v", usage, want)
 	}
 
 	insert("crosses-start", "auth-1", 990, 20, 10, int64(100))
-	crossing, _, _, err := queryCapacityUsageSince(ctx, r.SQL(), "auth-1", window, 900, 1000, 2000)
+	crossing, _, err := r.QueryCapacityUsage(ctx, "auth-1", window, 1000, 2000)
 	if err != nil || crossing.Requests != 3 || crossing.Tokens != 160 {
 		t.Fatalf("cross-boundary completion = %+v, %v", crossing, err)
 	}
@@ -570,8 +570,8 @@ func TestQueryCapacityUsage(t *testing.T) {
 	if err != nil || canonReason != "" {
 		t.Fatalf("canonical QueryCapacityUsage failed: %v %q", err, canonReason)
 	}
-	if canonUsage.PromptTokens != 1200 || canonUsage.CachedTokens != 200 || !canonUsage.HasInputBounds || canonUsage.MinInputTokens != 1200 || canonUsage.MaxInputTokens != 1200 || canonUsage.CacheRate == nil || *canonUsage.CacheRate != 16.7 {
-		t.Fatalf("canonical independent-cache usage = %+v, want PromptTokens=1200 Min/MaxInput=1200 CachedTokens=200 CacheRate=16.7", canonUsage)
+	if canonUsage.PromptTokens != 1200 || canonUsage.CachedTokens != 200 || canonUsage.CacheRate == nil || *canonUsage.CacheRate != 16.7 {
+		t.Fatalf("canonical independent-cache usage = %+v, want PromptTokens=1200 CachedTokens=200 CacheRate=16.7", canonUsage)
 	}
 	empty, _, err := r.QueryCapacityUsage(ctx, "auth-none", window, 1000, 2000)
 	if err != nil || empty != (quota.WindowUsage{FromMS: 1000, ToMS: 2000}) {
@@ -767,12 +767,12 @@ func TestQuotaCapacityCycleEvidence(t *testing.T) {
 	insert("third", cycleStart+3*hour)
 	save(cycleStart+4*hour, 60, resetAtMS)
 	got := points()
-	if len(got) != 3 || got[0].Requests != 1 || got[1].Requests != 3 || got[2].Requests != 4 || got[2].Tokens != 400 {
-		t.Fatalf("points = %+v, want 1, 3 and 4 recorded requests", got)
+	if len(got) != 3 || got[0].Requests != 2 || got[1].Requests != 3 || got[2].Requests != 4 || got[2].Tokens != 400 {
+		t.Fatalf("points = %+v, want 2 (healed late arrival), 3 and 4 recorded requests", got)
 	}
 
-	if len(got[1].IntervalModels) != 1 || got[1].IntervalModels[0].Model != "gpt-6.1-sol" || got[1].IntervalModels[0].Requests != 1 || got[2].IntervalModels[0].Requests != 1 {
-		t.Fatalf("completed interval models were not frozen: %+v", got)
+	if got[2].CostNanos != 4000 {
+		t.Fatalf("cumulative cost was not preserved across retention: %+v", got[2])
 	}
 
 	// Later cycles keep the evidence of the last three.
@@ -786,7 +786,7 @@ func TestQuotaCapacityCycleEvidence(t *testing.T) {
 	}
 }
 
-func TestQuotaCapacityLateUsageInvalidatesModelSample(t *testing.T) {
+func TestQuotaCapacityHealsLateUsageAndFreezesAtExhaustion(t *testing.T) {
 	ctx := context.Background()
 	repo := usageTestRepository(t)
 	const hour = int64(3600 * 1000)
@@ -805,40 +805,80 @@ func TestQuotaCapacityLateUsageInvalidatesModelSample(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	insert := func(prefix, model string, atMS int64) {
+	insert := func(name, model string, atMS int64) {
 		t.Helper()
-		for index := range 5 {
-			if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO usage_events (instance_id, event_key, api_group_key, auth_index, model, timestamp_ms, created_at_ms, total_tokens)
-				VALUES ('default', ?, 'group', 'auth-late', ?, ?, ?, 100)`, fmt.Sprintf("%s-%d", prefix, index), model, atMS+int64(index), atMS); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-	forecasts := func(atMS int64) []quota.ModelQuotaForecast {
-		t.Helper()
-		cycles, err := repo.LoadCapacityCycles(ctx, "auth-late")
-		if err != nil {
+		if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO usage_events (instance_id, event_key, api_group_key, auth_index, model, timestamp_ms, created_at_ms, total_tokens, cost_nanos)
+			VALUES ('default', ?, 'group', 'auth-late', ?, ?, ?, 100, 1000)`, name, model, atMS, atMS); err != nil {
 			t.Fatal(err)
 		}
-		result, _ := quota.BuildModelForecasts(window, nil, atMS, cycles[key])
-		return result
 	}
-	save(start+hour, 0)
-	insert("observed", "gpt-6.1-sol", start+hour+1000)
+
+	// Snapshot arrives before usage ingestion flushes, then flat refresh heals the stored point.
+	save(start+hour, 10)
+	insert("late-1", "gpt-6.1-sol", start+hour-2000)
+	insert("late-2", "gpt-6.1-terra", start+hour-1000)
 	save(start+2*hour, 10)
-	if got := forecasts(start + 2*hour); len(got) != 1 {
-		t.Fatalf("initial model sample = %+v", got)
+
+	cycles, err := repo.LoadCapacityCycles(ctx, "auth-late")
+	if err != nil {
+		t.Fatal(err)
 	}
-	// Late traffic shows the earlier quota climb was shared by two models.
-	insert("late", "gpt-6.1-terra", start+hour+2000)
-	save(start+3*hour, 20)
-	if got := forecasts(start + 3*hour); len(got) != 0 {
-		t.Fatalf("late mixed-model traffic retained an incomplete sample: %+v", got)
+	window.UsedPercent = new(float64(10))
+	got, reason := quota.EstimateWindowCapacity(window, nil, start+2*hour, start+2*hour, nil, cycles[key])
+	if reason != "" || got == nil || got.Requests != 20 || got.Tokens != 2000 || got.CostNanos == nil || *got.CostNanos != 20_000 {
+		t.Fatalf("late mixed-model healing = %+v, reason = %q", got, reason)
 	}
-	insert("fresh", "gpt-6.1-sol", start+3*hour+1000)
-	save(start+4*hour, 30)
-	if got := forecasts(start + 4*hour); len(got) != 1 || got[0].SampleRequests != 5 || got[0].FromMS != start+3*hour {
-		t.Fatalf("fresh interval did not establish a new sample: %+v", got)
+
+	// Reaching 100% freezes the cycle point against post-exhaustion overflow while still healing pre-100% late arrivals, even after retention deletes older rows.
+	save(start+3*hour, 100)
+	if _, err := repo.SQL().ExecContext(ctx, `DELETE FROM usage_events WHERE event_key = 'late-1'`); err != nil {
+		t.Fatal(err)
+	}
+	insert("late-before-full", "gpt-6.1-sol", start+3*hour-500)
+	insert("overflow", "gpt-6.1-sol", start+3*hour+1000)
+	save(start+4*hour, 100)
+	cycles, err = repo.LoadCapacityCycles(ctx, "auth-late")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pts := cycles[key][0].Points
+	firstFullIdx := len(pts) - 2
+	if firstFullIdx < 0 || pts[firstFullIdx].ObservedAtMS != start+3*hour || pts[firstFullIdx].Requests != 3 || pts[len(pts)-1].Requests != 4 {
+		t.Fatalf("100%% cutoff or post-exhaustion checkpoint mismatch: %+v", pts)
+	}
+
+	// Unwatermarked / has_usage_gap legacy cycles refresh earlier reset baselines alongside the latest point so post-reset deltas stay exact.
+	legacyJSON := fmt.Sprintf(`[{"at":%d,"used":50,"requests":1,"priced":1,"tokens":100,"cost_nanos":1000},{"at":%d,"used":0,"requests":1,"priced":1,"tokens":100,"cost_nanos":1000},{"at":%d,"used":10,"requests":2,"priced":2,"tokens":200,"cost_nanos":2000,"usage_watermark_id":0,"has_usage_gap":true}]`, start+2*hour, start+3*hour, start+3*hour+1800*1000)
+	if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO quota_capacity_cycles (auth_index, window_key, cycle_reset_at_ms, period_hours, plan_type, plan_tier, points_json, updated_at_ms)
+		VALUES ('auth-legacy', ?, ?, 5, '', '', ?, ?)`, key, reset, legacyJSON, start+3*hour+1800*1000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO usage_events (instance_id, event_key, api_group_key, auth_index, model, timestamp_ms, created_at_ms, total_tokens, cost_nanos)
+		VALUES ('default', 'leg-pre-1', 'group', 'auth-legacy', 'gpt-6.1-sol', ?, ?, 100, 1000),
+		       ('default', 'leg-pre-2', 'group', 'auth-legacy', 'gpt-6.1-sol', ?, ?, 100, 1000),
+		       ('default', 'leg-post', 'group', 'auth-legacy', 'gpt-6.1-sol', ?, ?, 100, 1000)`,
+		start+hour, start+hour, start+2*hour+500, start+2*hour+500, start+3*hour+500, start+3*hour+500); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SaveQuotaSnapshot(ctx, QuotaSnapshotRecord{
+		AuthIndex: "auth-legacy", Provider: "codex", Status: "healthy",
+		WindowsJSON:  fmt.Sprintf(`[{"id":"five_hour","scope":"standard","used_percent":10,"reset_at_ms":%d,"period_hours":5,"reset_accuracy":"exact"}]`, reset),
+		ObservedAtMS: start + 4*hour,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	legacyCycles, err := repo.LoadCapacityCycles(ctx, "auth-legacy")
+	if err != nil || len(legacyCycles[key]) == 0 {
+		t.Fatalf("legacy cycles = %+v (err=%v)", legacyCycles[key], err)
+	}
+	lpts := legacyCycles[key][0].Points
+	if len(lpts) != 3 || lpts[1].Requests != 2 || lpts[2].Requests != 3 || lpts[2].HasUsageGap {
+		t.Fatalf("legacy reset baseline was not refreshed alongside final point: %+v", lpts)
+	}
+	legacyWin := window
+	legacyWin.UsedPercent = new(float64(10))
+	if capEst, reason := quota.EstimateWindowCapacity(legacyWin, nil, start+4*hour, start+4*hour, nil, legacyCycles[key]); reason != "" || capEst == nil || capEst.Requests != 10 {
+		t.Fatalf("legacy post-reset capacity = %+v, reason = %q, want 10 requests", capEst, reason)
 	}
 }
 
@@ -867,80 +907,5 @@ func TestQuotaCapacityCycleReplacesPlanMetadata(t *testing.T) {
 	stored := cycles["codex|five_hour|standard|"]
 	if len(stored) != 1 || stored[0].PlanType != "pro" || stored[0].PlanTier != "elite" || len(stored[0].Points) != 3 || stored[0].Points[2].UsedPercent != 20 {
 		t.Fatalf("same-reset plan replacement lost metadata or points: %+v", stored)
-	}
-}
-
-func TestQuotaCapacityLateUsageSurvivesFlatReadingsAndRetention(t *testing.T) {
-	for _, scenario := range []struct {
-		name         string
-		isFlat       bool
-		hasRetention bool
-	}{{"flat", true, false}, {"retention", false, true}, {"flat with retention", true, true}} {
-		t.Run(scenario.name, func(t *testing.T) {
-			ctx := context.Background()
-			repo := usageTestRepository(t)
-			const hour = int64(3600 * 1000)
-			reset := time.Now().UnixMilli() + hour
-			start := reset - 5*hour
-			window := quota.QuotaWindow{ID: "five_hour", Scope: "standard", ResetAtMS: &reset, PeriodHours: new(float64(5)), ResetAccuracy: "exact"}
-			save := func(atMS int64, percent float64) {
-				t.Helper()
-				window.UsedPercent = &percent
-				raw, err := json.Marshal([]quota.QuotaWindow{window})
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err := repo.SaveQuotaSnapshot(ctx, QuotaSnapshotRecord{AuthIndex: "auth-late", Provider: "codex", Status: "healthy", WindowsJSON: string(raw), ObservedAtMS: atMS}); err != nil {
-					t.Fatal(err)
-				}
-			}
-			insert := func(prefix, model string, count int, atMS int64) {
-				t.Helper()
-				for index := range count {
-					if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO usage_events (instance_id, event_key, api_group_key, auth_index, model, timestamp_ms, created_at_ms, total_tokens)
-						VALUES ('default', ?, 'group', 'auth-late', ?, ?, ?, 100)`, fmt.Sprintf("%s-%d", prefix, index), model, atMS+int64(index), atMS); err != nil {
-						t.Fatal(err)
-					}
-				}
-			}
-			save(start+hour, 0)
-			insert("observed", "gpt-6.1-sol", 10, start+hour+1000)
-			save(start+2*hour, 10)
-			if scenario.hasRetention {
-				if _, err := repo.SQL().ExecContext(ctx, `DELETE FROM usage_events WHERE event_key IN ('observed-0','observed-1','observed-2','observed-3','observed-4')`); err != nil {
-					t.Fatal(err)
-				}
-				insert("current", "gpt-6.1-sol", 5, start+2*hour+1000)
-			}
-			insert("late", "gpt-6.1-terra", 5, start+hour+2000)
-			used := 11.0
-			if scenario.isFlat {
-				used = 10
-			}
-			save(start+3*hour, used)
-			cycles, err := repo.LoadCapacityCycles(ctx, "auth-late")
-			if err != nil {
-				t.Fatal(err)
-			}
-			stored := cycles["codex|five_hour|standard|"]
-			if got, _ := quota.BuildModelForecasts(window, nil, start+3*hour, stored); len(got) != 0 {
-				t.Fatalf("incomplete attribution survived %s: %+v", scenario.name, got)
-			}
-			if scenario.isFlat && len(stored[0].Points) != 2 {
-				t.Fatalf("flat reading added evidence: %+v", stored[0].Points)
-			}
-			if !scenario.isFlat {
-				insert("clean", "gpt-6.1-sol", 5, start+3*hour+1000)
-				save(start+4*hour, 16)
-				cycles, err = repo.LoadCapacityCycles(ctx, "auth-late")
-				if err != nil {
-					t.Fatal(err)
-				}
-				window.UsedPercent = new(float64(16))
-				if got, reason := quota.BuildModelForecasts(window, nil, start+4*hour, cycles["codex|five_hour|standard|"]); reason != "" || len(got) != 1 || got[0].SampleRequests != 10 || got[0].SampleUsedPercent != 6 {
-					t.Fatalf("post-gap clean intervals = %+v, %q", got, reason)
-				}
-			}
-		})
 	}
 }

@@ -4,7 +4,7 @@ import { Meter } from '../../components/common/Meter';
 import { useT } from '../../i18n';
 import type { QuotaMetric } from '../../types/quota';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import { compactQuotaForecast } from '../quota/quotaCapacity';
+import { compactQuotaCapacity } from '../quota/quotaCapacity';
 import { QuotaCapacityButton, type QuotaCapacityOwner } from '../quota/QuotaCapacityButton';
 import { formatQuotaMetric, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown } from '../quota/quotaFormat';
 import { QUOTA_LOW_PERCENT, quotaRemainingStroke } from '../quota/quotaThresholds';
@@ -75,9 +75,9 @@ function QuotaReading({ cell, siblings, name, provider, isMuted, nowMS, owner }:
     && window.used_percent === 0
     && (window.remaining_percent ?? 100) === 100;
   const reset = isUnusedFullCodexWindow ? t('quota.duration_hours', { n: 5 }) : quotaResetCountdown(window, nowMS, t);
-  const forecastLabel = owner ? compactQuotaForecast(window, tokenStyle, t) : null;
+  const forecastLabel = owner ? compactQuotaCapacity(window, tokenStyle, t) : null;
   const hasForecast = Boolean(forecastLabel);
-  const hasDialogEvidence = Boolean(owner && (hasForecast || window.usage || window.forecast_unavailable));
+  const hasDialogEvidence = Boolean(owner && (hasForecast || window.usage || window.capacity_unavailable));
   const detailsLabel = forecastLabel ?? window.description;
   return (
     <div

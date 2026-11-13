@@ -1,7 +1,7 @@
 package quota
 
 import (
-	"reflect"
+	"math"
 	"testing"
 )
 
@@ -22,15 +22,25 @@ func capacityWindow(usedPercent float64) QuotaWindow {
 	}
 }
 
-// point is a reading at the given hour with the tokens recorded since the cycle
-// start; every request is priced at one nano per token.
-func point(hour, used float64, requests, tokens int64) CalibrationPoint {
-	return CalibrationPoint{ObservedAtMS: int64(hour * float64(hourMS)), UsedPercent: used, Requests: requests, PricedRequests: requests, Tokens: tokens, CostNanos: tokens}
+func point(hour, used float64, requests, tokens, costNanos int64) CalibrationPoint {
+	return CalibrationPoint{
+		ObservedAtMS:   int64(hour * float64(hourMS)),
+		UsedPercent:    used,
+		Requests:       requests,
+		PricedRequests: requests,
+		Tokens:         tokens,
+		PromptTokens:   tokens,
+		CostNanos:      costNanos,
+	}
 }
 
-// cycle is the five-hour cycle that capacityWindow reads, from 5h to 10h.
 func cycle(points ...CalibrationPoint) CycleCalibration {
-	return CycleCalibration{WindowKey: "codex|five_hour|standard|", CycleResetAtMS: 10 * hourMS, PeriodHours: 5, Points: points}
+	return CycleCalibration{
+		WindowKey:      "codex|five_hour|standard|",
+		CycleResetAtMS: 10 * hourMS,
+		PeriodHours:    5,
+		Points:         points,
+	}
 }
 
 func TestSupportsWindowCapacity(t *testing.T) {
@@ -46,8 +56,6 @@ func TestSupportsWindowCapacity(t *testing.T) {
 		{"claude model window", "claude", QuotaWindow{ID: "seven_day_sonnet", Scope: "model", Model: "claude-3-5-sonnet"}, true},
 		{"codex code review", "codex", QuotaWindow{ID: "code_review_5h", Kind: "custom", Scope: "code_review"}, false},
 		{"codex unrecognised period", "codex", QuotaWindow{ID: "primary", Kind: "custom", Scope: "standard"}, false},
-		// A free plan's own window is monthly, and it is estimated on the same terms as the
-		// five-hour and weekly windows beside it.
 		{"codex monthly window", "codex", QuotaWindow{ID: "monthly", Kind: "monthly", Scope: "standard"}, true},
 		{"antigravity standard window", "antigravity", QuotaWindow{ID: "five_hour", Kind: "five_hour", Scope: "standard"}, false},
 		{"antigravity group window", "antigravity", QuotaWindow{ID: "ag_g_b", Scope: "group"}, true},
@@ -67,233 +75,181 @@ func TestWindowCycleRange(t *testing.T) {
 	if reason != "" || fromMS != 5*hourMS || toMS != 7*hourMS {
 		t.Fatalf("range = [%d, %d) reason %q, want [5h, 7h) with no reason", fromMS, toMS, reason)
 	}
-
-	// The range ends at the observation even when the clock has moved on:
-	// later requests are not part of the share the observation reported.
 	if _, toMS, _ = WindowCycleRange(window, 6*hourMS, 9*hourMS); toMS != 6*hourMS {
 		t.Fatalf("range end = %d, want the observation at 6h", toMS)
 	}
-
 	if _, _, reason = WindowCycleRange(window, 7*hourMS, 10*hourMS); reason != CapacityReasonExpired {
 		t.Fatalf("reset at now: reason = %q, want expired", reason)
 	}
-
 	approximate := window
 	approximate.ResetAccuracy = "approximate"
 	if _, _, reason = WindowCycleRange(approximate, 7*hourMS, 8*hourMS); reason != "" {
 		t.Fatalf("approximate reset: reason = %q, want an initial estimate", reason)
 	}
-
 	noPeriod := window
 	noPeriod.PeriodHours = nil
 	if _, _, reason = WindowCycleRange(noPeriod, 7*hourMS, 8*hourMS); reason != CapacityReasonBoundaryUnknown {
 		t.Fatalf("missing period: reason = %q, want boundary_unknown", reason)
 	}
-
 	noReset := window
 	noReset.ResetAtMS = nil
 	if _, _, reason = WindowCycleRange(noReset, 7*hourMS, 8*hourMS); reason != CapacityReasonBoundaryUnknown {
 		t.Fatalf("missing reset: reason = %q, want boundary_unknown", reason)
 	}
-
-	// An observation older than the cycle it would be measured against leaves
-	// an empty range rather than a negative one.
 	if _, _, reason = WindowCycleRange(window, 4*hourMS, 8*hourMS); reason != CapacityReasonBoundaryUnknown {
 		t.Fatalf("observation before cycle: reason = %q, want boundary_unknown", reason)
 	}
 }
 
-func modelPoint(hour, used float64, models ...ModelCalibrationUsage) CalibrationPoint {
-	return CalibrationPoint{ObservedAtMS: int64(hour * float64(hourMS)), UsedPercent: used, IntervalModels: models}
+func TestEstimateWindowCapacityDirectScalingAndPricingModes(t *testing.T) {
+	// Immediate prediction on the very first reading at 1% with 2 requests (no multi-snapshot or 5% gate).
+	usage := WindowUsage{
+		Requests:       2,
+		PricedRequests: 2,
+		Tokens:         6_400,
+		PromptTokens:   5_000,
+		CachedTokens:   4_000,
+		CostNanos:      20_000_000,
+	}
+	got, reason := EstimateWindowCapacity(capacityWindow(1), nil, 7*hourMS, 7*hourMS, &usage, nil)
+	if reason != "" || got == nil {
+		t.Fatalf("1%% single-reading capacity = %+v, reason = %q", got, reason)
+	}
+	if got.Basis != CapacityBasisCurrentWindow || got.Requests != 200 || got.Tokens != 640_000 || got.CostNanos == nil || *got.CostNanos != 2_000_000_000 || got.CacheRate == nil || *got.CacheRate != 80 {
+		t.Fatalf("unexpected 1%% scaled capacity = %+v", got)
+	}
+
+	// Partially priced window still estimates dollar cost while preserving sample_priced_requests < sample_requests.
+	partial := WindowUsage{Requests: 10, PricedRequests: 8, Tokens: 100_000, CostNanos: 4_000_000_000}
+	gotPartial, reason := EstimateWindowCapacity(capacityWindow(25), nil, 7*hourMS, 7*hourMS, &partial, nil)
+	if reason != "" || gotPartial == nil || gotPartial.CostNanos == nil || *gotPartial.CostNanos != 16_000_000_000 || gotPartial.SampleRequests != 10 || gotPartial.SamplePricedRequests != 8 {
+		t.Fatalf("partial priced capacity = %+v, reason = %q", gotPartial, reason)
+	}
+
+	// Completely unpriced window still predicts tokens and requests without fabricating a dollar cost.
+	unpriced := WindowUsage{Requests: 3, PricedRequests: 0, Tokens: 150_000, CostNanos: 0}
+	gotUnpriced, reason := EstimateWindowCapacity(capacityWindow(10), nil, 7*hourMS, 7*hourMS, &unpriced, nil)
+	if reason != "" || gotUnpriced == nil || gotUnpriced.CostNanos != nil || gotUnpriced.Tokens != 1_500_000 || gotUnpriced.Requests != 30 {
+		t.Fatalf("unpriced capacity = %+v, reason = %q", gotUnpriced, reason)
+	}
+
+	// Pathological sub-epsilon float noise falls back safely instead of overflowing int64.
+	if bad := ScaleWindowCapacity(CapacityBasisCurrentWindow, math.SmallestNonzeroFloat64, usage); bad != nil {
+		t.Fatalf("expected nil for sub-epsilon usedPercent, got %+v", bad)
+	}
 }
 
-func modelSample(model string, requests, tokens int64) ModelCalibrationUsage {
-	return ModelCalibrationUsage{Model: model, Requests: requests, Tokens: tokens, PromptTokens: tokens}
+func TestEstimateWindowCapacityPreviousWindowFallbackAndPlanGuard(t *testing.T) {
+	prior := CycleCalibration{
+		WindowKey:      "codex|five_hour|standard|",
+		CycleResetAtMS: 5 * hourMS,
+		PeriodHours:    5,
+		PlanType:       "pro",
+		PlanTier:       "elite",
+		Points:         []CalibrationPoint{point(4, 50, 40, 2_000_000, 15_000_000_000)},
+	}
+	plan := &QuotaPlan{PlanType: "pro", Tier: "elite"}
+
+	// Fresh 0% window with zero current traffic carries forward the scaled 100% capacity from the prior cycle.
+	got, reason := EstimateWindowCapacity(capacityWindow(0), plan, 6*hourMS, 6*hourMS, &WindowUsage{}, []CycleCalibration{prior})
+	if reason != "" || got == nil || got.Basis != CapacityBasisPreviousWindow || got.Requests != 80 || got.Tokens != 4_000_000 || got.CostNanos == nil || *got.CostNanos != 30_000_000_000 {
+		t.Fatalf("previous-window fallback = %+v, reason = %q", got, reason)
+	}
+
+	// Different plan rejects the prior cycle's capacity.
+	if got, reason := EstimateWindowCapacity(capacityWindow(0), &QuotaPlan{PlanType: "plus", Tier: "standard"}, 6*hourMS, 6*hourMS, &WindowUsage{}, []CycleCalibration{prior}); got != nil || reason != CapacityReasonLowUsage {
+		t.Fatalf("cross-plan fallback = %+v, reason = %q", got, reason)
+	}
 }
 
-func TestModelQuotaForecastUsesEachModelsOwnObservedConsumption(t *testing.T) {
-	stored := cycle(
-		modelPoint(6, 10),
-		modelPoint(7, 20, modelSample("gemini-4-hydrogen", 10, 1000)),
-		modelPoint(8, 40, modelSample("gemini-4-carbon", 10, 1000)),
+func TestEstimateWindowCapacityMidCycleResetAndExhaustionOverflow(t *testing.T) {
+	// Mid-cycle reset at 7h (80% -> 0%): at 0% falls back to pre-reset $20 capacity; at 10% uses post-reset delta.
+	withReset := cycle(
+		point(6, 80, 80, 800_000, 16_000_000_000),
+		point(7, 0, 80, 800_000, 16_000_000_000),
 	)
-	forecasts, reason := BuildModelForecasts(capacityWindow(40), nil, 9*hourMS, []CycleCalibration{stored})
-	if reason != "" || len(forecasts) != 2 {
-		t.Fatalf("forecasts = %+v, reason = %q", forecasts, reason)
+	atReset, reason := EstimateWindowCapacity(capacityWindow(0), nil, 7*hourMS, 7*hourMS, nil, []CycleCalibration{withReset})
+	if reason != "" || atReset == nil || atReset.Basis != CapacityBasisPreviousWindow || atReset.CostNanos == nil || *atReset.CostNanos != 20_000_000_000 {
+		t.Fatalf("immediately after mid-cycle reset = %+v, reason = %q", atReset, reason)
 	}
-	if forecasts[0].Model != "gemini-4-carbon" || forecasts[0].RemainingRequests != 30 || forecasts[0].RemainingTokens != 3000 || forecasts[0].SampleUsedPercent != 20 {
-		t.Fatalf("carbon = %+v", forecasts[0])
+
+	postReset := cycle(
+		point(6, 80, 80, 800_000, 16_000_000_000),
+		point(7, 0, 80, 800_000, 16_000_000_000),
+		point(8, 10, 90, 900_000, 18_000_000_000),
+	)
+	afterClimb, reason := EstimateWindowCapacity(capacityWindow(10), nil, 8*hourMS, 8*hourMS, nil, []CycleCalibration{postReset})
+	if reason != "" || afterClimb == nil || afterClimb.Basis != CapacityBasisCurrentWindow || afterClimb.Requests != 100 || afterClimb.CostNanos == nil || *afterClimb.CostNanos != 20_000_000_000 {
+		t.Fatalf("post-reset climb = %+v, reason = %q", afterClimb, reason)
 	}
-	if forecasts[1].Model != "gemini-4-hydrogen" || forecasts[1].RemainingRequests != 60 || forecasts[1].RemainingTokens != 6000 || forecasts[1].SampleRequests != 10 {
-		t.Fatalf("hydrogen = %+v", forecasts[1])
+
+	// Once a window reaches 100%, subsequent extra-usage overflow does not inflate window capacity—even across a sub-tolerance 99.5% rounding wobble.
+	withOverflow := cycle(point(7, 100, 50, 1_000_000, 10_000_000_000))
+	overflowLive := WindowUsage{Requests: 150, PricedRequests: 150, Tokens: 3_000_000, CostNanos: 30_000_000_000}
+	for _, readingPercent := range []float64{100, 99.5} {
+		capped, reason := EstimateWindowCapacity(capacityWindow(readingPercent), nil, 8*hourMS, 8*hourMS, &overflowLive, []CycleCalibration{withOverflow})
+		if reason != "" || capped == nil || capped.Tokens != 1_000_000 || capped.CostNanos == nil || *capped.CostNanos != 10_000_000_000 {
+			t.Fatalf("%.1f%% exhaustion overflow leaked into capacity = %+v, reason = %q", readingPercent, capped, reason)
+		}
+		if cutoff, _, ok := ExhaustionCutoffPoint(capacityWindow(readingPercent), nil, 8*hourMS, []CycleCalibration{withOverflow}); !ok || cutoff.ObservedAtMS != 7*hourMS {
+			t.Fatalf("%.1f%% cutoff dropped = (%+v, %v)", readingPercent, cutoff, ok)
+		}
 	}
-	// Recorded API-equivalent amounts are usage facts, not forecast inputs.
-	stored.Points[1].CostNanos = 100_000_000_000
-	repeated, _ := BuildModelForecasts(capacityWindow(40), nil, 9*hourMS, []CycleCalibration{stored})
-	if !reflect.DeepEqual(repeated, forecasts) {
-		t.Fatalf("a price edit changed a quota forecast: %+v", repeated)
+
+	// Completed cycle with a post-100% sub-tolerance dip (99.5%) still carries pre-exhaustion capacity into the next cycle.
+	priorWithDip := CycleCalibration{
+		WindowKey: "codex|five_hour|standard|", CycleResetAtMS: 5 * hourMS, PeriodHours: 5,
+		Points: []CalibrationPoint{point(3, 100, 50, 1_000_000, 10_000_000_000), point(4, 99.5, 150, 3_000_000, 30_000_000_000)},
+	}
+	nextCycleCap, reason := EstimateWindowCapacity(capacityWindow(0), nil, 6*hourMS, 6*hourMS, nil, []CycleCalibration{priorWithDip})
+	if reason != "" || nextCycleCap == nil || nextCycleCap.Requests != 50 || nextCycleCap.Tokens != 1_000_000 {
+		t.Fatalf("completed cycle with 99.5%% dip leaked overflow = %+v, reason = %q", nextCycleCap, reason)
 	}
 }
 
-func TestModelQuotaForecastRequiresAttributableIntervals(t *testing.T) {
-	hydrogen := modelSample("gemini-4-hydrogen", 10, 1000)
-	carbon := modelSample("gemini-4-carbon", 10, 1000)
-	mixedTier := hydrogen
-	mixedTier.HasMixedServiceTiers = true
-	cases := []struct {
-		name   string
-		stored CycleCalibration
-	}{
-		{"one reading is not a zero baseline", cycle(modelPoint(8, 50, hydrogen))},
-		{"legacy aggregate", cycle(point(6, 10, 1, 100), point(8, 50, 10, 1000))},
-		{"mixed models", cycle(modelPoint(6, 10), modelPoint(8, 50, hydrogen, carbon))},
-		{"unclassified traffic", cycle(modelPoint(6, 10), modelPoint(8, 50, hydrogen, modelSample("private-alias", 1, 100)))},
-		{"mixed service tiers", cycle(modelPoint(6, 10), modelPoint(8, 50, mixedTier))},
-		{"too few requests", cycle(modelPoint(6, 10), modelPoint(8, 50, modelSample("gemini-4-hydrogen", 4, 400)))},
-		{"too little quota", cycle(modelPoint(6, 10), modelPoint(8, 11, hydrogen))},
-		{"external-only use", cycle(modelPoint(6, 10), modelPoint(8, 50))},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			forecasts, reason := BuildModelForecasts(capacityWindow(tc.stored.Points[len(tc.stored.Points)-1].UsedPercent), nil, 9*hourMS, []CycleCalibration{tc.stored})
-			if len(forecasts) != 0 || reason == "" {
-				t.Fatalf("forecasts = %+v, reason = %q", forecasts, reason)
-			}
-		})
-	}
-	// New pure intervals can establish evidence after an unattributable climb.
-	stored := cycle(modelPoint(6, 10), modelPoint(7, 30, hydrogen, carbon), modelPoint(8, 40, hydrogen))
-	forecasts, reason := BuildModelForecasts(capacityWindow(40), nil, 9*hourMS, []CycleCalibration{stored})
-	if reason != "" || len(forecasts) != 1 || forecasts[0].FromMS != 7*hourMS {
-		t.Fatalf("forecasts = %+v, reason = %q", forecasts, reason)
-	}
-}
-
-func TestModelQuotaForecastResetsWorkloadAndCycleEvidence(t *testing.T) {
-	sample := modelSample("gpt-6.1-sol", 5, 1000)
-	cached := sample
-	cached.CachedTokens = 800
-	stored := cycle(modelPoint(6, 0), modelPoint(7, 10, sample), modelPoint(8, 11, cached))
-	if forecasts, _ := BuildModelForecasts(capacityWindow(12), nil, 9*hourMS, []CycleCalibration{stored}); len(forecasts) != 0 {
-		t.Fatalf("changed cache mix reused old sample: %+v", forecasts)
-	}
-	larger := sample
-	larger.Tokens, larger.PromptTokens = 10000, 10000
-	stored.Points[2] = modelPoint(8, 11, larger)
-	if forecasts, _ := BuildModelForecasts(capacityWindow(12), nil, 9*hourMS, []CycleCalibration{stored}); len(forecasts) != 0 {
-		t.Fatalf("changed request size reused old sample: %+v", forecasts)
-	}
-	stored.Points = append(stored.Points, modelPoint(8.5, 0), modelPoint(9, 5, sample))
-	forecasts, reason := BuildModelForecasts(capacityWindow(5), nil, 9*hourMS, []CycleCalibration{stored})
-	if reason != "" || len(forecasts) != 1 || forecasts[0].SampleRequests != 5 || forecasts[0].FromMS != int64(8.5*float64(hourMS)) {
-		t.Fatalf("reset retained old evidence: %+v, %q", forecasts, reason)
-	}
-	if forecasts, _ := BuildModelForecasts(capacityWindow(5), &QuotaPlan{PlanType: "new-plan"}, 9*hourMS, []CycleCalibration{stored}); len(forecasts) != 0 {
-		t.Fatalf("plan changed: %+v", forecasts)
-	}
-	prior := stored
-	prior.CycleResetAtMS -= 5 * hourMS
-	if forecasts, _ := BuildModelForecasts(capacityWindow(5), nil, 9*hourMS, []CycleCalibration{prior}); len(forecasts) != 0 {
-		t.Fatalf("previous cycle supplied a forecast: %+v", forecasts)
-	}
-}
-
-func TestModelQuotaForecastAccumulatesOnlyContinuousCompatibleIntervals(t *testing.T) {
-	sample := modelSample("gpt-6.1-sol", 3, 300)
-	stored := cycle(modelPoint(6, 20), modelPoint(7, 23, sample), modelPoint(8, 26, sample))
-	forecasts, reason := BuildModelForecasts(capacityWindow(26), nil, 9*hourMS, []CycleCalibration{stored})
-	if reason != "" || len(forecasts) != 1 || forecasts[0].SampleRequests != 6 || forecasts[0].RemainingRequests != 74 || forecasts[0].RoundingErrorPercent != 20.9 {
-		t.Fatalf("continuous sample = %+v, %q", forecasts, reason)
-	}
-	stored.Points[1].IntervalModels = nil
-	if forecasts, _ := BuildModelForecasts(capacityWindow(26), nil, 9*hourMS, []CycleCalibration{stored}); len(forecasts) != 0 {
-		t.Fatalf("missing interval attributed to the next model: %+v", forecasts)
-	}
-	// Models outside this window's metered scope do not contaminate its sample.
-	scoped := capacityWindow(10)
-	scoped.Scope, scoped.ModelFamilies = "model", []string{"claude-sonnet"}
-	stored = cycle(modelPoint(6, 0), modelPoint(8, 10, modelSample("claude-sonnet-4-6", 10, 1000), modelSample("gemini-4-carbon", 10, 1000)))
-	forecasts, reason = BuildModelForecasts(scoped, nil, 9*hourMS, []CycleCalibration{stored})
-	if reason != "" || len(forecasts) != 1 || forecasts[0].Model != "claude-sonnet-4-6" {
-		t.Fatalf("scoped sample = %+v, %q", forecasts, reason)
-	}
-}
-
-func TestNextCalibrationCycleKeepsAnExplicitBaseline(t *testing.T) {
+func TestNextCalibrationCycleKeepsBaselineAndRejectsOlderPlan(t *testing.T) {
 	stored, ok := NextCalibrationCycle(nil, "codex", capacityWindow(0), nil, 6*hourMS)
 	if !ok || stored.CycleResetAtMS != 10*hourMS {
 		t.Fatalf("zero baseline = %+v, %v", stored, ok)
 	}
-	stored.Points = []CalibrationPoint{modelPoint(6, 20)}
+	stored.Points = []CalibrationPoint{point(6, 20, 10, 1000, 1000)}
 	if _, ok := NextCalibrationCycle([]CycleCalibration{stored}, "codex", capacityWindow(20), nil, 7*hourMS); ok {
-		t.Fatal("idle reading added evidence")
+		t.Fatal("idle reading added a duplicate point")
+	}
+	if _, ok := NextCalibrationCycle([]CycleCalibration{stored}, "codex", capacityWindow(20.4), nil, 7*hourMS); !ok {
+		t.Fatal("fractional rise was ignored")
 	}
 	reset, ok := NextCalibrationCycle([]CycleCalibration{stored}, "codex", capacityWindow(0), nil, 8*hourMS)
 	if !ok || len(reset.Points) != 1 {
 		t.Fatalf("reset = %+v, %v", reset, ok)
 	}
-}
-
-func TestModelQuotaForecastSeparatesServiceTiers(t *testing.T) {
-	standard := modelSample("gpt-6.1-sol", 10, 1000)
-	standard.ServiceTier = "default"
-	fast := standard
-	fast.ServiceTier = "priority"
-	stored := cycle(modelPoint(6, 0), modelPoint(7, 10, standard), modelPoint(8, 30, fast))
-	forecasts, reason := BuildModelForecasts(capacityWindow(30), nil, 9*hourMS, []CycleCalibration{stored})
-	if reason != "" || len(forecasts) != 2 || forecasts[0].ServiceTier != "priority" || forecasts[0].RemainingRequests != 35 || forecasts[1].ServiceTier != "default" || forecasts[1].RemainingRequests != 70 {
-		t.Fatalf("tier forecasts = %+v, %q", forecasts, reason)
-	}
-}
-
-func TestModelQuotaForecastInvalidatesMixedIntervalWorkload(t *testing.T) {
-	initial := modelSample("gpt-6.1-sol", 10, 1000)
-	larger := modelSample(initial.Model, 5, 5000)
-	cached := modelSample(initial.Model, 5, 500)
-	cached.CachedTokens = 400
-	mixedTier := modelSample(initial.Model, 5, 500)
-	mixedTier.HasMixedServiceTiers = true
-	for _, changed := range []ModelCalibrationUsage{larger, cached, mixedTier} {
-		stored := cycle(modelPoint(6, 0), modelPoint(7, 10, initial), modelPoint(8, 20, changed, modelSample("gpt-6.1-terra", 5, 500)))
-		if got, _ := BuildModelForecasts(capacityWindow(20), nil, 9*hourMS, []CycleCalibration{stored}); len(got) != 0 {
-			t.Fatalf("mixed interval retained a changed workload: %+v", got)
-		}
-	}
-	stored := cycle(modelPoint(6, 0), modelPoint(7, 10, initial), modelPoint(8, 20, modelSample(initial.Model, 5, 500), modelSample("gpt-6.1-terra", 5, 500)))
-	if got, _ := BuildModelForecasts(capacityWindow(20), nil, 9*hourMS, []CycleCalibration{stored}); len(got) != 1 || got[0].SampleRequests != 10 {
-		t.Fatalf("unchanged model lost its earlier direct sample: %+v", got)
-	}
-}
-
-func TestNextCalibrationCycleRejectsOlderPlanReading(t *testing.T) {
-	stored := cycle(modelPoint(8, 20))
 	stored.PlanType, stored.PlanTier = "pro", "elite"
+	stored.Points = []CalibrationPoint{point(8, 20, 10, 1000, 1000)}
 	if _, ok := NextCalibrationCycle([]CycleCalibration{stored}, "codex", capacityWindow(10), &QuotaPlan{PlanType: "free", Tier: "basic"}, 7*hourMS); ok {
 		t.Fatal("an older plan reading replaced the newer plan's cycle")
 	}
-	reset := modelPoint(8, 0)
-	reset.HasUsageGap = true
-	withReset := cycle(modelPoint(6, 0), modelPoint(7, 20, modelSample("gpt-6.1-sol", 10, 1000)), reset)
-	if got, reason := BuildModelForecasts(capacityWindow(0), nil, 9*hourMS, []CycleCalibration{withReset}); len(got) != 0 || reason != CapacityReasonResetMidCycle {
-		t.Fatalf("mid-cycle reset with usage gap = %+v, %q", got, reason)
-	}
-}
 
-func TestModelQuotaForecastMinQuotaAndWorkloadTolerance(t *testing.T) {
-	p := modelSample("gpt-6.1-sol", 5, 5000)
-	p.PricedRequests = 5
-	p.CostNanos = 1_000_000_000
-	shortCycle := cycle(modelPoint(6, 0), modelPoint(8, 2, p))
-	forecasts, reason := BuildModelForecasts(capacityWindow(2), nil, 9*hourMS, []CycleCalibration{shortCycle})
-	if reason != "" || len(forecasts) != 1 || forecasts[0].RemainingRequests != 245 || forecasts[0].RemainingCostNanos == nil || *forecasts[0].RemainingCostNanos != 49_000_000_000 {
-		t.Fatalf("5h 2%% forecast = %+v, %q", forecasts, reason)
+	// Fractional rises coalesce without evicting baseline, mid-cycle reset, or 100% exhaustion points.
+	var pts []CalibrationPoint
+	for step := range 500 {
+		used := float64(step) * 0.1 // 0.0% .. 49.9%
+		pts = AppendCalibrationPoint(pts, CalibrationPoint{
+			ObservedAtMS: 5*hourMS + int64(step)*1000, UsedPercent: used,
+			Requests: int64(step + 1), PricedRequests: int64(step + 1), Tokens: int64(step+1) * 1000, CostNanos: int64(step+1) * 100_000_000,
+		})
 	}
-
-	first := ModelCalibrationUsage{Model: "gpt-6.1-sol", Requests: 3, Tokens: 10300, PromptTokens: 10000, CachedTokens: 6000, OutputTokens: 300}
-	second := ModelCalibrationUsage{Model: "gpt-6.1-sol", Requests: 3, Tokens: 20500, PromptTokens: 20000, CachedTokens: 16000, OutputTokens: 1200}
-	stored := cycle(modelPoint(6, 0), modelPoint(7, 3, first), modelPoint(8, 6, second))
-	forecasts, reason = BuildModelForecasts(capacityWindow(6), nil, 9*hourMS, []CycleCalibration{stored})
-	if reason != "" || len(forecasts) != 1 || forecasts[0].SampleRequests != 6 || forecasts[0].SampleUsedPercent != 6 {
-		t.Fatalf("moderate workload shift dropped sample = %+v, %q", forecasts, reason)
+	pts = AppendCalibrationPoint(pts, point(6, 0, 500, 500_000, 50_000_000_000))   // mid-cycle reset
+	pts = AppendCalibrationPoint(pts, point(7, 100, 600, 600_000, 60_000_000_000)) // post-reset 100% exhaustion
+	if len(pts) > capacityMaxPoints {
+		t.Fatalf("points exceeded cap: %d > %d", len(pts), capacityMaxPoints)
+	}
+	c := cycle(pts...)
+	if cutoff, _, ok := ExhaustionCutoffPoint(capacityWindow(100), nil, 8*hourMS, []CycleCalibration{c}); !ok || cutoff.ObservedAtMS != 7*hourMS {
+		t.Fatalf("exhaustion cutoff after fractional climb + reset = (%+v, %v), want 7h", cutoff, ok)
+	}
+	overflowLive := WindowUsage{FromMS: 5 * hourMS, ToMS: 8 * hourMS, Requests: 900, PricedRequests: 900, Tokens: 900_000, CostNanos: 90_000_000_000}
+	got, reason := EstimateWindowCapacity(capacityWindow(100), nil, 8*hourMS, 8*hourMS, &overflowLive, []CycleCalibration{c})
+	if reason != "" || got == nil || got.Requests != 100 || got.CostNanos == nil || *got.CostNanos != 10_000_000_000 {
+		t.Fatalf("post-reset 100%% capacity after 500 fractional steps = %+v, reason = %q", got, reason)
 	}
 }

@@ -24,9 +24,9 @@ export interface QuotaWindow {
   description?: string;
   /** What this deployment recorded for the credential in the window's current cycle, up to the observation. */
   usage?: QuotaWindowUsage;
-  /** Remaining work conditioned on directly observed model and workload samples. */
-  model_forecasts?: QuotaModelForecast[];
-  forecast_unavailable?: QuotaForecastUnavailableReason;
+  /** Estimated 100% full-window capacity scaled from recorded usage and used share. */
+  capacity?: QuotaWindowCapacity;
+  capacity_unavailable?: QuotaCapacityUnavailableReason;
 }
 
 export interface QuotaWindowUsage {
@@ -41,21 +41,14 @@ export interface QuotaWindowUsage {
   cost_nanos: number;
 }
 
-export interface QuotaModelForecast {
-  model: string;
-  service_tier?: string;
+export interface QuotaWindowCapacity {
+  basis: 'current_window' | 'previous_window';
   sample_requests: number;
   sample_priced_requests?: number;
-  sample_tokens: number;
-  sample_used_percent: number;
+  requests: number;
+  tokens: number;
+  cost_nanos?: number;
   cache_rate?: number;
-  from_ms: number;
-  observed_at_ms: number;
-  remaining_requests: number;
-  remaining_tokens: number;
-  remaining_cost_nanos?: number;
-  /** Meter rounding only; not a confidence bound on future workloads. */
-  rounding_error_percent: number;
 }
 
 /** One cycle of a window as the capacity details state it. */
@@ -68,21 +61,20 @@ export interface QuotaCapacityCycle {
   usage?: QuotaWindowUsage;
 }
 
-/** `GET /management/quota/{authIndex}/capacity?window=`: the cycle being read, the one before it, and model-conditioned remaining-work forecasts. */
+/** `GET /management/quota/{authIndex}/capacity?window=`: the cycle being read, the one before it, and estimated full-window capacity. */
 export interface QuotaCapacityHistory {
   window_id: string;
   current: QuotaCapacityCycle | null;
   previous: QuotaCapacityCycle | null;
-  model_forecasts?: QuotaModelForecast[];
-  forecast_unavailable?: QuotaForecastUnavailableReason;
+  capacity?: QuotaWindowCapacity;
+  capacity_unavailable?: QuotaCapacityUnavailableReason;
 }
 
-export type QuotaForecastUnavailableReason =
+export type QuotaCapacityUnavailableReason =
   | 'boundary_unknown'
   | 'expired'
   | 'no_reading'
   | 'low_usage'
-  | 'mixed_models'
   | 'no_traffic'
   | 'reset_mid_cycle'
   | 'scope_unknown'

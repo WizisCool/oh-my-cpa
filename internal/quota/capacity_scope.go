@@ -98,7 +98,7 @@ func isKnownCapacityFamily(family string) bool {
 	return false
 }
 
-func matchWindowModelScope(window QuotaWindow, families []string, exactModel, rawModel string) (isMatch bool, isUnknownFamily bool) {
+func matchWindowModelScope(families []string, exactModel, rawModel string) (isMatch bool, isUnknownFamily bool) {
 	model := normalizeCapacityModel(rawModel)
 	family := capacityModelFamily(model)
 	if len(families) == 0 {
@@ -107,7 +107,11 @@ func matchWindowModelScope(window QuotaWindow, families []string, exactModel, ra
 		isMatch = model != "" && !usage.IsModelSubstituted(exactModel, model)
 	} else {
 		for _, meteredFamily := range families {
-			if family == meteredFamily || meteredFamily == "claude" && strings.HasPrefix(family, "claude-") || meteredFamily == "fable" && family == "claude-fable" || strings.HasPrefix(meteredFamily, "gemini-") && (model == meteredFamily || strings.HasPrefix(model, meteredFamily+"-")) {
+			if family == meteredFamily ||
+				meteredFamily == "claude" && strings.HasPrefix(family, "claude-") ||
+				meteredFamily == "gpt" && family == "openai-o" ||
+				meteredFamily == "fable" && family == "claude-fable" ||
+				strings.HasPrefix(meteredFamily, "gemini-") && (model == meteredFamily || strings.HasPrefix(model, meteredFamily+"-")) {
 				isMatch = true
 			}
 		}
@@ -130,46 +134,20 @@ func SelectWindowUsage(window QuotaWindow, groups []ModelWindowUsage) (WindowUsa
 			return total, CapacityReasonScopeUnknown
 		}
 	}
-	hasFirstTier := false
-	hasFirstBounds := false
-	hasAllBounds := true
 	for _, group := range groups {
-		isMatch, isUnknown := matchWindowModelScope(window, families, exactModel, group.Model)
+		isMatch, isUnknown := matchWindowModelScope(families, exactModel, group.Model)
 		if isUnknown {
 			total.UnmatchedRequests += group.Usage.Requests
 		}
 		if isMatch {
 			total.Requests += group.Usage.Requests
-			total.BreakdownRequests += group.Usage.BreakdownRequests
 			total.PricedRequests += group.Usage.PricedRequests
 			total.Tokens += group.Usage.Tokens
-			total.PricedTokens += group.Usage.PricedTokens
 			total.PromptTokens += group.Usage.PromptTokens
 			total.CachedTokens += group.Usage.CachedTokens
-			total.CacheWriteTokens += group.Usage.CacheWriteTokens
-			total.OutputTokens += group.Usage.OutputTokens
 			total.CostNanos += group.Usage.CostNanos
-			if gMin, gMax, ok := group.Usage.inputBounds(); !ok {
-				hasAllBounds = false
-			} else if !hasFirstBounds {
-				total.MinInputTokens, total.MaxInputTokens = gMin, gMax
-				hasFirstBounds = true
-			} else {
-				total.MinInputTokens = min(total.MinInputTokens, gMin)
-				total.MaxInputTokens = max(total.MaxInputTokens, gMax)
-			}
-			if group.Usage.HasMixedServiceTiers {
-				total.HasMixedServiceTiers = true
-				hasFirstTier = true
-			} else if !hasFirstTier {
-				total.ServiceTier = group.Usage.ServiceTier
-				hasFirstTier = true
-			} else if total.ServiceTier != group.Usage.ServiceTier {
-				total.HasMixedServiceTiers = true
-			}
 		}
 	}
-	total.HasInputBounds = hasFirstBounds && hasAllBounds
 	total.CacheRate = ComputeCacheRate(total.CachedTokens, total.PromptTokens)
 	return total, ""
 }
@@ -194,15 +172,6 @@ func IsModelInWindowScope(window QuotaWindow, rawModel string) bool {
 			return false
 		}
 	}
-	isMatch, _ := matchWindowModelScope(window, families, exactModel, name)
+	isMatch, _ := matchWindowModelScope(families, exactModel, name)
 	return isMatch
-}
-
-// CanAffectWindowForecast reports whether a request for rawModel can change or
-// obscure window's attribution. Known models outside a scoped window's pool do not.
-func CanAffectWindowForecast(window QuotaWindow, rawModel string) bool {
-	if capacityModelFamily(normalizeCapacityModel(rawModel)) == "" {
-		return true
-	}
-	return IsModelInWindowScope(window, rawModel)
 }
