@@ -941,5 +941,85 @@ describe('Base UI Select, Tabs, Combobox & AutoComplete contracts', () => {
     expect(document.querySelector('[data-slot="sheet-content"][data-open]')).not.toBeNull();
     act(() => setDrawerOpen(false));
   });
-});
 
+  it('keeps sheet centering insets on AppModal until its exit transition completes on outside press', async () => {
+    installOmcApi();
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1280 });
+    try {
+      let setDrawerOpen!: (open: boolean) => void;
+      let setModalOpen!: (open: boolean) => void;
+      const Host = () => {
+        const [drawerOpen, _setDrawerOpen] = React.useState(true);
+        const [modalOpen, _setModalOpen] = React.useState(false);
+        setDrawerOpen = _setDrawerOpen;
+        setModalOpen = _setModalOpen;
+        return (
+          <AppDrawer open={drawerOpen} width="wide" widthKey="test_span_close" title="Detail drawer" onClose={() => _setDrawerOpen(false)}>
+            <AppModal open={modalOpen} size="large" title="Usage forecast" onCancel={() => _setModalOpen(false)}>
+              modal body
+            </AppModal>
+          </AppDrawer>
+        );
+      };
+      renderWithOmc(<Host />);
+
+      const sheet = document.querySelector<HTMLElement>('[data-slot="sheet-content"]')!;
+      vi.spyOn(sheet, 'getBoundingClientRect').mockReturnValue({
+        left: 512,
+        right: 1272,
+        top: 8,
+        bottom: 712,
+        width: 760,
+        height: 704,
+        x: 512,
+        y: 8,
+        toJSON: () => ({}),
+      });
+
+      act(() => setModalOpen(true));
+
+      const dialogViewport = document.querySelector<HTMLElement>('[data-slot="dialog-viewport"]')!;
+      const dialogContent = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')!;
+      expect(dialogViewport.style.paddingInlineStart).toBe('512px');
+      expect(dialogViewport.style.paddingInlineEnd).toBe('8px');
+
+      let resolveExit!: () => void;
+      const exitFinished = new Promise<void>((resolve) => {
+        resolveExit = resolve;
+      });
+      dialogContent.getAnimations = () => [
+        {
+          finished: exitFinished,
+          effect: { getTiming: () => ({ duration: 180, iterations: 1 }) },
+        } as unknown as Animation,
+      ];
+
+      fireEvent.pointerDown(dialogViewport, { button: 0 });
+      fireEvent.click(dialogViewport);
+
+      expect(dialogContent.hasAttribute('data-open')).toBe(false);
+      expect(sheet.hasAttribute('data-open')).toBe(true);
+      expect(dialogViewport.style.paddingInlineStart).toBe('512px');
+      expect(dialogViewport.style.paddingInlineEnd).toBe('8px');
+
+      await act(async () => {
+        resolveExit();
+        await exitFinished;
+      });
+
+      await waitFor(() => {
+        expect(dialogViewport.style.paddingInlineStart).toBe('');
+        expect(dialogViewport.style.paddingInlineEnd).toBe('');
+      });
+
+      act(() => setDrawerOpen(false));
+      act(() => setModalOpen(true));
+      expect(dialogViewport.style.paddingInlineStart).toBe('');
+      expect(dialogViewport.style.paddingInlineEnd).toBe('');
+      act(() => setModalOpen(false));
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: originalInnerWidth });
+    }
+  });
+});
