@@ -108,7 +108,7 @@ export function quotaWindowName(window: QuotaWindow, t: TFunc): string {
 
 /** Whether the server attaches capacity evidence or an unavailable reason to this window. */
 export function isEstimableQuotaWindow(window: QuotaWindow): boolean {
-  return Boolean(window.capacity || window.usage || window.capacity_unavailable);
+  return Boolean(window.model_forecasts?.length || window.usage || window.forecast_unavailable);
 }
 
 /**

@@ -24,13 +24,11 @@ type QuotaWindow struct {
 
 	ModelFamilies []string `json:"model_families,omitempty"`
 
-	// The three fields below are joined from recorded usage when a quota is
-	// read and are never part of a stored snapshot: usage keeps arriving after
-	// an observation, and a persisted figure would freeze whatever had been
-	// ingested at that moment.
-	Usage               *WindowUsage    `json:"usage,omitempty"`
-	Capacity            *WindowCapacity `json:"capacity,omitempty"`
-	CapacityUnavailable string          `json:"capacity_unavailable,omitempty"` // a CapacityReason* value
+	// Usage and model-conditioned forecasts are read-time projections. Upstream
+	// percentages and reset times remain the authority for quota availability.
+	Usage               *WindowUsage         `json:"usage,omitempty"`
+	ModelForecasts      []ModelQuotaForecast `json:"model_forecasts,omitempty"`
+	ForecastUnavailable string               `json:"forecast_unavailable,omitempty"`
 }
 
 // QuotaExtraUsage represents paid usage beyond the plan (Claude Extra Usage,
@@ -214,6 +212,8 @@ type NormalizedQuota struct {
 	// RateLimit is set when the provider refused the read for asking too often. It schedules the
 	// next read and never leaves the process: the reading's Error already tells the operator.
 	RateLimit *RateLimitSignal `json:"-"`
+	// HasFailedRead separates forecast eligibility from cooldown presentation.
+	HasFailedRead bool `json:"-"`
 	// IsDeferred marks a reading answered without a read; see Service.DeferredReading.
 	IsDeferred bool `json:"-"`
 }

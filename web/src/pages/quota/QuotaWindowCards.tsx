@@ -1,8 +1,6 @@
 import { Meter } from '../../components/common/Meter';
 import { useT } from '../../i18n';
 import type { QuotaWindow } from '../../types/quota';
-import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import { compactQuotaCapacity } from './quotaCapacity';
 import { QuotaCapacityButton, type QuotaCapacityOwner } from './QuotaCapacityButton';
 import { quotaRemainingPercent, quotaResetCountdown, quotaResetText } from './quotaFormat';
 import { quotaWindowFullName } from './quotaWindowSelection';
@@ -13,14 +11,14 @@ import styles from './QuotaWindowCards.module.css';
 export interface QuotaWindowCardsProps {
   windows: QuotaWindow[];
   nowMS: number;
-  /** The credential the windows belong to; with it a window's estimate opens its details. */
+  /** The credential whose recorded consumption and forecasts the details show. */
   owner?: QuotaCapacityOwner;
 }
 
 /**
  * A credential's limits, one card each. Cards of one model group share a heading, so the group is
- * read once and every card names only its period. A card states what is left, when it resets and,
- * where one applies, the window's estimated size; the details of that estimate open from the card.
+ * read once and every card names only its period. Native remaining shares and reset times
+ * lead; recorded consumption and model-conditioned forecasts live in the details.
  */
 export function QuotaWindowCards({ windows, nowMS, owner }: QuotaWindowCardsProps) {
   const t = useT();
@@ -55,15 +53,12 @@ function QuotaWindowCard({ window, siblings, name, nowMS, owner }: {
   owner?: QuotaWindowCardsProps['owner'];
 }) {
   const t = useT();
-  const { style: tokenStyle } = useTokenDisplayStyle();
   const remaining = quotaRemainingPercent(window);
   const stroke = quotaRemainingStroke(remaining);
   const reset = quotaResetCountdown(window, nowMS, t);
   const resetTitle = window.reset_accuracy && window.reset_accuracy !== 'exact' ? t('quota.reset_estimated_hint') : quotaResetText(window, nowMS, t);
-  const estimate = compactQuotaCapacity(window, tokenStyle, t);
-  // A window the estimate applies to opens its details, even before there is a figure: the
-  // details say what was recorded and what starts one.
-  const hasDetails = Boolean(owner && (window.capacity || window.usage || window.capacity_unavailable));
+  // Consumption details stay available while a model sample is still accumulating.
+  const hasDetails = Boolean(owner && (window.model_forecasts?.length || window.usage || window.forecast_unavailable));
   const content = (
     <>
       <span className={styles.head}>
@@ -77,7 +72,7 @@ function QuotaWindowCard({ window, siblings, name, nowMS, owner }: {
       {window.description && <span className={styles.description} data-tip={window.description} data-tip-overflow="">{window.description}</span>}
       <span className={styles.foot}>
         <span className={styles.estimate}>
-          {estimate && <>{t('quota.capacity_estimate')} <b>{estimate}</b></>}
+          {hasDetails && t('quota.capacity_open_details')}
         </span>
         {reset && <span className={styles.reset} data-tip={resetTitle}>{reset === t('quota.recovered') ? reset : t('quota.capacity_resets', { when: reset })}</span>}
       </span>

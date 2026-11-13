@@ -12,6 +12,7 @@ import { resolveCredentialMark } from '../src/types/brandMark';
 import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
 import { QuotaCapacityButton, QuotaCapacityScope } from '../src/pages/quota/QuotaCapacityButton';
 import QuotaCapacityDialog from '../src/pages/quota/QuotaCapacityDialog';
+import { formatShortDateTime } from '../src/pages/quota/quotaFormat';
 import { CredentialList } from '../src/pages/oauthManagement/CredentialList';
 import { ProviderStrip } from '../src/pages/oauthManagement/ProviderStrip';
 import type { CredentialActions } from '../src/pages/oauthManagement/CredentialParts';
@@ -21,7 +22,7 @@ import { renderWithOmc } from './support/render';
 import { buildCredentialSections } from '../src/pages/oauthManagement/credentialSections';
 import { buildOAuthWorkspaceProjection } from '../src/pages/oauthManagement/oauthWorkspaceLogic';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
-import type { QuotaItem, QuotaWindow } from '../src/types/quota';
+import type { QuotaItem, QuotaWindow, QuotaModelForecast } from '../src/types/quota';
 
 vi.mock('../src/components/dashboard/RollingNumber', () => ({
   RollingNumber: ({ readout }: { readout?: { number: number; prefix?: string; suffix: string; format: Intl.NumberFormatOptions } }) =>
@@ -392,7 +393,7 @@ describe('provider sections across pages', () => {
     api.on('GET', '/management/quota/acct-1/capacity', () => ({ current: null, previous: null }));
     const windowItem: QuotaWindow = {
       ...quotaWindow('five_hour', 70, 2),
-      capacity: { requests: 100, tokens: 1_000_000, cost_nanos: 10_000_000_000, error_percent: 5 },
+      forecast_unavailable: 'low_usage',
     };
     const owner = { authIndex: 'acct-1', credentialName: 'Primary' };
     let setBlocked!: (blocked: boolean) => void;
@@ -401,20 +402,20 @@ describe('provider sections across pages', () => {
       setBlocked = _setBlocked;
       return (
         <QuotaCapacityScope isBlocked={blocked}>
-          <QuotaCapacityButton owner={owner} window={windowItem}>≈ $10.00</QuotaCapacityButton>
+          <QuotaCapacityButton owner={owner} window={windowItem}>Usage details</QuotaCapacityButton>
         </QuotaCapacityScope>
       );
     };
     const view = renderWithOmc(<Host />);
     try {
-      fireEvent.click(screen.getByRole('button', { name: '≈ $10.00' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Usage details' }));
       expect(await screen.findByRole('dialog')).toBeTruthy();
 
       act(() => setBlocked(true));
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
       // Clicking while blocked does not reopen the row dialog.
-      fireEvent.click(screen.getByRole('button', { name: '≈ $10.00' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Usage details' }));
       expect(screen.queryByRole('dialog')).toBeNull();
     } finally {
       view.unmount();
@@ -422,94 +423,63 @@ describe('provider sections across pages', () => {
   });
 });
 
-describe('quota capacity dialog', () => {
-  it('switches between 5-hour and weekly windows and updates total window projections across models', async () => {
+describe('quota consumption and model forecast dialog', () => {
+  it('switches periods and directly observed models while keeping recorded money out of the forecast', async () => {
     const api = installOmcApi();
+    const sample = (model: string, remaining: number): QuotaModelForecast => ({
+      model, sample_requests: 10, sample_tokens: 100_000, sample_used_percent: 10,
+      from_ms: NOW_MS - HOUR_MS, observed_at_ms: NOW_MS, cache_rate: 80,
+      remaining_requests: remaining, remaining_tokens: remaining * 10_000, rounding_error_percent: 11.2,
+    });
     const fiveHour: QuotaWindow = {
-      ...quotaWindow('five_hour', 80, 3),
-      period_hours: 5,
+      ...quotaWindow('five_hour', 80, 3), period_hours: 5,
       usage: { from_ms: NOW_MS - 2 * HOUR_MS, to_ms: NOW_MS, requests: 90, priced_requests: 90, tokens: 1_750_000, cache_rate: 78.5, cost_nanos: 10_000_000_000 },
-      capacity: {
-        requests: 450,
-        tokens: 8_750_000,
-        cost_nanos: 50_000_000_000,
-        error_percent: 2.5,
-        projection: { model: 'claude-sonnet-4-6', sample_requests: 80, cache_rate: 80, requests: 890, tokens: 17_750_000 },
-      },
+      model_forecasts: [sample('gemini-4-hydrogen', 890), sample('gemini-4-carbon', 157)],
     };
     const weekly: QuotaWindow = {
-      ...quotaWindow('weekly', 60, 100),
-      id: 'seven_day',
-      period_hours: 168,
+      ...quotaWindow('weekly', 60, 100), id: 'seven_day', period_hours: 168,
       usage: { from_ms: NOW_MS - 68 * HOUR_MS, to_ms: NOW_MS, requests: 400, priced_requests: 400, tokens: 8_000_000, cache_rate: 85, cost_nanos: 80_000_000_000 },
-      capacity: {
-        requests: 1_000,
-        tokens: 20_000_000,
-        cost_nanos: 200_000_000_000,
-        error_percent: 1.5,
-        projection: { model: 'claude-sonnet-4-6', sample_requests: 350, cache_rate: 85, requests: 2_800, tokens: 56_000_000 },
-      },
+      model_forecasts: [sample('gemini-4-hydrogen', 2800), sample('gemini-4-carbon', 600)],
     };
-    api.on('GET', '/management/quota/claude-seat/capacity', (req) => {
-      const win = req.query.get('window');
-      if (win === 'seven_day') {
-        return {
-          window_id: 'seven_day',
-          current: { from_ms: NOW_MS - 68 * HOUR_MS, reset_at_ms: NOW_MS + 100 * HOUR_MS, used_percent: 40, usage: weekly.usage },
-          previous: null,
-          model_projections: [
-            { model: 'claude-sonnet-4-6', sample_requests: 350, cache_rate: 85, requests: 2_800, tokens: 56_000_000 },
-            { model: 'claude-opus-4-6', sample_requests: 50, cache_rate: 50, requests: 600, tokens: 10_000_000 },
-          ],
-        };
-      }
+    api.on('GET', '/management/quota/gemini-seat/capacity', (req) => {
+      const active = req.query.get('window') === 'seven_day' ? weekly : fiveHour;
       return {
-        window_id: 'five_hour',
-        current: { from_ms: NOW_MS - 2 * HOUR_MS, reset_at_ms: NOW_MS + 3 * HOUR_MS, used_percent: 20, usage: fiveHour.usage },
-        previous: {
-          from_ms: NOW_MS - 7 * HOUR_MS,
-          reset_at_ms: NOW_MS - 2 * HOUR_MS,
-          used_percent: 50,
-          usage: { from_ms: NOW_MS - 7 * HOUR_MS, to_ms: NOW_MS - 2 * HOUR_MS, requests: 200, priced_requests: 200, tokens: 4_000_000, cache_rate: 90, cost_nanos: 25_000_000_000 },
-        },
-        model_projections: [
-          { model: 'claude-sonnet-4-6', sample_requests: 80, cache_rate: 80, requests: 890, tokens: 17_750_000 },
-          { model: 'claude-opus-4-6', sample_requests: 10, cache_rate: 50, requests: 157, tokens: 2_350_000 },
-        ],
+        window_id: active.id,
+        current: { from_ms: active.usage!.from_ms, reset_at_ms: active.reset_at_ms, used_percent: 100 - active.remaining_percent!, usage: active.usage },
+        previous: null,
+        model_forecasts: active.model_forecasts,
       };
     });
-
-    const view = renderWithOmc(
-      <QuotaCapacityDialog
-        open
-        onClose={vi.fn()}
-        owner={{ authIndex: 'claude-seat', credentialName: 'Claude Max' }}
-        window={fiveHour}
-        windows={[fiveHour, weekly]}
-      />,
-    );
+    const view = renderWithOmc(<QuotaCapacityDialog open onClose={vi.fn()} owner={{ authIndex: 'gemini-seat', credentialName: 'Gemini Pro' }} window={fiveHour} windows={[fiveHour, weekly]} />);
     try {
       const dialog = await screen.findByRole('dialog');
       await waitFor(() => expect(within(dialog).getByTestId('quota-capacity-model-select')).toBeTruthy());
-      const forecastCard = within(dialog).getByRole('region', { name: 'This window holds' });
-      expect(forecastCard.textContent).toContain('$50.00');
+      const forecastCard = within(dialog).getByRole('region', { name: 'Available this window' });
       expect(forecastCard.textContent).toContain('890');
-
-      // Switch target model to claude-opus-4-6: total window requests update to 157 while window budget stays $50.00.
+      expect(forecastCard.textContent).toContain(`${formatShortDateTime(NOW_MS - HOUR_MS)} – ${formatShortDateTime(NOW_MS)}`);
+      expect(forecastCard.textContent).not.toContain('$');
+      expect(within(dialog).getByRole('region', { name: 'This window' }).textContent).toContain('$10.00');
       fireEvent.click(within(dialog).getByTestId('quota-capacity-model-select'));
-      fireEvent.click(await screen.findByRole('option', { name: 'claude-opus-4-6' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'gemini-4-carbon' }));
       await waitFor(() => expect(forecastCard.textContent).toContain('157'));
-      expect(forecastCard.textContent).toContain('$50.00');
-
-      // Switch period to Weekly inside the dialog; selected model claude-opus-4-6 carries across once history loads.
       fireEvent.click(within(dialog).getByRole('radio', { name: 'Weekly limit' }));
-      await waitFor(() => {
-        expect(forecastCard.textContent).toContain('$200');
-        expect(forecastCard.textContent).toContain('600');
-      });
-    } finally {
-      view.unmount();
-    }
+      await waitFor(() => expect(forecastCard.textContent).toContain('600'));
+      expect(forecastCard.textContent).not.toContain('$');
+    } finally { view.unmount(); }
+  });
+
+  it('clears an older model forecast when the latest evidence is mixed', async () => {
+    const api = installOmcApi();
+    api.on('GET', '/management/quota/mixed-seat/capacity', () => ({ window_id: 'five_hour', current: null, previous: null, forecast_unavailable: 'mixed_models' }));
+    const windowItem: QuotaWindow = {
+      ...quotaWindow('five_hour', 80, 3),
+      model_forecasts: [{ model: 'gemini-4-hydrogen', sample_requests: 10, sample_tokens: 1000, sample_used_percent: 10, from_ms: NOW_MS - HOUR_MS, observed_at_ms: NOW_MS, remaining_requests: 123, remaining_tokens: 12300, rounding_error_percent: 11.2 }],
+    };
+    const view = renderWithOmc(<QuotaCapacityDialog open onClose={vi.fn()} owner={{ authIndex: 'mixed-seat', credentialName: 'Gemini Pro' }} window={windowItem} />);
+    try {
+      const dialog = await screen.findByRole('dialog');
+      await waitFor(() => expect(within(dialog).getByText('No model forecast yet')).toBeTruthy());
+      expect(within(dialog).getByRole('region', { name: 'Available this window' }).textContent).not.toContain('123');
+    } finally { view.unmount(); }
   });
 });
-

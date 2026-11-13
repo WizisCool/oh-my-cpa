@@ -307,7 +307,7 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 		}
 
 		_ = h.persistNormalizedQuotaSnapshot(ctx, refreshed)
-		h.attachWindowCapacity(ctx, refreshed, h.now().UnixMilli())
+		h.attachQuotaForecasts(ctx, refreshed, h.now().UnixMilli())
 
 		outcome := "success"
 		if refreshed.Provider == "meta" && refreshed.Error != "" {
@@ -390,7 +390,7 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 				}
 				_ = h.recordAudit(request, "quota.refresh", "quota", r.AuthIndex, outcome, map[string]any{"status": r.Status})
 			}
-			h.attachWindowCapacity(ctx, r, h.now().UnixMilli())
+			h.attachQuotaForecasts(ctx, r, h.now().UnixMilli())
 			out = append(out, r)
 		}
 	}
@@ -467,7 +467,7 @@ func (h *Handler) persistNormalizedQuotaSnapshot(ctx context.Context, q *quota.N
 	windows := append([]quota.QuotaWindow(nil), q.Windows...)
 	for i := range windows {
 		window := &windows[i]
-		window.Usage, window.Capacity, window.CapacityUnavailable = nil, nil, ""
+		window.Usage, window.ModelForecasts, window.ForecastUnavailable = nil, nil, ""
 	}
 	q.Windows = windows
 	winJSON := "[]"
@@ -732,7 +732,7 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 	lastAttempts := h.lastQuotaAttempts(ctx, []string{authIndex})
 	attempt := quotaAttemptOf(lastAttempts[authIndex])
 	quota.ApplyReadingHealth(&normalized, attempt, hasStoredReading, nowMS)
-	h.attachWindowCapacity(ctx, &normalized, nowMS)
+	h.attachQuotaForecasts(ctx, &normalized, nowMS)
 
 	var history []repository.QuotaSnapshotRecord
 	if h.repo != nil {
@@ -899,7 +899,7 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 		attempt := quotaAttemptOf(lastAttempts[authIndex])
 		_, hasStoredReading := latestSnapshots[authIndex]
 		quota.ApplyReadingHealth(&normalized, attempt, hasStoredReading, nowMS)
-		h.attachWindowCapacity(ctx, &normalized, nowMS)
+		h.attachQuotaForecasts(ctx, &normalized, nowMS)
 
 		hasPartialCooldown := !normalized.Disabled && len(normalized.ModelCooldowns) > 0
 		switch normalized.Status {

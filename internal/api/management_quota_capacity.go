@@ -10,102 +10,56 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 )
 
-// Estimates are read-time joins over the stored cycle evidence, which only a
-// saved reading that moves the used share changes. A failed refresh can share
-// the prior windows, so replace the slice rather than writing estimates into the
-// stored reading.
-func (h *Handler) attachWindowCapacity(ctx context.Context, observation *quota.NormalizedQuota, nowMS int64) {
-	if h.repo == nil || observation == nil || len(observation.Windows) == 0 {
+// Native quota readings and recorded usage stay separate from model-conditioned
+// forecasts. Failed reads may share their window slice with the previous reading.
+func (h *Handler) attachQuotaForecasts(ctx context.Context, observation *quota.NormalizedQuota, nowMS int64) {
+	if h.repo == nil || observation == nil {
 		return
 	}
-	windows := slices.Clone(observation.Windows)
-	observation.Windows = windows
+	observation.Windows = slices.Clone(observation.Windows)
 	var cycles map[string][]quota.CycleCalibration
 	var cyclesErr error
 	hasLoadedCycles := false
-	var lookbackCache map[int64][]quota.ModelWindowUsage
-	for i := range windows {
-		window := &windows[i]
-		window.Usage, window.Capacity, window.CapacityUnavailable = nil, nil, ""
+	for index := range observation.Windows {
+		window := &observation.Windows[index]
+		window.Usage, window.ModelForecasts, window.ForecastUnavailable = nil, nil, ""
 		if !quota.SupportsWindowCapacity(observation.Provider, *window) {
+			continue
+		}
+		if fromMS, toMS, reason := quota.WindowCycleRange(*window, observation.ObservedAtMS, observation.ObservedAtMS); reason == "" {
+			usage, scopeReason, err := h.repo.QueryCapacityUsage(ctx, observation.AuthIndex, *window, fromMS, toMS)
+			if err != nil {
+				window.ForecastUnavailable = quota.CapacityReasonUsageUnavailable
+			} else if scopeReason != "" {
+				window.ForecastUnavailable = scopeReason
+			} else {
+				window.Usage = &usage
+			}
+		}
+		if window.ForecastUnavailable != "" {
+			continue
+		}
+		if _, _, reason := quota.WindowCycleRange(*window, observation.ObservedAtMS, nowMS); reason != "" {
+			window.ForecastUnavailable = reason
+			continue
+		}
+		if observation.Status == "stale" || observation.Status == "error" || observation.Error != "" || observation.Disabled || observation.HasFailedRead {
+			window.ForecastUnavailable = quota.CapacityReasonNoReading
 			continue
 		}
 		if !hasLoadedCycles {
 			cycles, cyclesErr = h.repo.LoadCapacityCycles(ctx, observation.AuthIndex)
 			hasLoadedCycles = true
 		}
-		usageReason := ""
-		var cycleGroups []quota.ModelWindowUsage
-		if fromMS, toMS, reason := quota.WindowCycleRange(*window, observation.ObservedAtMS, observation.ObservedAtMS); reason == "" {
-			usage, groups, scopeReason, err := h.repo.QueryCapacityUsageWithModels(ctx, observation.AuthIndex, *window, fromMS, toMS)
-			switch {
-			case err != nil:
-				usageReason = quota.CapacityReasonUsageUnavailable
-			case scopeReason != "":
-				usageReason = scopeReason
-			default:
-				window.Usage = &usage
-				cycleGroups = groups
-			}
-		}
 		if cyclesErr != nil {
-			window.CapacityUnavailable = quota.CapacityReasonHistoryUnavailable
+			window.ForecastUnavailable = quota.CapacityReasonHistoryUnavailable
 			continue
 		}
-		capacity, reason := quota.EstimateWindowCapacity(*window, observation.Plan, observation.ObservedAtMS, cycles[quota.CapacityWindowKey(observation.Provider, *window)])
-		if capacity == nil {
-			if usageReason != "" {
-				reason = usageReason
-			}
-			window.CapacityUnavailable = reason
-			continue
-		}
-		isLive := observation.Status != "stale" && observation.Status != "error" && observation.Error == "" && !observation.Disabled && (window.ResetAtMS == nil || *window.ResetAtMS > nowMS)
-		quota.AttachRemainingCapacity(capacity, *window, isLive)
-		projectionGroups := cycleGroups
-		if dominant, ok := quota.SelectDominantModelUsage(*window, projectionGroups); !ok || dominant.Usage.Requests < 5 {
-			horizonMS := recentProjectionHorizonMS(*window)
-			recentGroups, cached := lookbackCache[horizonMS]
-			if !cached {
-				if lookbackCache == nil {
-					lookbackCache = make(map[int64][]quota.ModelWindowUsage, 2)
-				}
-				_, loaded, _, err := h.repo.QueryCapacityUsageWithModels(
-					ctx,
-					observation.AuthIndex,
-					quota.QuotaWindow{ID: "lookback", Scope: "standard"},
-					observation.ObservedAtMS-horizonMS,
-					observation.ObservedAtMS,
-				)
-				if err == nil {
-					recentGroups = loaded
-				}
-				lookbackCache[horizonMS] = recentGroups
-			}
-			if _, hasScoped := quota.SelectDominantModelUsage(*window, recentGroups); hasScoped {
-				projectionGroups = recentGroups
-			}
-		}
-		quota.AttachModelProjection(capacity, *window, projectionGroups)
-		window.Capacity = capacity
+		window.ModelForecasts, window.ForecastUnavailable = quota.BuildModelForecasts(*window, observation.Plan, observation.ObservedAtMS, cycles[quota.CapacityWindowKey(observation.Provider, *window)])
 	}
-}
-
-func recentProjectionHorizonMS(window quota.QuotaWindow) int64 {
-	const (
-		hourMS = int64(3600 * 1000)
-		minMS  = 24 * hourMS
-		maxMS  = 7 * 24 * hourMS
-	)
-	if window.PeriodHours == nil || *window.PeriodHours <= 0 {
-		return minMS
-	}
-	span := int64(*window.PeriodHours * 2 * float64(hourMS))
-	return min(max(span, minMS), maxMS)
 }
 
 type capacityCycleDTO struct {
@@ -115,10 +69,8 @@ type capacityCycleDTO struct {
 	Usage       *quota.WindowUsage `json:"usage,omitempty"`
 }
 
-// getQuotaCapacityHistory answers the capacity details of one window from local
-// evidence alone: the cycle the latest reading belongs to, the one before it,
-// and per-model whole-window projections if the remaining allowance is spent on
-// a chosen model.
+// getQuotaCapacityHistory returns recorded consumption for two cycles and
+// forecasts supported by direct single-model observations in the current cycle.
 func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	authIndex := strings.TrimSpace(chi.URLParam(request, "authIndex"))
@@ -144,7 +96,7 @@ func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *h
 	}
 	index := slices.IndexFunc(windows, func(window quota.QuotaWindow) bool { return window.ID == windowID })
 	if index < 0 || !quota.SupportsWindowCapacity(snapshot.Provider, windows[index]) {
-		writeError(writer, http.StatusNotFound, "the credential has no estimated window "+strconv.Quote(windowID))
+		writeError(writer, http.StatusNotFound, "the credential has no observable window "+strconv.Quote(windowID))
 		return
 	}
 	window := windows[index]
@@ -168,7 +120,6 @@ func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *h
 	previous := quota.PreviousCapacityCycle(window, plan, snapshot.ObservedAtMS, cycles[windowKey])
 
 	response := map[string]any{"window_id": window.ID, "current": nil, "previous": nil}
-	var currentGroups []quota.ModelWindowUsage
 	var currentFromMS *int64
 	if fromMS, toMS, reason := quota.WindowCycleRange(window, snapshot.ObservedAtMS, snapshot.ObservedAtMS); reason == "" {
 		currentFromMS = &fromMS
@@ -176,9 +127,8 @@ func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *h
 		if used, hasReading := quota.WindowUsedPercent(window); hasReading {
 			current.UsedPercent = &used
 		}
-		if usage, groups, scopeReason, err := h.repo.QueryCapacityUsageWithModels(ctx, authIndex, window, fromMS, toMS); err == nil && scopeReason == "" {
+		if usage, scopeReason, err := h.repo.QueryCapacityUsage(ctx, authIndex, window, fromMS, toMS); err == nil && scopeReason == "" {
 			current.Usage = &usage
-			currentGroups = groups
 		}
 		response["current"] = current
 	}
@@ -210,98 +160,16 @@ func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *h
 		response["previous"] = cycle
 	}
 
-	if capacity, _ := quota.EstimateWindowCapacity(window, plan, snapshot.ObservedAtMS, cycles[windowKey]); capacity != nil {
-		projectionGroups := currentGroups
-		if dominant, hasDom := quota.SelectDominantModelUsage(window, projectionGroups); !hasDom || dominant.Usage.Requests < 5 {
-			lookbackFrom := snapshot.ObservedAtMS - recentProjectionHorizonMS(window)
-			if _, recentGroups, scopeReason, err := h.repo.QueryCapacityUsageWithModels(ctx, authIndex, window, lookbackFrom, snapshot.ObservedAtMS); err == nil && scopeReason == "" && len(recentGroups) > 0 {
-				projectionGroups = recentGroups
-			}
-		}
-		prices := h.loadCapacityModelRates(ctx, snapshot.Provider, snapshot.ObservedAtMS)
-		candidates := h.loadCapacityCandidateModels(ctx, snapshot.Provider)
-		if projections := quota.BuildModelProjections(capacity, window, projectionGroups, candidates, prices); len(projections) > 0 {
-			response["model_projections"] = projections
-		}
+	observation := normalizedQuotaFromSnapshot(authIndex, snapshot)
+	attempts := h.lastQuotaAttempts(ctx, []string{authIndex})
+	quota.ApplyReadingHealth(observation, quotaAttemptOf(attempts[authIndex]), true, h.now().UnixMilli())
+	h.attachQuotaForecasts(ctx, observation, h.now().UnixMilli())
+	result := observation.Windows[index]
+	if len(result.ModelForecasts) > 0 {
+		response["model_forecasts"] = result.ModelForecasts
+	}
+	if result.ForecastUnavailable != "" {
+		response["forecast_unavailable"] = result.ForecastUnavailable
 	}
 	writeJSON(writer, http.StatusOK, response)
-}
-
-func (h *Handler) loadCapacityModelRates(ctx context.Context, provider string, quoteAtMS int64) map[string]quota.ModelQuoteRate {
-	rates := make(map[string]quota.ModelQuoteRate)
-	if h.repo == nil {
-		return rates
-	}
-	channelMultiplier := 1.0
-	if channels, err := h.repo.ListChannelMultipliers(ctx); err == nil {
-		for _, ch := range channels {
-			if strings.EqualFold(ch.Channel, provider) && ch.Multiplier > 0 {
-				channelMultiplier = ch.Multiplier
-				break
-			}
-		}
-	}
-	toRate := func(price pricing.ModelPrice) quota.ModelQuoteRate {
-		return quota.ModelQuoteRate{
-			Price:             price,
-			ChannelMultiplier: channelMultiplier,
-			QuoteAtMS:         quoteAtMS,
-		}
-	}
-	sharedPrices, _ := h.repo.ListModelPrices(ctx)
-	sharedByModel := make(map[string]quota.ModelQuoteRate, len(sharedPrices))
-	for _, row := range sharedPrices {
-		rate := toRate(row)
-		sharedByModel[row.Model] = rate
-		rates[row.Model] = rate
-	}
-	if catalog, err := h.repo.ListPricingModels(ctx); err == nil {
-		for served, target := range catalog {
-			if _, hasDirect := rates[served]; !hasDirect && target != "" {
-				if rate, ok := sharedByModel[target]; ok {
-					rates[served] = rate
-				}
-			}
-		}
-	}
-	if channelPrices, err := h.repo.ListChannelModelPrices(ctx); err == nil {
-		for _, row := range channelPrices {
-			if strings.EqualFold(row.Channel, provider) {
-				rates[row.Model] = toRate(row)
-			}
-		}
-	}
-	return rates
-}
-
-func (h *Handler) loadCapacityCandidateModels(ctx context.Context, provider string) []string {
-	seen := make(map[string]bool)
-	var models []string
-	add := func(name string) {
-		name = strings.TrimSpace(name)
-		if name != "" && !seen[name] {
-			seen[name] = true
-			models = append(models, name)
-		}
-	}
-	h.warmupRuntime.mu.Lock()
-	if cached, ok := h.warmupRuntime.models[provider]; ok {
-		for _, m := range cached.models {
-			add(m)
-		}
-	}
-	h.warmupRuntime.mu.Unlock()
-
-	if h.repo != nil {
-		if providers, err := h.repo.ListPricingProviders(ctx); err == nil {
-			for _, item := range providers {
-				if strings.EqualFold(item.Channel, provider) || strings.EqualFold(item.Family, provider) {
-					for _, m := range item.Models {
-						add(m)
-					}
-				}
-			}
-		}
-	}
-	return models
 }

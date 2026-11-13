@@ -195,47 +195,11 @@ func IsModelInWindowScope(window QuotaWindow, rawModel string) bool {
 	return isMatch
 }
 
-// FilterScopedModels returns all named in-scope model usage groups ordered by
-// dominant rank (highest request count first).
-func FilterScopedModels(window QuotaWindow, groups []ModelWindowUsage) []ModelWindowUsage {
-	matched := make([]ModelWindowUsage, 0, len(groups))
-	for _, group := range groups {
-		name := strings.TrimSpace(group.Model)
-		if group.Usage.Requests <= 0 || group.Usage.Tokens <= 0 || !IsModelInWindowScope(window, name) {
-			continue
-		}
-		candidate := group
-		candidate.Model = name
-		matched = append(matched, candidate)
+// CanAffectWindowForecast reports whether a request for rawModel can change or
+// obscure window's attribution. Known models outside a scoped window's pool do not.
+func CanAffectWindowForecast(window QuotaWindow, rawModel string) bool {
+	if capacityModelFamily(normalizeCapacityModel(rawModel)) == "" {
+		return true
 	}
-	for i := 1; i < len(matched); i++ {
-		for j := i; j > 0 && dominantModelOutranks(matched[j], matched[j-1]); j-- {
-			matched[j], matched[j-1] = matched[j-1], matched[j]
-		}
-	}
-	return matched
-}
-
-// SelectDominantModelUsage chooses the named in-scope model with the highest
-// recent request count (breaking ties by effective tokens, raw tokens, then
-// model name) for forward capacity projection.
-func SelectDominantModelUsage(window QuotaWindow, groups []ModelWindowUsage) (ModelWindowUsage, bool) {
-	matched := FilterScopedModels(window, groups)
-	if len(matched) == 0 {
-		return ModelWindowUsage{}, false
-	}
-	return matched[0], true
-}
-
-func dominantModelOutranks(candidate, current ModelWindowUsage) bool {
-	if candidate.Usage.Requests != current.Usage.Requests {
-		return candidate.Usage.Requests > current.Usage.Requests
-	}
-	if candidate.Usage.CostNanos != current.Usage.CostNanos {
-		return candidate.Usage.CostNanos > current.Usage.CostNanos
-	}
-	if candidate.Usage.Tokens != current.Usage.Tokens {
-		return candidate.Usage.Tokens > current.Usage.Tokens
-	}
-	return candidate.Model < current.Model
+	return IsModelInWindowScope(window, rawModel)
 }

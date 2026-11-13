@@ -12,9 +12,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 )
 
-// capacityRetainedCycles is how many cycles of a window keep their evidence: the
-// live one and earlier ones a reference can come from when the last cycle had no
-// measurable climb.
+// capacityRetainedCycles keeps the live cycle and two earlier consumption histories.
 const capacityRetainedCycles = 3
 
 type capacityQuerier interface {
@@ -42,16 +40,37 @@ func recordCapacityCycles(ctx context.Context, tx *sql.Tx, snapshot QuotaSnapsho
 		}
 		cycle, isEvidence := quota.NextCalibrationCycle(stored, snapshot.Provider, window, plan, snapshot.ObservedAtMS)
 		if !isEvidence {
-			continue
+			if len(cycle.Points) == 0 {
+				continue
+			}
+			watermark, hasLateUsage, err := capacityUsageWatermark(ctx, tx, snapshot.AuthIndex, window, cycle)
+			if err != nil {
+				return err
+			}
+			last := &cycle.Points[len(cycle.Points)-1]
+			if watermark == last.UsageWatermarkID && !hasLateUsage {
+				continue
+			}
+			last.UsageWatermarkID = watermark
+			last.HasUsageGap = last.HasUsageGap || hasLateUsage
+		} else {
+			watermark, hasLateUsage, err := capacityUsageWatermark(ctx, tx, snapshot.AuthIndex, window, cycle)
+			if err != nil {
+				return err
+			}
+			point, isMeasured, err := capacityPoint(ctx, tx, snapshot.AuthIndex, window, cycle, snapshot.ObservedAtMS, watermark)
+			if err != nil {
+				return err
+			}
+			if !isMeasured {
+				continue
+			}
+			if len(cycle.Points) > 0 && hasLateUsage {
+				last := &cycle.Points[len(cycle.Points)-1]
+				last.HasUsageGap = true
+			}
+			cycle.Points = append(cycle.Points, point)
 		}
-		point, isMeasured, err := capacityPoint(ctx, tx, snapshot.AuthIndex, window, cycle, snapshot.ObservedAtMS)
-		if err != nil {
-			return err
-		}
-		if !isMeasured {
-			continue
-		}
-		cycle.Points = append(cycle.Points, point)
 		pointsJSON, err := json.Marshal(cycle.Points)
 		if err != nil {
 			return fmt.Errorf("encode capacity points: %w", err)
@@ -61,7 +80,8 @@ func recordCapacityCycles(ctx context.Context, tx *sql.Tx, snapshot QuotaSnapsho
 				auth_index, window_key, cycle_reset_at_ms, period_hours, plan_type, plan_tier, points_json, updated_at_ms
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(auth_index, window_key, cycle_reset_at_ms) DO UPDATE SET
-				points_json = excluded.points_json, updated_at_ms = excluded.updated_at_ms`,
+				points_json = excluded.points_json, updated_at_ms = excluded.updated_at_ms,
+				plan_type = excluded.plan_type, plan_tier = excluded.plan_tier, period_hours = excluded.period_hours`,
 			snapshot.AuthIndex, key, cycle.CycleResetAtMS, cycle.PeriodHours, cycle.PlanType, cycle.PlanTier,
 			string(pointsJSON), time.Now().UnixMilli(),
 		); err != nil {
@@ -85,17 +105,25 @@ func recordCapacityCycles(ctx context.Context, tx *sql.Tx, snapshot QuotaSnapsho
 // capacityPoint pairs a reading with the usage recorded from the cycle start. A
 // record that arrives after its reading is caught by the next point's fresh sum;
 // the running sum covers records that retention removed since the last point.
-func capacityPoint(ctx context.Context, q capacityQuerier, authIndex string, window quota.QuotaWindow, cycle quota.CycleCalibration, observedAtMS int64) (quota.CalibrationPoint, bool, error) {
+func capacityPoint(ctx context.Context, q capacityQuerier, authIndex string, window quota.QuotaWindow, cycle quota.CycleCalibration, observedAtMS, watermark int64) (quota.CalibrationPoint, bool, error) {
 	used, _ := quota.WindowUsedPercent(window)
 	usage, _, scopeReason, err := queryCapacityUsage(ctx, q, authIndex, window, cycle.CycleStartMS(), observedAtMS)
 	if err != nil || scopeReason != "" {
 		return quota.CalibrationPoint{}, false, err
 	}
+	var intervalModels []quota.ModelCalibrationUsage
 	if len(cycle.Points) > 0 {
 		last := cycle.Points[len(cycle.Points)-1]
-		since, _, _, err := queryCapacityUsage(ctx, q, authIndex, window, last.ObservedAtMS, observedAtMS)
+		since, groups, _, err := queryCapacityUsageSince(ctx, q, authIndex, window, cycle.CycleStartMS(), last.ObservedAtMS, observedAtMS)
 		if err != nil {
 			return quota.CalibrationPoint{}, false, err
+		}
+		for _, group := range groups {
+			intervalModels = append(intervalModels, quota.ModelCalibrationUsage{
+				Model: group.Model, Requests: group.Usage.Requests, Tokens: group.Usage.Tokens,
+				PromptTokens: group.Usage.PromptTokens, CachedTokens: group.Usage.CachedTokens, OutputTokens: group.Usage.OutputTokens,
+				ServiceTier: group.Usage.ServiceTier, HasMixedServiceTiers: group.Usage.HasMixedServiceTiers,
+			})
 		}
 		if last.Requests+since.Requests > usage.Requests {
 			usage = quota.WindowUsage{
@@ -112,6 +140,8 @@ func capacityPoint(ctx context.Context, q capacityQuerier, authIndex string, win
 	}
 	return quota.CalibrationPoint{
 		ObservedAtMS:      observedAtMS,
+		IntervalModels:    intervalModels,
+		UsageWatermarkID:  watermark,
 		UsedPercent:       used,
 		Requests:          usage.Requests,
 		PricedRequests:    usage.PricedRequests,
@@ -122,6 +152,47 @@ func capacityPoint(ctx context.Context, q capacityQuerier, authIndex string, win
 		CostNanos:         usage.CostNanos,
 		UnmatchedRequests: usage.UnmatchedRequests,
 	}, true, nil
+}
+
+// The insertion watermark is independent of event retention and request time.
+// Late arrivals mark the prior point rather than tainting clean traffic after it.
+func capacityUsageWatermark(ctx context.Context, q capacityQuerier, authIndex string, window quota.QuotaWindow, cycle quota.CycleCalibration) (int64, bool, error) {
+	var watermark int64
+	if err := q.QueryRowContext(ctx, `SELECT COALESCE(MAX(id), 0) FROM usage_events`).Scan(&watermark); err != nil {
+		return 0, false, fmt.Errorf("read quota usage watermark: %w", err)
+	}
+	if len(cycle.Points) == 0 {
+		return watermark, false, nil
+	}
+	last := cycle.Points[len(cycle.Points)-1]
+	if watermark <= last.UsageWatermarkID {
+		return last.UsageWatermarkID, false, nil
+	}
+	rows, err := q.QueryContext(ctx, `
+		SELECT DISTINCT COALESCE(NULLIF(response_model, ''), model)
+		FROM usage_events
+		WHERE id > ? AND id <= ? AND auth_index = ? AND timestamp_ms >= ? AND timestamp_ms < ?
+		  AND timestamp_ms + MAX(latency_ms, 0) < ? AND total_tokens > 0`,
+		last.UsageWatermarkID, watermark, authIndex, cycle.CycleStartMS(), last.ObservedAtMS, last.ObservedAtMS,
+	)
+	if err != nil {
+		return 0, false, fmt.Errorf("check late quota usage: %w", err)
+	}
+	defer rows.Close()
+	hasLateUsage := false
+	for rows.Next() {
+		var model string
+		if err := rows.Scan(&model); err != nil {
+			return 0, false, fmt.Errorf("scan late quota usage: %w", err)
+		}
+		if quota.CanAffectWindowForecast(window, model) {
+			hasLateUsage = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, false, fmt.Errorf("check late quota usage: %w", err)
+	}
+	return watermark, hasLateUsage, nil
 }
 
 // LoadCapacityCycles returns a credential's retained cycle evidence by window
@@ -172,7 +243,7 @@ func queryCapacityCycles(ctx context.Context, q capacityQuerier, authIndex, key 
 }
 
 // QueryCapacityUsage sums the requests that consumed a credential's window in
-// [fromMS, toMS). A request counts when it finishes, as upstream meters it then;
+// [fromMS, toMS). A request must start within the cycle and finish before the reading;
 // one that produced no tokens consumed nothing. A scoped window counts only the
 // models it meters, by served identity when CPA published one.
 func (r *Repository) QueryCapacityUsage(ctx context.Context, authIndex string, window quota.QuotaWindow, fromMS, toMS int64) (quota.WindowUsage, string, error) {
@@ -181,8 +252,8 @@ func (r *Repository) QueryCapacityUsage(ctx context.Context, authIndex string, w
 }
 
 // QueryCapacityUsageWithModels returns both the aggregated window usage and the
-// per-model breakdown in [fromMS, toMS) so callers can project remaining
-// capacity onto the credential's dominant recent model without a second scan.
+// per-model breakdown of completed requests in [fromMS, toMS). This pairs
+// native meter changes with directly observed model traffic.
 func (r *Repository) QueryCapacityUsageWithModels(ctx context.Context, authIndex string, window quota.QuotaWindow, fromMS, toMS int64) (quota.WindowUsage, []quota.ModelWindowUsage, string, error) {
 	if r == nil || r.SQL() == nil {
 		return quota.WindowUsage{}, nil, "", errors.New("repository is not initialized")
@@ -191,6 +262,13 @@ func (r *Repository) QueryCapacityUsageWithModels(ctx context.Context, authIndex
 }
 
 func queryCapacityUsage(ctx context.Context, q capacityQuerier, authIndex string, window quota.QuotaWindow, fromMS, toMS int64) (quota.WindowUsage, []quota.ModelWindowUsage, string, error) {
+	return queryCapacityUsageSince(ctx, q, authIndex, window, fromMS, fromMS, toMS)
+}
+
+// The indexed start bound stays at the cycle boundary, while completion owns
+// interval attribution. In-flight requests can cross a reading without forcing
+// every quota refresh to scan the credential's entire retained history.
+func queryCapacityUsageSince(ctx context.Context, q capacityQuerier, authIndex string, window quota.QuotaWindow, cycleFromMS, fromMS, toMS int64) (quota.WindowUsage, []quota.ModelWindowUsage, string, error) {
 	rows, err := q.QueryContext(ctx, `
 		WITH events AS (
 			SELECT
@@ -236,7 +314,7 @@ func queryCapacityUsage(ctx context.Context, q capacityQuerier, authIndex string
 					ELSE 0
 				END AS has_breakdown
 			FROM usage_events
-			WHERE auth_index = ? AND timestamp_ms >= ? AND timestamp_ms < ?
+			WHERE auth_index = ? AND timestamp_ms >= ? AND timestamp_ms + MAX(latency_ms, 0) >= ? AND timestamp_ms < ?
 			  AND timestamp_ms + MAX(latency_ms, 0) < ? AND total_tokens > 0
 		)
 		SELECT
@@ -274,7 +352,7 @@ func queryCapacityUsage(ctx context.Context, q capacityQuerier, authIndex string
 			COALESCE(MAX(resolved_tier), '')
 		FROM events
 		GROUP BY 1`,
-		authIndex, fromMS, toMS, toMS,
+		authIndex, cycleFromMS, fromMS, toMS, toMS,
 	)
 	if err != nil {
 		return quota.WindowUsage{}, nil, "", fmt.Errorf("query capacity usage: %w", err)
