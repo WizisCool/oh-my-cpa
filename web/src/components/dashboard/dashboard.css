@@ -240,8 +240,8 @@
   padding-left: 16px;
   border-left: 1px solid var(--border-soft);
 }
-.tile-split .is-danger, .tile-split .is-danger b { color: var(--danger); }
-.tile-split .is-zero, .tile-split .is-zero b { color: var(--meta); }
+.tile-split .is-danger b { color: var(--danger); }
+.tile-split .is-zero b { color: var(--meta); }
 /* The dashboard's window picker keeps one width across presets, so the header's other
    actions do not shift when the window is changed. */
 .range-trigger { min-width: 138px; }
