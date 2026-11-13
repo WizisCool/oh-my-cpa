@@ -495,6 +495,16 @@ func TestUpstreamAnswersQuotaReadsWithoutFetchingAnything(t *testing.T) {
 		if len(decoded) == 0 {
 			t.Errorf("api-call body for %s is empty", target)
 		}
+		if target == kimiUsageURL {
+			windows, err := quota.ParseKimiUsage([]byte(payload.Body), time.Now().UnixMilli())
+			if err != nil || len(windows) != 1 {
+				t.Fatalf("Kimi fixture quota = %+v, err = %v; want one readable window", windows, err)
+			}
+			window := windows[0]
+			if window.Kind != "five_hour" || window.Used == nil || *window.Used != 318 || window.RemainingPercent == nil || *window.RemainingPercent != 68.2 {
+				t.Errorf("Kimi fixture window = %+v, want five_hour, used 318, remaining 68.2%%", window)
+			}
+		}
 	}
 
 	// A URL outside the catalogue is refused, never dialled. This is the property that

@@ -14,6 +14,136 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
+func TestParseKimiUsageClassifiesCountedWindows(t *testing.T) {
+	for _, tc := range []struct {
+		duration int
+		unit     string
+		wantKind string
+	}{
+		{300, "TIME_UNIT_MINUTE", "five_hour"},
+		{24, "hours", "daily"},
+		{7, "days", "weekly"},
+		{30, "days", "monthly"},
+		{15, "hours", "custom"},
+	} {
+		t.Run(tc.wantKind, func(t *testing.T) {
+			raw := []byte(fmt.Sprintf(`{"limits":[{"window":{"duration":%d,"timeUnit":%q},"detail":{"limit":"200","used":"139"}}]}`, tc.duration, tc.unit))
+			windows, err := ParseKimiUsage(raw, 1735689600000)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(windows) != 1 {
+				t.Fatalf("got %d windows, want 1", len(windows))
+			}
+			if windows[0].Kind != tc.wantKind {
+				t.Errorf("window kind = %q, want %q", windows[0].Kind, tc.wantKind)
+			}
+			wantLabel := fmt.Sprintf("%gh", *windows[0].PeriodHours)
+			if windows[0].Label != wantLabel {
+				t.Errorf("window label = %q, want duration %q rather than an invented numbered limit", windows[0].Label, wantLabel)
+			}
+		})
+	}
+}
+
+func TestParseKimiUsageNamesUntimedCountedWindows(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		window string
+	}{
+		{"missing duration", `{}`},
+		{"unknown unit", `{"duration":300,"timeUnit":"unknown"}`},
+		{"unknown duration", `{"duration":"unknown","timeUnit":"hours"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := []byte(fmt.Sprintf(`{"limits":[{"window":%s,"detail":{"limit":100,"used":25}}]}`, tc.window))
+			windows, err := ParseKimiUsage(raw, 1735689600000)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(windows) != 1 {
+				t.Fatalf("got %d windows, want 1", len(windows))
+			}
+			window := windows[0]
+			if window.Label != "Quota" {
+				t.Errorf("window label = %q, want Quota without an invented number or period", window.Label)
+			}
+			if window.Kind != "custom" || window.PeriodHours != nil {
+				t.Errorf("unknown period was invented: kind = %q, hours = %v", window.Kind, window.PeriodHours)
+			}
+		})
+	}
+}
+
+func TestParseKimiUsageKeepsModelScopedWindowIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		identity  string
+		wantLabel string
+	}{
+		{"unnamed", ``, "kimi-model"},
+		{"upstream name", `"name":"Model allowance",`, "Model allowance"},
+		{"upstream title", `"name":"Model allowance","title":"Coding allowance",`, "Coding allowance"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := []byte(fmt.Sprintf(`{"limits":[{%s"scope":"kimi-model","window":{"duration":300,"timeUnit":"TIME_UNIT_MINUTE"},"detail":{"limit":100,"used":25}}]}`, tc.identity))
+			windows, err := ParseKimiUsage(raw, 1735689600000)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(windows) != 1 {
+				t.Fatalf("got %d windows, want 1", len(windows))
+			}
+			window := windows[0]
+			if window.Label != tc.wantLabel || window.Scope != "model" || window.Model != "kimi-model" {
+				t.Errorf("model identity = label %q, scope %q, model %q; want %q, model, kimi-model", window.Label, window.Scope, window.Model, tc.wantLabel)
+			}
+			if window.Kind != "five_hour" || window.PeriodHours == nil || *window.PeriodHours != 5 {
+				t.Errorf("model period changed: kind = %q, hours = %v", window.Kind, window.PeriodHours)
+			}
+		})
+	}
+}
+
+// Synthetic counts cover the response shape without retaining account data or reset times.
+func TestParseKimiUsageReadsRemainingCount(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		detail     string
+		wantUsed   float64
+		wantRemain float64
+	}{
+		{"remaining count", `"limit":"200","remaining":"70"`, 130, 35},
+		{"unused", `"limit":"100","remaining":"100"`, 0, 100},
+		{"exhausted", `"limit":"200","remaining":"0"`, 200, 0},
+		{"explicit used wins", `"limit":"200","remaining":"70","used":"50"`, 50, 75},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := []byte(fmt.Sprintf(`{"limits":[{"window":{"duration":300,"timeUnit":"TIME_UNIT_MINUTE"},"detail":{%s}}],"usages":{"limit_5h":{"used_ratio":0.0003},"limit_7d":{"used_ratio":0.4}}}`, tc.detail))
+			windows, err := ParseKimiUsage(raw, 1735689600000)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(windows) != 2 {
+				t.Fatalf("got %d windows, want five-hour and weekly", len(windows))
+			}
+			short := windows[0]
+			if short.Kind != "five_hour" || short.Label != "5h" {
+				t.Errorf("short window identity = %q, %q, want five_hour, 5h", short.Kind, short.Label)
+			}
+			if short.Used == nil || *short.Used != tc.wantUsed {
+				t.Errorf("used = %v, want %v", short.Used, tc.wantUsed)
+			}
+			if short.RemainingPercent == nil || *short.RemainingPercent != tc.wantRemain {
+				t.Errorf("remaining percentage = %v, want %v (nil displays --)", short.RemainingPercent, tc.wantRemain)
+			}
+			if windows[1].Kind != "weekly" || windows[1].RemainingPercent == nil || *windows[1].RemainingPercent != 60 {
+				t.Errorf("weekly reading changed: %+v", windows[1])
+			}
+		})
+	}
+}
+
 // A quantity written into the key is read as the duration it states, so a longer number is not read
 // as a shorter period and a seven-day spelling is a week rather than a day.
 func TestParseKimiUsageReadsQuantitiesInRatioPoolKeys(t *testing.T) {

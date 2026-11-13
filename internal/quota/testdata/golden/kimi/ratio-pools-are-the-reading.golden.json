@@ -2,8 +2,8 @@
   "windows": [
     {
       "id": "kimi_0",
-      "label": "限制项 1",
-      "kind": "custom",
+      "label": "5h",
+      "kind": "five_hour",
       "scope": "standard",
       "used": 139,
       "limit": 200,
