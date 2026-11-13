@@ -25,6 +25,18 @@ type modelCatalogOutcomeDTO struct {
 }
 
 // refreshModelSquareCatalogs updates CPA catalogs and provenance before the page re-reads.
+//
+// @Summary Refresh Model Square upstream catalogs
+// @Description Trigger CPA model catalog refresh and update local model provenance cache.
+// @Tags ModelSquare
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} modelCatalogRefreshDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 501 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/model-square/refresh-catalogs [post]
 func (h *Handler) refreshModelSquareCatalogs(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, isReady := h.managementClientOrError(writer, request)

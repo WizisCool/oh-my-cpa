@@ -63,6 +63,16 @@ func cpaProxyRemoved(view map[string]any) bool {
 	return isString && strings.TrimSpace(value) == ""
 }
 
+// @Summary Get outbound proxy settings
+// @Description Return OMC's outbound proxy mode, redacted address, and CPA synchronization state.
+// @Tags Config
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} outboundProxyDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/outbound-proxy [get]
 func (h *Handler) getOutboundProxy(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	store := repository.OutboundProxyStore{Repo: h.repo, Cipher: h.cipher}
@@ -100,6 +110,21 @@ type outboundProxyInput struct {
 	CPARevision string  `json:"cpa_revision"`
 }
 
+// @Summary Update outbound proxy settings
+// @Description Update OMC outbound proxy mode/URL and apply matching requests.proxy-url changes to CPA under revision check.
+// @Tags Config
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body outboundProxyInput true "Outbound proxy settings"
+// @Success 200 {object} outboundProxyDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/outbound-proxy [put]
 func (h *Handler) putOutboundProxy(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var input outboundProxyInput

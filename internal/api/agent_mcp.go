@@ -77,6 +77,20 @@ func (h *Handler) mcpHandler() (http.Handler, error) {
 //
 // It accepts the management key as a bearer token and nothing else: a session cookie is not
 // an MCP credential, so a page open in the operator's browser cannot drive the endpoint.
+//
+// @Summary Streamable HTTP MCP endpoint
+// @Description Expose Oh My CPA capabilities to Model Context Protocol clients via Streamable HTTP.
+// @Tags MCP
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} StatusOKResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 429 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /mcp [post]
+// @Router /mcp [get]
+// @Router /mcp [delete]
 func (h *Handler) serveMCP(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if request.Header.Get("Authorization") == "" {

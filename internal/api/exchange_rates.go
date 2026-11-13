@@ -50,6 +50,15 @@ func projectExchangeRates(snapshot exchangerate.Snapshot) exchangeRatesDTO {
 	return result
 }
 
+// @Summary List display currency exchange rates
+// @Description Return cached USD-based exchange rates and refresh metadata.
+// @Tags ExchangeRates
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} exchangeRatesDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/exchange-rates [get]
 func (h *Handler) listExchangeRates(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
@@ -66,6 +75,17 @@ func (h *Handler) listExchangeRates(writer http.ResponseWriter, request *http.Re
 	writeJSON(writer, http.StatusOK, projectExchangeRates(snapshot))
 }
 
+// @Summary Refresh display currency exchange rates
+// @Description Fetch updated exchange rates from the configured upstream source and persist them.
+// @Tags ExchangeRates
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} exchangeRatesDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/exchange-rates/refresh [post]
 func (h *Handler) refreshExchangeRates(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.exchangeRates == nil {

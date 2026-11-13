@@ -77,6 +77,45 @@ func (h *Handler) modelCooldownKeyResolver(ctx context.Context, client *manageme
 	}
 }
 
+// QuotaRefreshResponseDTO returns either a single refreshed quota or a batch list.
+type QuotaRefreshResponseDTO struct {
+	Status string                   `json:"status"`
+	Quota  *quota.NormalizedQuota   `json:"quota,omitempty"`
+	Quotas []*quota.NormalizedQuota `json:"quotas,omitempty"`
+	Total  int                      `json:"total,omitempty"`
+}
+
+// QuotaCooldownClearResponseDTO confirms cooldown/quota reset for an auth index.
+type QuotaCooldownClearResponseDTO struct {
+	Status    string `json:"status"`
+	AuthIndex string `json:"auth_index"`
+}
+
+// QuotaRedeemCreditResponseDTO confirms Codex credit redemption and cooldown clearing.
+type QuotaRedeemCreditResponseDTO struct {
+	Status          string                 `json:"status"`
+	Quota           *quota.NormalizedQuota `json:"quota"`
+	CooldownCleared bool                   `json:"cooldown_cleared"`
+	CooldownError   string                 `json:"cooldown_error,omitempty"`
+}
+
+// CredentialQuotaDetailResponseDTO returns normalized quota, snapshot history, model quotas, and last refresh attempt.
+type CredentialQuotaDetailResponseDTO struct {
+	Quota       quota.NormalizedQuota                 `json:"quota"`
+	History     []repository.QuotaSnapshotRecord      `json:"history"`
+	ModelQuotas map[string]managementQuotaObservation `json:"model_quotas"`
+	LastRefresh *QuotaRefreshAttemptDTO               `json:"last_refresh,omitempty"`
+}
+
+// @Summary Get credential quota overview
+// @Description Return normalized quota windows, active cooldowns, capacity forecasts, and overview summary across credentials.
+// @Tags Quota
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} quotaOverviewData
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/quota [get]
 func (h *Handler) getQuotaOverview(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -254,6 +293,20 @@ func quotaAttemptDTO(attempt *quota.ReadAttempt) *QuotaRefreshAttemptDTO {
 	return &QuotaRefreshAttemptDTO{AttemptedAtMS: attempt.AttemptedAtMS, Outcome: outcome, Error: attempt.Failure}
 }
 
+// @Summary Refresh credential quota
+// @Description Refresh quota observations for one auth_index or up to 10 auth_indexes (supports SSE when Accept includes text/event-stream).
+// @Tags Quota
+// @Accept json
+// @Produce json,text/event-stream
+// @Security CookieAuth
+// @Param body body refreshQuotaRequest true "Single or batch auth_index selection"
+// @Success 200 {object} QuotaRefreshResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/quota/refresh [post]
 func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var req refreshQuotaRequest
@@ -321,9 +374,9 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 			"status": refreshed.Status,
 		})
 
-		writeJSON(writer, http.StatusOK, map[string]any{
-			"status": "ok",
-			"quota":  refreshed,
+		writeJSON(writer, http.StatusOK, QuotaRefreshResponseDTO{
+			Status: "ok",
+			Quota:  refreshed,
 		})
 		return
 	}
@@ -403,7 +456,7 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 				out = append(out, r)
 			}
 		}
-		writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "quotas": out, "total": len(out)})
+		writeJSON(writer, http.StatusOK, QuotaRefreshResponseDTO{Status: "ok", Quotas: out, Total: len(out)})
 		return
 	}
 
@@ -634,14 +687,59 @@ func (h *Handler) clearCredentialCooldownWithAction(writer http.ResponseWriter, 
 	writeJSON(writer, 200, result)
 }
 
+// @Summary Clear credential cooldown
+// @Description Clear active gateway cooldown and local cooldown evidence for a credential auth_index.
+// @Tags Quota
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body quotaActionRequest true "Credential auth_index"
+// @Success 200 {object} QuotaCooldownClearResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/quota/clear-cooldown [post]
 func (h *Handler) clearCredentialCooldown(writer http.ResponseWriter, request *http.Request) {
 	h.clearCredentialCooldownWithAction(writer, request, "quota.clear_cooldown")
 }
 
+// @Summary Reset credential quota state
+// @Description Reset gateway quota cooldown state for a credential auth_index.
+// @Tags Quota
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body quotaActionRequest true "Credential auth_index"
+// @Success 200 {object} QuotaCooldownClearResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/quota/reset [post]
 func (h *Handler) resetCredentialQuota(writer http.ResponseWriter, request *http.Request) {
 	h.clearCredentialCooldownWithAction(writer, request, "quota.reset")
 }
 
+// @Summary Redeem Codex rate-limit reset credit
+// @Description Redeem a Codex quota reset credit, clear gateway cooldown, and refresh the credential quota reading.
+// @Tags Quota
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body quotaActionRequest true "Codex credential auth_index"
+// @Success 200 {object} QuotaRedeemCreditResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/quota/redeem-credit [post]
 func (h *Handler) redeemCodexResetCredit(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var req quotaActionRequest
@@ -680,6 +778,18 @@ func (h *Handler) redeemCodexResetCredit(writer http.ResponseWriter, request *ht
 	writeJSON(writer, 200, result)
 }
 
+// @Summary Get credential quota detail
+// @Description Return normalized quota windows, snapshot history, model quotas, and last refresh attempt for one credential.
+// @Tags Quota
+// @Produce json
+// @Security CookieAuth
+// @Param authIndex path string true "Credential runtime auth_index"
+// @Success 200 {object} CredentialQuotaDetailResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/quota/{authIndex} [get]
 func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	authIndex := strings.TrimSpace(chi.URLParam(request, "authIndex"))
@@ -793,15 +903,11 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 		}
 	}
 
-	response := map[string]any{
-		"quota":        normalized,
-		"history":      history,
-		"model_quotas": projectModelQuotas(targetFile.ModelQuotas),
-	}
-	// Absent rather than null: a credential nobody has tried to read has no attempt to report, and
-	// an explicit null would claim otherwise.
-	if lastRefresh := quotaAttemptDTO(attempt); lastRefresh != nil {
-		response["last_refresh"] = lastRefresh
+	response := CredentialQuotaDetailResponseDTO{
+		Quota:       normalized,
+		History:     history,
+		ModelQuotas: projectModelQuotas(targetFile.ModelQuotas),
+		LastRefresh: quotaAttemptDTO(attempt),
 	}
 	writeJSON(writer, http.StatusOK, response)
 }

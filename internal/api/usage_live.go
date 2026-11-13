@@ -41,6 +41,18 @@ type usageChangeSource interface {
 // 204 means "this deployment has no live source" (ingestion off, or demonstration
 // mode), which EventSource treats as final; the page then keeps its
 // polling fallback. 503 means the reader limit is reached.
+// usageLive streams "stored usage data changed" signals as server-sent events.
+//
+// @Summary Stream live usage change notifications
+// @Description Subscribe to Server-Sent Events signaling when new usage records are ingested.
+// @Tags Usage
+// @Produce text/event-stream
+// @Security CookieAuth
+// @Success 200 {string} string "Server-Sent Events stream"
+// @Success 204 {string} string "No content when live usage streaming is disabled or in demo mode"
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/usage/live [get]
 func (h *Handler) usageLive(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	source, ok := h.usage.(usageChangeSource)

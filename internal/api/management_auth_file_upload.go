@@ -14,6 +14,36 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
+// AuthFileUploadFailureItemDTO describes one failed auth file upload entry.
+type AuthFileUploadFailureItemDTO struct {
+	Name  string `json:"name"`
+	Error string `json:"error"`
+}
+
+// AuthFileUploadResponseDTO summarizes single or batch auth file upload results.
+type AuthFileUploadResponseDTO struct {
+	Status   string                         `json:"status"`
+	Uploaded int                            `json:"uploaded"`
+	Files    []string                       `json:"files"`
+	Failed   []AuthFileUploadFailureItemDTO `json:"failed,omitempty"`
+}
+
+// @Summary Upload credential auth file(s)
+// @Description Upload one JSON auth file via raw body (`?name=*.json`) or batch upload up to 100 JSON files via multipart/form-data.
+// @Tags AuthFiles
+// @Accept json,mpfd
+// @Produce json
+// @Security CookieAuth
+// @Param name query string false "Target filename (*.json) when uploading raw JSON body"
+// @Param files formData file false "Auth JSON file(s) when using multipart/form-data"
+// @Success 200 {object} AuthFileUploadResponseDTO
+// @Success 207 {object} AuthFileUploadResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files [post]
 func (h *Handler) uploadManagementAuthFiles(writer http.ResponseWriter, request *http.Request) {
 	request.Body = http.MaxBytesReader(writer, request.Body, managementAuthFileUploadLimit)
 	client, ok := h.managementClientOrError(writer, request)
@@ -82,7 +112,7 @@ func (h *Handler) uploadManagementAuthFiles(writer http.ResponseWriter, request 
 		h.pricing.NotifyModelsChanged()
 	}
 	h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
-	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "uploaded": 1, "files": []string{name}})
+	writeJSON(writer, http.StatusOK, AuthFileUploadResponseDTO{Status: "ok", Uploaded: 1, Files: []string{name}})
 }
 
 type multipartFileHeader struct {
@@ -97,26 +127,26 @@ func (h *Handler) handleUploadResults(writer http.ResponseWriter, ctx context.Co
 	}
 	prepared := make([]preparedUpload, 0, len(files))
 	uploaded := make([]string, 0, len(files))
-	failed := make([]map[string]string, 0)
+	failed := make([]AuthFileUploadFailureItemDTO, 0)
 	for _, file := range files {
 		name, uploadNameErr := validateJSONUploadName(file.filename)
 		if uploadNameErr != nil {
-			failed = append(failed, map[string]string{"name": filepath.Base(file.filename), "error": uploadNameErr.Error()})
+			failed = append(failed, AuthFileUploadFailureItemDTO{Name: filepath.Base(file.filename), Error: uploadNameErr.Error()})
 			continue
 		}
 		source, err := file.open()
 		if err != nil {
-			failed = append(failed, map[string]string{"name": name, "error": "cannot open upload"})
+			failed = append(failed, AuthFileUploadFailureItemDTO{Name: name, Error: "cannot open upload"})
 			continue
 		}
 		data, readErr := io.ReadAll(io.LimitReader(source, managementAuthFileUploadLimit+1))
 		_ = source.Close()
 		if readErr != nil || int64(len(data)) > managementAuthFileUploadLimit {
-			failed = append(failed, map[string]string{"name": name, "error": "upload is too large or unreadable"})
+			failed = append(failed, AuthFileUploadFailureItemDTO{Name: name, Error: "upload is too large or unreadable"})
 			continue
 		}
 		if jsonErr := validateAuthJSON(data); jsonErr != nil {
-			failed = append(failed, map[string]string{"name": name, "error": jsonErr.Error()})
+			failed = append(failed, AuthFileUploadFailureItemDTO{Name: name, Error: jsonErr.Error()})
 			continue
 		}
 		prepared = append(prepared, preparedUpload{name: name, data: data})
@@ -133,7 +163,7 @@ func (h *Handler) handleUploadResults(writer http.ResponseWriter, ctx context.Co
 		}
 		for _, item := range prepared {
 			if _, uploadErr := client.UploadAuthFile(ctx, item.name, item.data); uploadErr != nil {
-				failed = append(failed, map[string]string{"name": item.name, "error": publicCPAErrorMessage(uploadErr)})
+				failed = append(failed, AuthFileUploadFailureItemDTO{Name: item.name, Error: publicCPAErrorMessage(uploadErr)})
 				continue
 			}
 			uploaded = append(uploaded, item.name)
@@ -146,11 +176,10 @@ func (h *Handler) handleUploadResults(writer http.ResponseWriter, ctx context.Co
 		h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 	}
 	if len(failed) > 0 {
-		status := http.StatusMultiStatus
-		writeJSON(writer, status, map[string]any{"status": "partial", "uploaded": len(uploaded), "files": uploaded, "failed": failed})
+		writeJSON(writer, http.StatusMultiStatus, AuthFileUploadResponseDTO{Status: "partial", Uploaded: len(uploaded), Files: uploaded, Failed: failed})
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "uploaded": len(uploaded), "files": uploaded})
+	writeJSON(writer, http.StatusOK, AuthFileUploadResponseDTO{Status: "ok", Uploaded: len(uploaded), Files: uploaded})
 }
 
 func validateJSONUploadName(raw string) (string, error) {

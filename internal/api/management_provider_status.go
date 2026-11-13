@@ -68,6 +68,31 @@ func (req patchProviderStatusRequest) verifyName(actual string) error {
 	return nil
 }
 
+// PatchProviderStatusResponseDTO reports the updated disabled state of a provider entry.
+type PatchProviderStatusResponseDTO struct {
+	Status   string `json:"status"`
+	Family   string `json:"family"`
+	Index    int    `json:"index"`
+	Disabled bool   `json:"disabled"`
+	Version  uint64 `json:"version,omitempty"`
+}
+
+// @Summary Enable or disable a provider entry
+// @Description Toggle the disabled status of a configured provider entry with optional stale-position guard.
+// @Tags Providers
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body patchProviderStatusRequest true "Provider status update"
+// @Success 200 {object} PatchProviderStatusResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/providers/status [patch]
 func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var req patchProviderStatusRequest
@@ -103,12 +128,12 @@ func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, requ
 				return
 			}
 			setStateVersionHeader(writer, version)
-			writeJSON(writer, http.StatusOK, map[string]any{
-				"status":   "ok",
-				"family":   req.Family,
-				"index":    req.Index,
-				"disabled": req.Disabled,
-				"version":  version,
+			writeJSON(writer, http.StatusOK, PatchProviderStatusResponseDTO{
+				Status:   "ok",
+				Family:   req.Family,
+				Index:    req.Index,
+				Disabled: req.Disabled,
+				Version:  version,
 			})
 			return
 		}
@@ -125,11 +150,11 @@ func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, requ
 		h.pricing.NotifyModelsChanged()
 	}
 
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status":   "ok",
-		"family":   req.Family,
-		"index":    req.Index,
-		"disabled": req.Disabled,
+	writeJSON(writer, http.StatusOK, PatchProviderStatusResponseDTO{
+		Status:   "ok",
+		Family:   req.Family,
+		Index:    req.Index,
+		Disabled: req.Disabled,
 	})
 }
 

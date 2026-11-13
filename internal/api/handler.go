@@ -485,6 +485,56 @@ type loginRequest struct {
 	Remember bool `json:"remember"`
 }
 
+// AuthSessionResponseDTO reports the current console authentication state.
+type AuthSessionResponseDTO struct {
+	Authenticated bool `json:"authenticated"`
+	Demo          bool `json:"demo,omitempty"`
+}
+
+// HealthzResponseDTO reports service, database, and CPA management API readiness.
+type HealthzResponseDTO struct {
+	Status           string                         `json:"status"`
+	Version          string                         `json:"version"`
+	DatabaseStatus   string                         `json:"database_status"`
+	CPAConnected     bool                           `json:"cpa_connected"`
+	CPAManagementAPI management.ManagementAPIStatus `json:"cpa_management_api"`
+}
+
+// DiscoverResourcesResponseDTO reports the outcome of a CPA resource discovery sweep.
+type DiscoverResourcesResponseDTO struct {
+	Status          string   `json:"status"`
+	InstanceID      string   `json:"instance_id"`
+	DiscoveredCount int      `json:"discovered_count"`
+	UnclaimedCount  int      `json:"unclaimed_count"`
+	DurationMS      int64    `json:"duration_ms"`
+	Errors          []string `json:"errors"`
+}
+
+// ResourceListResponseDTO lists discovered CPA resources.
+type ResourceListResponseDTO struct {
+	Resources []resourceResponse `json:"resources"`
+	Total     int                `json:"total"`
+}
+
+// ResourceOverrideResponseDTO wraps an updated discovered resource projection.
+type ResourceOverrideResponseDTO struct {
+	Status   string           `json:"status"`
+	Resource resourceResponse `json:"resource"`
+}
+
+// @Summary Sign in to the console
+// @Description Authenticate using the CPA management key and issue a session cookie.
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param body body loginRequest true "Login credentials"
+// @Success 200 {object} AuthSessionResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 403 {object} ErrorResponseDTO
+// @Failure 429 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /auth/login [post]
 func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if !sameOrigin(request) {
@@ -517,7 +567,7 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 			writeInternalError(writer, err)
 			return
 		}
-		writeJSON(writer, http.StatusOK, map[string]any{"authenticated": true, "demo": true})
+		writeJSON(writer, http.StatusOK, AuthSessionResponseDTO{Authenticated: true, Demo: true})
 		return
 	}
 	if !h.auth.KeyMatches(payload.Password) {
@@ -540,9 +590,16 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 		writeInternalError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"authenticated": true})
+	writeJSON(writer, http.StatusOK, AuthSessionResponseDTO{Authenticated: true})
 }
 
+// @Summary Check console session
+// @Description Return whether the caller currently holds a valid console session cookie.
+// @Tags Auth
+// @Produce json
+// @Success 200 {object} AuthSessionResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Router /auth/session [get]
 func (h *Handler) session(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.auth == nil || !h.auth.Valid(request) {
@@ -555,15 +612,22 @@ func (h *Handler) session(writer http.ResponseWriter, request *http.Request) {
 				writeInternalError(writer, err)
 				return
 			}
-			writeJSON(writer, http.StatusOK, map[string]any{"authenticated": true, "demo": true})
+			writeJSON(writer, http.StatusOK, AuthSessionResponseDTO{Authenticated: true, Demo: true})
 			return
 		}
-		writeJSON(writer, http.StatusOK, map[string]any{"authenticated": false})
+		writeJSON(writer, http.StatusOK, AuthSessionResponseDTO{Authenticated: false})
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"authenticated": true})
+	writeJSON(writer, http.StatusOK, AuthSessionResponseDTO{Authenticated: true})
 }
 
+// @Summary Sign out of the console
+// @Description Clear the console session cookie.
+// @Tags Auth
+// @Produce json
+// @Success 200 {object} AuthSessionResponseDTO
+// @Failure 403 {object} ErrorResponseDTO
+// @Router /auth/logout [post]
 func (h *Handler) logout(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if !sameOrigin(request) {
@@ -573,7 +637,7 @@ func (h *Handler) logout(writer http.ResponseWriter, request *http.Request) {
 	if h.auth != nil {
 		h.auth.Clear(writer)
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"authenticated": false})
+	writeJSON(writer, http.StatusOK, AuthSessionResponseDTO{Authenticated: false})
 }
 
 func (h *Handler) requireAuthentication(next http.Handler) http.Handler {
@@ -641,6 +705,13 @@ func sameOrigin(request *http.Request) bool {
 	return strings.EqualFold(parsed.Scheme, expectedScheme) && strings.EqualFold(parsed.Host, request.Host)
 }
 
+// @Summary Service health check
+// @Description Report SQLite readiness and CPA management gateway connectivity.
+// @Tags Health
+// @Produce json
+// @Success 200 {object} HealthzResponseDTO
+// @Failure 503 {object} HealthzResponseDTO
+// @Router /healthz [get]
 func (h *Handler) healthz(writer http.ResponseWriter, request *http.Request) {
 	status := "ok"
 	httpStatus := http.StatusOK
@@ -675,15 +746,25 @@ func (h *Handler) healthz(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	writer.Header().Set("Cache-Control", "no-store")
-	writeJSON(writer, httpStatus, map[string]any{
-		"status":             status,
-		"version":            h.cfg.Version,
-		"database_status":    databaseStatus,
-		"cpa_connected":      cpaConnected,
-		"cpa_management_api": cpaManagementAPI,
+	writeJSON(writer, httpStatus, HealthzResponseDTO{
+		Status:           status,
+		Version:          h.cfg.Version,
+		DatabaseStatus:   databaseStatus,
+		CPAConnected:     cpaConnected,
+		CPAManagementAPI: cpaManagementAPI,
 	})
 }
 
+// @Summary Discover CPA resources
+// @Description Trigger an immediate discovery sweep against the default CPA instance.
+// @Tags Resources
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} DiscoverResourcesResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/instances/default/discover [post]
 func (h *Handler) discoverDefault(writer http.ResponseWriter, request *http.Request) {
 	started := time.Now()
 	instance, err := h.repo.GetInstance(request.Context(), defaultInstanceID())
@@ -725,16 +806,26 @@ func (h *Handler) discoverDefault(writer http.ResponseWriter, request *http.Requ
 	if h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status":           "ok",
-		"instance_id":      instance.ID,
-		"discovered_count": len(stored),
-		"unclaimed_count":  unclaimed,
-		"duration_ms":      time.Since(started).Milliseconds(),
-		"errors":           discoveryErrors,
+	writeJSON(writer, http.StatusOK, DiscoverResourcesResponseDTO{
+		Status:          "ok",
+		InstanceID:      instance.ID,
+		DiscoveredCount: len(stored),
+		UnclaimedCount:  unclaimed,
+		DurationMS:      time.Since(started).Milliseconds(),
+		Errors:          discoveryErrors,
 	})
 }
 
+// @Summary List discovered resources
+// @Description List CPA discovered resources optionally filtered by lifecycle status.
+// @Tags Resources
+// @Produce json
+// @Security CookieAuth
+// @Param status query string false "Filter by resource status"
+// @Success 200 {object} ResourceListResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Router /v1/resources [get]
 func (h *Handler) listResources(writer http.ResponseWriter, request *http.Request) {
 	status := strings.TrimSpace(request.URL.Query().Get("status"))
 	resources, err := h.repo.ListResources(request.Context(), status)
@@ -750,9 +841,22 @@ func (h *Handler) listResources(writer http.ResponseWriter, request *http.Reques
 	for _, resource := range resources {
 		response = append(response, toResourceResponse(resource))
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"resources": response, "total": len(response)})
+	writeJSON(writer, http.StatusOK, ResourceListResponseDTO{Resources: response, Total: len(response)})
 }
 
+// @Summary Update resource metadata override
+// @Description Apply display name, icon, color, notes, or status overrides for a discovered resource.
+// @Tags Resources
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path string true "Resource UUID"
+// @Param body body overrideRequest true "Resource override fields"
+// @Success 200 {object} ResourceOverrideResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Router /v1/resources/{id}/override [patch]
 func (h *Handler) updateResourceOverride(writer http.ResponseWriter, request *http.Request) {
 	id := chi.URLParam(request, "id")
 	if _, err := uuid.Parse(id); err != nil {
@@ -794,7 +898,7 @@ func (h *Handler) updateResourceOverride(writer http.ResponseWriter, request *ht
 		writeInternalError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "resource": toResourceResponse(resource)})
+	writeJSON(writer, http.StatusOK, ResourceOverrideResponseDTO{Status: "ok", Resource: toResourceResponse(resource)})
 }
 
 func (h *Handler) clientForInstance(ctx context.Context, instance domain.CPAInstance) (*management.Client, error) {

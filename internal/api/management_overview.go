@@ -98,6 +98,16 @@ type managementOverviewTypeCount struct {
 // managementOverview returns a safe, read-only aggregation of the CPA
 // management endpoints used by the dashboard. It is registered below the
 // existing /api/v1 authentication middleware.
+//
+// @Summary Get management overview
+// @Description Return a sanitized aggregation of CPA configuration counts, traffic, and credential health.
+// @Tags Dashboard
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} managementOverviewResponse
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Router /v1/management/overview [get]
 func (h *Handler) managementOverview(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	response := managementOverviewResponse{

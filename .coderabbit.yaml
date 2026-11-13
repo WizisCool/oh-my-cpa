@@ -42,11 +42,13 @@ reviews:
     # further review is asked for by commenting `@coderabbitai review`.
     auto_incremental_review: false
   # Generated artifacts whose freshness a gate already proves. The README
-  # screenshots are binary, so a review can say nothing about them, and the
-  # demonstration dataset is regenerated from the real handlers and pinned by
+  # screenshots are binary, so a review can say nothing about them, the
+  # Swagger spec is checked by `pnpm check:openapi` and `TestOpenAPIRouteCoverage`,
+  # and the demonstration dataset is regenerated from the real handlers and pinned by
   # `TestExportDemoDataset`; the generators and the pages they capture stay in review.
   path_filters:
     - '!docs/images/**'
+    - '!docs/openapi/swagger.json'
     - '!deploy/cloudflare/data/**'
   high_level_summary_instructions: >-
     Summarize what changed and which invariant or document it affects. Group the
@@ -98,12 +100,19 @@ reviews:
         `errors.Is`; handlers return explicit status codes with a JSON `error`
         field (plus a stable machine-readable `code`, or `details`, where a
         refusal must be distinguished programmatically). Comments explain why in
-        English and never restate the code. JSON tags, DB columns, CPA fields
+        English and never restate the code (excluding `swaggo` OpenAPI handler
+        annotations in `internal/api/`). JSON tags, DB columns, CPA fields
         and other external contract names keep their required spelling.
     - path: 'internal/api/**'
       instructions: >-
         Console endpoints. Every response field must be explicitly allowlisted,
-        so name any field that bypasses the allowlist. A new user-visible
+        so name any field that bypasses the allowlist. Every `/api` route
+        registered in `handler.go` requires `swaggo` annotations (`@Summary`,
+        `@Description`, `@Tags`, `@Success`, `@Failure`, `@Router`) referencing
+        safe explicit DTOs (never raw CPA/secret-bearing models), and
+        `docs/openapi/swagger.json` must be regenerated with
+        `pnpm openapi:generate` (enforced by `pnpm check:openapi` and
+        `TestOpenAPIRouteCoverage`). A new user-visible
         string is an i18n key rather than hardcoded copy; a shared frontend
         concept belongs in `web/src/types/` rather than in page-local helpers.
         Flag a new route, middleware or data-flow stage whose documentation

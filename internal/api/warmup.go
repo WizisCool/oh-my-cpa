@@ -81,6 +81,15 @@ type warmupModelCacheEntry struct {
 	expiresAt time.Time
 }
 
+// @Summary Get quota warmup settings and tasks
+// @Description Return scheduled warmup tasks, selectable accounts/models, and recent run history.
+// @Tags Quota
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} warmup.StateView
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Router /v1/management/quota/warmup/settings [get]
 func (h *Handler) getWarmupSettings(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	state, err := h.warmupState(request.Context())
@@ -91,6 +100,18 @@ func (h *Handler) getWarmupSettings(writer http.ResponseWriter, request *http.Re
 	writeJSON(writer, http.StatusOK, state)
 }
 
+// @Summary Create a quota warmup task
+// @Description Persist a new scheduled warmup task and return the updated warmup state.
+// @Tags Quota
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body warmup.TaskInput true "Warmup task configuration"
+// @Success 201 {object} warmup.StateView
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Router /v1/management/quota/warmup/tasks [post]
 func (h *Handler) createWarmupTask(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var input warmup.TaskInput
@@ -105,6 +126,20 @@ func (h *Handler) createWarmupTask(writer http.ResponseWriter, request *http.Req
 	writeJSON(writer, http.StatusCreated, state)
 }
 
+// @Summary Update a quota warmup task
+// @Description Modify an existing scheduled warmup task by ID.
+// @Tags Quota
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path string true "Warmup task ID"
+// @Param body body warmup.TaskInput true "Warmup task configuration"
+// @Success 200 {object} warmup.StateView
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Router /v1/management/quota/warmup/tasks/{id} [put]
 func (h *Handler) updateWarmupTask(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	id := strings.TrimSpace(chi.URLParam(request, "id"))
@@ -124,6 +159,18 @@ func (h *Handler) updateWarmupTask(writer http.ResponseWriter, request *http.Req
 	writeJSON(writer, http.StatusOK, state)
 }
 
+// @Summary Delete a quota warmup task
+// @Description Remove a scheduled warmup task by ID.
+// @Tags Quota
+// @Produce json
+// @Security CookieAuth
+// @Param id path string true "Warmup task ID"
+// @Success 200 {object} warmup.StateView
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Router /v1/management/quota/warmup/tasks/{id} [delete]
 func (h *Handler) deleteWarmupTask(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	id := strings.TrimSpace(chi.URLParam(request, "id"))
@@ -139,6 +186,19 @@ func (h *Handler) deleteWarmupTask(writer http.ResponseWriter, request *http.Req
 	writeJSON(writer, http.StatusOK, state)
 }
 
+// @Summary Run a quota warmup task immediately
+// @Description Execute a warmup task on demand against its selected credentials and return the run summary.
+// @Tags Quota
+// @Produce json
+// @Security CookieAuth
+// @Param id path string true "Warmup task ID"
+// @Success 200 {object} warmup.RunResponse
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Router /v1/management/quota/warmup/tasks/{id}/run [post]
 func (h *Handler) runWarmupTask(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	id := strings.TrimSpace(chi.URLParam(request, "id"))
@@ -155,6 +215,18 @@ func (h *Handler) runWarmupTask(writer http.ResponseWriter, request *http.Reques
 }
 
 // clearWarmupRuns empties the run history; repeated task_id parameters narrow it to those tasks.
+//
+// @Summary Clear quota warmup run history
+// @Description Delete stored warmup run records, optionally scoped to specific task_id values.
+// @Tags Quota
+// @Produce json
+// @Security CookieAuth
+// @Param task_id query []string false "Optional task IDs whose history should be cleared"
+// @Success 200 {object} warmup.StateView
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Router /v1/management/quota/warmup/runs [delete]
 func (h *Handler) clearWarmupRuns(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	requested, namesTasks := request.URL.Query()["task_id"]

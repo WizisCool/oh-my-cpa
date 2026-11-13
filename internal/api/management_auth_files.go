@@ -161,6 +161,43 @@ type managementAuthFileSafeFields struct {
 	OpenAPILegacyModels []string `json:"openapi_legacy_models,omitempty"`
 }
 
+// AuthFileStatusPatchRequestDTO toggles disabled status for a credential auth file.
+type AuthFileStatusPatchRequestDTO struct {
+	Name      string `json:"name"`
+	AuthIndex string `json:"auth_index,omitempty"`
+	Disabled  *bool  `json:"disabled"`
+}
+
+// AuthFileStatusPatchResponseDTO reports the updated credential status and optional state version.
+type AuthFileStatusPatchResponseDTO struct {
+	Status   string `json:"status"`
+	Disabled bool   `json:"disabled"`
+	Version  uint64 `json:"version,omitempty"`
+}
+
+// AuthFileRefreshRequestDTO identifies a credential auth file to refresh upstream tokens for.
+type AuthFileRefreshRequestDTO struct {
+	Name      string `json:"name"`
+	AuthIndex string `json:"auth_index,omitempty"`
+}
+
+// AuthFileModelsResponseDTO lists models advertised by a credential auth file.
+type AuthFileModelsResponseDTO struct {
+	Models []managementAuthFileModel `json:"models"`
+}
+
+// @Summary List credential auth files
+// @Description Return sanitized projections of CPA credential auth files, optionally filtered by name or auth_index.
+// @Tags AuthFiles
+// @Produce json
+// @Security CookieAuth
+// @Param name query string false "Filter by auth file name or ID"
+// @Param auth_index query string false "Filter by runtime auth_index"
+// @Success 200 {object} managementAuthFilesResponse
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files [get]
 func (h *Handler) listManagementAuthFiles(writer http.ResponseWriter, request *http.Request) {
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
@@ -246,12 +283,22 @@ func (h *Handler) listManagementAuthFiles(writer http.ResponseWriter, request *h
 	writeJSON(writer, http.StatusOK, managementAuthFilesResponse{Files: projected, Total: len(projected)})
 }
 
+// @Summary Enable or disable a credential auth file
+// @Description Toggle the disabled state of a CPA credential auth file and return the updated state version.
+// @Tags AuthFiles
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body AuthFileStatusPatchRequestDTO true "Auth file status update"
+// @Success 200 {object} AuthFileStatusPatchResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files/status [patch]
 func (h *Handler) patchManagementAuthFileStatus(writer http.ResponseWriter, request *http.Request) {
-	var payload struct {
-		Name      string `json:"name"`
-		AuthIndex string `json:"auth_index"`
-		Disabled  *bool  `json:"disabled"`
-	}
+	var payload AuthFileStatusPatchRequestDTO
 	if err := decodeManagementJSON(writer, request, managementAuthFileRequestLimit, &payload); err != nil {
 		return
 	}
@@ -366,10 +413,10 @@ func (h *Handler) patchManagementAuthFileStatus(writer http.ResponseWriter, requ
 					return
 				}
 				setStateVersionHeader(writer, version)
-				writeJSON(writer, http.StatusOK, map[string]any{
-					"status":   "ok",
-					"disabled": *payload.Disabled,
-					"version":  version,
+				writeJSON(writer, http.StatusOK, AuthFileStatusPatchResponseDTO{
+					Status:   "ok",
+					Disabled: *payload.Disabled,
+					Version:  version,
 				})
 				return
 			}
@@ -382,16 +429,28 @@ func (h *Handler) patchManagementAuthFileStatus(writer http.ResponseWriter, requ
 	}
 	_ = h.recordAudit(request, "auth_file.status_update", "auth_file", name, "success", map[string]any{"disabled": *payload.Disabled})
 
-	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "disabled": *payload.Disabled})
+	writeJSON(writer, http.StatusOK, AuthFileStatusPatchResponseDTO{Status: "ok", Disabled: *payload.Disabled})
 }
 
 // refreshManagementAuthFile renews one credential's tokens on demand. The
 // response states the outcome only: CPA's own answer carries the new tokens.
+//
+// @Summary Refresh a credential's OAuth tokens
+// @Description Trigger an on-demand upstream token refresh for the named auth file.
+// @Tags AuthFiles
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body AuthFileRefreshRequestDTO true "Auth file selector"
+// @Success 200 {object} StatusOKResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files/refresh [post]
 func (h *Handler) refreshManagementAuthFile(writer http.ResponseWriter, request *http.Request) {
-	var payload struct {
-		Name      string `json:"name"`
-		AuthIndex string `json:"auth_index"`
-	}
+	var payload AuthFileRefreshRequestDTO
 	if err := decodeManagementJSON(writer, request, managementAuthFileRequestLimit, &payload); err != nil {
 		return
 	}
@@ -432,9 +491,23 @@ func (h *Handler) refreshManagementAuthFile(writer http.ResponseWriter, request 
 	// a retry that renews or replaces the credential again.
 	_ = h.recordAudit(request, "auth_file.refresh", "auth_file", name, "success", nil)
 	h.invalidateCoordinator("management-auth-files", "management-quota")
-	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok"})
+	writeJSON(writer, http.StatusOK, StatusOKResponseDTO{Status: "ok"})
 }
 
+// @Summary Read allowlisted auth file settings
+// @Description Return non-secret editable fields (priority, weight, prefix, proxy, aliases, OpenAPI overrides) for a credential auth file.
+// @Tags AuthFiles
+// @Produce json
+// @Security CookieAuth
+// @Param name query string true "Auth file name"
+// @Param auth_index query string false "Optional runtime auth_index"
+// @Success 200 {object} managementAuthFileSafeFields
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files/safe-fields [get]
 func (h *Handler) getManagementAuthFileSafeFields(writer http.ResponseWriter, request *http.Request) {
 	name, selectorErr := validateAuthSelector(request.URL.Query().Get("name"))
 	if selectorErr != nil {
@@ -505,6 +578,18 @@ func findManagementAuthFile(files []management.AuthFile, name, authIndex string)
 	return management.AuthFile{}, false
 }
 
+// @Summary Download raw auth file JSON
+// @Description Download a credential auth file as JSON attachment after recording a fail-closed audit event.
+// @Tags AuthFiles
+// @Produce json
+// @Security CookieAuth
+// @Param name query string true "Auth file name (*.json)"
+// @Success 200 {file} binary
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files/download [get]
 func (h *Handler) downloadManagementAuthFile(writer http.ResponseWriter, request *http.Request) {
 	name, validationErr := validateJSONUploadName(request.URL.Query().Get("name"))
 	if validationErr != nil {
@@ -533,6 +618,17 @@ func (h *Handler) downloadManagementAuthFile(writer http.ResponseWriter, request
 	_, _ = writer.Write(data)
 }
 
+// @Summary List models served by an auth file
+// @Description Return the model definitions supported by a specific credential auth file.
+// @Tags AuthFiles
+// @Produce json
+// @Security CookieAuth
+// @Param name query string true "Auth file name"
+// @Success 200 {object} AuthFileModelsResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files/models [get]
 func (h *Handler) listManagementAuthFileModels(writer http.ResponseWriter, request *http.Request) {
 	name, selectorErr := validateAuthSelector(request.URL.Query().Get("name"))
 	if selectorErr != nil {
@@ -559,7 +655,7 @@ func (h *Handler) listManagementAuthFileModels(writer http.ResponseWriter, reque
 			break
 		}
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"models": projected})
+	writeJSON(writer, http.StatusOK, AuthFileModelsResponseDTO{Models: projected})
 }
 
 func validateAuthSelector(raw string) (string, error) {

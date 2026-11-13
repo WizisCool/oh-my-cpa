@@ -26,6 +26,18 @@ const (
 
 // stateEventsLive streams real-time state coordination events (`ready`, `state_sync`,
 // and `sync_error` with authoritative sanitized snapshot) over Server-Sent Events.
+//
+// @Summary Stream live state synchronization events
+// @Description Subscribe to Server-Sent Events carrying sanitized CPA configuration synchronization updates.
+// @Tags Events
+// @Produce text/event-stream
+// @Security CookieAuth
+// @Success 200 {string} string "Server-Sent Events stream"
+// @Success 204 {string} string "No content when live coordination is disabled or in demo mode"
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /events [get]
+// @Router /v1/events [get]
 func (h *Handler) stateEventsLive(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.cfg.IsDemoMode || h.stateCoord == nil {
@@ -103,6 +115,16 @@ func (h *Handler) stateEventsLive(writer http.ResponseWriter, request *http.Requ
 
 // getProjectedState returns the sanitized in-memory configuration projection
 // wrapped in { version, data } in under 1ms.
+//
+// @Summary Get projected CPA state
+// @Description Return the sanitized in-memory CPA configuration projection and its state version.
+// @Tags Management
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} statecoord.StateEnvelope[SafeProjectedStateDTO]
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/state [get]
 func (h *Handler) getProjectedState(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.stateCoord != nil {

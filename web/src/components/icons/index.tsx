@@ -12,6 +12,7 @@ import {
   BarChart3,
   Bell,
   BellOff,
+  BookOpen,
   Bot,
   Box,
   Boxes,
@@ -166,6 +167,7 @@ export const ArrowRightOutlined = /*#__PURE__*/ createIcon(ArrowRight, 'omc-icon
 export const ArrowUpOutlined = /*#__PURE__*/ createIcon(ArrowUp, 'omc-icon-arrow-up');
 export const AuditOutlined = /*#__PURE__*/ createIcon(ScrollText, 'omc-icon-audit');
 export const BarChartOutlined = /*#__PURE__*/ createIcon(BarChart3, 'omc-icon-bar-chart');
+export const BookOpenOutlined = /*#__PURE__*/ createIcon(BookOpen, 'omc-icon-book-open');
 export const BlockOutlined = /*#__PURE__*/ createIcon(Boxes, 'omc-icon-block');
 export const BoxOutlined = /*#__PURE__*/ createIcon(Box, 'omc-icon-box');
 export const BranchesOutlined = /*#__PURE__*/ createIcon(GitBranch, 'omc-icon-branches');

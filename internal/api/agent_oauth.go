@@ -15,6 +15,28 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
+// AgentOAuthResponseDTO describes an initiated Agent-gated OAuth flow.
+type AgentOAuthResponseDTO struct {
+	URL         string `json:"url"`
+	UserCode    string `json:"user_code,omitempty"`
+	Flow        string `json:"flow,omitempty"`
+	ExpiresAtMS int64  `json:"expires_at_ms"`
+}
+
+// @Summary Start OAuth flow for a pending Agent operation
+// @Description Initiate an upstream OAuth flow requested by a pending Agent approval operation.
+// @Tags Agent
+// @Produce json
+// @Security CookieAuth
+// @Param id path string true "Operation ID"
+// @Success 200 {object} AgentOAuthResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 403 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/agent/operations/{id}/oauth [post]
 func (h *Handler) startAgentOAuth(writer http.ResponseWriter, request *http.Request) {
 	if request.Header.Get("Origin") == "" || !sameOrigin(request) || request.Header.Get("Authorization") != "" {
 		writePlaygroundError(writer, 403, "capability_forbidden")
@@ -58,7 +80,7 @@ func (h *Handler) startAgentOAuth(writer http.ResponseWriter, request *http.Requ
 		}
 		h.agent.oauth[id] = flow
 	}
-	writeJSON(writer, 200, map[string]any{"url": flow.URL, "user_code": flow.UserCode, "flow": flow.Flow, "expires_at_ms": operation.ExpiresAtMS})
+	writeJSON(writer, 200, AgentOAuthResponseDTO{URL: flow.URL, UserCode: flow.UserCode, Flow: flow.Flow, ExpiresAtMS: operation.ExpiresAtMS})
 }
 func (h *Handler) verifyAgentOAuth(ctx context.Context, operation capability.Operation, approve bool) error {
 	h.agent.oauthMu.Lock()

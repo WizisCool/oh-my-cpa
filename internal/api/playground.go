@@ -95,6 +95,23 @@ func (h *Handler) playgroundClient(writer http.ResponseWriter, request *http.Req
 	}
 	return client, true
 }
+
+// PlaygroundModelsResponseDTO lists models visible to the selected Playground client API key.
+type PlaygroundModelsResponseDTO struct {
+	Models []gateway.Model `json:"models"`
+}
+
+// @Summary List Playground models
+// @Description Fetch gateway models accessible to the specified client API key fingerprint.
+// @Tags Playground
+// @Produce json
+// @Security CookieAuth
+// @Param client_key_fingerprint query string true "HMAC fingerprint of the client API key"
+// @Success 200 {object} PlaygroundModelsResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/playground/models [get]
 func (h *Handler) listPlaygroundModels(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.playgroundClient(writer, request, request.URL.Query().Get("client_key_fingerprint"))
@@ -106,7 +123,7 @@ func (h *Handler) listPlaygroundModels(writer http.ResponseWriter, request *http
 		writeJSON(writer, 502, gateway.ErrorEvent(err))
 		return
 	}
-	writeJSON(writer, 200, map[string]any{"models": models})
+	writeJSON(writer, 200, PlaygroundModelsResponseDTO{Models: models})
 }
 func (h *Handler) chatPlayground(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")

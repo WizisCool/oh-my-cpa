@@ -265,6 +265,10 @@ jobs:
         run: |
           pnpm build:demo
           pnpm exec wrangler deploy --config deploy/cloudflare/wrangler.jsonc --dry-run
+      - name: Stage public site and API docs assets and validate Worker config
+        run: |
+          pnpm build:site
+          pnpm exec wrangler deploy --config deploy/site/wrangler.jsonc --dry-run
       - name: Built-artifact browser acceptance
         env:
           OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser

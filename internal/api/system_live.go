@@ -29,6 +29,18 @@ const (
 // 204 means "this deployment has no release service" (demonstration mode, or a build without
 // one), which EventSource treats as final; the console then keeps its polling interval. 503
 // means the reader limit is reached, and it keeps polling too.
+// systemLive streams "the stored update observations changed" signals as server-sent events.
+//
+// @Summary Stream live system update notifications
+// @Description Subscribe to Server-Sent Events emitted when background update observations change.
+// @Tags System
+// @Produce text/event-stream
+// @Security CookieAuth
+// @Success 200 {string} string "Server-Sent Events stream"
+// @Success 204 {string} string "No content when release checking is unavailable or in demo mode"
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/system/live [get]
 func (h *Handler) systemLive(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.cfg.IsDemoMode || h.release == nil {

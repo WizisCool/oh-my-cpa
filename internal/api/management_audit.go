@@ -154,6 +154,35 @@ func parseAuditCursor(raw string) (repository.AuditCursor, error) {
 	return repository.AuditCursor{OccurredAtMS: occurredAt, ID: id}, nil
 }
 
+// AuditEventListResponseDTO returns paginated audit trail events and cursor.
+type AuditEventListResponseDTO struct {
+	Events     []auditEventDTO `json:"events"`
+	NextCursor string          `json:"next_cursor"`
+}
+
+// AuditSummaryResponseDTO returns aggregated audit event counts by action prefix and outcome.
+type AuditSummaryResponseDTO struct {
+	Buckets []auditBucketDTO `json:"buckets"`
+}
+
+// @Summary List audit events
+// @Description Query the append-only audit trail with keyset cursor pagination and category/outcome/search filters.
+// @Tags Audit
+// @Produce json
+// @Security CookieAuth
+// @Param limit query integer false "Page size (max 200)"
+// @Param before query string false "Opaque pagination cursor (<occurred_at_ms>_<id>)"
+// @Param since_ms query integer false "Minimum occurred_at_ms boundary"
+// @Param category query []string false "Action category prefix filters"
+// @Param outcome query string false "Outcome class" Enums(all, succeeded, failed, unfinished)
+// @Param q query string false "Search query"
+// @Param fold query boolean false "Fold attempt/outcome pairs into one timeline row (default true)"
+// @Success 200 {object} AuditEventListResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/audit/events [get]
 func (h *Handler) listAuditEvents(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
@@ -170,9 +199,9 @@ func (h *Handler) listAuditEvents(writer http.ResponseWriter, request *http.Requ
 		writeInternalError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"events":      auditEventDTOs(page.Events),
-		"next_cursor": formatAuditCursor(page.Next),
+	writeJSON(writer, http.StatusOK, AuditEventListResponseDTO{
+		Events:     auditEventDTOs(page.Events),
+		NextCursor: formatAuditCursor(page.Next),
 	})
 }
 
@@ -180,6 +209,21 @@ func (h *Handler) listAuditEvents(writer http.ResponseWriter, request *http.Requ
 // and search, as action prefix by outcome class. The console derives both facets'
 // counts from this one matrix, so it ignores the category and outcome filters and the
 // cursor: a facet's count has to describe what choosing it would return.
+//
+// @Summary Summarize audit event counts
+// @Description Return audit event counts grouped by action category prefix and outcome class.
+// @Tags Audit
+// @Produce json
+// @Security CookieAuth
+// @Param since_ms query integer false "Minimum occurred_at_ms boundary"
+// @Param q query string false "Search query"
+// @Param fold query boolean false "Fold attempt/outcome pairs (default true)"
+// @Success 200 {object} AuditSummaryResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/audit/summary [get]
 func (h *Handler) summarizeAuditEvents(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
@@ -196,12 +240,31 @@ func (h *Handler) summarizeAuditEvents(writer http.ResponseWriter, request *http
 		writeInternalError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"buckets": auditBucketDTOs(buckets)})
+	writeJSON(writer, http.StatusOK, AuditSummaryResponseDTO{Buckets: auditBucketDTOs(buckets)})
 }
 
 // exportAuditEvents downloads the filtered trail, up to repository.AuditPageMax
 // rows. Reading the trail out of the console is itself recorded, and the file is
 // withheld when that record cannot be written.
+//
+// @Summary Export audit events as JSON file
+// @Description Export matching audit events as a downloadable JSON attachment after recording a fail-closed audit entry.
+// @Tags Audit
+// @Produce json
+// @Security CookieAuth
+// @Param limit query integer false "Maximum events to export"
+// @Param before query string false "Opaque pagination cursor"
+// @Param since_ms query integer false "Minimum occurred_at_ms boundary"
+// @Param category query []string false "Action category prefix filters"
+// @Param outcome query string false "Outcome class" Enums(all, succeeded, failed, unfinished)
+// @Param q query string false "Search query"
+// @Param fold query boolean false "Fold attempt/outcome pairs (default false)"
+// @Success 200 {file} binary
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/audit/export [get]
 func (h *Handler) exportAuditEvents(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 

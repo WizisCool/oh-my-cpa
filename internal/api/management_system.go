@@ -245,7 +245,23 @@ type SystemReleaseEntryDTO struct {
 	BodyAvailable bool   `json:"body_available"`
 }
 
+// SystemCheckUpdatesResponseDTO reports refreshed version comparisons and cache usage.
+type SystemCheckUpdatesResponseDTO struct {
+	OMCVersion      SystemProductVersionDTO `json:"omc_version"`
+	CPAVersion      SystemProductVersionDTO `json:"cpa_version"`
+	ServedFromCache bool                    `json:"served_from_cache"`
+}
+
 // getSystemInfo answers the whole page.
+//
+// @Summary Get system information and diagnostics summary
+// @Description Return OMC/CPA version comparisons, database metrics, collector status, data volumes, maintenance state, and Go runtime stats.
+// @Tags System
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} SystemInfoDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Router /v1/management/system [get]
 func (h *Handler) getSystemInfo(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	ctx := request.Context()
@@ -415,6 +431,15 @@ func gatewayProviderCount(ctx context.Context, client *management.Client) *int {
 // do: a handler built without the service, an offline deployment and a refused request
 // all answer `200` with a null count, and the link stays a plain link. A page visit may
 // spend the read only where the operator allows page visits to check for updates.
+//
+// @Summary Get repository stargazer count
+// @Description Return the cached GitHub stargazer count for the shell repository link.
+// @Tags System
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} SystemRepositoryDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Router /v1/management/system/repository [get]
 func (h *Handler) getSystemRepository(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	dto := SystemRepositoryDTO{}
@@ -439,6 +464,15 @@ type SystemUpdatesDTO struct {
 // Background sweeps and page-owned checks refresh these observations; reading them
 // never spends a feed request. Without a release service, the two product versions
 // read as unchecked; plugin observations remain available independently.
+//
+// @Summary Get cached update indicators
+// @Description Return stored OMC, CPA, and plugin update availability without triggering remote network checks.
+// @Tags System
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} SystemUpdatesDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Router /v1/management/system/updates [get]
 func (h *Handler) getSystemUpdates(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	ctx := request.Context()
@@ -450,6 +484,19 @@ func (h *Handler) getSystemUpdates(writer http.ResponseWriter, request *http.Req
 }
 
 // getSystemReleases serves one product's merged change log.
+//
+// @Summary Get product release notes
+// @Description Return merged release entries and version comparison for OMC or CPA.
+// @Tags System
+// @Produce json
+// @Security CookieAuth
+// @Param product query string false "Product identifier" Enums(omc, cpa)
+// @Success 200 {object} SystemReleasesDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/system/releases [get]
 func (h *Handler) getSystemReleases(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	product := request.URL.Query().Get("product")
@@ -508,16 +555,15 @@ func (h *Handler) getSystemReleases(writer http.ResponseWriter, request *http.Re
 // postSystemCheckUpdates reads the feed when `release.CheckFloor` allows it and answers with
 // the resulting version states.
 //
-// A request is spent only outside the floor: inside it the stored index answers and the
-// response says so through `served_from_cache`. The floor exists because the feed is one
-// shared per-address budget - sixty requests an hour for the unauthenticated GitHub API - and
-// a page view costs up to four requests, so an unthrottled check let page loads exhaust an
-// allowance the operator shares with everything else they run.
-//
-// The audit records what happened rather than that the request arrived: "unavailable" when no
-// release service is configured, "cached" when the floor answered, and otherwise the outcome
-// of the attempt. Recording success before the check runs would put a claim in the audit trail
-// that the code has not yet earned.
+// @Summary Check for OMC and CPA updates
+// @Description Poll release feeds (respecting freshness floor) and return updated OMC and CPA version states.
+// @Tags System
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} SystemCheckUpdatesResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/system/check-updates [post]
 func (h *Handler) postSystemCheckUpdates(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	ctx := request.Context()
@@ -546,16 +592,7 @@ func (h *Handler) postSystemCheckUpdates(writer http.ResponseWriter, request *ht
 		}
 	}
 
-	response := struct {
-		OMCVersion SystemProductVersionDTO `json:"omc_version"`
-		CPAVersion SystemProductVersionDTO `json:"cpa_version"`
-		// ServedFromCache states that the floor answered this request instead of the feed.
-		// The field exists so the button can say "checked" only when a request was actually
-		// made: the feed is one shared per-address budget, and a control that reported a
-		// check it did not perform would teach the operator the wrong thing about what the
-		// page knows.
-		ServedFromCache bool `json:"served_from_cache"`
-	}{
+	response := SystemCheckUpdatesResponseDTO{
 		OMCVersion:      h.productVersionDTO(ctx, release.ProductOMC, h.omcVersion()),
 		CPAVersion:      h.productVersionDTO(ctx, release.ProductCPA, h.observedCPAVersion(ctx)),
 		ServedFromCache: servedFromCache,
@@ -576,6 +613,15 @@ type systemMaintenanceActionDTO struct {
 }
 
 // getSystemMaintenance reports the current or last maintenance job.
+//
+// @Summary Get database maintenance status
+// @Description Return the current or most recent SQLite maintenance job and vacuum admission check.
+// @Tags System
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} systemMaintenanceActionDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Router /v1/management/system/maintenance [get]
 func (h *Handler) getSystemMaintenance(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	writeJSON(writer, http.StatusOK, systemMaintenanceActionDTO{
@@ -585,11 +631,36 @@ func (h *Handler) getSystemMaintenance(writer http.ResponseWriter, request *http
 }
 
 // postSystemMaintenanceCheckpoint runs a WAL-truncating checkpoint.
+//
+// @Summary Start SQLite WAL checkpoint
+// @Description Admit and start an asynchronous SQLite WAL truncate checkpoint job.
+// @Tags System
+// @Produce json
+// @Security CookieAuth
+// @Success 202 {object} systemMaintenanceActionDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/system/maintenance/checkpoint [post]
 func (h *Handler) postSystemMaintenanceCheckpoint(writer http.ResponseWriter, request *http.Request) {
 	h.startMaintenance(writer, request, "checkpoint")
 }
 
 // postSystemMaintenanceVacuum rebuilds the database file.
+//
+// @Summary Start SQLite VACUUM rebuild
+// @Description Admit and start an asynchronous SQLite VACUUM job to reclaim free pages after checking disk space.
+// @Tags System
+// @Produce json
+// @Security CookieAuth
+// @Success 202 {object} systemMaintenanceActionDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Failure 507 {object} ErrorResponseDTO
+// @Router /v1/management/system/maintenance/vacuum [post]
 func (h *Handler) postSystemMaintenanceVacuum(writer http.ResponseWriter, request *http.Request) {
 	h.startMaintenance(writer, request, "vacuum")
 }
@@ -911,6 +982,15 @@ func processID() int { return os.Getpid() }
 // runtime numbers and the audit tail, with no key material, no tokens and no
 // request content. The demo refuses this route because a bundle is a file that
 // leaves the process.
+//
+// @Summary Export redacted system diagnostics
+// @Description Download a credential-free JSON diagnostics bundle covering versions, runtime stats, database geometry, and recent audit events.
+// @Tags System
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {file} binary
+// @Failure 401 {object} ErrorResponseDTO
+// @Router /v1/management/system/diagnostics [get]
 func (h *Handler) getSystemDiagnostics(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oh My CPA — API Reference</title>
+    <meta
+      name="description"
+      content="Swagger 2.0 / OpenAPI reference for Oh My CPA control plane, management, routing, pricing, quota, and Agent/MCP APIs."
+    />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        min-height: 100%;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f8f9fa;
+        color: #1e1e20;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        html,
+        body {
+          background: #141416;
+          color: #e3e3e4;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      (function () {
+        var pathname = location.pathname;
+        // Keep relative assets and ./swagger.json anchored inside /api-docs/ even on
+        // static servers that serve directory index HTML without trailing-slash redirects.
+        if (!pathname.endsWith('/') && !pathname.endsWith('/index.html')) {
+          location.replace(pathname + '/' + location.search + location.hash);
+          return;
+        }
+
+        var script = document.createElement('script');
+        script.src = './__SCALAR_BUNDLE__';
+        script.onload = function () {
+          if (!window.Scalar || typeof window.Scalar.createApiReference !== 'function') {
+            return;
+          }
+          window.Scalar.createApiReference('#app', {
+            url: './swagger.json',
+            favicon: './favicon.svg',
+            defaultOpenFirstTag: true,
+            metaData: {
+              title: 'Oh My CPA — API Reference',
+              description:
+                'Swagger 2.0 / OpenAPI reference for Oh My CPA control plane, management, routing, pricing, quota, and Agent/MCP APIs.',
+            },
+          });
+        };
+        document.head.appendChild(script);
+      })();
+    </script>
+    <noscript>JavaScript is required to render the interactive API documentation. Raw spec: <a href="./swagger.json">swagger.json</a>.</noscript>
+  </body>
+</html>

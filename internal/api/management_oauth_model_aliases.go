@@ -29,6 +29,35 @@ type managementOAuthModelAlias struct {
 	ForceMapping bool   `json:"force_mapping,omitempty"`
 }
 
+// OAuthModelAliasesResponseDTO maps provider names to global OAuth model alias rules.
+type OAuthModelAliasesResponseDTO struct {
+	Version uint64                                 `json:"version,omitempty"`
+	Aliases map[string][]managementOAuthModelAlias `json:"aliases"`
+}
+
+// OAuthModelAliasesPatchRequestDTO replaces the global OAuth model alias rules for one provider.
+type OAuthModelAliasesPatchRequestDTO struct {
+	Provider string                       `json:"provider"`
+	Aliases  *[]managementOAuthModelAlias `json:"aliases"`
+}
+
+// OAuthModelAliasesPatchResponseDTO returns the verified alias rules for a provider.
+type OAuthModelAliasesPatchResponseDTO struct {
+	Status   string                      `json:"status"`
+	Provider string                      `json:"provider"`
+	Aliases  []managementOAuthModelAlias `json:"aliases"`
+	Version  uint64                      `json:"version,omitempty"`
+}
+
+// @Summary List OAuth model aliases
+// @Description Return global OAuth model alias mappings grouped by provider.
+// @Tags AuthFiles
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} OAuthModelAliasesResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files/model-aliases [get]
 func (h *Handler) listManagementOAuthModelAliases(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -48,9 +77,9 @@ func (h *Handler) listManagementOAuthModelAliases(writer http.ResponseWriter, re
 		})
 		if err == nil {
 			setStateVersionHeader(writer, env.Version)
-			writeJSON(writer, http.StatusOK, map[string]any{
-				"version": env.Version,
-				"aliases": env.Data,
+			writeJSON(writer, http.StatusOK, OAuthModelAliasesResponseDTO{
+				Version: env.Version,
+				Aliases: env.Data,
 			})
 			return
 		}
@@ -65,7 +94,7 @@ func (h *Handler) listManagementOAuthModelAliases(writer http.ResponseWriter, re
 		writeError(writer, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"aliases": projected})
+	writeJSON(writer, http.StatusOK, OAuthModelAliasesResponseDTO{Aliases: projected})
 }
 
 // errOAuthModelAliasMismatch reports a write CPA accepted but did not read back as requested.
@@ -116,11 +145,21 @@ func (h *Handler) applyManagementOAuthModelAliases(ctx context.Context, client *
 	return current, nil
 }
 
+// @Summary Update OAuth model aliases for a provider
+// @Description Replace global OAuth model aliases for one provider and verify persistence.
+// @Tags AuthFiles
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body OAuthModelAliasesPatchRequestDTO true "Provider model alias list"
+// @Success 200 {object} OAuthModelAliasesPatchResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files/model-aliases [patch]
 func (h *Handler) patchManagementOAuthModelAliases(writer http.ResponseWriter, request *http.Request) {
-	var payload struct {
-		Provider string                       `json:"provider"`
-		Aliases  *[]managementOAuthModelAlias `json:"aliases"`
-	}
+	var payload OAuthModelAliasesPatchRequestDTO
 	if err := decodeManagementJSON(writer, request, managementAuthFileRequestLimit, &payload); err != nil {
 		return
 	}
@@ -183,11 +222,11 @@ func (h *Handler) patchManagementOAuthModelAliases(writer http.ResponseWriter, r
 				return
 			}
 			setStateVersionHeader(writer, version)
-			writeJSON(writer, http.StatusOK, map[string]any{
-				"status":   "ok",
-				"provider": provider,
-				"aliases":  aliases,
-				"version":  version,
+			writeJSON(writer, http.StatusOK, OAuthModelAliasesPatchResponseDTO{
+				Status:   "ok",
+				Provider: provider,
+				Aliases:  aliases,
+				Version:  version,
 			})
 			return
 		}
@@ -206,10 +245,10 @@ func (h *Handler) patchManagementOAuthModelAliases(writer http.ResponseWriter, r
 		writeError(writer, http.StatusInternalServerError, "audit log failure after model alias update")
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status":   "ok",
-		"provider": provider,
-		"aliases":  current,
+	writeJSON(writer, http.StatusOK, OAuthModelAliasesPatchResponseDTO{
+		Status:   "ok",
+		Provider: provider,
+		Aliases:  current,
 	})
 }
 

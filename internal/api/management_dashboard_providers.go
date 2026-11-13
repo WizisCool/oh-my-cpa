@@ -60,6 +60,20 @@ const dashboardActivityBuckets = 24
 // The buckets exist because a window rate averages the present into the past. A provider that
 // served for twenty hours and has failed for the last two still reads green over a day; the
 // per-bucket blocks show where in the window the failures sit.
+// @Summary Get dashboard provider traffic
+// @Description Return provider and API-key credential traffic buckets over the selected dashboard window.
+// @Tags Dashboard
+// @Produce json
+// @Security CookieAuth
+// @Param preset query string false "Time range preset"
+// @Param from query integer false "Custom window start timestamp in Unix milliseconds"
+// @Param to query integer false "Custom window end timestamp in Unix milliseconds"
+// @Param open_end query boolean false "Whether custom window tracks current time"
+// @Success 200 {object} dashboardProvidersResponse
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/dashboard/providers [get]
 func (h *Handler) dashboardProviders(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 

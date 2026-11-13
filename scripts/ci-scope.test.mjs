@@ -30,6 +30,12 @@ test('Go backend changes trigger go + browser, and API/migration changes also ve
     browser: true,
     docker: false,
   });
+  assert.deepEqual(scopeOf(['docs/openapi/swagger.json']), {
+    go: true,
+    frontend: true,
+    browser: false,
+    docker: false,
+  });
 });
 
 test('frontend-only changes skip Go unit tests while keeping browser and frontend gates', () => {
@@ -59,8 +65,10 @@ test('frontend-only changes skip Go unit tests while keeping browser and fronten
     'scripts/api-target.mjs',
     'scripts/dev-base-redirect.mjs',
     'scripts/build-demo.mjs',
+    'scripts/build-site.mjs',
     'scripts/generate-demo-data.mjs',
     'scripts/bundle-reference.json',
+    'deploy/site/api-docs/index.html',
   ]) {
     assert.deepEqual(scopeOf([script]), {
       go: false,

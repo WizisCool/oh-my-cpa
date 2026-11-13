@@ -142,6 +142,17 @@ func writePluginHostError(writer http.ResponseWriter, err error) {
 
 // servePluginResource serves one resource of a plugin page: the document itself, or
 // a stylesheet, script or image it loads.
+//
+// @Summary Serve hosted plugin page resource
+// @Description Proxy and rebase HTML, JS, CSS, or static resources belonging to an installed CPA plugin page.
+// @Tags PluginHost
+// @Security CookieAuth
+// @Param path path string true "Plugin resource path"
+// @Success 200 {file} binary
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/plugin-host/v0/resource/plugins/{path} [get]
 func (h *Handler) servePluginResource(writer http.ResponseWriter, request *http.Request) {
 	resourcePath, _, ok := management.PluginResourcePath(h.pluginHostTarget(request))
 	if !ok {
@@ -177,6 +188,34 @@ func (h *Handler) servePluginResource(writer http.ResponseWriter, request *http.
 }
 
 // servePluginRoute keeps native secret reads auditable and native writes serialized.
+//
+// @Summary Proxy hosted plugin management route
+// @Description Forward authenticated plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.
+// @Tags PluginHost
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param path path string true "CPA plugin management subpath"
+// @Success 200 {object} object
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/plugin-host/v0/management/{path} [get]
+// @Router /v1/plugin-host/v0/management/{path} [head]
+// @Router /v1/plugin-host/v0/management/{path} [post]
+// @Router /v1/plugin-host/v0/management/{path} [put]
+// @Router /v1/plugin-host/v0/management/{path} [patch]
+// @Router /v1/plugin-host/v0/management/{path} [delete]
+// @Router /v1/plugin-host/v8/management/{path} [get]
+// @Router /v1/plugin-host/v8/management/{path} [head]
+// @Router /v1/plugin-host/v8/management/{path} [post]
+// @Router /v1/plugin-host/v8/management/{path} [put]
+// @Router /v1/plugin-host/v8/management/{path} [patch]
+// @Router /v1/plugin-host/v8/management/{path} [delete]
 func (h *Handler) servePluginRoute(writer http.ResponseWriter, request *http.Request) {
 	routePath, ok := management.PluginRoutePath(h.pluginHostTarget(request))
 	if !ok {
@@ -224,6 +263,16 @@ func (h *Handler) servePluginRoute(writer http.ResponseWriter, request *http.Req
 	})
 }
 
+// @Summary List gateway models for hosted plugin pages
+// @Description Proxy CPA /v1/models for CPAMC-compatible plugin pages using the caller's own API key.
+// @Tags PluginHost
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} object
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/plugin-host/v1/models [get]
 func (h *Handler) servePluginModels(writer http.ResponseWriter, request *http.Request) {
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {

@@ -8,6 +8,20 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
+// AuthFileDisplayNameRequestDTO sets or clears a local display name for an auth file.
+type AuthFileDisplayNameRequestDTO struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Version     int64  `json:"version"`
+}
+
+// AuthFileDisplayNameResponseDTO returns the persisted display name and optimistic lock version.
+type AuthFileDisplayNameResponseDTO struct {
+	Status             string `json:"status"`
+	DisplayName        string `json:"display_name"`
+	DisplayNameVersion int64  `json:"display_name_version"`
+}
+
 // putManagementAuthFileDisplayName names or clears one credential.
 //
 // The name is Oh My CPA's own metadata, so this never writes to CPA: naming a
@@ -15,17 +29,30 @@ import (
 // currently reports, so a name cannot be parked against a file that does not
 // exist. Like a caller-key rename it is audited fail-closed, and the name itself
 // stays out of the audit details because the file name already identifies it.
+//
+// @Summary Set credential display name
+// @Description Set or clear Oh My CPA's local display name for a CPA credential auth file using optimistic versioning.
+// @Tags AuthFiles
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body AuthFileDisplayNameRequestDTO true "Display name update"
+// @Success 200 {object} AuthFileDisplayNameResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files/display-name [put]
 func (h *Handler) putManagementAuthFileDisplayName(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
 		writeError(writer, http.StatusServiceUnavailable, "database is unavailable")
 		return
 	}
-	var payload struct {
-		Name        string `json:"name"`
-		DisplayName string `json:"display_name"`
-		Version     int64  `json:"version"`
-	}
+	var payload AuthFileDisplayNameRequestDTO
 	if err := decodeManagementJSON(writer, request, 8*1024, &payload); err != nil {
 		return
 	}
@@ -100,9 +127,9 @@ func (h *Handler) putManagementAuthFileDisplayName(writer http.ResponseWriter, r
 	h.identityArchive.reset()
 	h.publishStateSync("management-auth-files", stateScopeIdentityDirectory)
 	_ = h.recordAudit(request, action, "auth_file", name, "success", nil)
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status":               "ok",
-		"display_name":         stored.DisplayName,
-		"display_name_version": stored.Version,
+	writeJSON(writer, http.StatusOK, AuthFileDisplayNameResponseDTO{
+		Status:             "ok",
+		DisplayName:        stored.DisplayName,
+		DisplayNameVersion: stored.Version,
 	})
 }

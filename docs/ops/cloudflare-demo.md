@@ -72,6 +72,14 @@ Rollback restores the Worker and static assets together using Cloudflare's retai
 versions. Revert the corresponding source change on `main` as well, otherwise the
 next push deploys it again. There is no demonstration database to restore.
 
+## Public site, `/demo` subpath, and API documentation (`deploy/site`)
+
+[`deploy/site`](../../deploy/site) mounts the replaceable root entrypoint (`deploy/site/landing/`), `/api-docs/`, and `/demo/` together for `omc.junze.dev`:
+
+- `pnpm build:api-docs`: Stages the standalone, self-hosted Scalar UI (`index.html`, content-hashed `scalar.<hash>.js`, `docs/openapi/swagger.json`, and `favicon.svg`) to `tmp/api-docs` (or `-- --out <dir>`) with zero Cloudflare or landing-page coupling, so any landing framework or static server can embed `/api-docs/`.
+- `pnpm build:site`: Composes `deploy/site/landing/` (or `-- --landing-dir <dir>`), `_headers`, `/api-docs/`, and `/demo/` (from the built SPA with `basePath: '/demo'`, or skip with `-- --skip-demo`) into `tmp/site/dist`.
+- `deploy/site/worker.mjs` and `deploy/site/wrangler.jsonc`: Mount the shared `deploy/cloudflare/worker.mjs` demo handler under `/demo` (`run_worker_first: ["/demo", "/demo/*"]`) for `omc.junze.dev` (`workers_dev: false`, `not_found_handling: "none"`). Workers Builds connects `oh-my-cpa-site` to `main` with preview builds disabled, build command `pnpm build && pnpm check:demo && pnpm build:site`, and deploy command `pnpm exec wrangler deploy --config deploy/site/wrangler.jsonc`.
+
 ## Troubleshooting
 
 - **A panel is empty:** inspect its Worker route and generated response. Extend the

@@ -216,6 +216,21 @@ func (h *Handler) resolveDashboardAPIKey(request *http.Request) string {
 	return fp
 }
 
+// @Summary Get usage analytics dashboard
+// @Description Return aggregated request, token, cost, latency, and pipeline coverage metrics for a time window.
+// @Tags Dashboard
+// @Produce json
+// @Security CookieAuth
+// @Param preset query string false "Time range preset (15m, 1h, 6h, 24h, 7d, 30d, 90d, today, yesterday, this_week, last_week, this_month, last_month, all)"
+// @Param from query integer false "Custom window start timestamp in Unix milliseconds"
+// @Param to query integer false "Custom window end timestamp in Unix milliseconds"
+// @Param open_end query boolean false "Whether custom window tracks current time"
+// @Param api_key query string false "Filter by client API key or hmac fingerprint"
+// @Success 200 {object} dashboardResponse
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/dashboard [get]
 func (h *Handler) dashboard(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 
@@ -277,12 +292,21 @@ func (h *Handler) dashboard(writer http.ResponseWriter, request *http.Request) {
 
 // dashboardTail is the live-poll sibling of dashboard.
 //
-// A sliding relative window has no cheap "nothing changed" answer: its totals
-// move on every tick even when no request arrived, because the left edge keeps
-// dropping old events. So this endpoint recomputes the whole window's numbers —
-// exactly the ones the KPI tiles print — and only trims what the browser
-// already holds: the two series ship their last buckets instead of the full
-// grid, and the collector stats are left out.
+// @Summary Poll dashboard tail metrics
+// @Description Recompute window totals and return the trailing series buckets for live dashboard polling.
+// @Tags Dashboard
+// @Produce json
+// @Security CookieAuth
+// @Param preset query string false "Time range preset"
+// @Param from query integer false "Custom window start timestamp in Unix milliseconds"
+// @Param to query integer false "Custom window end timestamp in Unix milliseconds"
+// @Param open_end query boolean false "Whether custom window tracks current time"
+// @Param api_key query string false "Filter by client API key or hmac fingerprint"
+// @Success 200 {object} dashboardTailResponse
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/dashboard/tail [get]
 func (h *Handler) dashboardTail(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 
@@ -574,7 +598,23 @@ func dashboardComparisonBounds(window dashboardWindow, zone *time.Location) (fro
 	return fromMS, toMS, false, true
 }
 
+// UsageIngestDisabledStatusDTO reports usage pipeline status when ingestion is turned off.
+type UsageIngestDisabledStatusDTO struct {
+	Enabled bool   `json:"enabled"`
+	Note    string `json:"note"`
+}
+
 // dashboardIngestStatus reports the capture/decode/maintenance loops.
+//
+// @Summary Get usage ingestion status
+// @Description Return the current state of background usage capture, decoding, and rollup loops.
+// @Tags Usage
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} ingest.Status
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Router /v1/usage/ingest-status [get]
 func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.cfg.IsDemoMode {
@@ -590,9 +630,9 @@ func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *htt
 		return
 	}
 	if h.usage == nil {
-		writeJSON(writer, http.StatusOK, map[string]any{
-			"enabled": false,
-			"note":    "usage ingestion is disabled for this deployment",
+		writeJSON(writer, http.StatusOK, UsageIngestDisabledStatusDTO{
+			Enabled: false,
+			Note:    "usage ingestion is disabled for this deployment",
 		})
 		return
 	}
@@ -612,6 +652,15 @@ func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *htt
 // this the refresh button is a re-read that cannot show a request CPA accepted
 // one second ago. The drain stays server-side: CPA's queue is destructive, so
 // the browser must never pop it itself.
+// @Summary Trigger immediate usage ingestion
+// @Description Drain the CPA usage queue and process captured records into queryable events.
+// @Tags Usage
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} ingest.RefreshNowResult
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Router /v1/usage/ingest/refresh [post]
 func (h *Handler) refreshUsageIngest(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.cfg.IsDemoMode {

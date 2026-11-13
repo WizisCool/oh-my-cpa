@@ -29,11 +29,42 @@ type logsFacadeResponse struct {
 	Limit       int      `json:"limit"`
 }
 
+// ClearLogsResponseDTO reports whether CPA log truncation succeeded.
+type ClearLogsResponseDTO struct {
+	Cleared bool `json:"cleared"`
+}
+
+// ManagementLogsStatusDTO reports CPA's file-logging and request-logging switches.
+type ManagementLogsStatusDTO struct {
+	LoggingToFile bool `json:"logging_to_file"`
+	RequestLog    bool `json:"request_log"`
+}
+
+// RequestErrorLogsResponseDTO lists downloadable request-error log filenames.
+type RequestErrorLogsResponseDTO struct {
+	Files []management.ErrorLogFile `json:"files"`
+}
+
 // managementLogs tails CPA's log file.
 //
 // `cursor` is preferred and `after` is the fallback for builds that predate it;
 // the client shifts the `after` boundary back one second so lines sharing a
 // timestamp with the last one read are not silently lost.
+//
+// @Summary Tail CPA gateway logs
+// @Description Read incremental lines from CPA's log file using cursor or unix timestamp fallback.
+// @Tags Logs
+// @Produce json
+// @Security CookieAuth
+// @Param cursor query string false "Opaque pagination cursor returned by previous read"
+// @Param after query integer false "Fallback unix timestamp in seconds"
+// @Param limit query integer false "Maximum lines to return"
+// @Success 200 {object} logsFacadeResponse
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/logs [get]
 func (h *Handler) managementLogs(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -77,6 +108,17 @@ func (h *Handler) managementLogs(writer http.ResponseWriter, request *http.Reque
 
 // clearManagementLogs truncates CPA's log file. Destructive, so it is a POST-ish
 // DELETE the operator triggers deliberately; nothing here runs on a timer.
+//
+// @Summary Clear CPA gateway logs
+// @Description Truncate CPA's log file and record an audit event.
+// @Tags Logs
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} ClearLogsResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/logs [delete]
 func (h *Handler) clearManagementLogs(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if auditErr := h.recordAudit(request, "logs.clear", "logs", "management_logs", "attempt", nil); auditErr != nil {
@@ -96,7 +138,7 @@ func (h *Handler) clearManagementLogs(writer http.ResponseWriter, request *http.
 		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"cleared": true})
+	writeJSON(writer, http.StatusOK, ClearLogsResponseDTO{Cleared: true})
 }
 
 // managementLogsStatus reports the two CPA switches the log page depends on.
@@ -104,6 +146,16 @@ func (h *Handler) clearManagementLogs(writer http.ResponseWriter, request *http.
 // CPAMC hides its log navigation entry when file logging is off, which reads to
 // an operator as "the feature is broken" rather than "the switch is off". Oh My
 // CPA keeps the entry and answers the question directly instead.
+//
+// @Summary Get CPA logging switches
+// @Description Report whether CPA has file logging and per-request logging enabled.
+// @Tags Logs
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} ManagementLogsStatusDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/logs/status [get]
 func (h *Handler) managementLogsStatus(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -115,13 +167,23 @@ func (h *Handler) managementLogsStatus(writer http.ResponseWriter, request *http
 		writeCPAFacadeError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]bool{
-		"logging_to_file": scalars.LoggingToFile,
-		"request_log":     scalars.RequestLog,
+	writeJSON(writer, http.StatusOK, ManagementLogsStatusDTO{
+		LoggingToFile: scalars.LoggingToFile,
+		RequestLog:    scalars.RequestLog,
 	})
 }
 
 // requestErrorLogs lists the downloadable request-error log files.
+//
+// @Summary List request-error log files
+// @Description Return the filenames of CPA request-error logs available for download.
+// @Tags Logs
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} RequestErrorLogsResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/request-error-logs [get]
 func (h *Handler) requestErrorLogs(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -133,10 +195,23 @@ func (h *Handler) requestErrorLogs(writer http.ResponseWriter, request *http.Req
 		writeCPAFacadeError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"files": files})
+	writeJSON(writer, http.StatusOK, RequestErrorLogsResponseDTO{Files: files})
 }
 
 // downloadRequestErrorLog streams one error log file back to the browser.
+//
+// @Summary Download a request-error log file
+// @Description Download one CPA request-error log file as plain text and record an audit entry.
+// @Tags Logs
+// @Produce text/plain
+// @Security CookieAuth
+// @Param name path string true "Error log filename"
+// @Success 200 {string} string "Plain-text error log"
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/request-error-logs/{name} [get]
 func (h *Handler) downloadRequestErrorLog(writer http.ResponseWriter, request *http.Request) {
 	name := chi.URLParam(request, "name")
 	if !management.ValidLogFileName(name) {
@@ -177,6 +252,20 @@ var requestLogIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`
 // The gateway log names requests the request list never holds: one refused
 // before a credential was chosen publishes no usage record, so its log cannot be
 // reached through a record and is asked for by the id on its log line instead.
+//
+// @Summary Download request log by request ID
+// @Description Download CPA's per-request log file for a gateway request ID.
+// @Tags Logs
+// @Produce text/plain
+// @Security CookieAuth
+// @Param id path string true "CPA request ID"
+// @Success 200 {string} string "Plain-text request log"
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/request-logs/{id} [get]
 func (h *Handler) downloadRequestLogByID(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	requestID := chi.URLParam(request, "id")

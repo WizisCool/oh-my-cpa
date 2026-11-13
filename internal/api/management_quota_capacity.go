@@ -141,8 +141,32 @@ type capacityCycleDTO struct {
 	Usage       *quota.WindowUsage `json:"usage,omitempty"`
 }
 
+// QuotaCapacityHistoryResponseDTO returns current and previous quota cycle consumption and estimated capacity.
+type QuotaCapacityHistoryResponseDTO struct {
+	WindowID            string                `json:"window_id"`
+	Current             *capacityCycleDTO     `json:"current"`
+	Previous            *capacityCycleDTO     `json:"previous"`
+	Capacity            *quota.WindowCapacity `json:"capacity,omitempty"`
+	CapacityUnavailable string                `json:"capacity_unavailable,omitempty"`
+}
+
 // getQuotaCapacityHistory returns recorded consumption for the current and
 // previous cycles alongside the window's estimated full capacity.
+//
+// @Summary Get quota window capacity history
+// @Description Return current/previous cycle token and request usage alongside estimated window capacity.
+// @Tags Quota
+// @Produce json
+// @Security CookieAuth
+// @Param authIndex path string true "Credential runtime auth_index"
+// @Param window query string true "Quota window ID"
+// @Success 200 {object} QuotaCapacityHistoryResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/quota/{authIndex}/capacity [get]
 func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	authIndex := strings.TrimSpace(chi.URLParam(request, "authIndex"))
@@ -192,7 +216,7 @@ func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *h
 	windowCycles := h.repo.ReconcileLiveCycleForRead(ctx, authIndex, window, plan, snapshot.ObservedAtMS, cycles[windowKey])
 	previous := quota.PreviousCapacityCycle(window, plan, snapshot.ObservedAtMS, windowCycles)
 
-	response := map[string]any{"window_id": window.ID, "current": nil, "previous": nil}
+	response := QuotaCapacityHistoryResponseDTO{WindowID: window.ID}
 	var currentFromMS *int64
 	if fromMS, toMS, reason := quota.WindowCycleRange(window, snapshot.ObservedAtMS, snapshot.ObservedAtMS); reason == "" {
 		currentFromMS = &fromMS
@@ -203,7 +227,7 @@ func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *h
 		if usage, scopeReason, err := h.resolveCurrentCycleUsage(ctx, authIndex, window, plan, snapshot.ObservedAtMS, fromMS, toMS, windowCycles); err == nil && scopeReason == "" {
 			current.Usage = &usage
 		}
-		response["current"] = current
+		response.Current = &current
 	}
 	if previous != nil && len(previous.Points) > 0 {
 		last := previous.Points[len(previous.Points)-1]
@@ -230,7 +254,7 @@ func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *h
 			}
 		}
 		cycle.Usage = &usage
-		response["previous"] = cycle
+		response.Previous = &cycle
 	}
 
 	observation := normalizedQuotaFromSnapshot(authIndex, snapshot)
@@ -239,10 +263,10 @@ func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *h
 	h.attachQuotaCapacity(ctx, observation, h.now().UnixMilli())
 	result := observation.Windows[index]
 	if result.Capacity != nil {
-		response["capacity"] = result.Capacity
+		response.Capacity = result.Capacity
 	}
 	if result.CapacityUnavailable != "" {
-		response["capacity_unavailable"] = result.CapacityUnavailable
+		response.CapacityUnavailable = result.CapacityUnavailable
 	}
 	writeJSON(writer, http.StatusOK, response)
 }

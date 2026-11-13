@@ -16,6 +16,21 @@ import (
 // The read is a credential reveal and is audited as one; a read whose audit cannot be
 // written answers nothing. A browser that cannot store the value simply leaves the
 // plugin to ask for its own sign-in.
+// CPACredentialResponseDTO carries the decrypted CPA management key for CPAMC-compatible plugin pages.
+type CPACredentialResponseDTO struct {
+	ManagementKey string `json:"management_key"`
+}
+
+// @Summary Reveal CPA management key for hosted plugin bridge
+// @Description Decrypt and return the CPA management key for CPAMC-compatible plugin pages after fail-closed audit logging.
+// @Tags Plugins
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} CPACredentialResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/cpa-credential [get]
 func (h *Handler) getCPACredential(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	instance, err := h.repo.GetInstance(request.Context(), defaultInstanceID())
@@ -37,5 +52,5 @@ func (h *Handler) getCPACredential(writer http.ResponseWriter, request *http.Req
 		writeAuditFailure(writer, "audit log failure; credential read aborted")
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]string{"management_key": string(key)})
+	writeJSON(writer, http.StatusOK, CPACredentialResponseDTO{ManagementKey: string(key)})
 }

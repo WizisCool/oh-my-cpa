@@ -132,6 +132,7 @@ export default {
   'header.expand_sidebar': '展开侧栏',
   'header.open_nav': '打开导航',
   'header.nav_sheet': '导航',
+  'header.open_api_docs': '打开 API 文档',
   'header.open_repository': '打开项目 GitHub 仓库',
   'header.refresh_all': '刷新全部',
   'mobile.filters': '筛选',

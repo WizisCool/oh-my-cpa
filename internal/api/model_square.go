@@ -108,6 +108,16 @@ func (h *Handler) RefreshModelSquareProvenance(ctx context.Context) error {
 	return err
 }
 
+// @Summary List Model Square catalog and routes
+// @Description Return merged model metadata, provider provenance, and call routes for Model Square.
+// @Tags ModelSquare
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} modelSquareDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/model-square [get]
 func (h *Handler) listModelSquare(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	directory, err := h.operationsService().ListModelSquare(request.Context(), operations.ModelSquareQuery{})
