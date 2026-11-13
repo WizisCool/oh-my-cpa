@@ -1,8 +1,7 @@
 import clsx from 'clsx';
 import { quotaWindowFullName } from '../quota/quotaWindowSelection';
 import { Meter } from '../../components/common/Meter';
-import { useT, type TFunc } from '../../i18n';
-import type { MessageKey } from '../../i18n/catalog';
+import { useT } from '../../i18n';
 import type { QuotaMetric } from '../../types/quota';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { compactQuotaCapacity } from '../quota/quotaCapacity';
@@ -10,29 +9,8 @@ import { QuotaCapacityButton, type QuotaCapacityOwner } from '../quota/QuotaCapa
 import { formatQuotaMetric, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown } from '../quota/quotaFormat';
 import { QUOTA_LOW_PERCENT, quotaRemainingStroke } from '../quota/quotaThresholds';
 import { quotaWindowKindOf } from '../quota/quotaWindowSelection';
-import { packQuotaLines, type QuotaLine, type QuotaLineCell, type QuotaPeriod } from './credentialSections';
+import { packQuotaLines, quotaReadingName, type QuotaLine, type QuotaLineCell } from './credentialSections';
 import styles from './QuotaGauges.module.css';
-
-const PERIOD_KEYS: Record<QuotaPeriod, MessageKey> = {
-  five_hour: 'quota.slot_five_hour', daily: 'quota.slot_daily', weekly: 'quota.slot_weekly', monthly: 'quota.slot_monthly',
-};
-
-function lineTitle(line: QuotaLine, t: TFunc): string {
-  if (line.label) return line.label;
-  return t(line.scope === 'code_review' ? 'omc.quota_family_code_review' : 'omc.quota_family_plan');
-}
-
-function cellPeriodTitle(cell: QuotaLineCell, t: TFunc): string | undefined {
-  const kind = quotaWindowKindOf(cell.window);
-  return kind === 'five_hour' || kind === 'daily' || kind === 'weekly' || kind === 'monthly' ? t(PERIOD_KEYS[kind]) : undefined;
-}
-
-/** The plan's limits are named by their period; any other by its period and name, or its name alone. */
-function readingName(line: QuotaLine, cell: QuotaLineCell, t: TFunc): string {
-  const period = cellPeriodTitle(cell, t);
-  if (line.scope === 'standard' && !line.label) return period ?? cell.window.label;
-  return period ? t('omc.quota_reading_name', { family: lineTitle(line, t), period }) : lineTitle(line, t);
-}
 
 /**
  * A credential's limits in two tracks: the first line's short limit - nearly every provider's five
@@ -58,7 +36,7 @@ export function QuotaLines({ lines, provider, isMuted, nowMS, owner }: {
           siblings={allWindows}
           // Every reading names itself, so "5 hours Gemini" and "Weekly Gemini 4 Argon" cannot be
           // mistaken for each other without a header to read them by.
-          name={readingName(line, cell, t)}
+          name={quotaReadingName(line, cell, t)}
           provider={provider}
           isMuted={isMuted}
           nowMS={nowMS}

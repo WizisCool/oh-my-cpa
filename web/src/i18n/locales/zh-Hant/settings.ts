@@ -201,6 +201,7 @@ export default {
   "omc.quota_family_code_review": "程式碼審查",
   "omc.quota_remaining_prefix": "剩餘",
   "omc.quota_reading_name": "{period} {family}",
+  "omc.quota_allowance_name": "{name}（{allowance}）",
   "omc.section_select": "選擇本頁全部 {provider} 憑證",
   "omc.fleet_providers": "供應商",
   "omc.fleet_all_accounts": "全部帳戶",

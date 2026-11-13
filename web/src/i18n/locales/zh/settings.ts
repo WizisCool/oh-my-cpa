@@ -198,6 +198,7 @@ export default {
   'omc.quota_family_code_review': '代码审查',
   'omc.quota_remaining_prefix': '剩余',
   'omc.quota_reading_name': '{period} {family}',
+  'omc.quota_allowance_name': '{name}（{allowance}）',
   'omc.section_select': '选择本页全部 {provider} 凭据',
   'omc.fleet_providers': '提供商',
   'omc.fleet_all_accounts': '全部账号',

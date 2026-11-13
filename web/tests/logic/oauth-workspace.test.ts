@@ -24,13 +24,16 @@ import { pluginMultiPortalKeys, pluginOAuthProviderTitles } from '../../src/type
 import { providerDisplayName } from '../../src/types/providerMetadata.ts';
 import { orderQuotaWindows, quotaWindowFullName, quotaWindowGroupKey, quotaWindowKindOf, quotaWindowParts } from '../../src/pages/quota/quotaWindowSelection.ts';
 import { applyKeyOrder, moveKey, parseGroupedOrder, parseRankOrder, rankedKeys, ranksOf } from '../../src/types/displayOrder.ts';
-import { credentialStatusOf, compareSections, quotaCellsOf, quotaLinesOf, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection, providersInSectionOrder } from '../../src/pages/oauthManagement/credentialSections.ts';
+import { credentialStatusOf, compareSections, quotaCellsOf, quotaLinesOf, quotaReadingName, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection, providersInSectionOrder } from '../../src/pages/oauthManagement/credentialSections.ts';
 import type { QuotaWindow } from '../../src/types/quota.ts';
 import { formatShortDateTime, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../../src/pages/quota/quotaFormat.ts';
 import { matchesStatusFilter } from '../../src/components/authFiles/authFileLogic.ts';
 import { healthBucketOf, healthCounts, matchesHealthLens, parseHealthLens, providerSummaries } from '../../src/pages/oauthManagement/fleetPresentation.ts';
 import { siwcBadgeState } from '../../src/components/authFiles/siwcBadge.ts';
-import type { TFunc } from '../../src/i18n/index.tsx';
+import { makeT, type TFunc } from '../../src/i18n/index.tsx';
+import { CATALOGS } from '../../src/i18n/resources.ts';
+import { formatMessage } from '../../src/i18n/format.ts';
+import { languageLocale } from '../../src/i18n/language.ts';
 
 /** Stands in for the dictionary: the countdown assertions only need the arguments back. */
 const echoT: TFunc = (key, vars) => (vars ? `${key}:${Object.values(vars).join('/')}` : key);
@@ -683,6 +686,73 @@ test('quota lines: a family per line, five-hour then weekly, a lone limit across
     const lines = quotaLinesOf(quotaRecord('cred', windows, provider));
     const shown = lines.map((line) => `${line.label ?? (line.scope === 'standard' ? 'plan' : line.scope)}: ${line.cells.map((cell) => (cell.spans ? 'span' : cell.slot)).join(' ')}`);
     assert.deepEqual(shown, expected, name);
+  }
+});
+
+// Synthetic windows reproduce the standard plugin quota shape without account data or reset times.
+test('Factory list keeps all six group windows and names monthly extras in the console language', async () => {
+  const windows: QuotaWindow[] = ['Standard', 'Core'].flatMap((group) => [
+    { id: `${group}_5h`, label: `${group} · 5小时限制 (5-Hour)`, scope: 'group', period_hours: 5 },
+    { id: `${group}_7d`, label: `${group} · 每周限制 (Weekly)`, scope: 'group', period_hours: 168 },
+    { id: `${group}_30d`, label: `${group} · 每月限制 (Monthly)`, scope: 'group', period_hours: 720 },
+  ]);
+  const placed = packQuotaLines(quotaLinesOf(quotaRecord('factory', windows, 'factory')));
+  assert.deepEqual(placed.map(({ cell }) => cell.window.id), [
+    'Standard_5h', 'Standard_7d', 'Standard_30d', 'Core_5h', 'Core_7d', 'Core_30d',
+  ]);
+  const expected = {
+    zh: ['5 小时 Standard', '每周 Standard', '每月 Standard', '5 小时 Core', '每周 Core', '每月 Core'],
+    en: ['5 hours Standard', 'Weekly Standard', 'Monthly Standard', '5 hours Core', 'Weekly Core', 'Monthly Core'],
+    'zh-Hant': ['5 小時 Standard', '每週 Standard', '每月 Standard', '5 小時 Core', '每週 Core', '每月 Core'],
+    ms: ['Standard 5 jam', 'Standard Mingguan', 'Standard Bulanan', 'Core 5 jam', 'Core Mingguan', 'Core Bulanan'],
+  };
+  for (const lang of ['zh', 'en', 'zh-Hant', 'ms'] as const) {
+    const entry = CATALOGS[lang];
+    const catalog = typeof entry === 'function' ? await entry() : entry;
+    const t: TFunc = (key, vars) => formatMessage(catalog[key], vars, languageLocale(lang));
+    assert.deepEqual(placed.map(({ line, cell }) => quotaReadingName(line, cell, t)), expected[lang], lang);
+  }
+});
+
+test('quota reading names preserve model scope and provider text for unknown group periods', () => {
+  const windows: QuotaWindow[] = [
+    { id: 'model_5h', label: 'Sonnet 5小时用量', scope: 'model', model: 'claude-sonnet', period_hours: 5 },
+    { id: 'model_7d', label: 'Sonnet 每周用量', scope: 'model', model: 'claude-sonnet', period_hours: 168 },
+    { id: 'model_30d', label: 'Sonnet 每月用量', scope: 'model', model: 'claude-sonnet', period_hours: 720 },
+    { id: 'group_7d', label: 'Standard · 每周限制 (Weekly)', scope: 'group', period_hours: 168 },
+    { id: 'group_custom', label: 'Standard · Custom allowance', scope: 'group', period_hours: 48 },
+    { id: 'group_unknown', label: 'Standard · Burst allowance', scope: 'group' },
+  ];
+  const placed = packQuotaLines(quotaLinesOf(quotaRecord('custom', windows, 'factory')));
+  assert.deepEqual(placed.map(({ cell }) => [cell.window.id, cell.window.scope, cell.window.model]), [
+    ['model_5h', 'model', 'claude-sonnet'], ['model_7d', 'model', 'claude-sonnet'], ['model_30d', 'model', 'claude-sonnet'],
+    ['group_7d', 'group', undefined], ['group_custom', 'group', undefined], ['group_unknown', 'group', undefined],
+  ]);
+  for (const lang of ['zh', 'en'] as const) {
+    assert.deepEqual(placed.map(({ line, cell }) => quotaReadingName(line, cell, makeT(lang))), lang === 'zh' ? [
+      '5 小时 Sonnet', '每周 Sonnet', '每月 Sonnet', '每周 Standard', 'Standard（Custom allowance）', 'Standard（Burst allowance）',
+    ] : [
+      '5 hours Sonnet', 'Weekly Sonnet', 'Monthly Sonnet', 'Weekly Standard', 'Standard (Custom allowance)', 'Standard (Burst allowance)',
+    ]);
+  }
+});
+
+test('group allowance names survive unknown periods and duplicate known periods in any source order', () => {
+  const burst: QuotaWindow = { id: 'burst', label: 'Standard · Burst allowance', scope: 'group', period_hours: 48 };
+  const general: QuotaWindow = { id: 'general', label: 'Standard · General allowance', scope: 'group', period_hours: 168 };
+  const partner: QuotaWindow = { id: 'partner', label: 'Standard · Partner allowance', scope: 'group', period_hours: 168 };
+  for (const windows of [[burst], [general, burst], [burst, general], [general, partner], [partner, general]]) {
+    const placed = packQuotaLines(quotaLinesOf(quotaRecord('allowances', windows, 'factory')));
+    const names = Object.fromEntries(placed.map(({ line, cell }) => [cell.window.id, quotaReadingName(line, cell, makeT('en'))]));
+    assert.equal(placed.length, windows.length);
+    if (windows.includes(burst)) assert.equal(names.burst, 'Standard (Burst allowance)');
+    if (windows.includes(general) && windows.includes(partner)) {
+      assert.equal(names.general, 'Weekly Standard (General allowance)');
+      assert.equal(names.partner, 'Weekly Standard (Partner allowance)');
+      const zhNames = Object.fromEntries(placed.map(({ line, cell }) => [cell.window.id, quotaReadingName(line, cell, makeT('zh'))]));
+      assert.equal(zhNames.general, '每周 Standard（General allowance）');
+      assert.equal(zhNames.partner, '每周 Standard（Partner allowance）');
+    }
   }
 });
 
