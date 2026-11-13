@@ -113,10 +113,10 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
           <Button size="sm" disabled={isMutating || !isSelectionReady || selectablePageCount === 0} onClick={onSelectPage}>
             {t('af.select_page')}
           </Button>
-          <Button className={styles['scope-filtered']} size="sm" disabled={isMutating || !isSelectionReady || !canSelectFiltered} onClick={onSelectFiltered}>
+          <Button size="sm" disabled={isMutating || !isSelectionReady || !canSelectFiltered} onClick={onSelectFiltered}>
             {t('af.select_filtered', { n: selectableFilteredCount })}
           </Button>
-          <Button className={styles['scope-clear']} size="sm" variant="ghost" icon={<CloseOutlined />} disabled={isMutating} onClick={onClearSelection}>
+          <Button size="sm" variant="ghost" icon={<CloseOutlined />} disabled={isMutating} onClick={onClearSelection}>
             {t('af.clear_selection')}
           </Button>
         </div>
