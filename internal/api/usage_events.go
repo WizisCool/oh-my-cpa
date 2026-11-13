@@ -500,11 +500,11 @@ type UsageFacetsResponseDTO struct {
 // @Param since query integer false "Record ID boundary for arrived_count"
 // @Param limit query integer false "Page size"
 // @Param q query string false "Search text"
-// @Param model query []string false "Upstream model filters"
-// @Param model_alias query []string false "Call point filters"
-// @Param provider query []string false "Provider filters"
-// @Param api_key query []string false "Client API key fingerprint filters"
-// @Param auth_index query []string false "Credential auth_index filters"
+// @Param model query []string false "Upstream model filters" collectionFormat(multi)
+// @Param model_alias query []string false "Call point filters" collectionFormat(multi)
+// @Param provider query []string false "Provider filters" collectionFormat(multi)
+// @Param api_key query []string false "Client API key fingerprint filters" collectionFormat(multi)
+// @Param auth_index query []string false "Credential auth_index filters" collectionFormat(multi)
 // @Success 200 {object} UsageEventListResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO

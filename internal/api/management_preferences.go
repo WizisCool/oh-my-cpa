@@ -67,14 +67,14 @@ var knownPreferences = map[string]bool{
 // Each stored JSON document is kept as the client sent it; the console owns each key's shape while
 // the server checks only that it parses.
 type PreferenceListResponseDTO struct {
-	Preferences map[string]json.RawMessage `json:"preferences"`
-	TimeZone    repository.TimezoneInfo    `json:"time_zone"`
+	Preferences map[string]any          `json:"preferences"`
+	TimeZone    repository.TimezoneInfo `json:"time_zone"`
 }
 
 // PreferencePutResponseDTO returns the persisted preference key and JSON value.
 type PreferencePutResponseDTO struct {
-	Key   string          `json:"key"`
-	Value json.RawMessage `json:"value"`
+	Key   string `json:"key"`
+	Value any    `json:"value"`
 }
 
 // @Summary List console preferences
@@ -100,7 +100,7 @@ func (h *Handler) listPreferences(writer http.ResponseWriter, request *http.Requ
 		writeInternalError(writer, fmt.Errorf("list preferences: %w", err))
 		return
 	}
-	preferences := map[string]json.RawMessage{}
+	preferences := map[string]any{}
 	for key, raw := range stored {
 		if !knownPreferences[key] || !json.Valid([]byte(raw)) {
 			// A value written by an older build that no longer parses must not
@@ -125,7 +125,7 @@ func (h *Handler) listPreferences(writer http.ResponseWriter, request *http.Requ
 // @Produce json
 // @Security CookieAuth
 // @Param key path string true "Allowlisted preference key"
-// @Param body body object true "Arbitrary valid JSON document for the preference key"
+// @Param body body any true "Valid JSON value (object, array, string, number, boolean, or null) for the preference key"
 // @Success 200 {object} PreferencePutResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO

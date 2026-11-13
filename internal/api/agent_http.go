@@ -90,9 +90,45 @@ func (h *Handler) readyAgent(writer http.ResponseWriter) bool {
 	return true
 }
 
+// CapabilityDefinitionDTO is the API-owned projection of an agent/MCP capability definition.
+type CapabilityDefinitionDTO struct {
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Version      int      `json:"version"`
+	Permission   string   `json:"permission"`
+	Risk         string   `json:"risk"`
+	Adapters     []string `json:"adapters"`
+	Invalidates  []string `json:"invalidates,omitempty"`
+	HumanInput   string   `json:"human_input,omitempty"`
+	InputSchema  any      `json:"input_schema"`
+	OutputSchema any      `json:"output_schema"`
+}
+
+func projectCapabilityDefinitions(defs []*capability.Definition) []CapabilityDefinitionDTO {
+	out := make([]CapabilityDefinitionDTO, 0, len(defs))
+	for _, def := range defs {
+		if def == nil {
+			continue
+		}
+		out = append(out, CapabilityDefinitionDTO{
+			Name:         def.Name,
+			Description:  def.Description,
+			Version:      def.Version,
+			Permission:   def.Permission,
+			Risk:         def.Risk,
+			Adapters:     def.Adapters,
+			Invalidates:  def.Invalidates,
+			HumanInput:   def.HumanInput,
+			InputSchema:  def.InputSchema,
+			OutputSchema: def.OutputSchema,
+		})
+	}
+	return out
+}
+
 // CapabilityListResponseDTO lists the capabilities visible to the caller principal.
 type CapabilityListResponseDTO struct {
-	Capabilities []*capability.Definition `json:"capabilities"`
+	Capabilities []CapabilityDefinitionDTO `json:"capabilities"`
 }
 
 // InvokeCapabilityRequestDTO specifies a capability name and JSON argument payload.
@@ -140,7 +176,7 @@ func (h *Handler) listCapabilities(writer http.ResponseWriter, request *http.Req
 	if h.cfg.IsDemoMode {
 		principal = agent.PRINCIPAL
 	}
-	writeJSON(writer, 200, CapabilityListResponseDTO{Capabilities: h.agent.executor.Registry.List(principal)})
+	writeJSON(writer, 200, CapabilityListResponseDTO{Capabilities: projectCapabilityDefinitions(h.agent.executor.Registry.List(principal))})
 }
 
 // @Summary Invoke a capability

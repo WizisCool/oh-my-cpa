@@ -58,27 +58,73 @@ func (h *Handler) parseConfigBackupID(writer http.ResponseWriter, request *http.
 	return id, true
 }
 
+// ConfigBackupDTO projects stored CPA configuration backup metadata without internal gateway URLs.
+type ConfigBackupDTO struct {
+	ID          int64  `json:"id"`
+	CreatedAtMS int64  `json:"created_at_ms"`
+	Revision    string `json:"revision"`
+	SizeBytes   int64  `json:"size_bytes"`
+	Layout      string `json:"layout"`
+	Reason      string `json:"reason"`
+}
+
+// ConfigBackupSettingsDTO describes the retention policy and allowed bounds for configuration backups.
+type ConfigBackupSettingsDTO struct {
+	Retention       int `json:"retention"`
+	RetentionMin    int `json:"retention_min"`
+	RetentionMax    int `json:"retention_max"`
+	LegacyRetention int `json:"legacy_retention"`
+}
+
+func projectConfigBackupDTO(backup repository.ConfigBackup) ConfigBackupDTO {
+	return ConfigBackupDTO{
+		ID:          backup.ID,
+		CreatedAtMS: backup.CreatedAtMS,
+		Revision:    backup.Revision,
+		SizeBytes:   backup.SizeBytes,
+		Layout:      backup.Layout,
+		Reason:      backup.Reason,
+	}
+}
+
+func projectConfigBackupDTOs(backups []repository.ConfigBackup) []ConfigBackupDTO {
+	out := make([]ConfigBackupDTO, 0, len(backups))
+	for _, backup := range backups {
+		out = append(out, projectConfigBackupDTO(backup))
+	}
+	return out
+}
+
+func projectConfigBackupSettingsDTO(settings repository.ConfigBackupSettings) ConfigBackupSettingsDTO {
+	return ConfigBackupSettingsDTO{
+		Retention:       settings.Retention,
+		RetentionMin:    settings.RetentionMin,
+		RetentionMax:    settings.RetentionMax,
+		LegacyRetention: settings.LegacyRetention,
+	}
+}
+
 // ConfigBackupsResponseDTO lists stored CPA configuration snapshots and retention settings.
 type ConfigBackupsResponseDTO struct {
-	Backups  []repository.ConfigBackup       `json:"backups"`
-	Settings repository.ConfigBackupSettings `json:"settings"`
+	Backups  []ConfigBackupDTO       `json:"backups"`
+	Settings ConfigBackupSettingsDTO `json:"settings"`
 }
 
 // ConfigBackupSettingsResponseDTO wraps updated config backup retention settings.
 type ConfigBackupSettingsResponseDTO struct {
-	Settings repository.ConfigBackupSettings `json:"settings"`
+	Settings ConfigBackupSettingsDTO `json:"settings"`
 }
 
 // ConfigBackupCreateResponseDTO returns a saved config backup and whether a new snapshot was created.
 type ConfigBackupCreateResponseDTO struct {
-	Backup  repository.ConfigBackup `json:"backup"`
-	Created bool                    `json:"created"`
+	Backup  ConfigBackupDTO `json:"backup"`
+	Created bool            `json:"created"`
 }
 
 // ConfigBackupDetailResponseDTO reveals a decrypted config backup YAML along with metadata.
 type ConfigBackupDetailResponseDTO struct {
-	Backup repository.ConfigBackup `json:"backup"`
-	YAML   string                  `json:"yaml"`
+	Backup ConfigBackupDTO `json:"backup"`
+	YAML   string          `json:"yaml"`
 }
 
 // ConfigBackupRestoreResponseDTO confirms a config backup restore and reports the new CPA revision.
@@ -99,7 +145,7 @@ type ConfigBackupRestoreResponseDTO struct {
 func (h *Handler) listConfigBackups(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
-		writeJSON(writer, http.StatusOK, ConfigBackupsResponseDTO{Backups: []repository.ConfigBackup{}, Settings: repository.ConfigBackupSettings{
+		writeJSON(writer, http.StatusOK, ConfigBackupsResponseDTO{Backups: []ConfigBackupDTO{}, Settings: ConfigBackupSettingsDTO{
 			Retention:       repository.CONFIG_BACKUP_RETENTION_DEFAULT,
 			RetentionMin:    repository.CONFIG_BACKUP_RETENTION_MIN,
 			RetentionMax:    repository.CONFIG_BACKUP_RETENTION_MAX,
@@ -118,7 +164,10 @@ func (h *Handler) listConfigBackups(writer http.ResponseWriter, request *http.Re
 		writeInternalError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, ConfigBackupsResponseDTO{Backups: backups, Settings: settings})
+	writeJSON(writer, http.StatusOK, ConfigBackupsResponseDTO{
+		Backups:  projectConfigBackupDTOs(backups),
+		Settings: projectConfigBackupSettingsDTO(settings),
+	})
 }
 
 type configBackupSettingsRequest struct {
@@ -165,7 +214,7 @@ func (h *Handler) putConfigBackupSettings(writer http.ResponseWriter, request *h
 		return
 	}
 	_ = h.recordAudit(request, "config.backup_settings", "config", "config_backups", "success", map[string]any{"retention": settings.Retention})
-	writeJSON(writer, http.StatusOK, ConfigBackupSettingsResponseDTO{Settings: settings})
+	writeJSON(writer, http.StatusOK, ConfigBackupSettingsResponseDTO{Settings: projectConfigBackupSettingsDTO(settings)})
 }
 
 // createConfigBackup keeps the stored file now, outside any write: before an
@@ -210,7 +259,7 @@ func (h *Handler) createConfigBackup(writer http.ResponseWriter, request *http.R
 		return
 	}
 	_ = h.recordAudit(request, "config.create_backup", "config", strconv.FormatInt(backup.ID, 10), "success", map[string]any{"revision": backup.Revision, "created": isCreated})
-	writeJSON(writer, http.StatusOK, ConfigBackupCreateResponseDTO{Backup: backup, Created: isCreated})
+	writeJSON(writer, http.StatusOK, ConfigBackupCreateResponseDTO{Backup: projectConfigBackupDTO(backup), Created: isCreated})
 }
 
 // getConfigBackup reveals one kept file. It holds the same secrets as the raw
@@ -247,7 +296,7 @@ func (h *Handler) getConfigBackup(writer http.ResponseWriter, request *http.Requ
 		writeError(writer, http.StatusInternalServerError, "audit log failure; backup reveal aborted")
 		return
 	}
-	writeJSON(writer, http.StatusOK, ConfigBackupDetailResponseDTO{Backup: backup, YAML: document})
+	writeJSON(writer, http.StatusOK, ConfigBackupDetailResponseDTO{Backup: projectConfigBackupDTO(backup), YAML: document})
 }
 
 // restoreConfigBackup writes a kept file back to the gateway. The document never

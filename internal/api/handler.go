@@ -232,9 +232,9 @@ func (h *Handler) routes() chi.Router {
 				authRouter.NotFound(h.notFound)
 				authRouter.MethodNotAllowed(h.methodNotAllowed)
 			})
-			apiRouter.Post("/mcp", h.serveMCP)
-			apiRouter.Get("/mcp", h.serveMCP)
-			apiRouter.Delete("/mcp", h.serveMCP)
+			apiRouter.Post("/mcp", h.serveMCPPost)
+			apiRouter.Get("/mcp", h.serveMCPGet)
+			apiRouter.Delete("/mcp", h.serveMCPDelete)
 			apiRouter.With(h.requireConsoleOrCapability).Get("/events", h.stateEventsLive)
 			apiRouter.Route("/v1", func(v1 chi.Router) {
 				v1.Use(h.requireConsoleOrCapability)
@@ -436,8 +436,11 @@ func (h *Handler) routes() chi.Router {
 				// A plugin's own page and the plugin routes its script calls.
 				v1.Get(PLUGIN_HOST_ROUTE+"/v0/resource/plugins/*", h.servePluginResource)
 				for _, prefix := range []string{management.PluginRoutePrefix, management.PluginRouteV8Prefix} {
-					for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+					for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodDelete} {
 						v1.Method(method, PLUGIN_HOST_ROUTE+prefix+"*", http.HandlerFunc(h.servePluginRoute))
+					}
+					for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch} {
+						v1.Method(method, PLUGIN_HOST_ROUTE+prefix+"*", http.HandlerFunc(h.servePluginRouteWithBody))
 					}
 				}
 				v1.Get(PLUGIN_HOST_ROUTE+management.PluginModelsPath, h.servePluginModels)

@@ -77,12 +77,64 @@ func (h *Handler) modelCooldownKeyResolver(ctx context.Context, client *manageme
 	}
 }
 
-// QuotaRefreshResponseDTO returns either a single refreshed quota or a batch list.
+// QuotaRefreshResponseDTO documents either a single refreshed quota or a batch refresh summary.
 type QuotaRefreshResponseDTO struct {
 	Status string                   `json:"status"`
 	Quota  *quota.NormalizedQuota   `json:"quota,omitempty"`
 	Quotas []*quota.NormalizedQuota `json:"quotas,omitempty"`
-	Total  int                      `json:"total,omitempty"`
+	Total  *int                     `json:"total,omitempty"`
+}
+
+// QuotaSingleRefreshResponseDTO returns a single refreshed credential quota reading.
+type QuotaSingleRefreshResponseDTO struct {
+	Status string                 `json:"status"`
+	Quota  *quota.NormalizedQuota `json:"quota"`
+}
+
+// QuotaBatchRefreshResponseDTO returns the batch quota refresh results and count, preserving empty collections.
+type QuotaBatchRefreshResponseDTO struct {
+	Status string                   `json:"status"`
+	Quotas []*quota.NormalizedQuota `json:"quotas"`
+	Total  int                      `json:"total"`
+}
+
+// QuotaSnapshotDTO projects a persisted normalized quota snapshot record for detail history responses.
+type QuotaSnapshotDTO struct {
+	WarmupJSON       string `json:"warmup_json,omitempty"`
+	ID               string `json:"id"`
+	AuthIndex        string `json:"auth_index"`
+	Provider         string `json:"provider"`
+	Status           string `json:"status"`
+	PlanType         string `json:"plan_type"`
+	PlanTier         string `json:"plan_tier"`
+	PlanJSON         string `json:"plan_json,omitempty"`
+	WindowsJSON      string `json:"windows_json"`
+	ResetCreditsJSON string `json:"reset_credits_json,omitempty"`
+	ResetGrantsJSON  string `json:"reset_grants_json,omitempty"`
+	ObservedAtMS     int64  `json:"observed_at_ms"`
+	CreatedAtMS      int64  `json:"created_at_ms"`
+}
+
+func projectQuotaSnapshotDTOs(records []repository.QuotaSnapshotRecord) []QuotaSnapshotDTO {
+	out := make([]QuotaSnapshotDTO, 0, len(records))
+	for _, record := range records {
+		out = append(out, QuotaSnapshotDTO{
+			WarmupJSON:       record.WarmupJSON,
+			ID:               record.ID,
+			AuthIndex:        record.AuthIndex,
+			Provider:         record.Provider,
+			Status:           record.Status,
+			PlanType:         record.PlanType,
+			PlanTier:         record.PlanTier,
+			PlanJSON:         record.PlanJSON,
+			WindowsJSON:      record.WindowsJSON,
+			ResetCreditsJSON: record.ResetCreditsJSON,
+			ResetGrantsJSON:  record.ResetGrantsJSON,
+			ObservedAtMS:     record.ObservedAtMS,
+			CreatedAtMS:      record.CreatedAtMS,
+		})
+	}
+	return out
 }
 
 // QuotaCooldownClearResponseDTO confirms cooldown/quota reset for an auth index.
@@ -102,7 +154,7 @@ type QuotaRedeemCreditResponseDTO struct {
 // CredentialQuotaDetailResponseDTO returns normalized quota, snapshot history, model quotas, and last refresh attempt.
 type CredentialQuotaDetailResponseDTO struct {
 	Quota       quota.NormalizedQuota                 `json:"quota"`
-	History     []repository.QuotaSnapshotRecord      `json:"history"`
+	History     []QuotaSnapshotDTO                    `json:"history"`
 	ModelQuotas map[string]managementQuotaObservation `json:"model_quotas"`
 	LastRefresh *QuotaRefreshAttemptDTO               `json:"last_refresh,omitempty"`
 }
@@ -374,7 +426,7 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 			"status": refreshed.Status,
 		})
 
-		writeJSON(writer, http.StatusOK, QuotaRefreshResponseDTO{
+		writeJSON(writer, http.StatusOK, QuotaSingleRefreshResponseDTO{
 			Status: "ok",
 			Quota:  refreshed,
 		})
@@ -456,7 +508,7 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 				out = append(out, r)
 			}
 		}
-		writeJSON(writer, http.StatusOK, QuotaRefreshResponseDTO{Status: "ok", Quotas: out, Total: len(out)})
+		writeJSON(writer, http.StatusOK, QuotaBatchRefreshResponseDTO{Status: "ok", Quotas: out, Total: len(out)})
 		return
 	}
 
@@ -905,7 +957,7 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 
 	response := CredentialQuotaDetailResponseDTO{
 		Quota:       normalized,
-		History:     history,
+		History:     projectQuotaSnapshotDTOs(history),
 		ModelQuotas: projectModelQuotas(targetFile.ModelQuotas),
 		LastRefresh: quotaAttemptDTO(attempt),
 	}

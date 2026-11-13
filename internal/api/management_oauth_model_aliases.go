@@ -37,8 +37,8 @@ type OAuthModelAliasesResponseDTO struct {
 
 // OAuthModelAliasesPatchRequestDTO replaces the global OAuth model alias rules for one provider.
 type OAuthModelAliasesPatchRequestDTO struct {
-	Provider string                       `json:"provider"`
-	Aliases  *[]managementOAuthModelAlias `json:"aliases"`
+	Provider string                       `json:"provider" validate:"required"`
+	Aliases  *[]managementOAuthModelAlias `json:"aliases" validate:"required"`
 }
 
 // OAuthModelAliasesPatchResponseDTO returns the verified alias rules for a provider.

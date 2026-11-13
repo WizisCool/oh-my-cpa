@@ -3,9 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { stageApiDocs, stageSite } from './build-site.mjs';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 test('stageApiDocs emits self-contained assets and hashed Scalar bundle', async () => {
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-api-docs-'));
@@ -25,6 +26,13 @@ test('stageApiDocs emits self-contained assets and hashed Scalar bundle', async 
     const committedSpec = fs.readFileSync(path.join(ROOT, 'docs', 'openapi', 'swagger.json'), 'utf8');
     const stagedSpec = fs.readFileSync(path.join(outDir, 'swagger.json'), 'utf8');
     assert.equal(stagedSpec, committedSpec);
+
+    const headersText = fs.readFileSync(path.join(ROOT, 'deploy', 'site', '_headers'), 'utf8');
+    const catchAllPos = headersText.indexOf('\n/*\n');
+    const scalarRulePos = headersText.indexOf('/api-docs/scalar.*.js');
+    const demoRulePos = headersText.indexOf('/demo/assets/*');
+    assert.ok(catchAllPos >= 0 && scalarRulePos > catchAllPos && demoRulePos > catchAllPos, 'catch-all /* rule must precede asset overrides');
+    assert.equal(headersText.match(/!\s*Cache-Control/g)?.length, 2, 'each asset override must detach inherited Cache-Control');
   } finally {
     fs.rmSync(outDir, { recursive: true, force: true });
   }

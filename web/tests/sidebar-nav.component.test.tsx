@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { installOmcApi, type OmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 import { AppLayout } from '../src/components/common/AppLayout';
-import { HeaderNav } from '../src/components/common/HeaderNav';
 import { NavSelectionHighlight } from '../src/components/common/NavSelectionHighlight';
 import { consoleRouteRegistry } from '../src/routePreload';
 import { ThemeProvider } from '../src/theme/ThemeContext';
@@ -261,28 +260,5 @@ describe('sidebar selection highlight', () => {
     expect(layer0?.style.opacity).toBe('0');
     expect(layer1?.style.opacity).toBe('1');
     expect(layer1?.style.transform).toBe('translate3d(0, 136px, 0)');
-  });
-
-  it('shows the API documentation shortcut in demo mode only', async () => {
-    vi.spyOn(consoleRouteRegistry, 'scheduleIdlePrewarm').mockReturnValue(() => undefined);
-    api.on('GET', '/management/system/repository', () => ({ stargazers_count: 0 }));
-    api.on('GET', '/management/system/updates', () => ({ omc_version: { state: 'unchecked' }, cpa_version: { state: 'unchecked' } }));
-
-    const selfHosted = renderWithOmc(<ThemeProvider><AppLayout /></ThemeProvider>, { route: '/dashboard', isStrict: true });
-    await screen.findByRole('link', { name: 'Open project on GitHub' });
-    expect(screen.queryByTestId('demo-api-docs-link')).toBeNull();
-    selfHosted.unmount();
-
-    window.__OMCPA_CONFIG__ = { demo: true };
-    const rootDemo = renderWithOmc(<ThemeProvider><AppLayout /></ThemeProvider>, { route: '/dashboard', isStrict: true });
-    const docsLink = await screen.findByTestId('demo-api-docs-link');
-    expect(docsLink.getAttribute('href')).toBe('https://omc.junze.dev/api-docs/');
-    expect(docsLink.getAttribute('target')).toBe('_blank');
-    rootDemo.unmount();
-
-    window.__OMCPA_CONFIG__ = { demo: true, basePath: '/demo', apiBaseUrl: '/api/v1' };
-    renderWithOmc(<ThemeProvider><HeaderNav /></ThemeProvider>, { isStrict: true });
-    const subpathDocsLink = await screen.findByTestId('demo-api-docs-link');
-    expect(subpathDocsLink.getAttribute('href')).toBe('/api-docs/');
   });
 });

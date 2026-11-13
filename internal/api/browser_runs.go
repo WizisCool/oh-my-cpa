@@ -376,15 +376,18 @@ type CancelBrowserRunResponseDTO struct {
 }
 
 // @Summary Start an Agent run
-// @Description Start a detached Agent conversation turn streamed as AG-UI SSE events.
+// @Description Start an Agent conversation turn streamed as AG-UI SSE events. Passing X-OMC-Run-ID enables detached, recoverable execution for active-run lookup, replay, and cancellation; omitting it streams directly without creating a recoverable run, and demo mode serves the direct stream directly.
 // @Tags Agent
 // @Accept json
 // @Produce text/event-stream
 // @Security CookieAuth
+// @Param X-OMC-Run-ID header string false "Optional run identifier enabling detached execution, replay, and cancellation"
 // @Param body body object true "AG-UI run input payload"
 // @Success 200 {string} string "AG-UI event stream"
 // @Failure 400 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
 // @Failure 413 {object} ErrorResponseDTO
+// @Failure 429 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/agent/run [post]
 func (h *Handler) startAgentRun(writer http.ResponseWriter, request *http.Request) {
@@ -392,11 +395,12 @@ func (h *Handler) startAgentRun(writer http.ResponseWriter, request *http.Reques
 }
 
 // @Summary Start a Playground chat run
-// @Description Start a detached Playground inference stream against the selected gateway key.
+// @Description Start a Playground inference stream against the selected gateway key. Passing X-OMC-Run-ID enables detached, recoverable execution for active-run lookup, replay, and cancellation; omitting it streams directly without creating a recoverable run, and demo mode ignores run tracking.
 // @Tags Playground
 // @Accept json
 // @Produce text/event-stream
 // @Security CookieAuth
+// @Param X-OMC-Run-ID header string false "Optional run identifier enabling detached execution, replay, and cancellation"
 // @Param body body playgroundRequest true "Playground chat request"
 // @Success 200 {string} string "Playground SSE stream"
 // @Failure 400 {object} ErrorResponseDTO
@@ -404,6 +408,7 @@ func (h *Handler) startAgentRun(writer http.ResponseWriter, request *http.Reques
 // @Failure 413 {object} ErrorResponseDTO
 // @Failure 429 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/playground/chat [post]
 func (h *Handler) startPlaygroundRun(writer http.ResponseWriter, request *http.Request) {
 	h.startBrowserRun("playground", h.chatPlayground, writer, request)

@@ -260,28 +260,31 @@
             "BearerAuth": []
           }
         ],
-        "description": "Expose Oh My CPA capabilities to Model Context Protocol clients via Streamable HTTP.",
-        "consumes": [
-          "application/json"
-        ],
+        "description": "Stateless Streamable HTTP MCP endpoint; SSE GET streams are disabled and authenticated requests with Accept: text/event-stream receive 405 Method Not Allowed (Allow: POST).",
         "produces": [
-          "application/json"
+          "text/event-stream"
         ],
         "tags": [
           "MCP"
         ],
-        "summary": "Streamable HTTP MCP endpoint",
+        "summary": "Open Streamable HTTP MCP event stream",
         "responses": {
-          "200": {
-            "description": "OK",
+          "400": {
+            "description": "Missing text/event-stream in Accept header",
             "schema": {
-              "$ref": "#/definitions/api.StatusOKResponseDTO"
+              "type": "string"
             }
           },
           "401": {
             "description": "Unauthorized",
             "schema": {
               "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "405": {
+            "description": "Method not allowed in stateless MCP mode (Allow: POST)",
+            "schema": {
+              "type": "string"
             }
           },
           "429": {
@@ -304,28 +307,58 @@
             "BearerAuth": []
           }
         ],
-        "description": "Expose Oh My CPA capabilities to Model Context Protocol clients via Streamable HTTP.",
+        "description": "Invoke Oh My CPA capabilities via JSON-RPC 2.0 over Streamable HTTP. Clients must send Content-Type: application/json and Accept: application/json, text/event-stream; notifications return 202 with an empty body.",
         "consumes": [
           "application/json"
         ],
         "produces": [
-          "application/json"
+          "application/json",
+          "text/event-stream"
         ],
         "tags": [
           "MCP"
         ],
-        "summary": "Streamable HTTP MCP endpoint",
+        "summary": "Call Streamable HTTP MCP endpoint",
+        "parameters": [
+          {
+            "description": "JSON-RPC 2.0 request or notification",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/api.MCPJSONRPCRequestDTO"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
             "schema": {
-              "$ref": "#/definitions/api.StatusOKResponseDTO"
+              "$ref": "#/definitions/api.MCPJSONRPCResponseDTO"
+            }
+          },
+          "202": {
+            "description": "Accepted (JSON-RPC notification or response)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "Missing or invalid Accept header or malformed JSON-RPC payload",
+            "schema": {
+              "type": "string"
             }
           },
           "401": {
             "description": "Unauthorized",
             "schema": {
               "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "415": {
+            "description": "Unsupported Media Type (Content-Type must be application/json)",
+            "schema": {
+              "type": "string"
             }
           },
           "429": {
@@ -348,22 +381,34 @@
             "BearerAuth": []
           }
         ],
-        "description": "Expose Oh My CPA capabilities to Model Context Protocol clients via Streamable HTTP.",
-        "consumes": [
-          "application/json"
-        ],
+        "description": "Terminate a Streamable HTTP MCP session when an Mcp-Session-Id header is provided (no-op 204 in stateless mode).",
         "produces": [
           "application/json"
         ],
         "tags": [
           "MCP"
         ],
-        "summary": "Streamable HTTP MCP endpoint",
+        "summary": "Close Streamable HTTP MCP session",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "MCP session identifier",
+            "name": "Mcp-Session-Id",
+            "in": "header",
+            "required": true
+          }
+        ],
         "responses": {
-          "200": {
-            "description": "OK",
+          "204": {
+            "description": "Session closed",
             "schema": {
-              "$ref": "#/definitions/api.StatusOKResponseDTO"
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "Missing Mcp-Session-Id header",
+            "schema": {
+              "type": "string"
             }
           },
           "401": {
@@ -692,7 +737,7 @@
             "CookieAuth": []
           }
         ],
-        "description": "Start a detached Agent conversation turn streamed as AG-UI SSE events.",
+        "description": "Start an Agent conversation turn streamed as AG-UI SSE events. Passing X-OMC-Run-ID enables detached, recoverable execution for active-run lookup, replay, and cancellation; omitting it streams directly without creating a recoverable run, and demo mode serves the direct stream directly.",
         "consumes": [
           "application/json"
         ],
@@ -704,6 +749,12 @@
         ],
         "summary": "Start an Agent run",
         "parameters": [
+          {
+            "type": "string",
+            "description": "Optional run identifier enabling detached execution, replay, and cancellation",
+            "name": "X-OMC-Run-ID",
+            "in": "header"
+          },
           {
             "description": "AG-UI run input payload",
             "name": "body",
@@ -727,8 +778,20 @@
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
           },
+          "409": {
+            "description": "Conflict",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
           "413": {
             "description": "Request Entity Too Large",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
             "schema": {
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
@@ -1579,7 +1642,7 @@
           "201": {
             "description": "Created",
             "schema": {
-              "$ref": "#/definitions/repository.Font"
+              "$ref": "#/definitions/api.FontDTO"
             }
           },
           "400": {
@@ -1658,7 +1721,7 @@
           "201": {
             "description": "Created",
             "schema": {
-              "$ref": "#/definitions/repository.Font"
+              "$ref": "#/definitions/api.FontDTO"
             }
           },
           "400": {
@@ -2628,7 +2691,7 @@
             "items": {
               "type": "string"
             },
-            "collectionFormat": "csv",
+            "collectionFormat": "multi",
             "description": "Auth file name(s) to delete",
             "name": "name",
             "in": "query"
@@ -3658,7 +3721,7 @@
           "409": {
             "description": "Conflict",
             "schema": {
-              "$ref": "#/definitions/api.ErrorResponseDTO"
+              "$ref": "#/definitions/api.ClientKeyAliasConflictResponseDTO"
             }
           },
           "500": {
@@ -4985,7 +5048,7 @@
             "items": {
               "type": "string"
             },
-            "collectionFormat": "csv",
+            "collectionFormat": "multi",
             "description": "Client API key or hmac fingerprint filters",
             "name": "api_key",
             "in": "query"
@@ -4995,7 +5058,7 @@
             "items": {
               "type": "string"
             },
-            "collectionFormat": "csv",
+            "collectionFormat": "multi",
             "description": "Upstream model filters",
             "name": "model",
             "in": "query"
@@ -5005,7 +5068,7 @@
             "items": {
               "type": "string"
             },
-            "collectionFormat": "csv",
+            "collectionFormat": "multi",
             "description": "Call point filters",
             "name": "model_alias",
             "in": "query"
@@ -5015,7 +5078,7 @@
             "items": {
               "type": "string"
             },
-            "collectionFormat": "csv",
+            "collectionFormat": "multi",
             "description": "Provider filters",
             "name": "provider",
             "in": "query"
@@ -5025,7 +5088,7 @@
             "items": {
               "type": "string"
             },
-            "collectionFormat": "csv",
+            "collectionFormat": "multi",
             "description": "Credential auth_index filters",
             "name": "auth_index",
             "in": "query"
@@ -5292,7 +5355,7 @@
           "502": {
             "description": "Bad Gateway",
             "schema": {
-              "$ref": "#/definitions/api.ErrorResponseDTO"
+              "$ref": "#/definitions/api.ModelCatalogRefreshErrorResponseDTO"
             }
           }
         }
@@ -7552,7 +7615,7 @@
             "items": {
               "type": "string"
             },
-            "collectionFormat": "csv",
+            "collectionFormat": "multi",
             "description": "Optional task IDs whose history should be cleared",
             "name": "task_id",
             "in": "query"
@@ -7577,8 +7640,8 @@
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
           },
-          "500": {
-            "description": "Internal Server Error",
+          "503": {
+            "description": "Service Unavailable",
             "schema": {
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
@@ -7614,8 +7677,8 @@
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
           },
-          "500": {
-            "description": "Internal Server Error",
+          "503": {
+            "description": "Service Unavailable",
             "schema": {
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
@@ -7671,8 +7734,8 @@
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
           },
-          "500": {
-            "description": "Internal Server Error",
+          "503": {
+            "description": "Service Unavailable",
             "schema": {
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
@@ -7741,8 +7804,8 @@
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
           },
-          "500": {
-            "description": "Internal Server Error",
+          "503": {
+            "description": "Service Unavailable",
             "schema": {
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
@@ -7797,8 +7860,8 @@
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
           },
-          "500": {
-            "description": "Internal Server Error",
+          "503": {
+            "description": "Service Unavailable",
             "schema": {
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
@@ -7861,8 +7924,8 @@
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
           },
-          "500": {
-            "description": "Internal Server Error",
+          "503": {
+            "description": "Service Unavailable",
             "schema": {
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
@@ -10085,7 +10148,7 @@
             "CookieAuth": []
           }
         ],
-        "description": "Start a detached Playground inference stream against the selected gateway key.",
+        "description": "Start a Playground inference stream against the selected gateway key. Passing X-OMC-Run-ID enables detached, recoverable execution for active-run lookup, replay, and cancellation; omitting it streams directly without creating a recoverable run, and demo mode ignores run tracking.",
         "consumes": [
           "application/json"
         ],
@@ -10097,6 +10160,12 @@
         ],
         "summary": "Start a Playground chat run",
         "parameters": [
+          {
+            "type": "string",
+            "description": "Optional run identifier enabling detached execution, replay, and cancellation",
+            "name": "X-OMC-Run-ID",
+            "in": "header"
+          },
           {
             "description": "Playground chat request",
             "name": "body",
@@ -10140,6 +10209,12 @@
           },
           "502": {
             "description": "Bad Gateway",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
             "schema": {
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
@@ -10206,17 +10281,14 @@
             "CookieAuth": []
           }
         ],
-        "description": "Forward authenticated plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
-        "consumes": [
-          "application/json"
-        ],
+        "description": "Forward authenticated GET, HEAD, or DELETE plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
         "produces": [
           "application/json"
         ],
         "tags": [
           "PluginHost"
         ],
-        "summary": "Proxy hosted plugin management route",
+        "summary": "Proxy hosted plugin management route (read / delete)",
         "parameters": [
           {
             "type": "string",
@@ -10251,12 +10323,6 @@
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
           },
-          "413": {
-            "description": "Request Entity Too Large",
-            "schema": {
-              "$ref": "#/definitions/api.ErrorResponseDTO"
-            }
-          },
           "500": {
             "description": "Internal Server Error",
             "schema": {
@@ -10283,7 +10349,7 @@
             "CookieAuth": []
           }
         ],
-        "description": "Forward authenticated plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
+        "description": "Forward authenticated POST, PUT, or PATCH plugin-host API calls with an optional JSON payload to CPA v0/v8 management endpoints with fail-closed audit logging and write serialization.",
         "consumes": [
           "application/json"
         ],
@@ -10293,7 +10359,7 @@
         "tags": [
           "PluginHost"
         ],
-        "summary": "Proxy hosted plugin management route",
+        "summary": "Proxy hosted plugin management write route",
         "parameters": [
           {
             "type": "string",
@@ -10301,6 +10367,12 @@
             "name": "path",
             "in": "path",
             "required": true
+          },
+          {
+            "description": "Optional JSON payload forwarded to the CPA plugin management endpoint",
+            "name": "body",
+            "in": "body",
+            "schema": {}
           }
         ],
         "responses": {
@@ -10360,7 +10432,7 @@
             "CookieAuth": []
           }
         ],
-        "description": "Forward authenticated plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
+        "description": "Forward authenticated POST, PUT, or PATCH plugin-host API calls with an optional JSON payload to CPA v0/v8 management endpoints with fail-closed audit logging and write serialization.",
         "consumes": [
           "application/json"
         ],
@@ -10370,7 +10442,7 @@
         "tags": [
           "PluginHost"
         ],
-        "summary": "Proxy hosted plugin management route",
+        "summary": "Proxy hosted plugin management write route",
         "parameters": [
           {
             "type": "string",
@@ -10378,6 +10450,12 @@
             "name": "path",
             "in": "path",
             "required": true
+          },
+          {
+            "description": "Optional JSON payload forwarded to the CPA plugin management endpoint",
+            "name": "body",
+            "in": "body",
+            "schema": {}
           }
         ],
         "responses": {
@@ -10437,17 +10515,14 @@
             "CookieAuth": []
           }
         ],
-        "description": "Forward authenticated plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
-        "consumes": [
-          "application/json"
-        ],
+        "description": "Forward authenticated GET, HEAD, or DELETE plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
         "produces": [
           "application/json"
         ],
         "tags": [
           "PluginHost"
         ],
-        "summary": "Proxy hosted plugin management route",
+        "summary": "Proxy hosted plugin management route (read / delete)",
         "parameters": [
           {
             "type": "string",
@@ -10478,12 +10553,6 @@
           },
           "404": {
             "description": "Not Found",
-            "schema": {
-              "$ref": "#/definitions/api.ErrorResponseDTO"
-            }
-          },
-          "413": {
-            "description": "Request Entity Too Large",
             "schema": {
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
@@ -10514,17 +10583,14 @@
             "CookieAuth": []
           }
         ],
-        "description": "Forward authenticated plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
-        "consumes": [
-          "application/json"
-        ],
+        "description": "Forward authenticated GET, HEAD, or DELETE plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
         "produces": [
           "application/json"
         ],
         "tags": [
           "PluginHost"
         ],
-        "summary": "Proxy hosted plugin management route",
+        "summary": "Proxy hosted plugin management route (read / delete)",
         "parameters": [
           {
             "type": "string",
@@ -10559,12 +10625,6 @@
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
           },
-          "413": {
-            "description": "Request Entity Too Large",
-            "schema": {
-              "$ref": "#/definitions/api.ErrorResponseDTO"
-            }
-          },
           "500": {
             "description": "Internal Server Error",
             "schema": {
@@ -10591,7 +10651,7 @@
             "CookieAuth": []
           }
         ],
-        "description": "Forward authenticated plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
+        "description": "Forward authenticated POST, PUT, or PATCH plugin-host API calls with an optional JSON payload to CPA v0/v8 management endpoints with fail-closed audit logging and write serialization.",
         "consumes": [
           "application/json"
         ],
@@ -10601,7 +10661,7 @@
         "tags": [
           "PluginHost"
         ],
-        "summary": "Proxy hosted plugin management route",
+        "summary": "Proxy hosted plugin management write route",
         "parameters": [
           {
             "type": "string",
@@ -10609,6 +10669,12 @@
             "name": "path",
             "in": "path",
             "required": true
+          },
+          {
+            "description": "Optional JSON payload forwarded to the CPA plugin management endpoint",
+            "name": "body",
+            "in": "body",
+            "schema": {}
           }
         ],
         "responses": {
@@ -10762,17 +10828,14 @@
             "CookieAuth": []
           }
         ],
-        "description": "Forward authenticated plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
-        "consumes": [
-          "application/json"
-        ],
+        "description": "Forward authenticated GET, HEAD, or DELETE plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
         "produces": [
           "application/json"
         ],
         "tags": [
           "PluginHost"
         ],
-        "summary": "Proxy hosted plugin management route",
+        "summary": "Proxy hosted plugin management route (read / delete)",
         "parameters": [
           {
             "type": "string",
@@ -10807,12 +10870,6 @@
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
           },
-          "413": {
-            "description": "Request Entity Too Large",
-            "schema": {
-              "$ref": "#/definitions/api.ErrorResponseDTO"
-            }
-          },
           "500": {
             "description": "Internal Server Error",
             "schema": {
@@ -10839,7 +10896,7 @@
             "CookieAuth": []
           }
         ],
-        "description": "Forward authenticated plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
+        "description": "Forward authenticated POST, PUT, or PATCH plugin-host API calls with an optional JSON payload to CPA v0/v8 management endpoints with fail-closed audit logging and write serialization.",
         "consumes": [
           "application/json"
         ],
@@ -10849,7 +10906,7 @@
         "tags": [
           "PluginHost"
         ],
-        "summary": "Proxy hosted plugin management route",
+        "summary": "Proxy hosted plugin management write route",
         "parameters": [
           {
             "type": "string",
@@ -10857,6 +10914,12 @@
             "name": "path",
             "in": "path",
             "required": true
+          },
+          {
+            "description": "Optional JSON payload forwarded to the CPA plugin management endpoint",
+            "name": "body",
+            "in": "body",
+            "schema": {}
           }
         ],
         "responses": {
@@ -10916,7 +10979,7 @@
             "CookieAuth": []
           }
         ],
-        "description": "Forward authenticated plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
+        "description": "Forward authenticated POST, PUT, or PATCH plugin-host API calls with an optional JSON payload to CPA v0/v8 management endpoints with fail-closed audit logging and write serialization.",
         "consumes": [
           "application/json"
         ],
@@ -10926,7 +10989,7 @@
         "tags": [
           "PluginHost"
         ],
-        "summary": "Proxy hosted plugin management route",
+        "summary": "Proxy hosted plugin management write route",
         "parameters": [
           {
             "type": "string",
@@ -10934,6 +10997,12 @@
             "name": "path",
             "in": "path",
             "required": true
+          },
+          {
+            "description": "Optional JSON payload forwarded to the CPA plugin management endpoint",
+            "name": "body",
+            "in": "body",
+            "schema": {}
           }
         ],
         "responses": {
@@ -10993,17 +11062,14 @@
             "CookieAuth": []
           }
         ],
-        "description": "Forward authenticated plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
-        "consumes": [
-          "application/json"
-        ],
+        "description": "Forward authenticated GET, HEAD, or DELETE plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
         "produces": [
           "application/json"
         ],
         "tags": [
           "PluginHost"
         ],
-        "summary": "Proxy hosted plugin management route",
+        "summary": "Proxy hosted plugin management route (read / delete)",
         "parameters": [
           {
             "type": "string",
@@ -11034,12 +11100,6 @@
           },
           "404": {
             "description": "Not Found",
-            "schema": {
-              "$ref": "#/definitions/api.ErrorResponseDTO"
-            }
-          },
-          "413": {
-            "description": "Request Entity Too Large",
             "schema": {
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
@@ -11070,17 +11130,14 @@
             "CookieAuth": []
           }
         ],
-        "description": "Forward authenticated plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
-        "consumes": [
-          "application/json"
-        ],
+        "description": "Forward authenticated GET, HEAD, or DELETE plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
         "produces": [
           "application/json"
         ],
         "tags": [
           "PluginHost"
         ],
-        "summary": "Proxy hosted plugin management route",
+        "summary": "Proxy hosted plugin management route (read / delete)",
         "parameters": [
           {
             "type": "string",
@@ -11115,12 +11172,6 @@
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
           },
-          "413": {
-            "description": "Request Entity Too Large",
-            "schema": {
-              "$ref": "#/definitions/api.ErrorResponseDTO"
-            }
-          },
           "500": {
             "description": "Internal Server Error",
             "schema": {
@@ -11147,7 +11198,7 @@
             "CookieAuth": []
           }
         ],
-        "description": "Forward authenticated plugin-host API calls to CPA v0/v8 management endpoints with fail-closed audit logging.",
+        "description": "Forward authenticated POST, PUT, or PATCH plugin-host API calls with an optional JSON payload to CPA v0/v8 management endpoints with fail-closed audit logging and write serialization.",
         "consumes": [
           "application/json"
         ],
@@ -11157,7 +11208,7 @@
         "tags": [
           "PluginHost"
         ],
-        "summary": "Proxy hosted plugin management route",
+        "summary": "Proxy hosted plugin management write route",
         "parameters": [
           {
             "type": "string",
@@ -11165,6 +11216,12 @@
             "name": "path",
             "in": "path",
             "required": true
+          },
+          {
+            "description": "Optional JSON payload forwarded to the CPA plugin management endpoint",
+            "name": "body",
+            "in": "body",
+            "schema": {}
           }
         ],
         "responses": {
@@ -11283,13 +11340,11 @@
             "required": true
           },
           {
-            "description": "Arbitrary valid JSON document for the preference key",
+            "description": "Valid JSON value (object, array, string, number, boolean, or null) for the preference key",
             "name": "body",
             "in": "body",
             "required": true,
-            "schema": {
-              "type": "object"
-            }
+            "schema": {}
           }
         ],
         "responses": {
@@ -12123,7 +12178,7 @@
             "items": {
               "type": "string"
             },
-            "collectionFormat": "csv",
+            "collectionFormat": "multi",
             "description": "Upstream model filters",
             "name": "model",
             "in": "query"
@@ -12133,7 +12188,7 @@
             "items": {
               "type": "string"
             },
-            "collectionFormat": "csv",
+            "collectionFormat": "multi",
             "description": "Call point filters",
             "name": "model_alias",
             "in": "query"
@@ -12143,7 +12198,7 @@
             "items": {
               "type": "string"
             },
-            "collectionFormat": "csv",
+            "collectionFormat": "multi",
             "description": "Provider filters",
             "name": "provider",
             "in": "query"
@@ -12153,7 +12208,7 @@
             "items": {
               "type": "string"
             },
-            "collectionFormat": "csv",
+            "collectionFormat": "multi",
             "description": "Client API key fingerprint filters",
             "name": "api_key",
             "in": "query"
@@ -12163,7 +12218,7 @@
             "items": {
               "type": "string"
             },
-            "collectionFormat": "csv",
+            "collectionFormat": "multi",
             "description": "Credential auth_index filters",
             "name": "auth_index",
             "in": "query"
@@ -12407,7 +12462,7 @@
           "200": {
             "description": "OK",
             "schema": {
-              "$ref": "#/definitions/ingest.Status"
+              "$ref": "#/definitions/api.UsageIngestStatusResponseDTO"
             }
           },
           "401": {
@@ -12922,6 +12977,13 @@
         "expired": {
           "type": "string"
         },
+        "headers": {
+          "description": "Headers sets custom HTTP headers keyed by header name; sending null clears the override.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "model_aliases": {
           "type": "array",
           "items": {
@@ -13145,13 +13207,50 @@
         }
       }
     },
+    "api.CapabilityDefinitionDTO": {
+      "type": "object",
+      "properties": {
+        "adapters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "type": "string"
+        },
+        "human_input": {
+          "type": "string"
+        },
+        "input_schema": {},
+        "invalidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "output_schema": {},
+        "permission": {
+          "type": "string"
+        },
+        "risk": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      }
+    },
     "api.CapabilityListResponseDTO": {
       "type": "object",
       "properties": {
         "capabilities": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/capability.Definition"
+            "$ref": "#/definitions/api.CapabilityDefinitionDTO"
           }
         }
       }
@@ -13249,11 +13348,48 @@
         }
       }
     },
+    "api.ClientKeyAliasConflictResponseDTO": {
+      "type": "object",
+      "properties": {
+        "alias": {
+          "$ref": "#/definitions/api.ClientKeyAliasDTO"
+        },
+        "code": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "api.ClientKeyAliasDTO": {
+      "type": "object",
+      "properties": {
+        "alias": {
+          "type": "string"
+        },
+        "created_at_ms": {
+          "type": "integer"
+        },
+        "key_fingerprint": {
+          "type": "string"
+        },
+        "updated_at_ms": {
+          "type": "integer"
+        },
+        "version": {
+          "type": "integer"
+        }
+      }
+    },
     "api.ClientKeyAliasPutResponseDTO": {
       "type": "object",
       "properties": {
         "alias": {
-          "$ref": "#/definitions/repository.ClientKeyAlias"
+          "$ref": "#/definitions/api.ClientKeyAliasDTO"
         },
         "status": {
           "type": "string"
@@ -13266,8 +13402,28 @@
         "aliases": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/definitions/repository.ClientKeyAlias"
+            "$ref": "#/definitions/api.ClientKeyAliasDTO"
           }
+        }
+      }
+    },
+    "api.ClientKeyUsageDTO": {
+      "type": "object",
+      "properties": {
+        "failed": {
+          "type": "integer"
+        },
+        "key_fingerprint": {
+          "type": "string"
+        },
+        "last_used_ms": {
+          "type": "integer"
+        },
+        "requests": {
+          "type": "integer"
+        },
+        "total_tokens": {
+          "type": "integer"
         }
       }
     },
@@ -13277,7 +13433,7 @@
         "usage": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/repository.ClientKeyUsage"
+            "$ref": "#/definitions/api.ClientKeyUsageDTO"
           }
         },
         "window": {
@@ -13297,10 +13453,33 @@
       "type": "object",
       "properties": {
         "backup": {
-          "$ref": "#/definitions/repository.ConfigBackup"
+          "$ref": "#/definitions/api.ConfigBackupDTO"
         },
         "created": {
           "type": "boolean"
+        }
+      }
+    },
+    "api.ConfigBackupDTO": {
+      "type": "object",
+      "properties": {
+        "created_at_ms": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "integer"
+        },
+        "layout": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer"
         }
       }
     },
@@ -13308,7 +13487,7 @@
       "type": "object",
       "properties": {
         "backup": {
-          "$ref": "#/definitions/repository.ConfigBackup"
+          "$ref": "#/definitions/api.ConfigBackupDTO"
         },
         "yaml": {
           "type": "string"
@@ -13326,11 +13505,28 @@
         }
       }
     },
+    "api.ConfigBackupSettingsDTO": {
+      "type": "object",
+      "properties": {
+        "legacy_retention": {
+          "type": "integer"
+        },
+        "retention": {
+          "type": "integer"
+        },
+        "retention_max": {
+          "type": "integer"
+        },
+        "retention_min": {
+          "type": "integer"
+        }
+      }
+    },
     "api.ConfigBackupSettingsResponseDTO": {
       "type": "object",
       "properties": {
         "settings": {
-          "$ref": "#/definitions/repository.ConfigBackupSettings"
+          "$ref": "#/definitions/api.ConfigBackupSettingsDTO"
         }
       }
     },
@@ -13340,11 +13536,11 @@
         "backups": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/repository.ConfigBackup"
+            "$ref": "#/definitions/api.ConfigBackupDTO"
           }
         },
         "settings": {
-          "$ref": "#/definitions/repository.ConfigBackupSettings"
+          "$ref": "#/definitions/api.ConfigBackupSettingsDTO"
         }
       }
     },
@@ -13373,7 +13569,7 @@
         "history": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/repository.QuotaSnapshotRecord"
+            "$ref": "#/definitions/api.QuotaSnapshotDTO"
           }
         },
         "last_refresh": {
@@ -13751,13 +13947,62 @@
         }
       }
     },
+    "api.FontDTO": {
+      "type": "object",
+      "properties": {
+        "byte_size": {
+          "type": "integer"
+        },
+        "created_at_ms": {
+          "type": "integer"
+        },
+        "faces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/api.FontFaceDTO"
+          }
+        },
+        "family": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      }
+    },
+    "api.FontFaceDTO": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "style": {
+          "type": "string"
+        },
+        "unicode_range": {
+          "type": "string"
+        },
+        "weight_max": {
+          "type": "integer"
+        },
+        "weight_min": {
+          "type": "integer"
+        }
+      }
+    },
     "api.FontListResponseDTO": {
       "type": "object",
       "properties": {
         "fonts": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/repository.Font"
+            "$ref": "#/definitions/api.FontDTO"
           }
         }
       }
@@ -13972,6 +14217,44 @@
         }
       }
     },
+    "api.MCPJSONRPCErrorDTO": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer"
+        },
+        "data": {},
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "api.MCPJSONRPCRequestDTO": {
+      "type": "object",
+      "properties": {
+        "id": {},
+        "jsonrpc": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "params": {}
+      }
+    },
+    "api.MCPJSONRPCResponseDTO": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/definitions/api.MCPJSONRPCErrorDTO"
+        },
+        "id": {},
+        "jsonrpc": {
+          "type": "string"
+        },
+        "result": {}
+      }
+    },
     "api.ManagementConfigPatchResponseDTO": {
       "type": "object",
       "properties": {
@@ -14086,6 +14369,32 @@
         }
       }
     },
+    "api.ModelCatalogRefreshErrorResponseDTO": {
+      "type": "object",
+      "properties": {
+        "catalogs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/api.modelCatalogOutcomeDTO"
+          }
+        },
+        "changed_providers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "code": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    },
     "api.OAuthCallbackResponseDTO": {
       "type": "object",
       "properties": {
@@ -14110,6 +14419,10 @@
     },
     "api.OAuthExcludedModelsPatchRequestDTO": {
       "type": "object",
+      "required": [
+        "models",
+        "provider"
+      ],
       "properties": {
         "models": {
           "type": "array",
@@ -14161,6 +14474,10 @@
     },
     "api.OAuthModelAliasesPatchRequestDTO": {
       "type": "object",
+      "required": [
+        "aliases",
+        "provider"
+      ],
       "properties": {
         "aliases": {
           "type": "array",
@@ -14635,9 +14952,7 @@
       "properties": {
         "preferences": {
           "type": "object",
-          "additionalProperties": {
-            "type": "object"
-          }
+          "additionalProperties": {}
         },
         "time_zone": {
           "$ref": "#/definitions/repository.TimezoneInfo"
@@ -14650,9 +14965,7 @@
         "key": {
           "type": "string"
         },
-        "value": {
-          "type": "object"
-        }
+        "value": {}
       }
     },
     "api.PricingAttentionResponseDTO": {
@@ -15432,6 +15745,50 @@
         },
         "total": {
           "type": "integer"
+        }
+      }
+    },
+    "api.QuotaSnapshotDTO": {
+      "type": "object",
+      "properties": {
+        "auth_index": {
+          "type": "string"
+        },
+        "created_at_ms": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "observed_at_ms": {
+          "type": "integer"
+        },
+        "plan_json": {
+          "type": "string"
+        },
+        "plan_tier": {
+          "type": "string"
+        },
+        "plan_type": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "reset_credits_json": {
+          "type": "string"
+        },
+        "reset_grants_json": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "warmup_json": {
+          "type": "string"
+        },
+        "windows_json": {
+          "type": "string"
         }
       }
     },
@@ -16755,6 +17112,189 @@
         },
         "window": {
           "$ref": "#/definitions/api.dashboardWindow"
+        }
+      }
+    },
+    "api.UsageIngestCollectorDTO": {
+      "type": "object",
+      "properties": {
+        "auth_rejected": {
+          "type": "boolean"
+        },
+        "captured": {
+          "type": "integer"
+        },
+        "control_frames": {
+          "type": "integer"
+        },
+        "coverage_gaps": {
+          "type": "integer"
+        },
+        "failing": {
+          "type": "boolean"
+        },
+        "last_capture_at": {
+          "type": "string"
+        },
+        "last_error": {
+          "type": "string"
+        },
+        "last_error_at": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "refresh_signal_at": {
+          "type": "string"
+        },
+        "running": {
+          "type": "boolean"
+        }
+      }
+    },
+    "api.UsageIngestDecoderDTO": {
+      "type": "object",
+      "properties": {
+        "decoded": {
+          "type": "integer"
+        },
+        "discarded": {
+          "type": "integer"
+        },
+        "last_error": {
+          "type": "string"
+        },
+        "last_error_at": {
+          "type": "string"
+        },
+        "running": {
+          "type": "boolean"
+        }
+      }
+    },
+    "api.UsageIngestGapDTO": {
+      "type": "object",
+      "properties": {
+        "acknowledged_at_ms": {
+          "type": "integer"
+        },
+        "ended_at_ms": {
+          "type": "integer"
+        },
+        "estimated_count": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "integer"
+        },
+        "instance_id": {
+          "type": "string"
+        },
+        "reason_code": {
+          "type": "string"
+        },
+        "source_mode": {
+          "type": "string"
+        },
+        "started_at_ms": {
+          "type": "integer"
+        },
+        "summary": {
+          "type": "string"
+        }
+      }
+    },
+    "api.UsageIngestMaintenanceDTO": {
+      "type": "object",
+      "properties": {
+        "folded": {
+          "type": "integer"
+        },
+        "last_error": {
+          "type": "string"
+        },
+        "last_error_at": {
+          "type": "string"
+        },
+        "last_retention_at": {
+          "type": "string"
+        },
+        "last_run_at": {
+          "type": "string"
+        },
+        "next_retention_at": {
+          "type": "string"
+        },
+        "purged": {
+          "type": "integer"
+        },
+        "released_pages": {
+          "type": "integer"
+        },
+        "running": {
+          "type": "boolean"
+        }
+      }
+    },
+    "api.UsageIngestStatsDTO": {
+      "type": "object",
+      "properties": {
+        "CheckpointFacts": {
+          "type": "integer"
+        },
+        "Discarded": {
+          "type": "integer"
+        },
+        "ErrorEvents": {
+          "type": "integer"
+        },
+        "Events": {
+          "type": "integer"
+        },
+        "FirstEventMS": {
+          "type": "integer"
+        },
+        "LastEventMS": {
+          "type": "integer"
+        },
+        "Pending": {
+          "type": "integer"
+        },
+        "Processed": {
+          "type": "integer"
+        }
+      }
+    },
+    "api.UsageIngestStatusResponseDTO": {
+      "type": "object",
+      "properties": {
+        "collector": {
+          "$ref": "#/definitions/api.UsageIngestCollectorDTO"
+        },
+        "decoder": {
+          "$ref": "#/definitions/api.UsageIngestDecoderDTO"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "healthy": {
+          "type": "boolean"
+        },
+        "maintenance": {
+          "$ref": "#/definitions/api.UsageIngestMaintenanceDTO"
+        },
+        "note": {
+          "type": "string"
+        },
+        "recent_gaps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/api.UsageIngestGapDTO"
+          }
+        },
+        "stats": {
+          "$ref": "#/definitions/api.UsageIngestStatsDTO"
         }
       }
     },
@@ -20115,47 +20655,6 @@
         }
       }
     },
-    "capability.Definition": {
-      "type": "object",
-      "properties": {
-        "adapters": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "description": {
-          "type": "string"
-        },
-        "human_input": {
-          "type": "string"
-        },
-        "input_schema": {
-          "$ref": "#/definitions/jsonschema.Schema"
-        },
-        "invalidates": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "name": {
-          "type": "string"
-        },
-        "output_schema": {
-          "$ref": "#/definitions/jsonschema.Schema"
-        },
-        "permission": {
-          "type": "string"
-        },
-        "risk": {
-          "type": "string"
-        },
-        "version": {
-          "type": "integer"
-        }
-      }
-    },
     "capability.Operation": {
       "type": "object",
       "properties": {
@@ -20253,21 +20752,6 @@
         "ResourceStatusMissing"
       ]
     },
-    "fontasset.Format": {
-      "type": "string",
-      "enum": [
-        "woff2",
-        "woff",
-        "truetype",
-        "opentype"
-      ],
-      "x-enum-varnames": [
-        "FormatWOFF2",
-        "FormatWOFF",
-        "FormatTrueType",
-        "FormatOpenType"
-      ]
-    },
     "gateway.AgentImage": {
       "type": "object",
       "properties": {
@@ -20333,23 +20817,6 @@
         }
       }
     },
-    "ingest.Mode": {
-      "type": "string",
-      "enum": [
-        "auto",
-        "subscribe",
-        "resp_pull",
-        "http_pull",
-        "off"
-      ],
-      "x-enum-varnames": [
-        "ModeAuto",
-        "ModeSubscribe",
-        "ModeRESPPull",
-        "ModeHTTPPull",
-        "ModeOff"
-      ]
-    },
     "ingest.RefreshNowResult": {
       "type": "object",
       "properties": {
@@ -20391,276 +20858,6 @@
         },
         "synced": {
           "description": "Synced is true only when a pass drained everything it found and every\nrecord it captured reached usage_events.",
-          "type": "boolean"
-        }
-      }
-    },
-    "ingest.Status": {
-      "type": "object",
-      "properties": {
-        "auth_rejected": {
-          "description": "AuthRejected marks that the failure in force is CPA refusing the key, which\nthe UI should surface as an actionable configuration error.",
-          "type": "boolean"
-        },
-        "captured": {
-          "type": "integer"
-        },
-        "control_frames": {
-          "type": "integer"
-        },
-        "coverage_gaps": {
-          "type": "integer"
-        },
-        "failing": {
-          "description": "Failing is true from a failed collection attempt until a pass next\nsucceeds. LastError is history and stays after recovery, so it cannot\nanswer \"is collection working now\"; this does.",
-          "type": "boolean"
-        },
-        "last_capture_at": {
-          "type": "string"
-        },
-        "last_error": {
-          "type": "string"
-        },
-        "last_error_at": {
-          "type": "string"
-        },
-        "mode": {
-          "$ref": "#/definitions/ingest.Mode"
-        },
-        "refresh_signal_at": {
-          "type": "string"
-        },
-        "running": {
-          "type": "boolean"
-        }
-      }
-    },
-    "jsonschema.Schema": {
-      "type": "object",
-      "properties": {
-        "$anchor": {
-          "type": "string"
-        },
-        "$comment": {
-          "type": "string"
-        },
-        "$defs": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/jsonschema.Schema"
-          }
-        },
-        "$dynamicAnchor": {
-          "type": "string"
-        },
-        "$dynamicRef": {
-          "type": "string"
-        },
-        "$id": {
-          "description": "core",
-          "type": "string"
-        },
-        "$ref": {
-          "type": "string"
-        },
-        "$schema": {
-          "type": "string"
-        },
-        "$vocabulary": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "boolean"
-          }
-        },
-        "additionalItems": {
-          "$ref": "#/definitions/jsonschema.Schema"
-        },
-        "additionalProperties": {
-          "$ref": "#/definitions/jsonschema.Schema"
-        },
-        "allOf": {
-          "description": "logic",
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/jsonschema.Schema"
-          }
-        },
-        "anyOf": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/jsonschema.Schema"
-          }
-        },
-        "const": {
-          "description": "Const is *any because a JSON null (Go nil) is a valid value."
-        },
-        "contains": {
-          "$ref": "#/definitions/jsonschema.Schema"
-        },
-        "contentEncoding": {
-          "description": "other\nhttps://json-schema.org/draft/2020-12/draft-bhutton-json-schema-validation-00#rfc.section.8",
-          "type": "string"
-        },
-        "contentMediaType": {
-          "type": "string"
-        },
-        "contentSchema": {
-          "$ref": "#/definitions/jsonschema.Schema"
-        },
-        "default": {
-          "type": "object"
-        },
-        "definitions": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/jsonschema.Schema"
-          }
-        },
-        "dependentRequired": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "dependentSchemas": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/jsonschema.Schema"
-          }
-        },
-        "deprecated": {
-          "type": "boolean"
-        },
-        "description": {
-          "type": "string"
-        },
-        "else": {
-          "$ref": "#/definitions/jsonschema.Schema"
-        },
-        "enum": {
-          "type": "array",
-          "items": {}
-        },
-        "examples": {
-          "type": "array",
-          "items": {}
-        },
-        "exclusiveMaximum": {
-          "type": "number"
-        },
-        "exclusiveMinimum": {
-          "type": "number"
-        },
-        "format": {
-          "description": "https://json-schema.org/draft/2020-12/draft-bhutton-json-schema-validation-00#rfc.section.7",
-          "type": "string"
-        },
-        "if": {
-          "description": "conditional",
-          "allOf": [
-            {
-              "$ref": "#/definitions/jsonschema.Schema"
-            }
-          ]
-        },
-        "maxContains": {
-          "type": "integer"
-        },
-        "maxItems": {
-          "type": "integer"
-        },
-        "maxLength": {
-          "type": "integer"
-        },
-        "maxProperties": {
-          "type": "integer"
-        },
-        "maximum": {
-          "type": "number"
-        },
-        "minContains": {
-          "description": "*int, not int: default is 1, not 0",
-          "type": "integer"
-        },
-        "minItems": {
-          "type": "integer"
-        },
-        "minLength": {
-          "type": "integer"
-        },
-        "minProperties": {
-          "description": "objects",
-          "type": "integer"
-        },
-        "minimum": {
-          "type": "number"
-        },
-        "multipleOf": {
-          "type": "number"
-        },
-        "not": {
-          "$ref": "#/definitions/jsonschema.Schema"
-        },
-        "oneOf": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/jsonschema.Schema"
-          }
-        },
-        "pattern": {
-          "type": "string"
-        },
-        "patternProperties": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/jsonschema.Schema"
-          }
-        },
-        "prefixItems": {
-          "description": "arrays",
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/jsonschema.Schema"
-          }
-        },
-        "properties": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/jsonschema.Schema"
-          }
-        },
-        "propertyNames": {
-          "$ref": "#/definitions/jsonschema.Schema"
-        },
-        "readOnly": {
-          "type": "boolean"
-        },
-        "required": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "then": {
-          "$ref": "#/definitions/jsonschema.Schema"
-        },
-        "title": {
-          "description": "metadata",
-          "type": "string"
-        },
-        "unevaluatedItems": {
-          "$ref": "#/definitions/jsonschema.Schema"
-        },
-        "unevaluatedProperties": {
-          "$ref": "#/definitions/jsonschema.Schema"
-        },
-        "uniqueItems": {
-          "type": "boolean"
-        },
-        "writeOnly": {
           "type": "boolean"
         }
       }
@@ -21643,87 +21840,6 @@
         }
       }
     },
-    "repository.ClientKeyAlias": {
-      "type": "object",
-      "properties": {
-        "alias": {
-          "type": "string"
-        },
-        "created_at_ms": {
-          "type": "integer"
-        },
-        "key_fingerprint": {
-          "type": "string"
-        },
-        "updated_at_ms": {
-          "type": "integer"
-        },
-        "version": {
-          "type": "integer"
-        }
-      }
-    },
-    "repository.ClientKeyUsage": {
-      "type": "object",
-      "properties": {
-        "failed": {
-          "type": "integer"
-        },
-        "key_fingerprint": {
-          "type": "string"
-        },
-        "last_used_ms": {
-          "description": "LastUsedMS is the newest request time observed in the window, which is the\nsame clock the request list prints.",
-          "type": "integer"
-        },
-        "requests": {
-          "type": "integer"
-        },
-        "total_tokens": {
-          "type": "integer"
-        }
-      }
-    },
-    "repository.ConfigBackup": {
-      "type": "object",
-      "properties": {
-        "created_at_ms": {
-          "type": "integer"
-        },
-        "id": {
-          "type": "integer"
-        },
-        "layout": {
-          "type": "string"
-        },
-        "reason": {
-          "type": "string"
-        },
-        "revision": {
-          "type": "string"
-        },
-        "size_bytes": {
-          "type": "integer"
-        }
-      }
-    },
-    "repository.ConfigBackupSettings": {
-      "type": "object",
-      "properties": {
-        "legacy_retention": {
-          "type": "integer"
-        },
-        "retention": {
-          "type": "integer"
-        },
-        "retention_max": {
-          "type": "integer"
-        },
-        "retention_min": {
-          "type": "integer"
-        }
-      }
-    },
     "repository.CustomIcon": {
       "type": "object",
       "properties": {
@@ -21812,66 +21928,6 @@
         }
       }
     },
-    "repository.Font": {
-      "type": "object",
-      "properties": {
-        "byte_size": {
-          "type": "integer"
-        },
-        "created_at_ms": {
-          "type": "integer"
-        },
-        "faces": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/repository.FontFace"
-          }
-        },
-        "family": {
-          "type": "string"
-        },
-        "id": {
-          "type": "string"
-        },
-        "source": {
-          "$ref": "#/definitions/repository.FontSource"
-        }
-      }
-    },
-    "repository.FontFace": {
-      "type": "object",
-      "properties": {
-        "format": {
-          "$ref": "#/definitions/fontasset.Format"
-        },
-        "id": {
-          "type": "string"
-        },
-        "style": {
-          "type": "string"
-        },
-        "unicode_range": {
-          "type": "string"
-        },
-        "weight_max": {
-          "type": "integer"
-        },
-        "weight_min": {
-          "type": "integer"
-        }
-      }
-    },
-    "repository.FontSource": {
-      "type": "string",
-      "enum": [
-        "google",
-        "upload"
-      ],
-      "x-enum-varnames": [
-        "FontSourceGoogle",
-        "FontSourceUpload"
-      ]
-    },
     "repository.PriceVersion": {
       "type": "object",
       "properties": {
@@ -21886,50 +21942,6 @@
         },
         "price": {
           "$ref": "#/definitions/repository.VersionPrice"
-        }
-      }
-    },
-    "repository.QuotaSnapshotRecord": {
-      "type": "object",
-      "properties": {
-        "auth_index": {
-          "type": "string"
-        },
-        "created_at_ms": {
-          "type": "integer"
-        },
-        "id": {
-          "type": "string"
-        },
-        "observed_at_ms": {
-          "type": "integer"
-        },
-        "plan_json": {
-          "type": "string"
-        },
-        "plan_tier": {
-          "type": "string"
-        },
-        "plan_type": {
-          "type": "string"
-        },
-        "provider": {
-          "type": "string"
-        },
-        "reset_credits_json": {
-          "type": "string"
-        },
-        "reset_grants_json": {
-          "type": "string"
-        },
-        "status": {
-          "type": "string"
-        },
-        "warmup_json": {
-          "type": "string"
-        },
-        "windows_json": {
-          "type": "string"
         }
       }
     },

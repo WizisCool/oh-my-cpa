@@ -443,11 +443,11 @@ func (h *Handler) insightsRhythmFilters(request *http.Request) map[repository.Us
 // @Param preset query string false "Insights time preset"
 // @Param from query integer false "Custom window start timestamp in Unix milliseconds"
 // @Param to query integer false "Custom window end timestamp in Unix milliseconds"
-// @Param api_key query []string false "Client API key or hmac fingerprint filters"
-// @Param model query []string false "Upstream model filters"
-// @Param model_alias query []string false "Call point filters"
-// @Param provider query []string false "Provider filters"
-// @Param auth_index query []string false "Credential auth_index filters"
+// @Param api_key query []string false "Client API key or hmac fingerprint filters" collectionFormat(multi)
+// @Param model query []string false "Upstream model filters" collectionFormat(multi)
+// @Param model_alias query []string false "Call point filters" collectionFormat(multi)
+// @Param provider query []string false "Provider filters" collectionFormat(multi)
+// @Param auth_index query []string false "Credential auth_index filters" collectionFormat(multi)
 // @Success 200 {object} insightsRhythmResponse
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO

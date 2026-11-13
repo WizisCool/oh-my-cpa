@@ -598,10 +598,141 @@ func dashboardComparisonBounds(window dashboardWindow, zone *time.Location) (fro
 	return fromMS, toMS, false, true
 }
 
-// UsageIngestDisabledStatusDTO reports usage pipeline status when ingestion is turned off.
-type UsageIngestDisabledStatusDTO struct {
-	Enabled bool   `json:"enabled"`
-	Note    string `json:"note"`
+// UsageIngestCollectorDTO describes the usage collector state within pipeline status responses.
+type UsageIngestCollectorDTO struct {
+	Mode          string     `json:"mode"`
+	Running       bool       `json:"running"`
+	Captured      int64      `json:"captured"`
+	ControlFrames int64      `json:"control_frames"`
+	CoverageGaps  int64      `json:"coverage_gaps"`
+	LastError     string     `json:"last_error,omitempty"`
+	Failing       bool       `json:"failing,omitempty"`
+	AuthRejected  bool       `json:"auth_rejected,omitempty"`
+	LastCaptureAt *time.Time `json:"last_capture_at,omitempty"`
+	LastErrorAt   *time.Time `json:"last_error_at,omitempty"`
+	RefreshSignal *time.Time `json:"refresh_signal_at,omitempty"`
+}
+
+// UsageIngestDecoderDTO describes the usage decoder loop state within pipeline status responses.
+type UsageIngestDecoderDTO struct {
+	Running     bool       `json:"running"`
+	Decoded     int64      `json:"decoded"`
+	Discarded   int64      `json:"discarded"`
+	LastError   string     `json:"last_error,omitempty"`
+	LastErrorAt *time.Time `json:"last_error_at,omitempty"`
+}
+
+// UsageIngestMaintenanceDTO describes the usage folding and retention maintenance loop state.
+type UsageIngestMaintenanceDTO struct {
+	Running         bool       `json:"running"`
+	Folded          int64      `json:"folded"`
+	Purged          int64      `json:"purged"`
+	LastError       string     `json:"last_error,omitempty"`
+	LastErrorAt     *time.Time `json:"last_error_at,omitempty"`
+	LastRunAt       *time.Time `json:"last_run_at,omitempty"`
+	LastRetentionAt *time.Time `json:"last_retention_at,omitempty"`
+	NextRetentionAt *time.Time `json:"next_retention_at,omitempty"`
+	ReleasedPages   int64      `json:"released_pages"`
+}
+
+// UsageIngestStatsDTO describes persisted usage pipeline counters while preserving wire field names.
+type UsageIngestStatsDTO struct {
+	Events          int64  `json:"Events"`
+	ErrorEvents     int64  `json:"ErrorEvents"`
+	Pending         int64  `json:"Pending"`
+	Processed       int64  `json:"Processed"`
+	Discarded       int64  `json:"Discarded"`
+	FirstEventMS    *int64 `json:"FirstEventMS"`
+	LastEventMS     *int64 `json:"LastEventMS"`
+	CheckpointFacts int64  `json:"CheckpointFacts"`
+}
+
+// UsageIngestGapDTO describes a recorded usage ingestion coverage gap.
+type UsageIngestGapDTO struct {
+	ID               int64  `json:"id"`
+	InstanceID       string `json:"instance_id"`
+	SourceMode       string `json:"source_mode"`
+	StartedAtMS      int64  `json:"started_at_ms"`
+	EndedAtMS        int64  `json:"ended_at_ms"`
+	EstimatedCount   int    `json:"estimated_count"`
+	ReasonCode       string `json:"reason_code"`
+	Summary          string `json:"summary"`
+	AcknowledgedAtMS *int64 `json:"acknowledged_at_ms,omitempty"`
+}
+
+// UsageIngestStatusResponseDTO describes the usage ingestion pipeline status response for enabled and disabled states.
+type UsageIngestStatusResponseDTO struct {
+	Enabled     bool                       `json:"enabled"`
+	Note        string                     `json:"note,omitempty"`
+	Collector   *UsageIngestCollectorDTO   `json:"collector,omitempty"`
+	Decoder     *UsageIngestDecoderDTO     `json:"decoder,omitempty"`
+	Maintenance *UsageIngestMaintenanceDTO `json:"maintenance,omitempty"`
+	Stats       *UsageIngestStatsDTO       `json:"stats,omitempty"`
+	RecentGaps  []UsageIngestGapDTO        `json:"recent_gaps,omitempty"`
+	Healthy     bool                       `json:"healthy,omitempty"`
+}
+
+func projectUsageIngestStatusDTO(status ingest.PipelineStatus) UsageIngestStatusResponseDTO {
+	gaps := make([]UsageIngestGapDTO, 0, len(status.RecentGaps))
+	for _, gap := range status.RecentGaps {
+		gaps = append(gaps, UsageIngestGapDTO{
+			ID:               gap.ID,
+			InstanceID:       gap.InstanceID,
+			SourceMode:       gap.SourceMode,
+			StartedAtMS:      gap.StartedAtMS,
+			EndedAtMS:        gap.EndedAtMS,
+			EstimatedCount:   gap.EstimatedCount,
+			ReasonCode:       gap.ReasonCode,
+			Summary:          gap.Summary,
+			AcknowledgedAtMS: gap.AcknowledgedAtMS,
+		})
+	}
+	return UsageIngestStatusResponseDTO{
+		Enabled: status.Enabled,
+		Collector: &UsageIngestCollectorDTO{
+			Mode:          string(status.Collector.Mode),
+			Running:       status.Collector.Running,
+			Captured:      status.Collector.Captured,
+			ControlFrames: status.Collector.ControlFrames,
+			CoverageGaps:  status.Collector.CoverageGaps,
+			LastError:     status.Collector.LastError,
+			Failing:       status.Collector.Failing,
+			AuthRejected:  status.Collector.AuthRejected,
+			LastCaptureAt: status.Collector.LastCaptureAt,
+			LastErrorAt:   status.Collector.LastErrorAt,
+			RefreshSignal: status.Collector.RefreshSignal,
+		},
+		Decoder: &UsageIngestDecoderDTO{
+			Running:     status.Decoder.Running,
+			Decoded:     status.Decoder.Decoded,
+			Discarded:   status.Decoder.Discarded,
+			LastError:   status.Decoder.LastError,
+			LastErrorAt: status.Decoder.LastErrorAt,
+		},
+		Maintenance: &UsageIngestMaintenanceDTO{
+			Running:         status.Maintenance.Running,
+			Folded:          status.Maintenance.Folded,
+			Purged:          status.Maintenance.Purged,
+			LastError:       status.Maintenance.LastError,
+			LastErrorAt:     status.Maintenance.LastErrorAt,
+			LastRunAt:       status.Maintenance.LastRunAt,
+			LastRetentionAt: status.Maintenance.LastRetentionAt,
+			NextRetentionAt: status.Maintenance.NextRetentionAt,
+			ReleasedPages:   status.Maintenance.ReleasedPages,
+		},
+		Stats: &UsageIngestStatsDTO{
+			Events:          status.Stats.Events,
+			ErrorEvents:     status.Stats.ErrorEvents,
+			Pending:         status.Stats.Pending,
+			Processed:       status.Stats.Processed,
+			Discarded:       status.Stats.Discarded,
+			FirstEventMS:    status.Stats.FirstEventMS,
+			LastEventMS:     status.Stats.LastEventMS,
+			CheckpointFacts: status.Stats.CheckpointFacts,
+		},
+		RecentGaps: gaps,
+		Healthy:    status.Healthy,
+	}
 }
 
 // dashboardIngestStatus reports the capture/decode/maintenance loops.
@@ -611,7 +742,7 @@ type UsageIngestDisabledStatusDTO struct {
 // @Tags Usage
 // @Produce json
 // @Security CookieAuth
-// @Success 200 {object} ingest.Status
+// @Success 200 {object} UsageIngestStatusResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Router /v1/usage/ingest-status [get]
@@ -626,11 +757,11 @@ func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *htt
 			writeInternalError(writer, err)
 			return
 		}
-		writeJSON(writer, http.StatusOK, status)
+		writeJSON(writer, http.StatusOK, projectUsageIngestStatusDTO(status))
 		return
 	}
 	if h.usage == nil {
-		writeJSON(writer, http.StatusOK, UsageIngestDisabledStatusDTO{
+		writeJSON(writer, http.StatusOK, UsageIngestStatusResponseDTO{
 			Enabled: false,
 			Note:    "usage ingestion is disabled for this deployment",
 		})
@@ -641,7 +772,7 @@ func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *htt
 		writeInternalError(writer, fmt.Errorf("read usage pipeline status: %w", err))
 		return
 	}
-	writeJSON(writer, http.StatusOK, status)
+	writeJSON(writer, http.StatusOK, projectUsageIngestStatusDTO(status))
 }
 
 // refreshUsageIngest drains CPA's usage queue now instead of waiting for the

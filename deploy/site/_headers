@@ -2,14 +2,17 @@
 # Copied into `tmp/site/dist/_headers` by `scripts/build-site.mjs` for hosts
 # that read `_headers` (Cloudflare Workers Assets, Cloudflare Pages, Netlify).
 
-# Content-hashed bundles change filenames when rebuilt and can be cached immutably.
-/api-docs/scalar.*.js
-  Cache-Control: public, max-age=31536000, immutable
-
-/demo/assets/*
-  Cache-Control: public, max-age=31536000, immutable
-
 # HTML documents, favicons, and the OpenAPI spec always revalidate on visit so spec
 # and console updates after merges take effect immediately.
 /*
   Cache-Control: public, max-age=0, must-revalidate
+
+# Content-hashed bundles change filenames when rebuilt and can be cached immutably.
+# Detach the inherited Cache-Control header from /* first so Cloudflare does not join both.
+/api-docs/scalar.*.js
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/demo/assets/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable

@@ -132,11 +132,28 @@ func TestOpenAPIRouteCoverage(t *testing.T) {
 	}
 
 	var missingRefs []string
-	verifyOpenAPIRefs(doc.Paths, doc.Definitions, &missingRefs)
+	for _, methods := range doc.Paths {
+		verifyOpenAPIRefs(methods, doc.Definitions, &missingRefs)
+	}
 	verifyOpenAPIRefs(doc.Definitions, doc.Definitions, &missingRefs)
 	if len(missingRefs) > 0 {
 		sort.Strings(missingRefs)
 		t.Fatalf("unresolved OpenAPI $ref target(s):\n  %s", strings.Join(missingRefs, "\n  "))
+	}
+}
+
+func TestVerifyOpenAPIRefsCoversPaths(t *testing.T) {
+	paths := map[string]map[string]json.RawMessage{
+		"/broken": {
+			"get": json.RawMessage(`{"responses":{"200":{"schema":{"$ref":"#/definitions/api.MissingDTO"}}}}`),
+		},
+	}
+	var missing []string
+	for _, methods := range paths {
+		verifyOpenAPIRefs(methods, map[string]json.RawMessage{}, &missing)
+	}
+	if len(missing) != 1 || missing[0] != "#/definitions/api.MissingDTO" {
+		t.Fatalf("missing refs = %v, want [#/definitions/api.MissingDTO]", missing)
 	}
 }
 

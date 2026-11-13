@@ -26,8 +26,8 @@ type OAuthExcludedModelsResponseDTO struct {
 
 // OAuthExcludedModelsPatchRequestDTO replaces excluded model patterns for one OAuth provider.
 type OAuthExcludedModelsPatchRequestDTO struct {
-	Provider string    `json:"provider"`
-	Models   *[]string `json:"models"`
+	Provider string    `json:"provider" validate:"required"`
+	Models   *[]string `json:"models" validate:"required"`
 }
 
 // OAuthExcludedModelsPatchResponseDTO returns the verified excluded model rules for a provider.

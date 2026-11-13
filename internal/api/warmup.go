@@ -88,7 +88,7 @@ type warmupModelCacheEntry struct {
 // @Security CookieAuth
 // @Success 200 {object} warmup.StateView
 // @Failure 401 {object} ErrorResponseDTO
-// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/quota/warmup/settings [get]
 func (h *Handler) getWarmupSettings(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
@@ -110,7 +110,7 @@ func (h *Handler) getWarmupSettings(writer http.ResponseWriter, request *http.Re
 // @Success 201 {object} warmup.StateView
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
-// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/quota/warmup/tasks [post]
 func (h *Handler) createWarmupTask(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
@@ -138,7 +138,7 @@ func (h *Handler) createWarmupTask(writer http.ResponseWriter, request *http.Req
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
-// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/quota/warmup/tasks/{id} [put]
 func (h *Handler) updateWarmupTask(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
@@ -169,7 +169,7 @@ func (h *Handler) updateWarmupTask(writer http.ResponseWriter, request *http.Req
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
-// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/quota/warmup/tasks/{id} [delete]
 func (h *Handler) deleteWarmupTask(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
@@ -197,7 +197,7 @@ func (h *Handler) deleteWarmupTask(writer http.ResponseWriter, request *http.Req
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
-// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/quota/warmup/tasks/{id}/run [post]
 func (h *Handler) runWarmupTask(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
@@ -221,11 +221,11 @@ func (h *Handler) runWarmupTask(writer http.ResponseWriter, request *http.Reques
 // @Tags Quota
 // @Produce json
 // @Security CookieAuth
-// @Param task_id query []string false "Optional task IDs whose history should be cleared"
+// @Param task_id query []string false "Optional task IDs whose history should be cleared" collectionFormat(multi)
 // @Success 200 {object} warmup.StateView
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
-// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/quota/warmup/runs [delete]
 func (h *Handler) clearWarmupRuns(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")

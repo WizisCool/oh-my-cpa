@@ -28,7 +28,7 @@ type AuthFileDeleteResponseDTO struct {
 // @Accept json
 // @Produce json
 // @Security CookieAuth
-// @Param name query []string false "Auth file name(s) to delete"
+// @Param name query []string false "Auth file name(s) to delete" collectionFormat(multi)
 // @Param body body AuthFileDeleteRequestDTO false "Batch delete payload"
 // @Success 200 {object} AuthFileDeleteResponseDTO
 // @Success 207 {object} AuthFileDeleteResponseDTO

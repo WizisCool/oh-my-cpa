@@ -17,6 +17,16 @@ type modelCatalogRefreshDTO struct {
 	Error            string                   `json:"error,omitempty"`
 }
 
+// ModelCatalogRefreshErrorResponseDTO describes a 502 catalog refresh failure, covering both
+// early CPA/network errors and partial-completion catalog outcomes.
+type ModelCatalogRefreshErrorResponseDTO struct {
+	OK               *bool                    `json:"ok,omitempty"`
+	Catalogs         []modelCatalogOutcomeDTO `json:"catalogs,omitempty"`
+	ChangedProviders []string                 `json:"changed_providers,omitempty"`
+	Code             string                   `json:"code,omitempty"`
+	Error            string                   `json:"error,omitempty"`
+}
+
 type modelCatalogOutcomeDTO struct {
 	Catalog          string   `json:"catalog"`
 	Status           string   `json:"status"`
@@ -35,7 +45,7 @@ type modelCatalogOutcomeDTO struct {
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 501 {object} ErrorResponseDTO
-// @Failure 502 {object} ErrorResponseDTO
+// @Failure 502 {object} ModelCatalogRefreshErrorResponseDTO
 // @Router /v1/management/model-square/refresh-catalogs [post]
 func (h *Handler) refreshModelSquareCatalogs(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")

@@ -59,9 +59,59 @@ func extendTransferDeadlines(writer http.ResponseWriter) {
 	_ = controller.SetWriteDeadline(deadline)
 }
 
+// FontFaceDTO describes one stored `@font-face` rule without exposing binary font content.
+type FontFaceDTO struct {
+	ID           string `json:"id"`
+	WeightMin    int    `json:"weight_min"`
+	WeightMax    int    `json:"weight_max"`
+	Style        string `json:"style"`
+	UnicodeRange string `json:"unicode_range,omitempty"`
+	Format       string `json:"format"`
+}
+
+// FontDTO describes an installed console font family and its face descriptors.
+type FontDTO struct {
+	ID          string        `json:"id"`
+	Family      string        `json:"family"`
+	Source      string        `json:"source"`
+	CreatedAtMS int64         `json:"created_at_ms"`
+	ByteSize    int64         `json:"byte_size"`
+	Faces       []FontFaceDTO `json:"faces"`
+}
+
+func projectFontDTO(font repository.Font) FontDTO {
+	faces := make([]FontFaceDTO, 0, len(font.Faces))
+	for _, face := range font.Faces {
+		faces = append(faces, FontFaceDTO{
+			ID:           face.ID,
+			WeightMin:    face.WeightMin,
+			WeightMax:    face.WeightMax,
+			Style:        face.Style,
+			UnicodeRange: face.UnicodeRange,
+			Format:       string(face.Format),
+		})
+	}
+	return FontDTO{
+		ID:          font.ID,
+		Family:      font.Family,
+		Source:      string(font.Source),
+		CreatedAtMS: font.CreatedAtMS,
+		ByteSize:    font.ByteSize,
+		Faces:       faces,
+	}
+}
+
+func projectFontDTOs(fonts []repository.Font) []FontDTO {
+	out := make([]FontDTO, 0, len(fonts))
+	for _, font := range fonts {
+		out = append(out, projectFontDTO(font))
+	}
+	return out
+}
+
 // FontListResponseDTO lists stored console font families.
 type FontListResponseDTO struct {
-	Fonts []repository.Font `json:"fonts"`
+	Fonts []FontDTO `json:"fonts"`
 }
 
 // InstallGoogleFontRequestDTO identifies a Google Fonts family to download and store locally.
@@ -89,7 +139,7 @@ func (h *Handler) listFonts(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	writer.Header().Set("Cache-Control", "no-store")
-	writeJSON(writer, http.StatusOK, FontListResponseDTO{Fonts: fonts})
+	writeJSON(writer, http.StatusOK, FontListResponseDTO{Fonts: projectFontDTOs(fonts)})
 }
 
 func (h *Handler) googleFonts() (*fontasset.GoogleInstaller, error) {
@@ -112,7 +162,7 @@ func (h *Handler) googleFonts() (*fontasset.GoogleInstaller, error) {
 // @Produce json
 // @Security CookieAuth
 // @Param body body InstallGoogleFontRequestDTO true "Google Fonts family name"
-// @Success 201 {object} repository.Font
+// @Success 201 {object} FontDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
@@ -145,7 +195,7 @@ func (h *Handler) installGoogleFont(writer http.ResponseWriter, request *http.Re
 		writeFontError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusCreated, font)
+	writeJSON(writer, http.StatusCreated, projectFontDTO(font))
 }
 
 // uploadFont stores the files of one family. The family's name is the operator's when
@@ -159,7 +209,7 @@ func (h *Handler) installGoogleFont(writer http.ResponseWriter, request *http.Re
 // @Security CookieAuth
 // @Param family formData string false "Optional family name override"
 // @Param file formData file true "Font file(s)"
-// @Success 201 {object} repository.Font
+// @Success 201 {object} FontDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
@@ -228,7 +278,7 @@ func (h *Handler) uploadFont(writer http.ResponseWriter, request *http.Request) 
 		writeFontError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusCreated, font)
+	writeJSON(writer, http.StatusCreated, projectFontDTO(font))
 }
 
 func readFontPart(part *multipart.Part) (fontasset.Face, string, error) {

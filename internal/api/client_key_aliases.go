@@ -24,21 +24,79 @@ type clientKeyAliasRequest struct {
 	Version        int64  `json:"version"`
 }
 
+// ClientKeyAliasDTO projects an operator-assigned caller key alias record.
+type ClientKeyAliasDTO struct {
+	KeyFingerprint string `json:"key_fingerprint"`
+	Alias          string `json:"alias"`
+	Version        int64  `json:"version"`
+	CreatedAtMS    int64  `json:"created_at_ms"`
+	UpdatedAtMS    int64  `json:"updated_at_ms"`
+}
+
+// ClientKeyUsageDTO projects observed request usage for one caller key in a window.
+type ClientKeyUsageDTO struct {
+	KeyFingerprint string `json:"key_fingerprint"`
+	Requests       int64  `json:"requests"`
+	Failed         int64  `json:"failed"`
+	TotalTokens    int64  `json:"total_tokens"`
+	LastUsedMS     int64  `json:"last_used_ms"`
+}
+
+func projectClientKeyAliasDTO(alias repository.ClientKeyAlias) ClientKeyAliasDTO {
+	return ClientKeyAliasDTO{
+		KeyFingerprint: alias.KeyFingerprint,
+		Alias:          alias.Alias,
+		Version:        alias.Version,
+		CreatedAtMS:    alias.CreatedAtMS,
+		UpdatedAtMS:    alias.UpdatedAtMS,
+	}
+}
+
+func projectClientKeyAliasesDTO(aliases map[string]repository.ClientKeyAlias) map[string]ClientKeyAliasDTO {
+	out := make(map[string]ClientKeyAliasDTO, len(aliases))
+	for key, alias := range aliases {
+		out[key] = projectClientKeyAliasDTO(alias)
+	}
+	return out
+}
+
+func projectClientKeyUsageDTOs(usage []repository.ClientKeyUsage) []ClientKeyUsageDTO {
+	out := make([]ClientKeyUsageDTO, 0, len(usage))
+	for _, entry := range usage {
+		out = append(out, ClientKeyUsageDTO{
+			KeyFingerprint: entry.KeyFingerprint,
+			Requests:       entry.Requests,
+			Failed:         entry.Failed,
+			TotalTokens:    entry.TotalTokens,
+			LastUsedMS:     entry.LastUsedMS,
+		})
+	}
+	return out
+}
+
 // ClientKeyAliasesResponseDTO maps usage key fingerprints to operator-assigned aliases.
 type ClientKeyAliasesResponseDTO struct {
-	Aliases map[string]repository.ClientKeyAlias `json:"aliases"`
+	Aliases map[string]ClientKeyAliasDTO `json:"aliases"`
 }
 
 // ClientKeyAliasPutResponseDTO returns the persisted client key alias record.
 type ClientKeyAliasPutResponseDTO struct {
-	Status string                    `json:"status"`
-	Alias  repository.ClientKeyAlias `json:"alias"`
+	Status string            `json:"status"`
+	Alias  ClientKeyAliasDTO `json:"alias"`
+}
+
+// ClientKeyAliasConflictResponseDTO describes an optimistic version conflict when updating a client key alias.
+type ClientKeyAliasConflictResponseDTO struct {
+	Error  string            `json:"error"`
+	Code   string            `json:"code"`
+	Alias  ClientKeyAliasDTO `json:"alias"`
+	Detail string            `json:"detail"`
 }
 
 // ClientKeyUsageResponseDTO returns per-key usage aggregates for a dashboard time window.
 type ClientKeyUsageResponseDTO struct {
-	Window dashboardWindow             `json:"window"`
-	Usage  []repository.ClientKeyUsage `json:"usage"`
+	Window dashboardWindow     `json:"window"`
+	Usage  []ClientKeyUsageDTO `json:"usage"`
 }
 
 // listClientKeyAliases returns every stored alias for the instance.
@@ -68,7 +126,7 @@ func (h *Handler) listClientKeyAliases(writer http.ResponseWriter, request *http
 		writeError(writer, http.StatusInternalServerError, "failed to read client key aliases")
 		return
 	}
-	writeJSON(writer, http.StatusOK, ClientKeyAliasesResponseDTO{Aliases: aliases})
+	writeJSON(writer, http.StatusOK, ClientKeyAliasesResponseDTO{Aliases: projectClientKeyAliasesDTO(aliases)})
 }
 
 // putClientKeyAlias names or clears one key.
@@ -92,7 +150,7 @@ func (h *Handler) listClientKeyAliases(writer http.ResponseWriter, request *http
 // @Success 200 {object} ClientKeyAliasPutResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
-// @Failure 409 {object} ErrorResponseDTO
+// @Failure 409 {object} ClientKeyAliasConflictResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/client-key-aliases [put]
@@ -136,11 +194,11 @@ func (h *Handler) putClientKeyAlias(writer http.ResponseWriter, request *http.Re
 		case errors.Is(err, repository.ErrClientKeyAliasVersionConflict):
 			// 409 with the stored version so the console can reload and retry
 			// against the current state instead of guessing.
-			writeJSON(writer, http.StatusConflict, map[string]any{
-				"error":  "the alias was changed by another session; reload and try again",
-				"code":   "alias_version_conflict",
-				"alias":  stored,
-				"detail": err.Error(),
+			writeJSON(writer, http.StatusConflict, ClientKeyAliasConflictResponseDTO{
+				Error:  "the alias was changed by another session; reload and try again",
+				Code:   "alias_version_conflict",
+				Alias:  projectClientKeyAliasDTO(stored),
+				Detail: err.Error(),
 			})
 		case errors.Is(err, repository.ErrClientKeyAliasInvalid):
 			writeError(writer, http.StatusBadRequest, err.Error())
@@ -151,7 +209,7 @@ func (h *Handler) putClientKeyAlias(writer http.ResponseWriter, request *http.Re
 	}
 
 	_ = h.recordAudit(request, action, "client_key", target, "success", map[string]any{"cleared": normalized == ""})
-	writeJSON(writer, http.StatusOK, ClientKeyAliasPutResponseDTO{Status: "ok", Alias: stored})
+	writeJSON(writer, http.StatusOK, ClientKeyAliasPutResponseDTO{Status: "ok", Alias: projectClientKeyAliasDTO(stored)})
 }
 
 // clientKeyUsage returns per-key request counts and last-use times.
@@ -195,7 +253,7 @@ func (h *Handler) clientKeyUsage(writer http.ResponseWriter, request *http.Reque
 	}
 	writeJSON(writer, http.StatusOK, ClientKeyUsageResponseDTO{
 		Window: window,
-		Usage:  usage,
+		Usage:  projectClientKeyUsageDTOs(usage),
 	})
 }
 

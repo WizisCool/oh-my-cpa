@@ -11,7 +11,7 @@ import { ConfirmAction } from './ConfirmAction';
 import { HeaderAction } from './HeaderAction';
 import { PreferenceMenus } from './PreferenceMenus';
 import { useT } from '../../i18n';
-import { getAppConfig } from '../../types/config';
+import { getAppConfig, resolveApiDocsUrl } from '../../types/config';
 import { isDemoMode } from '../../types/demoMode';
 import { formatStarCount } from '../../utils/format';
 import { Tooltip } from './Tooltip';
@@ -23,12 +23,6 @@ import {
 } from '../../demo/sandbox';
 
 const REPOSITORY_URL = 'https://github.com/WizisCool/oh-my-cpa';
-
-function resolveApiDocsUrl(basePath: string): string {
-  // When mounted under `/demo`, resolve `/api-docs/` on the same origin so both
-  // `omc.junze.dev/demo/` and local `deploy/site` previews open their own API reference.
-  return basePath === '/demo' ? '/api-docs/' : 'https://omc.junze.dev/api-docs/';
-}
 /** The server reads the count at most hourly, so asking more often learns nothing. */
 const STAR_COUNT_STALE_MS = 60 * 60 * 1000;
 

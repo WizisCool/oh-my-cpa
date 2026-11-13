@@ -84,12 +84,14 @@ func (h *Handler) applyManagementAuthFileFields(ctx context.Context, client *man
 
 // AuthFileFieldsPatchRequestDTO documents editable auth file metadata fields.
 type AuthFileFieldsPatchRequestDTO struct {
-	Name            string                      `json:"name"`
-	AuthIndex       string                      `json:"auth_index,omitempty"`
-	Priority        *int                        `json:"priority,omitempty"`
-	Weight          *int64                      `json:"weight,omitempty"`
-	Prefix          *string                     `json:"prefix,omitempty"`
-	ProxyURL        *string                     `json:"proxy_url,omitempty"`
+	Name      string  `json:"name"`
+	AuthIndex string  `json:"auth_index,omitempty"`
+	Priority  *int    `json:"priority,omitempty"`
+	Weight    *int64  `json:"weight,omitempty"`
+	Prefix    *string `json:"prefix,omitempty"`
+	ProxyURL  *string `json:"proxy_url,omitempty"`
+	// Headers sets custom HTTP headers keyed by header name; sending null clears the override.
+	Headers         map[string]string           `json:"headers,omitempty"`
 	Expired         *string                     `json:"expired,omitempty"`
 	DisableCooling  *bool                       `json:"disable_cooling,omitempty"`
 	Websockets      *bool                       `json:"websockets,omitempty"`
