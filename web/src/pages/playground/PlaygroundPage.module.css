@@ -81,7 +81,7 @@
 }
 
 .is-unset :global([data-slot='slider-thumb']) {
-  box-shadow: 0 0 0 1.5px var(--border), var(--edge-drop);
+  box-shadow: var(--shadow-control);
 }
 
 .number-input,

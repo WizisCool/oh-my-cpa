@@ -1,5 +1,5 @@
 /* StatTiles.module.css — a strip of counted tiles, each one a filter over the list below it.
-   Each tile is a raised card; the selected one takes an accent ring and the hover inset. */
+   Each tile is a card on the page; the pointer raises it and the selected one is picked up and lit. */
 
 .stat-tiles {
   display: grid;
@@ -22,16 +22,22 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: box-shadow var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
+  transition: var(--select-transition);
+}
+
+.stat-tile:active {
+  transform: scale(var(--press-scale));
 }
 
 .stat-tile:hover {
   background: var(--hover-inset);
+  box-shadow: var(--shadow-raised);
 }
 
-.stat-tile-active {
-  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
-  background: var(--hover-inset);
+.stat-tile-active,
+.stat-tile-active:hover {
+  box-shadow: var(--shadow-selected);
+  background: var(--select-surface);
 }
 
 .stat-tile:focus-visible {
@@ -99,12 +105,15 @@
   }
   .stat-tile:hover {
     background: transparent;
+    box-shadow: none;
   }
-  .stat-tile-active {
+  .stat-tile-active,
+  .stat-tile-active:hover {
     background: var(--thumb-bg);
     box-shadow: var(--shadow-control);
   }
-  .stat-tiles[data-thumb] .stat-tile-active {
+  .stat-tiles[data-thumb] .stat-tile-active,
+  .stat-tiles[data-thumb] .stat-tile-active:hover {
     background: transparent;
     box-shadow: none;
   }
@@ -124,5 +133,11 @@
   .stat-tile-value {
     flex: none;
     font-size: var(--text-sm);
+  }
+  /* Four segments in one row wrapped each label to its own number of lines, so the strip read
+     ragged. Two rows of two give every segment room for one line at the same height (enlarged text
+     still wraps); the thumb glides in both directions. */
+  .stat-tiles:has(> :nth-child(4)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

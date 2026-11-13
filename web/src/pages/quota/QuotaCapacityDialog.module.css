@@ -1,7 +1,7 @@
 /* Three cards drawn the way every card in the console is: the page's ground inside the dialog's
    elevated fill, the edge shadow, a PanelTitle head over a rule. Nothing here names a colour;
    the theme's tokens carry every palette, light or dark. The forecast is told apart the way a
-   selected tile is, by an accent frame, and its figures by their "≈". */
+   selected tile is, picked up and lit, and its figures by their "≈". */
 .dialog-title {
   display: inline-flex;
   align-items: center;
@@ -66,7 +66,8 @@
 }
 
 .card[data-tone='forecast'] {
-  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
+  box-shadow: var(--shadow-selected);
+  background: var(--select-surface);
 }
 
 .head {

@@ -141,7 +141,7 @@ const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ c
         <Tooltip title={t('common.save')}>
           <Button
             size="sm"
-            className="row-action-btn"
+            variant="ghost" className="row-action-btn"
             icon={<CheckOutlined />}
             disabled={!isDirty}
             loading={save.isPending}
@@ -159,7 +159,7 @@ const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ c
           >
             <Button
               size="sm"
-              className="row-action-btn"
+              variant="ghost" className="row-action-btn"
               icon={<UndoOutlined />}
               loading={reset.isPending}
               aria-label={`${t('pricing.channels.reset')}: ${label}`}

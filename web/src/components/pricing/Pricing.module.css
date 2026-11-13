@@ -148,18 +148,6 @@
   gap: 6px;
 }
 
-.tier-badge {
-  border: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 6px;
-  color: var(--fg-2);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-  background: color-mix(in srgb, var(--fg) 6%, transparent);
-  border-radius: var(--radius-sm);
-}
 
 /* ── The OpenRouter picker ── */
 .picker {

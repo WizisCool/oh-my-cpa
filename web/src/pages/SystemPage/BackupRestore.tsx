@@ -226,7 +226,7 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
                     )}
                     <Button
                       size="sm"
-                      variant={selectedKey === item.key ? 'primary' : 'secondary'}
+                      variant={selectedKey === item.key ? 'active' : 'secondary'}
                       aria-expanded={selectedKey === item.key}
                       disabled={isBusy || isWorking}
                       onClick={() => {

@@ -64,7 +64,6 @@ export function ToggleGroupItem({ className, children, ...props }: ToggleGroupIt
         'focus-visible:outline-none focus-visible:shadow-focus',
         'data-disabled:pointer-events-none data-disabled:opacity-50',
         size === 'sm' ? 'min-h-6 px-2.5 py-0.5 text-md' : 'min-h-7 px-3 py-1 text-md',
-        '[@media(pointer:coarse)]:min-h-[30px]',
         className,
       )}
       {...props}

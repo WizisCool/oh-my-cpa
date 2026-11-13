@@ -21,8 +21,10 @@
   margin-bottom: 0;
 }
 
+/* Grows into the slack and gives it back when "Clear filters" arrives, so the row never wraps. */
 .search {
-  width: 260px;
+  flex: 1 1 160px;
+  max-width: 320px;
 }
 
 .window-summary {
@@ -46,7 +48,9 @@
     width: 100%;
   }
 
+  /* The summary line is a link's height, so "Clear filters" can join it without growing it. */
   .window-summary {
+    min-height: 28px;
     margin-left: 0;
   }
 }

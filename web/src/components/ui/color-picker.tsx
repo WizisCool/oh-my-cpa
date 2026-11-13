@@ -66,7 +66,7 @@ export function ColorPicker({
         <span
           aria-hidden="true"
           style={{ backgroundColor: normalized }}
-          className="size-4 shrink-0 rounded-xs shadow-[inset_0_0_0_1px_rgba(128,128,128,0.28)]"
+          className="size-4 shrink-0 rounded-xs shadow-[inset_0_0_0_1px_var(--fine-ring)]"
         />
         {showText ? <span className="font-mono text-sm tabular-nums">{normalized}</span> : null}
       </PopoverTrigger>

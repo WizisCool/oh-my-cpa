@@ -823,8 +823,8 @@
   font-size: var(--text-sm);
 }
 
+/* A mode chip says its mode in the accent ink; its edge stays the chip's own. */
 .composer-chip[data-tone='accent'] {
-  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
   color: var(--accent);
 }
 
@@ -1283,7 +1283,7 @@
 }
 
 .picker-search:focus-within {
-  box-shadow: 0 0 0 1px var(--accent);
+  box-shadow: var(--shadow-field-focus);
 }
 
 .picker-search :global([data-slot='input']) {

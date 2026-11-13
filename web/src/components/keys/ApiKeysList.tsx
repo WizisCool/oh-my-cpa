@@ -174,7 +174,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
       <Tooltip title={record.usageFingerprint ? t('keys.view_requests') : t('keys.not_linked')}>
         <Button
           size="sm"
-          className="row-action-btn"
+          variant="ghost" className="row-action-btn"
           icon={<HistoryOutlined />}
           disabled={!record.usageFingerprint}
           onClick={() => onViewRequests(record)}
@@ -184,7 +184,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
       <Tooltip title={isReadOnly ? t('demo.blocked') : t('cfg.api_keys_edit')}>
         <Button
           size="sm"
-          className="row-action-btn"
+          variant="ghost" className="row-action-btn"
           icon={<EditOutlined />}
           disabled={isReadOnly}
           onClick={() => onEdit(record.index)}
@@ -208,7 +208,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
         <Button
           size="sm"
           danger
-          className="row-action-btn"
+          variant="ghost" className="row-action-btn"
           icon={<DeleteOutlined />}
           disabled={isReadOnly || isBusy}
           aria-label={`${t('cfg.api_keys_delete')}: ${nameOf(record)}`}

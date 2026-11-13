@@ -29,8 +29,6 @@ export function RequestSelectionBar({
   const t = useT();
   return (
     <SelectionBar
-      variant="inline"
-      className="request-selection-bar"
       label={t('events.selection')}
       summary={t('events.selected_count', { n: count })}
       selection={(

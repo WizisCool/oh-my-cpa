@@ -164,7 +164,7 @@
 }
 
 .orbit-inner {
-  stroke: color-mix(in srgb, var(--map-light) 32%, transparent);
+  stroke: color-mix(in srgb, var(--fg) 12%, transparent);
   stroke-width: 1;
   stroke-dasharray: 2 7;
   animation: skeleton-orbit-turn 40s linear infinite;
@@ -188,7 +188,7 @@
   width: var(--hub-size);
   height: var(--hub-size);
   border-radius: var(--radius-xl);
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--map-light) 20%, var(--lift-ring)), var(--float-drop);
+  box-shadow: var(--shadow-float);
 }
 
 .gateway-mark {

@@ -4,6 +4,15 @@ import { App } from './App';
 import './index.css';
 import { applyStoredFonts } from './theme/fontLibrary';
 
+// iOS Safari zooms the whole page into any focused field set under 16px, which every field at the
+// console's 13px reading size is. `maximum-scale=1` stops that focus zoom while iOS keeps pinch zoom
+// regardless; any other browser would read it as disabling pinch zoom, so only iOS is given it.
+const isIOS = /iP(?:hone|od|ad)/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+if (isIOS) {
+  const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+  if (viewport && !/maximum-scale/.test(viewport.content)) viewport.content += ', maximum-scale=1';
+}
+
 // Before the first render, so the first frame is painted in the typeface this browser last
 // saw chosen rather than switching once the preference arrives.
 applyStoredFonts();

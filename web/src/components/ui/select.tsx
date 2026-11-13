@@ -70,8 +70,8 @@ function SelectTrigger({
         'disabled:cursor-not-allowed disabled:opacity-50',
         status === 'error' && 'shadow-field-invalid focus-visible:shadow-field-invalid-focus data-[popup-open]:shadow-field-invalid-focus',
         status === 'warning' && 'shadow-[inset_0_0_0_1px_var(--warn)]',
-        size === 'sm' && 'h-7 pl-2.5 pr-2 text-md [@media(pointer:coarse)]:min-h-9',
-        size === 'default' && 'h-8 pl-3 pr-2.5 text-base [@media(pointer:coarse)]:min-h-10',
+        size === 'sm' && 'h-7 pl-2.5 pr-2 text-md',
+        size === 'default' && 'h-8 pl-3 pr-2.5 text-base',
         size === 'lg' && 'h-10 pl-3.5 pr-3 text-base',
         className,
       )}

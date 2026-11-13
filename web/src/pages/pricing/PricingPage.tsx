@@ -391,17 +391,17 @@ export const PricingPage: React.FC = () => {
           <Tooltip title={row.rowKind === 'priced' ? t('pricing.edit') : t('pricing.set_price')}>
             <Button
               size="sm"
-              className="row-action-btn"
+              variant="ghost" className="row-action-btn"
               icon={<EditOutlined />}
               onClick={() => openEditor?.(row.model, { channel: row.channel, channelLabel: row.channelLabel })}
               aria-label={`${row.rowKind === 'priced' ? t('pricing.edit') : t('pricing.set_price')}: ${row.model}`}
               data-testid="pricing-row-edit"
             />
           </Tooltip>
-          {row.targetChannel && <Button size="sm" onClick={() => openEditor?.(row.model, { channel: row.targetChannel, channelLabel: row.channelLabel })} data-testid="pricing-channel-model-edit">
+          {row.targetChannel && <Button variant="ghost" size="sm" onClick={() => openEditor?.(row.model, { channel: row.targetChannel, channelLabel: row.channelLabel })} data-testid="pricing-channel-model-edit">
             {t('pricing.scope.channel')}
           </Button>}
-          {row.channel && <Button size="sm" onClick={() => openEditor?.(row.model)} data-testid="pricing-shared-model-edit">
+          {row.channel && <Button variant="ghost" size="sm" onClick={() => openEditor?.(row.model)} data-testid="pricing-shared-model-edit">
             {t('pricing.scope.shared')}
           </Button>}
         </div>

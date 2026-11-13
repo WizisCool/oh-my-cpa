@@ -305,21 +305,24 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
     {
       key: 'actions',
       title: t('common.details'),
-      width: 92,
+      width: 64,
       align: 'right',
       render: (_, event) => (
-        <Button
-          size="sm"
-          icon={<ProfileOutlined />}
-          onClick={(clickEvent) => {
-            clickEvent.stopPropagation();
-            setOpenId(event.id);
-          }}
-          aria-label={`${t('common.details')}: ${auditActionLabel(event.action, t)}`}
-          data-testid="audit-open"
-        >
-          {t('common.details')}
-        </Button>
+        <div className="row-actions">
+          <ToolButton
+            variant="ghost"
+            size="sm"
+            className="row-action-btn"
+            icon={<ProfileOutlined />}
+            label={`${t('common.details')}: ${auditActionLabel(event.action, t)}`}
+            tooltip={t('common.details')}
+            onClick={(clickEvent) => {
+              clickEvent.stopPropagation();
+              setOpenId(event.id);
+            }}
+            data-testid="audit-open"
+          />
+        </div>
       ),
     },
   ];

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  RightOutlined,
 } from '../icons';
 import { Outlet, useLocation, useMatches, useNavigate } from 'react-router-dom';
 import { HeaderNav } from './HeaderNav';
@@ -336,7 +337,7 @@ export const AppLayout: React.FC = () => {
                 {currentGroup && (
                   <>
                     <li className="app-breadcrumb-group">{t(currentGroup.labelKey)}</li>
-                    <li className="app-breadcrumb-sep" aria-hidden="true">/</li>
+                    <li className="app-breadcrumb-sep" aria-hidden="true"><RightOutlined /></li>
                   </>
                 )}
                 <li className="app-breadcrumb-item" aria-current="page">
