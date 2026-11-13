@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"net/http"
@@ -35,6 +36,7 @@ const (
 var (
 	errWarmupTaskNotFound = errors.New("warmup task not found")
 	errWarmupTaskBusy     = errors.New("warmup task already running")
+	errWarmupSlotConsumed = errors.New("warmup slot already consumed")
 )
 
 type warmupRuntime struct {
@@ -334,10 +336,12 @@ func (h *Handler) saveWarmupTask(ctx context.Context, id string, input warmup.Ta
 
 	now := h.now().UTC()
 	nowISO := warmup.FormatISO(now)
+	var existing *warmup.Task
 	var task warmup.Task
 	action := "warmup.task.create"
 	if strings.TrimSpace(id) != "" {
-		existing, err := h.repo.ReadWarmupTask(ctx, warmupInstanceID, id)
+		var err error
+		existing, err = h.repo.ReadWarmupTask(ctx, warmupInstanceID, id)
 		if err != nil {
 			return warmup.StateView{}, err
 		}
@@ -380,10 +384,61 @@ func (h *Handler) saveWarmupTask(ctx context.Context, id string, input warmup.Ta
 	}); err != nil {
 		return warmup.StateView{}, err
 	}
-	if err := h.repo.WriteWarmupTask(ctx, warmupInstanceID, task, now.UnixMilli()); err != nil {
+	reconcileMarks := h.warmupTaskMarksReconciler(&catalog, task, now)
+	if err := h.repo.WriteWarmupTaskWithMarks(ctx, warmupInstanceID, task, existing != nil, now.UnixMilli(), reconcileMarks); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return warmup.StateView{}, errWarmupTaskNotFound
+		}
 		return warmup.StateView{}, err
 	}
 	return h.buildWarmupStateView(ctx, &catalog)
+}
+
+func isWarmupTaskTargetChanged(existing, saved warmup.Task) bool {
+	if existing.Provider != saved.Provider || existing.Trigger.Kind != saved.Trigger.Kind || existing.Trigger.Window != saved.Trigger.Window {
+		return true
+	}
+	if existing.AuthIndex != saved.AuthIndex {
+		return true
+	}
+	// Account is only a fallback lookup key when no stable AuthIndex identifies the credential.
+	return existing.AuthIndex == "" && existing.Account != saved.Account
+}
+
+func (h *Handler) warmupTaskMarksReconciler(
+	catalog *warmup.Catalog,
+	saved warmup.Task,
+	now time.Time,
+) func(persisted *warmup.Task, current warmup.TaskMarks) (*warmup.TaskMarks, error) {
+	account := findCatalogAccount(catalog, saved)
+	return func(persisted *warmup.Task, current warmup.TaskMarks) (*warmup.TaskMarks, error) {
+		if persisted == nil {
+			if !saved.Enabled || saved.Trigger.Kind != "window" {
+				return nil, nil
+			}
+			if marks, isChanged := warmup.ReconcileWindowMarks(saved, account, current, now); isChanged {
+				return &marks, nil
+			}
+			return nil, nil
+		}
+		if isWarmupTaskTargetChanged(*persisted, saved) {
+			marks := warmup.TaskMarks{}
+			if saved.Enabled && saved.Trigger.Kind == "window" {
+				marks, _ = warmup.ReconcileWindowMarks(saved, account, marks, now)
+			}
+			return &marks, nil
+		}
+		if !persisted.Enabled && saved.Enabled && saved.Trigger.Kind == "window" {
+			current.LastReset = ""
+			current.ObservedAt = ""
+			current.ObservedResetsAt = ""
+			current.ConfirmedReset = ""
+			current.IsSlidingIdle = false
+			current, _ = warmup.ReconcileWindowMarks(saved, account, current, now)
+			return &current, nil
+		}
+		return nil, nil
+	}
 }
 
 func (h *Handler) removeWarmupTask(ctx context.Context, id string) (warmup.StateView, error) {
@@ -581,11 +636,15 @@ func (h *Handler) executeTaskRun(
 
 	completed := finish(outcome.Status, outcome.Reason)
 	if task.Trigger.Kind == "window" && outcome.Status == "ok" {
-		marks, err := h.repo.ReadWarmupMarks(context.WithoutCancel(ctx), warmupInstanceID, task.ID)
-		if err == nil {
-			marks.LastSent = warmup.FormatISO(h.now().UTC())
-			_ = h.repo.WriteWarmupMarks(context.WithoutCancel(ctx), warmupInstanceID, task.ID, marks, h.now().UnixMilli())
-		}
+		sentISO := warmup.FormatISO(h.now().UTC())
+		_, _ = h.repo.UpdateWarmupMarks(context.WithoutCancel(ctx), warmupInstanceID, task.ID, h.now().UnixMilli(), func(marks warmup.TaskMarks) (warmup.TaskMarks, bool, error) {
+			marks.LastSent = sentISO
+			marks.IsSlidingIdle = false
+			marks.ObservedAt = ""
+			marks.ObservedResetsAt = ""
+			marks.ConfirmedReset = ""
+			return marks, true, nil
+		})
 	}
 	return completed, nil
 }
@@ -635,6 +694,18 @@ func (h *Handler) runCredentialWarmupRound(ctx context.Context) error {
 		return err
 	}
 	now := h.now().UTC()
+	for _, task := range enabled {
+		if task.Trigger.Kind != "window" {
+			continue
+		}
+		account := findCatalogAccount(&catalog, task)
+		if updated, err := h.repo.UpdateWarmupMarks(ctx, warmupInstanceID, task.ID, now.UnixMilli(), func(current warmup.TaskMarks) (warmup.TaskMarks, bool, error) {
+			reconciled, isChanged := warmup.ReconcileWindowMarks(task, account, current, now)
+			return reconciled, isChanged, nil
+		}); err == nil {
+			marksMap[task.ID] = updated
+		}
+	}
 
 	refreshedAny := false
 	refreshedIndices := make(map[string]struct{})
@@ -660,12 +731,16 @@ func (h *Handler) runCredentialWarmupRound(ctx context.Context) error {
 		if h.warmupRefreshBackoffActive(authIndex, now) {
 			continue
 		}
-		if needsWindowQuotaRefresh(task, account, marksMap[task.ID], now) {
+		if warmup.NeedsWindowQuotaRefresh(task, account, marksMap[task.ID], now) {
 			refreshedIndices[authIndex] = struct{}{}
-			if h.refreshWarmupQuota(ctx, client, file) {
+			switch h.refreshWarmupQuota(ctx, client, file) {
+			case warmupQuotaRefreshed:
 				h.clearWarmupRefreshBackoff(authIndex)
 				refreshedAny = true
-			} else {
+			case warmupQuotaDeferred:
+				// Provider Retry-After or per-credential read gate deferred the request without an
+				// upstream failure; let the gate's own deadline govern when reading resumes.
+			case warmupQuotaFailed:
 				h.deferWarmupRefresh(authIndex, now)
 			}
 		}
@@ -679,55 +754,79 @@ func (h *Handler) runCredentialWarmupRound(ctx context.Context) error {
 		if h.isWarmupTaskRunning(task.ID) {
 			continue
 		}
-		marks := marksMap[task.ID]
 		if task.Trigger.Kind == "window" {
 			account := findCatalogAccount(&catalog, task)
-			win := warmup.FindAccountWindow(account, task.Trigger.Window)
-			due := warmup.CurrentWindowDue(task, account, marks, now)
-			if due != nil && !due.Idle && win != nil && win.ResetsAt != "" && marks.LastReset != win.ResetsAt {
-				marks.LastReset = win.ResetsAt
-				marksMap[task.ID] = marks
-				_ = h.repo.WriteWarmupMarks(ctx, warmupInstanceID, task.ID, marks, now.UnixMilli())
-			}
-			if due == nil || slices.Contains(marks.ResetKeys, due.ResetKey) {
+			var due *warmup.WindowDueResult
+			updatedMarks, err := h.repo.UpdateWarmupMarks(ctx, warmupInstanceID, task.ID, now.UnixMilli(), func(current warmup.TaskMarks) (warmup.TaskMarks, bool, error) {
+				reconciled, isChanged := warmup.ReconcileWindowMarks(task, account, current, now)
+				candidate := warmup.CurrentWindowDue(task, account, reconciled, now)
+				if candidate == nil || slices.Contains(reconciled.ResetKeys, candidate.ResetKey) {
+					return reconciled, isChanged, errWarmupSlotConsumed
+				}
+				dueTime, ok := warmup.ParseISO(candidate.At)
+				if !ok || dueTime.After(now) {
+					return reconciled, isChanged, errWarmupSlotConsumed
+				}
+				due = candidate
+				reconciled.ResetKeys = append(reconciled.ResetKeys, candidate.ResetKey)
+				if !candidate.Idle {
+					if window := warmup.FindAccountWindow(account, task.Trigger.Window); window != nil && (window.UsedPercent == nil || *window.UsedPercent == 0) {
+						idleKey := warmup.IdleResetKey(now)
+						if !slices.Contains(reconciled.ResetKeys, idleKey) {
+							reconciled.ResetKeys = append(reconciled.ResetKeys, idleKey)
+						}
+					}
+				}
+				if len(reconciled.ResetKeys) > warmup.MAX_RESET_KEYS {
+					reconciled.ResetKeys = reconciled.ResetKeys[len(reconciled.ResetKeys)-warmup.MAX_RESET_KEYS:]
+				}
+				if window := warmup.FindAccountWindow(account, task.Trigger.Window); window != nil && !candidate.Idle && !reconciled.IsSlidingIdle {
+					if windowReset, ok := warmup.ParseISO(window.ResetsAt); ok && windowReset.After(now) {
+						reconciled.LastReset = window.ResetsAt
+					} else {
+						reconciled.LastReset = ""
+					}
+				}
+				return reconciled, true, nil
+			})
+			if errors.Is(err, errWarmupSlotConsumed) {
+				marksMap[task.ID] = updatedMarks
 				continue
 			}
-			dueTime, ok := warmup.ParseISO(due.At)
-			if !ok || dueTime.After(now) {
+			if err != nil || due == nil {
 				continue
 			}
-			marks.ResetKeys = append(marks.ResetKeys, due.ResetKey)
-			if len(marks.ResetKeys) > warmup.MAX_RESET_KEYS {
-				marks.ResetKeys = marks.ResetKeys[len(marks.ResetKeys)-warmup.MAX_RESET_KEYS:]
-			}
-			marksMap[task.ID] = marks
-			if err := h.repo.WriteWarmupMarks(ctx, warmupInstanceID, task.ID, marks, now.UnixMilli()); err != nil {
-				continue
-			}
+			marksMap[task.ID] = updatedMarks
 			if _, err := h.executeTaskRun(ctx, client, &catalog, filesByIndex, task, "schedule", due.At, due.ResetKey); err != nil {
 				h.reportSkippedWarmup(task, err)
+			} else if refreshedMarks, readErr := h.repo.ReadWarmupMarks(ctx, warmupInstanceID, task.ID); readErr == nil {
+				marksMap[task.ID] = refreshedMarks
 			}
 			continue
 		}
 
-		dueTime, ok := warmup.LastDue(now, task.Trigger)
-		if !ok {
+		var dueISO, source string
+		updatedMarks, err := h.repo.UpdateWarmupMarks(ctx, warmupInstanceID, task.ID, now.UnixMilli(), func(current warmup.TaskMarks) (warmup.TaskMarks, bool, error) {
+			dueTime, ok := warmup.LastDue(now, task.Trigger)
+			if !ok {
+				return current, false, errWarmupSlotConsumed
+			}
+			floorISO := maxISOString(current.LastDue, task.UpdatedAt)
+			if floorTime, ok := warmup.ParseISO(floorISO); ok && !dueTime.After(floorTime) {
+				return current, false, errWarmupSlotConsumed
+			}
+			source = "schedule"
+			if now.Sub(dueTime) > warmup.CATCHUP_LAG {
+				source = "catchup"
+			}
+			dueISO = warmup.FormatISO(dueTime)
+			current.LastDue = dueISO
+			return current, true, nil
+		})
+		if err != nil {
 			continue
 		}
-		floorISO := maxISOString(marks.LastDue, task.UpdatedAt)
-		if floorTime, ok := warmup.ParseISO(floorISO); ok && !dueTime.After(floorTime) {
-			continue
-		}
-		source := "schedule"
-		if now.Sub(dueTime) > warmup.CATCHUP_LAG {
-			source = "catchup"
-		}
-		dueISO := warmup.FormatISO(dueTime)
-		marks.LastDue = dueISO
-		marksMap[task.ID] = marks
-		if err := h.repo.WriteWarmupMarks(ctx, warmupInstanceID, task.ID, marks, now.UnixMilli()); err != nil {
-			continue
-		}
+		marksMap[task.ID] = updatedMarks
 		if _, err := h.executeTaskRun(ctx, client, &catalog, filesByIndex, task, source, dueISO, ""); err != nil {
 			h.reportSkippedWarmup(task, err)
 		}
@@ -747,41 +846,31 @@ func (h *Handler) reportSkippedWarmup(task warmup.Task, err error) {
 	h.logger.Warn("warmup run was not sent", "task", task.ID, "error", err)
 }
 
-func needsWindowQuotaRefresh(task warmup.Task, account *warmup.CatalogAccount, marks warmup.TaskMarks, now time.Time) bool {
-	if account == nil || strings.TrimSpace(account.SnapshotAt) == "" {
-		return true
-	}
-	snapAt, hasSnap := warmup.ParseISO(account.SnapshotAt)
-	if !hasSnap {
-		return true
-	}
-	if sentAt, ok := warmup.ParseISO(marks.LastSent); ok {
-		settleAt := sentAt.Add(warmup.POST_SEND_SETTLE)
-		if !now.Before(settleAt) && snapAt.Before(settleAt) {
-			return true
-		}
-	}
-	win := warmup.FindAccountWindow(account, task.Trigger.Window)
-	if win == nil {
-		return false
-	}
-	if resetAt, ok := warmup.ParseISO(win.ResetsAt); ok {
-		if !now.Before(resetAt) && snapAt.Before(resetAt) {
-			return true
-		}
-	}
-	return false
-}
+type warmupQuotaRefreshOutcome int
 
-func (h *Handler) refreshWarmupQuota(ctx context.Context, client *management.Client, file management.AuthFile) bool {
+const (
+	warmupQuotaRefreshed warmupQuotaRefreshOutcome = iota
+	warmupQuotaDeferred
+	warmupQuotaFailed
+)
+
+func (h *Handler) refreshWarmupQuota(ctx context.Context, client *management.Client, file management.AuthFile) warmupQuotaRefreshOutcome {
 	service := quota.NewServiceWithClock(client, h.now)
 	prior := h.loadPriorNormalizedQuota(ctx, file.AuthIndex)
 	reading, err := h.refreshQuotaReadingAs(ctx, service, file, prior, true)
 	if err != nil || reading == nil {
-		return false
+		return warmupQuotaFailed
 	}
-	_ = h.persistNormalizedQuotaSnapshot(ctx, reading)
-	return true
+	if reading.IsDeferred {
+		return warmupQuotaDeferred
+	}
+	if isUsable, _ := quota.ReadOutcome(reading, nil); !isUsable {
+		return warmupQuotaFailed
+	}
+	if h.persistNormalizedQuotaSnapshot(ctx, reading) != nil {
+		return warmupQuotaFailed
+	}
+	return warmupQuotaRefreshed
 }
 
 func (h *Handler) warmupRefreshBackoffActive(authIndex string, now time.Time) bool {
@@ -909,11 +998,16 @@ func warmupAccountWindows(provider, authIndex string, snapshots map[string]repos
 		seenIDs := make(map[string]bool, len(q.Windows))
 		for _, w := range q.Windows {
 			resetsAt := formatOptionalEpochISO(w.ResetAtMS)
+			periodHours := 0.0
+			if w.PeriodHours != nil && *w.PeriodHours > 0 {
+				periodHours = *w.PeriodHours
+			}
 			windows = append(windows, warmup.QuotaWindow{
 				ID:          w.ID,
 				Label:       firstNonEmpty(w.Label, w.ID),
 				UsedPercent: w.UsedPercent,
 				ResetsAt:    resetsAt,
+				PeriodHours: periodHours,
 			})
 			seenIDs[w.ID] = true
 		}
@@ -924,6 +1018,7 @@ func warmupAccountWindows(provider, authIndex string, snapshots map[string]repos
 					Label:       "5h",
 					UsedPercent: q.WarmupEvidence.FiveHour.UsedPercent,
 					ResetsAt:    formatOptionalEpochISO(q.WarmupEvidence.FiveHour.ResetAtMS),
+					PeriodHours: 5,
 				}}, windows...)
 			}
 			if !seenIDs["seven_day"] && !seenIDs["weekly"] && (q.WarmupEvidence.Weekly.State == "idle" || q.WarmupEvidence.Weekly.ResetAtMS != nil) {
@@ -936,6 +1031,7 @@ func warmupAccountWindows(provider, authIndex string, snapshots map[string]repos
 					Label:       "7d",
 					UsedPercent: q.WarmupEvidence.Weekly.UsedPercent,
 					ResetsAt:    formatOptionalEpochISO(q.WarmupEvidence.Weekly.ResetAtMS),
+					PeriodHours: 168,
 				})
 			}
 		}
@@ -946,8 +1042,8 @@ func warmupAccountWindows(provider, authIndex string, snapshots map[string]repos
 			wid = "weekly"
 		}
 		windows = []warmup.QuotaWindow{
-			{ID: "five_hour", Label: "5h"},
-			{ID: wid, Label: "7d"},
+			{ID: "five_hour", Label: "5h", PeriodHours: 5},
+			{ID: wid, Label: "7d", PeriodHours: 168},
 		}
 	}
 	return windows, snapshotAt

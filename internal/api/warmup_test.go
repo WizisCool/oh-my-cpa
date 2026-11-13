@@ -10,12 +10,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
@@ -30,22 +32,30 @@ type warmupFixture struct {
 	// credentialFile is what CPA serves when the credential file is downloaded (its model_aliases).
 	credentialFile string
 	// globalAliases is CPA's oauth model-alias map as JSON.
-	globalAliases string
-	onVerify      func(name, authIndex, model string)
-	verifyStatus  int
-	verifyReason  string
-	isTimedOut    bool
-	isActive      bool
-	isDisabled    bool
-	resetAt       time.Time
-	mu            sync.Mutex
-	sends         int
-	modelReads    int
-	usageReads    int
-	lastModel     string
-	lastAuthIndex string
-	entered       chan struct{}
-	release       chan struct{}
+	globalAliases     string
+	onVerify          func(name, authIndex, model string)
+	verifyStatus      int
+	verifyReason      string
+	isTimedOut        bool
+	isActive          bool
+	isSlidingWhenIdle bool
+	isDisabled        bool
+	isUnavailable     bool
+	usageHTTPStatus   int
+	agFiveRemaining   float64
+	agWeeklyRemaining float64
+	agFiveResetAt     time.Time
+	agWeeklyResetAt   time.Time
+	clockFn           func() time.Time
+	resetAt           time.Time
+	mu                sync.Mutex
+	sends             int
+	modelReads        int
+	usageReads        int
+	lastModel         string
+	lastAuthIndex     string
+	entered           chan struct{}
+	release           chan struct{}
 }
 
 func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
@@ -56,9 +66,12 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 	}
 	models := fixture.models
 	if len(models) == 0 {
-		if provider == "codex" {
+		switch provider {
+		case "codex":
 			models = []string{"gpt-5.4", "gpt-5.4-mini"}
-		} else {
+		case "antigravity":
+			models = []string{"gemini-3.8-flash", "gemini-4-carbon"}
+		default:
 			models = []string{"claude-haiku-4-5", "claude-sonnet-4-6"}
 		}
 	}
@@ -67,12 +80,30 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 		modelItems = append(modelItems, map[string]string{"id": m})
 	}
 	modelsJSON, _ := json.Marshal(map[string]any{"models": modelItems})
+	var handler *Handler
+	currentClock := func() time.Time {
+		if fixture.clockFn != nil {
+			return fixture.clockFn().UTC()
+		}
+		if handler != nil {
+			return handler.now().UTC()
+		}
+		return time.Now().UTC()
+	}
 
 	server := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
 		case "/v8/management/credentials":
-			_, _ = fmt.Fprintf(writer, `{"files":[{"id":"%s-file","name":"%s.json","type":"%s","provider":"%s","oauth_provider":"%s","auth_index":"exact-%s","source":"file","disabled":%t}]}`, provider, provider, provider, provider, fixture.oauthProvider, provider, fixture.isDisabled)
+			fixture.mu.Lock()
+			isDisabled := fixture.isDisabled
+			isUnavailable := fixture.isUnavailable
+			fixture.mu.Unlock()
+			projectField := ""
+			if provider == "antigravity" {
+				projectField = `,"project_id":"ag-test-project"`
+			}
+			_, _ = fmt.Fprintf(writer, `{"files":[{"id":"%s-file","name":"%s.json","type":"%s","provider":"%s","oauth_provider":"%s","auth_index":"exact-%s","source":"file","disabled":%t,"unavailable":%t%s}]}`, provider, provider, provider, provider, fixture.oauthProvider, provider, isDisabled, isUnavailable, projectField)
 		case "/v8/management/credentials/models":
 			fixture.mu.Lock()
 			fixture.modelReads++
@@ -85,6 +116,7 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 				Model     string `json:"model"`
 			}
 			_ = json.NewDecoder(request.Body).Decode(&payload)
+			now := currentClock()
 			fixture.mu.Lock()
 			fixture.sends++
 			fixture.lastModel = payload.Model
@@ -94,8 +126,8 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 			verifyReason := fixture.verifyReason
 			if verifyStatus == 0 && verifyReason == "" && !isTimedOut {
 				fixture.isActive = true
-				if fixture.resetAt.IsZero() {
-					fixture.resetAt = time.Now().UTC().Add(5 * time.Hour)
+				if fixture.resetAt.IsZero() || !fixture.resetAt.After(now) {
+					fixture.resetAt = now.Add(5 * time.Hour)
 				}
 			}
 			fixture.mu.Unlock()
@@ -146,22 +178,90 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 				_, _ = writer.Write([]byte(`{"status_code":200,"body":{"account":{"has_claude_max":true}}}`))
 				return
 			}
+			if strings.Contains(payload.URL, "retrieveUserQuotaSummary") {
+				fixture.mu.Lock()
+				fixture.usageReads++
+				status := fixture.usageHTTPStatus
+				fiveRem := fixture.agFiveRemaining
+				weekRem := fixture.agWeeklyRemaining
+				fiveReset := fixture.agFiveResetAt
+				weekReset := fixture.agWeeklyResetAt
+				fixture.mu.Unlock()
+				if status != 0 && status != http.StatusOK {
+					_ = json.NewEncoder(writer).Encode(map[string]any{
+						"status_code": status,
+						"body":        map[string]any{"message": "upstream failure"},
+					})
+					return
+				}
+				now := currentClock()
+				if fiveReset.IsZero() {
+					fiveReset = now.Add(5 * time.Hour)
+				}
+				if weekReset.IsZero() {
+					weekReset = now.Add(7 * 24 * time.Hour)
+				}
+				body := map[string]any{
+					"groups": []map[string]any{{
+						"displayName": "Gemini Models",
+						"buckets": []map[string]any{
+							{
+								"bucketId":          "gemini-week",
+								"displayName":       "Weekly Limit",
+								"window":            "weekly",
+								"remainingFraction": weekRem,
+								"resetTime":         weekReset.UTC().Format(time.RFC3339),
+							},
+							{
+								"bucketId":          "gemini-5h",
+								"displayName":       "Five Hour Limit",
+								"window":            "5h",
+								"remainingFraction": fiveRem,
+								"resetTime":         fiveReset.UTC().Format(time.RFC3339),
+							},
+						},
+					}},
+				}
+				_ = json.NewEncoder(writer).Encode(map[string]any{"status_code": 200, "body": body})
+				return
+			}
+			if strings.Contains(payload.URL, "loadCodeAssist") {
+				_, _ = writer.Write([]byte(`{"status_code":200,"body":{"currentTier":{"id":"ultra-lite"}}}`))
+				return
+			}
 			if strings.HasPrefix(payload.URL, "https://api.anthropic.com/api/oauth/usage") || payload.URL == "https://chatgpt.com/backend-api/wham/usage" {
+				now := currentClock()
 				fixture.mu.Lock()
 				if !strings.Contains(payload.URL, "cedar_ember") {
 					fixture.usageReads++
 				}
+				status := fixture.usageHTTPStatus
 				isActive := fixture.isActive
+				isSliding := fixture.isSlidingWhenIdle
 				resetAt := fixture.resetAt
+				if isActive && !resetAt.IsZero() && !resetAt.After(now) {
+					isActive = false
+					fixture.isActive = false
+				}
 				fixture.mu.Unlock()
+				if status != 0 && status != http.StatusOK {
+					_ = json.NewEncoder(writer).Encode(map[string]any{
+						"status_code": status,
+						"body":        map[string]any{"message": "upstream failure"},
+					})
+					return
+				}
 				if resetAt.IsZero() {
-					resetAt = time.Now().UTC().Add(5 * time.Hour)
+					resetAt = now.Add(5 * time.Hour)
 				}
 				if provider == "codex" {
 					var fiveReset, weeklyReset any
 					if isActive {
 						fiveReset = resetAt.Unix()
 						weeklyReset = resetAt.Add(7 * 24 * time.Hour).Unix()
+					} else if isSliding {
+						fiveReset = now.Add(5 * time.Hour).Unix()
+						weeklyReset = now.Add(7 * 24 * time.Hour).Unix()
 					}
 					body := map[string]any{
 						"plan_type": "plus",
@@ -213,7 +313,7 @@ func newWarmupHandler(t *testing.T, fixture *warmupFixture) *Handler {
 	}))
 	t.Cleanup(server.Close)
 
-	handler := testHandler(t, "")
+	handler = testHandler(t, "")
 	handler.repo.Timezone().Apply(time.UTC)
 	cipher, err := crypto.New("01234567890123456789012345678901")
 	if err != nil {
@@ -813,7 +913,24 @@ func TestWarmupWindowTriggerIdleAndResetGrace(t *testing.T) {
 	}
 	taskID := state.Tasks[0].ID
 
-	// Round 1: No snapshot yet -> refreshes quota (idle window), fires once with idle reset_key
+	// Round 0: If the Claude provider read gate is paused for 2 minutes by another credential's 429,
+	// the deferred read must not trigger a 5-minute warmup failure backoff; once the 2-minute pause
+	// expires, the round reads quota and fires immediately.
+	gate := handler.quotaReadGates.claudeGate()
+	gate.mu.Lock()
+	gate.pausedUntilMS = now.Add(QUOTA_RATE_LIMIT_PROVIDER_PAUSE).UnixMilli()
+	gate.mu.Unlock()
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fixture.mu.Lock()
+	if fixture.sends != 0 || fixture.usageReads != 0 {
+		t.Fatalf("expected deferred read during provider pause to skip upstream read and send, got sends=%d usageReads=%d", fixture.sends, fixture.usageReads)
+	}
+	fixture.mu.Unlock()
+
+	// Round 1 at +2m01s (provider pause expired, well under the 5m failure backoff): refreshes quota and fires once.
+	now = now.Add(QUOTA_RATE_LIMIT_PROVIDER_PAUSE + time.Second)
 	resetTarget := now.Add(5 * time.Hour)
 	fixture.mu.Lock()
 	fixture.resetAt = resetTarget
@@ -970,4 +1087,513 @@ func TestWarmupDemoRefusesDirectOperationAdapters(t *testing.T) {
 	if _, err := handler.triggerWarmupTask(ctx, "t_1"); err == nil || err.Error() != "demo_operation_refused" {
 		t.Fatalf("demo triggerWarmupTask: %v", err)
 	}
+}
+
+func TestWarmupCodexSlidingIdleAndCycleRolloverFiresOnSchedule(t *testing.T) {
+	now := time.Date(2026, 11, 13, 11, 3, 0, 0, time.UTC)
+	fixture := &warmupFixture{
+		provider:          "codex",
+		isSlidingWhenIdle: true,
+		clockFn:           func() time.Time { return now },
+	}
+	handler := newWarmupHandler(t, fixture)
+	handler.nowFn = func() time.Time { return now }
+	ctx := context.Background()
+	caller, baseURL := warmupHTTPClient(t, handler)
+
+	state := postWarmupTaskWire(t, caller, baseURL, map[string]any{
+		"enabled":    true,
+		"provider":   "codex",
+		"auth_index": "exact-codex",
+		"trigger":    map[string]any{"kind": "window", "window": "five_hour"},
+	})
+	taskID := state.Tasks[0].ID
+
+	// Round 1 at 11:03:00Z: reads initial snapshot (reset_at = 16:03:00Z, used_percent = 0) and records baseline.
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fixture.mu.Lock()
+	if fixture.sends != 0 || fixture.usageReads != 1 {
+		t.Fatalf("round 1: sends=%d usageReads=%d, want 0 and 1", fixture.sends, fixture.usageReads)
+	}
+	fixture.mu.Unlock()
+
+	// Round 2 at 11:04:00Z (+60s): confirmation read sees reset_at slid to 16:04:00Z -> fires immediately.
+	now = now.Add(time.Minute)
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	lockedFirstReset := now.Add(5 * time.Hour)
+	fixture.mu.Lock()
+	if fixture.sends != 1 || fixture.lastModel != "gpt-5.4-mini" || fixture.usageReads != 2 {
+		t.Fatalf("round 2: sends=%d model=%q usageReads=%d, want 1 gpt-5.4-mini and 2", fixture.sends, fixture.lastModel, fixture.usageReads)
+	}
+	fixture.mu.Unlock()
+	codexSettingsAfterRound2 := getWarmupSettingsWire(t, caller, baseURL)
+	if len(codexSettingsAfterRound2.Runs) != 1 || codexSettingsAfterRound2.Runs[0].TaskID != taskID || codexSettingsAfterRound2.Runs[0].Outcome != "ok" || codexSettingsAfterRound2.Runs[0].Source != "schedule" {
+		t.Fatalf("expected recorded scheduled Codex run over HTTP, got %+v", codexSettingsAfterRound2.Runs)
+	}
+
+	// Round 3 at 11:05:05Z (after POST_SEND_SETTLE): reads locked reset_at (16:04:00Z) with 0% usage and confirms active cycle.
+	now = now.Add(65 * time.Second)
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fixture.mu.Lock()
+	readsAfterSettle := fixture.usageReads
+	fixture.mu.Unlock()
+	if readsAfterSettle != 3 {
+		t.Fatalf("expected 1 post-send settle read (total 3), got %d", readsAfterSettle)
+	}
+	codexSettingsAfterSettle := getWarmupSettingsWire(t, caller, baseURL)
+	if gotNext := codexSettingsAfterSettle.Next[taskID]; gotNext == nil || *gotNext != warmup.FormatISO(lockedFirstReset.Add(warmup.WINDOW_GRACE)) {
+		t.Fatalf("unexpected Codex HTTP next after settle: %v", gotNext)
+	}
+
+	// Mid-cycle ticks make no redundant quota reads and send nothing.
+	for _, step := range []time.Duration{time.Minute, time.Hour, 2 * time.Hour} {
+		now = now.Add(step)
+		if err := handler.runCredentialWarmupRound(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fixture.mu.Lock()
+	if fixture.sends != 1 || fixture.usageReads != 3 {
+		t.Fatalf("mid-cycle: sends=%d usageReads=%d, want 1 and 3", fixture.sends, fixture.usageReads)
+	}
+	fixture.mu.Unlock()
+
+	// Five-hour rollover at lockedFirstReset + 35s: upstream returns a fresh sliding 5h boundary, and warmup fires on schedule.
+	now = lockedFirstReset.Add(35 * time.Second)
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fixture.mu.Lock()
+	if fixture.sends != 2 || fixture.usageReads != 4 {
+		t.Fatalf("post-rollover: sends=%d usageReads=%d, want 2 and 4", fixture.sends, fixture.usageReads)
+	}
+	fixture.mu.Unlock()
+	codexSettingsAfterRollover := getWarmupSettingsWire(t, caller, baseURL)
+	if len(codexSettingsAfterRollover.Runs) != 2 || codexSettingsAfterRollover.Runs[0].Outcome != "ok" || codexSettingsAfterRollover.Runs[0].ResetKey != warmup.FormatISO(lockedFirstReset) {
+		t.Fatalf("expected second scheduled Codex run for %s over HTTP, got %+v", warmup.FormatISO(lockedFirstReset), codexSettingsAfterRollover.Runs)
+	}
+}
+
+func TestWarmupAntigravityGroupedWindowRolloverFiresAndHonorsRefreshBackoff(t *testing.T) {
+	now := time.Date(2026, 11, 13, 11, 4, 0, 0, time.UTC)
+	fiveReset1 := time.Date(2026, 11, 13, 12, 27, 0, 0, time.UTC)
+	weekReset1 := time.Date(2026, 11, 18, 17, 21, 0, 0, time.UTC)
+	fixture := &warmupFixture{
+		provider:          "antigravity",
+		agFiveRemaining:   0.77,
+		agWeeklyRemaining: 0.30,
+		agFiveResetAt:     fiveReset1,
+		agWeeklyResetAt:   weekReset1,
+		clockFn:           func() time.Time { return now },
+	}
+	handler := newWarmupHandler(t, fixture)
+	handler.nowFn = func() time.Time { return now }
+	ctx := context.Background()
+
+	// Seed initial Antigravity quota observation so grouped window IDs are present in the catalog.
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	client, err := handler.capabilityClient(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if handler.refreshWarmupQuota(ctx, client, findWarmupTestFile(t, handler, ctx, "exact-antigravity")) != warmupQuotaRefreshed {
+		t.Fatal("initial antigravity quota seed failed")
+	}
+	caller, baseURL := warmupHTTPClient(t, handler)
+
+	fiveState := postWarmupTaskWire(t, caller, baseURL, map[string]any{
+		"enabled":    true,
+		"provider":   "antigravity",
+		"auth_index": "exact-antigravity",
+		"model":      "gemini-3.8-flash",
+		"trigger":    map[string]any{"kind": "window", "window": "ag_Gemini Models_gemini-5h"},
+	})
+	fiveTaskID := fiveState.Tasks[0].ID
+
+	allState := postWarmupTaskWire(t, caller, baseURL, map[string]any{
+		"enabled":    true,
+		"provider":   "antigravity",
+		"auth_index": "exact-antigravity",
+		"model":      "gemini-3.8-flash",
+		"trigger":    map[string]any{"kind": "window", "window": "ag_Gemini Models_gemini-week"},
+	})
+	var weekTaskID string
+	for _, task := range allState.Tasks {
+		if task.ID != fiveTaskID {
+			weekTaskID = task.ID
+		}
+	}
+	initialSettings := getWarmupSettingsWire(t, caller, baseURL)
+	if got5h := initialSettings.Next[fiveTaskID]; got5h == nil || *got5h != warmup.FormatISO(fiveReset1.Add(warmup.WINDOW_GRACE)) {
+		t.Fatalf("unexpected 5h HTTP next instant: %v", got5h)
+	}
+	if gotWeek := initialSettings.Next[weekTaskID]; gotWeek == nil || *gotWeek != warmup.FormatISO(weekReset1.Add(warmup.WINDOW_GRACE)) {
+		t.Fatalf("unexpected weekly HTTP next instant: %v", gotWeek)
+	}
+	if len(initialSettings.Runs) != 0 {
+		t.Fatalf("expected 0 initial HTTP runs, got %d", len(initialSettings.Runs))
+	}
+
+	// Phase 1: Normal rollover at fiveReset1 + 35s — upstream reports 100% remaining and next reset +5h.
+	fiveReset2 := fiveReset1.Add(5 * time.Hour)
+	fixture.mu.Lock()
+	fixture.agFiveRemaining = 1.0
+	fixture.agFiveResetAt = fiveReset2
+	fixture.mu.Unlock()
+	now = fiveReset1.Add(35 * time.Second)
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fixture.mu.Lock()
+	if fixture.sends != 1 || fixture.lastModel != "gemini-3.8-flash" {
+		t.Fatalf("phase 1 rollover: sends=%d model=%q, want 1 gemini-3.8-flash", fixture.sends, fixture.lastModel)
+	}
+	fixture.mu.Unlock()
+	rolloverSettings := getWarmupSettingsWire(t, caller, baseURL)
+	if got5h := rolloverSettings.Next[fiveTaskID]; got5h == nil || *got5h != warmup.FormatISO(fiveReset2.Add(warmup.WINDOW_GRACE)) {
+		t.Fatalf("unexpected 5h HTTP next instant after rollover: %v", got5h)
+	}
+	if gotWeek := rolloverSettings.Next[weekTaskID]; gotWeek == nil || *gotWeek != warmup.FormatISO(weekReset1.Add(warmup.WINDOW_GRACE)) {
+		t.Fatalf("unexpected weekly HTTP next instant after 5h rollover: %v", gotWeek)
+	}
+	if len(rolloverSettings.Runs) != 1 || rolloverSettings.Runs[0].TaskID != fiveTaskID || rolloverSettings.Runs[0].Outcome != "ok" || rolloverSettings.Runs[0].ResetKey != warmup.FormatISO(fiveReset1) {
+		t.Fatalf("expected Antigravity 5h HTTP run without firing weekly task (%s), got %+v", weekTaskID, rolloverSettings.Runs)
+	}
+
+	// Settle post-send quota reading for cycle 2.
+	now = now.Add(65 * time.Second)
+	fixture.mu.Lock()
+	fixture.agFiveRemaining = 0.99
+	fixture.mu.Unlock()
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Phase 2: At fiveReset2 + 35s, simulate a transient upstream 500 on quota read: backoff activates for 5m without burning the reset key.
+	fixture.mu.Lock()
+	fixture.usageHTTPStatus = http.StatusInternalServerError
+	readsBeforeFailure := fixture.usageReads
+	fixture.mu.Unlock()
+	now = fiveReset2.Add(35 * time.Second)
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now = fiveReset2.Add(95 * time.Second)
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fixture.mu.Lock()
+	// One failed Antigravity quota read tries the 3 regional Cloud Code endpoints, then backs off for 5m.
+	if fixture.sends != 1 || fixture.usageReads != readsBeforeFailure+3 {
+		t.Fatalf("during 5m backoff: sends=%d usageReads=%d, want 1 and %d", fixture.sends, fixture.usageReads, readsBeforeFailure+3)
+	}
+	fiveReset3 := fiveReset2.Add(5 * time.Hour)
+	fixture.usageHTTPStatus = http.StatusOK
+	fixture.agFiveRemaining = 1.0
+	fixture.agFiveResetAt = fiveReset3
+	fixture.mu.Unlock()
+
+	now = fiveReset2.Add(warmupRefreshBackoff + 40*time.Second)
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fixture.mu.Lock()
+	if fixture.sends != 2 {
+		t.Fatalf("after recovery: sends=%d, want 2", fixture.sends)
+	}
+	fixture.mu.Unlock()
+
+	// Settle post-send quota reading for cycle 3, then simulate an external quota refresh (e.g. RunQuotaAutoRefresh)
+	// landing right after fiveReset3 before the warmup round ticks: warmup must still fire.
+	now = now.Add(65 * time.Second)
+	fixture.mu.Lock()
+	fixture.agFiveRemaining = 0.99
+	fixture.mu.Unlock()
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	fiveReset4 := fiveReset3.Add(5 * time.Hour)
+	now = fiveReset3.Add(40 * time.Second)
+	fixture.mu.Lock()
+	fixture.agFiveRemaining = 1.0
+	fixture.agFiveResetAt = fiveReset4
+	fixture.mu.Unlock()
+	if handler.refreshWarmupQuota(ctx, client, findWarmupTestFile(t, handler, ctx, "exact-antigravity")) != warmupQuotaRefreshed {
+		t.Fatal("external post-reset refresh failed")
+	}
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fixture.mu.Lock()
+	if fixture.sends != 3 {
+		t.Fatalf("expected external refresh before warmup tick to still fire 5h task, got sends=%d", fixture.sends)
+	}
+	fixture.mu.Unlock()
+
+	// Settle post-send quota reading for cycle 4, then manually run the 5h task at fiveReset4 + 20s:
+	// when a fresh 0%-usage snapshot arrives at fiveReset4 + 30s and the scheduler ticks at +31s,
+	// the manual post-reset send must retire fiveReset4 so only 1 CPA send occurs for that boundary.
+	now = now.Add(65 * time.Second)
+	fixture.mu.Lock()
+	fixture.agFiveRemaining = 0.99
+	fixture.mu.Unlock()
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fiveReset5 := fiveReset4.Add(5 * time.Hour)
+	now = fiveReset4.Add(20 * time.Second)
+	manualResp, err := caller.Post(baseURL+"/api/v1/management/quota/warmup/tasks/"+fiveTaskID+"/run", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = manualResp.Body.Close()
+	if manualResp.StatusCode != http.StatusOK {
+		t.Fatalf("manual run status=%d, want 200", manualResp.StatusCode)
+	}
+	fixture.mu.Lock()
+	if fixture.sends != 4 {
+		t.Fatalf("expected manual post-reset run to send once (total 4), got %d", fixture.sends)
+	}
+	fixture.agFiveRemaining = 1.0
+	fixture.agFiveResetAt = fiveReset5
+	fixture.mu.Unlock()
+	now = fiveReset4.Add(30 * time.Second)
+	if handler.refreshWarmupQuota(ctx, client, findWarmupTestFile(t, handler, ctx, "exact-antigravity")) != warmupQuotaRefreshed {
+		t.Fatal("post-manual refresh failed")
+	}
+	now = fiveReset4.Add(31 * time.Second)
+	if err := handler.runCredentialWarmupRound(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fixture.mu.Lock()
+	if fixture.sends != 4 {
+		t.Fatalf("scheduler resent after post-reset manual send: sends=%d, want 4", fixture.sends)
+	}
+	fixture.mu.Unlock()
+
+	// Updating only the display Account when AuthIndex stays unchanged must preserve ResetKeys/LastSent,
+	// whereas switching Trigger.Window resets marks to the newly selected window's boundary.
+	marksBeforeRename, err := handler.repo.ReadWarmupMarks(ctx, "default", fiveTaskID)
+	if err != nil || len(marksBeforeRename.ResetKeys) == 0 {
+		t.Fatalf("expected non-empty ResetKeys before rename, got %+v (err=%v)", marksBeforeRename, err)
+	}
+	if _, err := handler.saveWarmupTask(ctx, fiveTaskID, warmup.TaskInput{
+		Enabled:   true,
+		Provider:  "antigravity",
+		AuthIndex: "exact-antigravity",
+		Account:   "renamed-display-label",
+		Model:     "gemini-3.8-flash",
+		Trigger:   warmup.Trigger{Kind: "window", Window: "ag_Gemini Models_gemini-5h"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	marksAfterRename, err := handler.repo.ReadWarmupMarks(ctx, "default", fiveTaskID)
+	if err != nil || !reflect.DeepEqual(marksAfterRename.ResetKeys, marksBeforeRename.ResetKeys) || marksAfterRename.LastSent != marksBeforeRename.LastSent {
+		t.Fatalf("Account display rename with stable AuthIndex wiped marks: before=%+v after=%+v", marksBeforeRename, marksAfterRename)
+	}
+	if _, err := handler.saveWarmupTask(ctx, fiveTaskID, warmup.TaskInput{
+		Enabled:   true,
+		Provider:  "antigravity",
+		AuthIndex: "exact-antigravity",
+		Account:   "renamed-display-label",
+		Model:     "gemini-3.8-flash",
+		Trigger:   warmup.Trigger{Kind: "window", Window: "ag_Gemini Models_gemini-week"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	marksAfterWindowSwitch, err := handler.repo.ReadWarmupMarks(ctx, "default", fiveTaskID)
+	if err != nil || len(marksAfterWindowSwitch.ResetKeys) != 0 || marksAfterWindowSwitch.LastReset != warmup.FormatISO(weekReset1) {
+		t.Fatalf("switching target window did not atomically reset marks to weekly boundary: %+v (err=%v)", marksAfterWindowSwitch, err)
+	}
+
+	// Re-enabling a task concurrently with a scheduler ResetKeys update must read-modify-write inside
+	// a single SQLite transaction so a newly recorded ResetKey is never overwritten.
+	if _, err := handler.saveWarmupTask(ctx, fiveTaskID, warmup.TaskInput{
+		Enabled:   false,
+		Provider:  "antigravity",
+		AuthIndex: "exact-antigravity",
+		Account:   "renamed-display-label",
+		Model:     "gemini-3.8-flash",
+		Trigger:   warmup.Trigger{Kind: "window", Window: "ag_Gemini Models_gemini-week"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	concurrentResetKey := warmup.FormatISO(weekReset1)
+	enteredSchedulerTx := make(chan struct{})
+	releaseSchedulerTx := make(chan struct{})
+	schedulerDone := make(chan error, 1)
+	go func() {
+		_, txErr := handler.repo.UpdateWarmupMarks(ctx, "default", fiveTaskID, now.UnixMilli(), func(current warmup.TaskMarks) (warmup.TaskMarks, bool, error) {
+			close(enteredSchedulerTx)
+			<-releaseSchedulerTx
+			current.ResetKeys = append(current.ResetKeys, concurrentResetKey)
+			return current, true, nil
+		})
+		schedulerDone <- txErr
+	}()
+	<-enteredSchedulerTx
+	saveDone := make(chan error, 1)
+	go func() {
+		_, saveErr := handler.saveWarmupTask(ctx, fiveTaskID, warmup.TaskInput{
+			Enabled:   true,
+			Provider:  "antigravity",
+			AuthIndex: "exact-antigravity",
+			Account:   "renamed-display-label",
+			Model:     "gemini-3.8-flash",
+			Trigger:   warmup.Trigger{Kind: "window", Window: "ag_Gemini Models_gemini-week"},
+		})
+		saveDone <- saveErr
+	}()
+	// Give saveWarmupTask time to finish catalog/audit work and wait at the single-writer transaction boundary.
+	time.Sleep(25 * time.Millisecond)
+	close(releaseSchedulerTx)
+	if err := <-schedulerDone; err != nil {
+		t.Fatalf("concurrent scheduler UpdateWarmupMarks failed: %v", err)
+	}
+	if err := <-saveDone; err != nil {
+		t.Fatalf("concurrent saveWarmupTask failed: %v", err)
+	}
+	marksAfterConcurrentReenable, err := handler.repo.ReadWarmupMarks(ctx, "default", fiveTaskID)
+	if err != nil || !slices.Contains(marksAfterConcurrentReenable.ResetKeys, concurrentResetKey) {
+		t.Fatalf("concurrent task re-enable overwrote scheduler ResetKey %q: %+v (err=%v)", concurrentResetKey, marksAfterConcurrentReenable, err)
+	}
+
+	// If an intervening save switches the persisted target before another save's transaction runs,
+	// WriteWarmupTaskWithMarks must compare against the in-transaction persisted task rather than
+	// retaining the intervening target's LastReset.
+	enteredTargetTx := make(chan struct{})
+	releaseTargetTx := make(chan struct{})
+	interveningDone := make(chan error, 1)
+	if _, err := handler.saveWarmupTask(ctx, fiveTaskID, warmup.TaskInput{
+		Enabled:   true,
+		Provider:  "antigravity",
+		AuthIndex: "exact-antigravity",
+		Account:   "label-before",
+		Model:     "gemini-3.8-flash",
+		Trigger:   warmup.Trigger{Kind: "window", Window: "ag_Gemini Models_gemini-5h"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		txErr := handler.repo.WriteWarmupTaskWithMarks(ctx, "default", warmup.Task{
+			ID:        fiveTaskID,
+			Name:      "intervening-weekly",
+			Enabled:   true,
+			Provider:  "antigravity",
+			AuthIndex: "exact-antigravity",
+			Account:   "label-before",
+			Model:     "gemini-3.8-flash",
+			Trigger:   warmup.Trigger{Kind: "window", Window: "ag_Gemini Models_gemini-week"},
+			UpdatedAt: warmup.FormatISO(now),
+		}, true, now.UnixMilli(), func(_ *warmup.Task, _ warmup.TaskMarks) (*warmup.TaskMarks, error) {
+			close(enteredTargetTx)
+			<-releaseTargetTx
+			weeklyMarks := warmup.TaskMarks{LastReset: warmup.FormatISO(weekReset1)}
+			return &weeklyMarks, nil
+		})
+		interveningDone <- txErr
+	}()
+	<-enteredTargetTx
+	renameSaveDone := make(chan error, 1)
+	go func() {
+		_, saveErr := handler.saveWarmupTask(ctx, fiveTaskID, warmup.TaskInput{
+			Enabled:   true,
+			Provider:  "antigravity",
+			AuthIndex: "exact-antigravity",
+			Account:   "label-after",
+			Model:     "gemini-3.8-flash",
+			Trigger:   warmup.Trigger{Kind: "window", Window: "ag_Gemini Models_gemini-5h"},
+		})
+		renameSaveDone <- saveErr
+	}()
+	time.Sleep(25 * time.Millisecond)
+	close(releaseTargetTx)
+	if err := <-interveningDone; err != nil {
+		t.Fatalf("intervening target switch failed: %v", err)
+	}
+	if err := <-renameSaveDone; err != nil {
+		t.Fatalf("concurrent rename save failed: %v", err)
+	}
+	marksAfterInterveningTarget, err := handler.repo.ReadWarmupMarks(ctx, "default", fiveTaskID)
+	if err != nil || marksAfterInterveningTarget.LastReset != warmup.FormatISO(fiveReset5) {
+		t.Fatalf("concurrent save retained intervening weekly LastReset instead of 5h boundary %s: %+v (err=%v)", warmup.FormatISO(fiveReset5), marksAfterInterveningTarget, err)
+	}
+}
+
+func findWarmupTestFile(t *testing.T, handler *Handler, ctx context.Context, authIndex string) management.AuthFile {
+	t.Helper()
+	client, err := handler.capabilityClient(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, files := handler.warmupCatalogWithFiles(ctx, client)
+	file, ok := files[authIndex]
+	if !ok {
+		t.Fatalf("missing test file %q", authIndex)
+	}
+	return file
+}
+
+func postWarmupTaskWire(t *testing.T, caller *http.Client, baseURL string, payload map[string]any) warmup.StateView {
+	t.Helper()
+	rawPayload, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := caller.Post(baseURL+"/api/v1/management/quota/warmup/tasks", "application/json", bytes.NewReader(rawPayload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /warmup/tasks status=%d, want 201", resp.StatusCode)
+	}
+	return decodeWarmupStateWire(t, resp)
+}
+
+func getWarmupSettingsWire(t *testing.T, caller *http.Client, baseURL string) warmup.StateView {
+	t.Helper()
+	resp, err := caller.Get(baseURL + "/api/v1/management/quota/warmup/settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /warmup/settings status=%d, want 200", resp.StatusCode)
+	}
+	return decodeWarmupStateWire(t, resp)
+}
+
+func decodeWarmupStateWire(t *testing.T, resp *http.Response) warmup.StateView {
+	t.Helper()
+	var wireMap map[string]any
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(resp.Body); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(buf.Bytes(), &wireMap); err != nil {
+		t.Fatalf("invalid warmup settings JSON: %v", err)
+	}
+	if bytes.Contains(buf.Bytes(), []byte("period_hours")) || bytes.Contains(buf.Bytes(), []byte("periodHours")) {
+		t.Fatalf("internal window PeriodHours leaked onto HTTP wire response: %s", buf.String())
+	}
+	for _, requiredKey := range []string{"tasks", "runs", "next", "timeline"} {
+		if _, ok := wireMap[requiredKey]; !ok {
+			t.Fatalf("missing required wire key %q in %s", requiredKey, buf.String())
+		}
+	}
+	var state warmup.StateView
+	if err := json.Unmarshal(buf.Bytes(), &state); err != nil {
+		t.Fatalf("unmarshal warmup StateView wire payload: %v", err)
+	}
+	return state
 }

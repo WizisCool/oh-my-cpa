@@ -6,11 +6,15 @@ const (
 	FIVE_HOUR_MS = int64((5 * time.Hour) / time.Millisecond)
 	WEEK_MS      = int64((7 * 24 * time.Hour) / time.Millisecond)
 
-	WINDOW_GRACE     = 30 * time.Second
-	DAILY_LOOKBACK   = 48 * time.Hour
-	POST_SEND_SETTLE = 60 * time.Second
-	CARD_FRESH_AGE   = 60 * time.Second
-	CATCHUP_LAG      = 90 * time.Second
+	WINDOW_GRACE             = 30 * time.Second
+	DAILY_LOOKBACK           = 48 * time.Hour
+	POST_SEND_SETTLE         = 60 * time.Second
+	SLIDING_CONFIRM_INTERVAL = 45 * time.Second
+	SLIDING_DRIFT_TOLERANCE  = 15 * time.Second
+	SLIDING_FIXED_TOLERANCE  = 5 * time.Second
+	SLIDING_FULL_MARGIN      = 10 * time.Minute
+	CARD_FRESH_AGE           = 60 * time.Second
+	CATCHUP_LAG              = 90 * time.Second
 
 	MIN_EVERY_HOURS   = 1
 	MAX_EVERY_HOURS   = 168
@@ -80,10 +84,14 @@ type Run struct {
 }
 
 type TaskMarks struct {
-	LastDue   string   `json:"last_due,omitempty"`
-	ResetKeys []string `json:"reset_keys,omitempty"`
-	LastReset string   `json:"last_reset,omitempty"`
-	LastSent  string   `json:"last_sent,omitempty"`
+	LastDue          string   `json:"last_due,omitempty"`
+	ResetKeys        []string `json:"reset_keys,omitempty"`
+	LastReset        string   `json:"last_reset,omitempty"`
+	LastSent         string   `json:"last_sent,omitempty"`
+	ObservedAt       string   `json:"observed_at,omitempty"`
+	ObservedResetsAt string   `json:"observed_resets_at,omitempty"`
+	ConfirmedReset   string   `json:"confirmed_reset,omitempty"`
+	IsSlidingIdle    bool     `json:"sliding_idle,omitempty"`
 }
 
 type QuotaWindow struct {
@@ -91,6 +99,7 @@ type QuotaWindow struct {
 	Label       string   `json:"label"`
 	UsedPercent *float64 `json:"used_percent"`
 	ResetsAt    string   `json:"resets_at,omitempty"`
+	PeriodHours float64  `json:"-"`
 }
 
 type CatalogAccount struct {
