@@ -89,9 +89,6 @@ func ParseKimiUsage(raw []byte, nowMS int64) ([]QuotaWindow, error) {
 		if label == "" {
 			label = item.Name
 		}
-		if label == "" {
-			label = fmt.Sprintf("限制项 %d", i+1)
-		}
 
 		rawUsed := item.Used
 		rawLimit := item.Limit
@@ -154,6 +151,12 @@ func ParseKimiUsage(raw []byte, nowMS int64) ([]QuotaWindow, error) {
 
 		usedVal, hasUsed := toFloat(rawUsed)
 		limVal, hasLim := toFloat(rawLimit)
+		if !hasUsed && hasLim && limVal > 0 && item.Detail != nil {
+			if remaining, ok := toFloat(item.Detail.Remaining); ok && remaining >= 0 {
+				usedVal = clamp(limVal-remaining, 0, limVal)
+				hasUsed = true
+			}
+		}
 
 		var usedPercent *float64
 		var remainingPercent *float64
@@ -225,10 +228,25 @@ func ParseKimiUsage(raw []byte, nowMS int64) ([]QuotaWindow, error) {
 			scope = "model"
 		}
 
+		if label == "" {
+			switch {
+			case item.Scope != "":
+				label = item.Scope
+			case periodHours != nil:
+				label = fmt.Sprintf("%gh", *periodHours)
+			default:
+				label = "Quota"
+			}
+		}
+		kind := kimiPeriodKind(periodHours)
+		if kind == "" {
+			kind = "custom"
+		}
+
 		windows = append(windows, QuotaWindow{
 			ID:               fmt.Sprintf("kimi_%d", i),
 			Label:            label,
-			Kind:             "custom",
+			Kind:             kind,
 			Scope:            scope,
 			Model:            item.Scope,
 			Used:             usedPtr,

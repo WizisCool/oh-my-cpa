@@ -3,7 +3,7 @@
     {
       "id": "kimi_0",
       "label": "每日限额",
-      "kind": "custom",
+      "kind": "daily",
       "scope": "model",
       "model": "moonshot-v1-8k",
       "used": 150,

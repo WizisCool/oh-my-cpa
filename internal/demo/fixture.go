@@ -940,12 +940,10 @@ func quotaPayloads(now time.Time) map[string]any {
 			},
 		},
 		kimiUsageURL: map[string]any{
-			"data": map[string]any{
-				"limits": []map[string]any{{
-					"window": map[string]any{"duration": 300, "timeUnit": "TIME_UNIT_MINUTE"},
-					"detail": map[string]any{"limit": 1000, "remaining": 682, "resetTime": resetAt},
-				}},
-			},
+			"limits": []map[string]any{{
+				"window": map[string]any{"duration": 300, "timeUnit": "TIME_UNIT_MINUTE"},
+				"detail": map[string]any{"limit": 1000, "remaining": 682, "resetTime": resetAt},
+			}},
 		},
 		// The credits document is the subscription's own window and the ledger beside it is the
 		// account's metered spending. They are two reads on one path, and only the credits one
