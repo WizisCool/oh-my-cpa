@@ -273,7 +273,13 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
       )}
 
       {windows.length > 0 ? (
-        <QuotaWindowCards windows={windows} nowMS={nowMS} owner={{ authIndex: item.auth_index, credentialName: credentialLabel, mark: credentialMark }} />
+        <QuotaWindowCards
+          windows={windows}
+          nowMS={nowMS}
+          provider={item.provider}
+          observedAtMS={item.observed_at_ms}
+          owner={{ authIndex: item.auth_index, credentialName: credentialLabel, mark: credentialMark }}
+        />
       ) : (
         <div className={styles['no-window']}>{t(quotaEmptyStateKey(item))}</div>
       )}

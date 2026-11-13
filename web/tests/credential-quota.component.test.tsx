@@ -273,7 +273,7 @@ describe('credential list row', () => {
   it('shows the five-hour and weekly limits in place with reset times, unused window duration, and derived estimate markers', () => {
     const { container } = renderCredentialRow(quota('codex-full', [
       { ...quotaWindow('weekly', 100, 48), reset_accuracy: 'derived' },
-      { ...quotaWindow('five_hour', 100, 2), used_percent: 0 },
+      { ...quotaWindow('five_hour', 100, 5), used_percent: 0 },
     ]));
     const cells = container.querySelectorAll<HTMLElement>('[data-quota-window-label]');
     expect(within(cells[0]).getByText('100%')).toBeTruthy();

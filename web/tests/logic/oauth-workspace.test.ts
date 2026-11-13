@@ -26,7 +26,7 @@ import { orderQuotaWindows, quotaWindowFullName, quotaWindowGroupKey, quotaWindo
 import { applyKeyOrder, moveKey, parseGroupedOrder, parseRankOrder, rankedKeys, ranksOf } from '../../src/types/displayOrder.ts';
 import { credentialStatusOf, compareSections, quotaCellsOf, quotaLinesOf, quotaReadingName, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection, providersInSectionOrder } from '../../src/pages/oauthManagement/credentialSections.ts';
 import type { QuotaWindow } from '../../src/types/quota.ts';
-import { formatShortDateTime, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../../src/pages/quota/quotaFormat.ts';
+import { formatShortDateTime, isUnusedFullCodexFiveHourWindow, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../../src/pages/quota/quotaFormat.ts';
 import { matchesStatusFilter } from '../../src/components/authFiles/authFileLogic.ts';
 import { healthBucketOf, healthCounts, matchesHealthLens, parseHealthLens, providerSummaries } from '../../src/pages/oauthManagement/fleetPresentation.ts';
 import { siwcBadgeState } from '../../src/components/authFiles/siwcBadge.ts';
@@ -970,4 +970,74 @@ test('antigravity list excludes Claude and GPT while drawer preserves all window
   assert.equal(drawerWindows.length, 5);
   const drawerLabels = drawerWindows.map((w) => w.label);
   assert.equal(drawerLabels.some((l) => l.includes('Claude and GPT')), true);
+});
+
+test('isUnusedFullCodexFiveHourWindow distinguishes unstarted windows from started zero-percent cycles', () => {
+  const observedAt = 1_794_583_624_338;
+  const fiveHours = 5 * 3_600_000;
+  const base: QuotaWindow = {
+    id: 'five_hour',
+    label: '5小时用量上限 (5-Hour)',
+    kind: 'five_hour',
+    scope: 'standard',
+    used_percent: 0,
+    remaining_percent: 100,
+    reset_accuracy: 'exact',
+  };
+
+  // Unstarted: reset is ~5h out from observation (even with slight jitter or 5m elapsed on the page)
+  assert.equal(
+    isUnusedFullCodexFiveHourWindow('codex', { ...base, reset_at_ms: observedAt + fiveHours + 676 }, observedAt, observedAt + 5 * 60_000),
+    true,
+  );
+  // Unstarted: reset_at_ms slightly below 5h due to whole-second truncation upstream
+  assert.equal(
+    isUnusedFullCodexFiveHourWindow('codex', { ...base, reset_at_ms: observedAt + fiveHours - 271 }, observedAt, observedAt),
+    true,
+  );
+  // Unstarted: no reset timestamp reported at all
+  assert.equal(
+    isUnusedFullCodexFiveHourWindow('codex', base, observedAt, observedAt),
+    true,
+  );
+
+  // Active cycle that started ~2h ago (e.g. warmup / small requests rounding to 0% used)
+  assert.equal(
+    isUnusedFullCodexFiveHourWindow('codex', { ...base, reset_at_ms: observedAt + 3 * 3_600_000 + 4 * 60_000 }, observedAt, observedAt),
+    false,
+  );
+  // Active cycle observed 30s after starting with no local requests, evaluated 2h later
+  assert.equal(
+    isUnusedFullCodexFiveHourWindow(
+      'codex',
+      { ...base, reset_at_ms: observedAt + fiveHours - 30_000 },
+      observedAt,
+      observedAt + 2 * 3_600_000,
+    ),
+    false,
+  );
+  // Active cycle 2 minutes after warmup
+  assert.equal(
+    isUnusedFullCodexFiveHourWindow('codex', { ...base, reset_at_ms: observedAt + fiveHours - 124_000 }, observedAt, observedAt),
+    false,
+  );
+  // Active cycle with recorded usage even inside the first minute
+  assert.equal(
+    isUnusedFullCodexFiveHourWindow('codex', {
+      ...base,
+      reset_at_ms: observedAt + fiveHours - 5_000,
+      usage: { from_ms: observedAt - 5_000, to_ms: observedAt, requests: 1, priced_requests: 1, tokens: 100, cost_nanos: 100 },
+    }, observedAt, observedAt),
+    false,
+  );
+  // Stale reading past its recorded reset
+  assert.equal(
+    isUnusedFullCodexFiveHourWindow('codex', { ...base, reset_at_ms: observedAt + fiveHours }, observedAt, observedAt + fiveHours + 1_000),
+    false,
+  );
+  // Positive usage, non-Codex provider, weekly or model-scoped windows
+  assert.equal(isUnusedFullCodexFiveHourWindow('codex', { ...base, used_percent: 0.2, remaining_percent: 99.8 }, observedAt, observedAt), false);
+  assert.equal(isUnusedFullCodexFiveHourWindow('claude', base, observedAt, observedAt), false);
+  assert.equal(isUnusedFullCodexFiveHourWindow('codex', { ...base, id: 'weekly', kind: 'weekly' }, observedAt, observedAt), false);
+  assert.equal(isUnusedFullCodexFiveHourWindow('codex', { ...base, scope: 'model', model: 'gpt-5' }, observedAt, observedAt), false);
 });
