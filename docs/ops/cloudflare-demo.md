@@ -46,7 +46,7 @@ pnpm exec wrangler deploy --config deploy/cloudflare/wrangler.jsonc --dry-run
 
 `build:demo` stages an already-built SPA and ensures `deploy/cloudflare/data/responses.json` is generated; it does not build the SPA itself. A fresh checkout has no embedded production assets. If `go` is absent from `PATH` (for example on Cloudflare Workers Builds), `scripts/generate-demo-data.mjs` downloads and verifies the Go toolchain pinned in `scripts/tools-versions.json`.
 
-`pnpm check:demo` and `pnpm test:self` verify dataset privacy, schema coverage, refusal rules, and Worker route matching. Local built-artifact browser acceptance and its setup are described in [Testing](../testing.md).
+`pnpm check:demo` and `pnpm test:self` verify dataset privacy, schema coverage, refusal rules, and Worker route matching; `ci.yml` also verifies `pnpm build:demo` and `wrangler deploy --dry-run` whenever browser-facing or API code changes. Local built-artifact browser acceptance and its setup are described in [Testing](../testing.md).
 
 ## Deploy
 

@@ -203,9 +203,13 @@ reviews:
       instructions: >-
         Every `uses:` is pinned to a commit SHA and every checkout sets
         `persist-credentials: false` (`pnpm verify:workflow:lint`). The required
-        `static`, `browser` and `probes` checks are aggregates that must wait on
-        the `changes` job and fail on any lane result other than success or skipped,
-        or a failed scope decision would read as a pass.
+        `static`, `browser` and `probes` checks are aggregates: `static` must
+        wait on `changes` and require `changes`, `static-repo`, and every
+        selected static lane (`static-go`, `static-frontend`, `docker-check`)
+        to succeed (and unselected lanes to be skipped); `browser` must wait on
+        `changes` and require `changes` plus `browser-acceptance` (when selected)
+        to succeed; `probes` and `verify` require both `static` and `browser`
+        to succeed, so a failed scope decision can never read as a pass.
     - path: '{Dockerfile,.env.example,deploy/**}'
       instructions: >-
         Deployment surface. The image is one CGO-free binary with the SPA

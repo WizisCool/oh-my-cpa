@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, labeled]
+  merge_group:
   schedule:
     - cron: '17 19 * * *'
   workflow_dispatch:
@@ -14,35 +15,50 @@ permissions:
   contents: read
   actions: read
 
+env:
+  # Shipped binaries are CGO-free; sharing one build mode keeps Go caches warm across lanes.
+  CGO_ENABLED: '0'
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  static-go:
+  changes:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.scope.outputs.go }}
+      frontend: ${{ steps.scope.outputs.frontend }}
+      browser: ${{ steps.scope.outputs.browser }}
+      docker: ${{ steps.scope.outputs.docker }}
+      full: ${{ steps.scope.outputs.full }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Set up Go
-        uses: ./.github/actions/setup-go
-      - name: Test
-        run: go test ./...
-      - name: Lint
+          fetch-depth: 0
+      - name: Reject unresolved merge conflict markers
         run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
-          "$(go env GOPATH)/bin/golangci-lint" run ./...
-      - name: Verify clean generated state
-        run: test -z "$(git status --porcelain)"
+          if git grep -nIE '^(<<<<<<< |\|\|\|\|\|\|\| |=======$|>>>>>>> )'; then
+            echo "::error::Unresolved merge conflict markers found in tracked files"
+            exit 1
+          fi
+      - name: Decide required verification lanes
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: node scripts/ci-scope.mjs >> "$GITHUB_OUTPUT"
 
-  static-frontend:
+  static-repo:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
-      - name: Checkout
+      - name: Checkout full history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
@@ -57,19 +73,21 @@ jobs:
           path: |
             .tools/gitleaks
             .tools/lychee
-          key: verification-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/tools-versions.json') }}
+            .tools/bin/actionlint
+          key: verification-tools-${{ runner.os }}-${{ runner.arch }}-actionlint-v1.7.12-${{ hashFiles('scripts/tools-versions.json') }}
       - name: Lint workflows
+        env:
+          ACTIONLINT_BIN: .tools/bin/actionlint
         run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          if [ ! -x .tools/bin/actionlint ]; then
+            mkdir -p .tools/bin
+            GOBIN="$PWD/.tools/bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          fi
           pnpm verify:workflow:lint
       - name: Verify pinned toolchain
         run: pnpm verify:toolchain:strict
-      - name: Type check, unit/component tests, and Ant Design lint
-        run: pnpm verify:static:frontend
-      - name: Repository gates and documentation links
-        run: |
-          pnpm verify:static:repository
-          pnpm check-docs
+      - name: Check documentation links
+        run: pnpm check-docs
       - name: Scan worktree and history
         run: |
           pnpm verify:secrets:worktree
@@ -79,21 +97,42 @@ jobs:
           git diff --check
           test -z "$(git status --porcelain)"
 
-  static:
-    needs: [static-go, static-frontend]
-    if: always()
+  static-go:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
-      - name: Require all static gates
-        env:
-          GO_RESULT: ${{ needs.static-go.result }}
-          WEB_RESULT: ${{ needs.static-frontend.result }}
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+      - name: Cache Go linter
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            .tools/bin/golangci-lint
+            ~/.cache/golangci-lint
+          key: golangci-lint-${{ runner.os }}-${{ runner.arch }}-v2.15.0-${{ hashFiles('.golangci.yml', 'go.sum') }}
+          restore-keys: |
+            golangci-lint-${{ runner.os }}-${{ runner.arch }}-v2.15.0-
+      - name: Test
+        run: go test ./...
+      - name: Lint
         run: |
-          test "$GO_RESULT" = success
-          test "$WEB_RESULT" = success
+          if [ ! -x .tools/bin/golangci-lint ]; then
+            mkdir -p .tools/bin
+            GOBIN="$PWD/.tools/bin" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
+          fi
+          .tools/bin/golangci-lint run ./...
+      - name: Verify clean generated state
+        run: test -z "$(git status --porcelain)"
 
-  browser:
+  static-frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -105,36 +144,137 @@ jobs:
         uses: ./.github/actions/setup-go
       - name: Set up JavaScript workspace
         uses: ./.github/actions/setup-node
-      - name: Set up Chromium
-        uses: ./.github/actions/setup-browser
-      - name: Build embedded SPA and browser fixtures
+      - name: Type check and frontend tests
+        run: pnpm verify:static:frontend
+      - name: Repository contracts and demo dataset
+        run: pnpm verify:static:repository
+      - name: Verify clean generated state
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+
+  docker-check:
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
+      - name: Build container image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: oh-my-cpa:ci-test
+          build-args: |
+            VERSION=v0.0.0-ci
+            REVISION=${{ github.sha }}
+      - name: Smoke test container image
+        env:
+          RELEASE_TAG: v0.0.0-ci
+        run: node scripts/docker-smoke.mjs oh-my-cpa:ci-test
+
+  static:
+    needs: [changes, static-repo, static-go, static-frontend, docker-check]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require all selected static gates
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          REPO: ${{ needs.static-repo.result }}
+          NEED_GO: ${{ needs.changes.outputs.go }}
+          GO_RESULT: ${{ needs.static-go.result }}
+          NEED_WEB: ${{ needs.changes.outputs.frontend }}
+          WEB_RESULT: ${{ needs.static-frontend.result }}
+          NEED_DOCKER: ${{ needs.changes.outputs.docker }}
+          DOCKER_RESULT: ${{ needs.docker-check.result }}
+        run: |
+          test "$CHANGES" = success
+          test "$REPO" = success
+          if [ "$NEED_GO" = true ]; then test "$GO_RESULT" = success; else test "$GO_RESULT" = skipped; fi
+          if [ "$NEED_WEB" = true ]; then test "$WEB_RESULT" = success; else test "$WEB_RESULT" = skipped; fi
+          if [ "$NEED_DOCKER" = true ]; then test "$DOCKER_RESULT" = success; else test "$DOCKER_RESULT" = skipped; fi
+
+  browser-acceptance:
+    needs: changes
+    if: needs.changes.outputs.browser == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+      - name: Set up JavaScript workspace
+        uses: ./.github/actions/setup-node
+      - name: Cache Playwright Chromium
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/tools-versions.json') }}
+      - name: Prepare Chromium, embedded SPA, and browser fixtures
         id: prepare
         run: |
           set -o pipefail
+          install_log="$(mktemp)"
+          node scripts/install-chromium.mjs >"${install_log}" 2>&1 &
+          install_pid=$!
+          mkdir -p tmp
+          go build -trimpath -o tmp/seed-usage-browser ./scripts/fixture/seed-usage &
+          seed_build_pid=$!
+          build_status=0
           (
             ulimit -Sn 1024
             ulimit -Hn 1024
             pnpm build
-          )
-          mkdir -p tmp
-          CGO_ENABLED=0 go build -trimpath -o tmp/seed-usage-browser ./scripts/fixture/seed-usage
-          CGO_ENABLED=0 go build -trimpath -o tmp/oh-my-cpa-browser ./cmd/oh-my-cpa
+          ) || build_status=$?
+          go_status=0
+          if [ "${build_status}" -eq 0 ]; then
+            go build -trimpath -o tmp/oh-my-cpa-browser ./cmd/oh-my-cpa || go_status=$?
+          fi
+          seed_status=0
+          wait "${seed_build_pid}" || seed_status=$?
+          install_status=0
+          wait "${install_pid}" || install_status=$?
+          cat "${install_log}"
+          if [ "${build_status}" -ne 0 ]; then
+            exit "${build_status}"
+          fi
+          if [ "${go_status}" -ne 0 ]; then
+            exit "${go_status}"
+          fi
+          if [ "${seed_status}" -ne 0 ]; then
+            exit "${seed_status}"
+          fi
+          exit "${install_status}"
       - name: Verify loading boundaries and report bundle growth
         env:
-          BUNDLE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BUNDLE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           GH_TOKEN: ${{ github.token }}
         run: pnpm check:bundle
+      - name: Stage Cloudflare demo assets and validate Worker config
+        run: |
+          pnpm build:demo
+          pnpm exec wrangler deploy --config deploy/cloudflare/wrangler.jsonc --dry-run
       - name: Built-artifact browser acceptance
         env:
           OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
           OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
-          IS_PR: ${{ github.event_name == 'pull_request' }}
-          HAS_FULL_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'full-ci') }}
+          RUN_FULL: ${{ needs.changes.outputs.full }}
         run: |
-          if [ "$IS_PR" = "true" ] && [ "$HAS_FULL_LABEL" != "true" ]; then
-            pnpm verify:browser:smoke
-          else
+          if [ "$RUN_FULL" = "true" ]; then
             pnpm verify:browser
+          else
+            pnpm verify:browser:smoke
           fi
       - name: Upload bundle report
         if: always() && steps.prepare.outcome == 'success'
@@ -158,6 +298,21 @@ jobs:
         run: |
           git diff --check
           test -z "$(git status --porcelain)"
+
+  browser:
+    needs: [changes, browser-acceptance]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require browser acceptance when selected
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          NEED_BROWSER: ${{ needs.changes.outputs.browser }}
+          BROWSER_RESULT: ${{ needs.browser-acceptance.result }}
+        run: |
+          test "$CHANGES" = success
+          if [ "$NEED_BROWSER" = true ]; then test "$BROWSER_RESULT" = success; else test "$BROWSER_RESULT" = skipped; fi
 
   probes:
     needs: [static, browser]

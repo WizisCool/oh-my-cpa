@@ -11,6 +11,8 @@ on:
         type: string
 permissions:
   contents: read
+env:
+  CGO_ENABLED: '0'
 concurrency:
   group: docker-hub-release
   queue: max
@@ -25,6 +27,7 @@ jobs:
       image: ${{ steps.plan.outputs.image }}
       tags: ${{ steps.plan.outputs.version_tags }}
       is_latest: ${{ steps.plan.outputs.is_latest }}
+      split_native: ${{ steps.plan.outputs.split_native }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -50,9 +53,52 @@ jobs:
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' | jq -s . > "$RELEASE_INDEX"
           node scripts/release-plan.mjs
           echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-  static:
+          if grep -q -- '--web-only' scripts/native-release.mjs && grep -q -- '--finalize' scripts/native-release.mjs; then
+            echo "split_native=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "split_native=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  static-go:
+    needs: identity
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.identity.outputs.revision }}
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.27.3
+          cache: true
+      - name: Cache Go linter
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            .tools/bin/golangci-lint
+            ~/.cache/golangci-lint
+          key: golangci-lint-${{ runner.os }}-${{ runner.arch }}-v2.15.0-${{ hashFiles('.golangci.yml', 'go.sum') }}
+          restore-keys: |
+            golangci-lint-${{ runner.os }}-${{ runner.arch }}-v2.15.0-
+      - name: Test and vet
+        run: go test ./... && go vet ./...
+      - name: Lint
+        run: |
+          if [ ! -x .tools/bin/golangci-lint ]; then
+            mkdir -p .tools/bin
+            GOBIN="$PWD/.tools/bin" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
+          fi
+          .tools/bin/golangci-lint run ./...
+      - name: Verify clean generated state
+        run: test -z "$(git status --porcelain)"
+
+  static-frontend:
+    needs: identity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - name: Checkout full history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -74,24 +120,31 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Validate Actions syntax and expressions
-        run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          pnpm verify:workflow:lint
-      - name: Verify pinned toolchain
-        run: pnpm verify:toolchain:strict
       - name: Cache verification tools
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             .tools/gitleaks
             .tools/lychee
-          key: verification-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/tools-versions.json') }}
+            .tools/bin/actionlint
+          key: verification-tools-${{ runner.os }}-${{ runner.arch }}-actionlint-v1.7.12-${{ hashFiles('scripts/tools-versions.json') }}
+      - name: Validate Actions syntax and expressions
+        env:
+          ACTIONLINT_BIN: .tools/bin/actionlint
+        run: |
+          if [ ! -x .tools/bin/actionlint ]; then
+            mkdir -p .tools/bin
+            GOBIN="$PWD/.tools/bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          fi
+          pnpm verify:workflow:lint
+      - name: Verify pinned toolchain
+        run: pnpm verify:toolchain:strict
       - name: Check offline documentation links and fragments
-        if: hashFiles('scripts/check-docs.mjs') != ''
         run: pnpm check-docs
-      - name: Verify static gates
-        run: pnpm verify:static
+      - name: Verify frontend and repository gates
+        run: |
+          pnpm verify:static:frontend
+          pnpm verify:static:repository
       - name: Scan worktree and history
         run: |
           pnpm verify:secrets:worktree
@@ -101,10 +154,11 @@ jobs:
           git diff --check
           git status --short
           test -z "$(git status --porcelain)"
-    needs: identity
+
   browser:
+    needs: identity
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -131,7 +185,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/tools-versions.json') }}
       - name: Prepare Chromium and build embedded SPA
         id: prepare
         run: |
@@ -139,17 +193,21 @@ jobs:
           install_log="$(mktemp)"
           node scripts/install-chromium.mjs >"${install_log}" 2>&1 &
           install_pid=$!
+          mkdir -p tmp
+          go build -trimpath -o tmp/seed-usage-browser ./scripts/fixture/seed-usage &
+          seed_build_pid=$!
           build_status=0
-          pnpm build || build_status=$?
+          (
+            ulimit -Sn 1024
+            ulimit -Hn 1024
+            pnpm build
+          ) || build_status=$?
           go_status=0
           if [ "${build_status}" -eq 0 ]; then
-            mkdir -p tmp
-            CGO_ENABLED=0 go build -trimpath -o tmp/seed-usage-browser ./scripts/fixture/seed-usage &
-            seed_build_pid=$!
-            CGO_ENABLED=0 go build -trimpath -o tmp/oh-my-cpa-browser ./cmd/oh-my-cpa
-            go_status=$?
-            wait "${seed_build_pid}" || go_status=$?
+            go build -trimpath -o tmp/oh-my-cpa-browser ./cmd/oh-my-cpa || go_status=$?
           fi
+          seed_status=0
+          wait "${seed_build_pid}" || seed_status=$?
           install_status=0
           wait "${install_pid}" || install_status=$?
           cat "${install_log}"
@@ -158,6 +216,9 @@ jobs:
           fi
           if [ "${go_status}" -ne 0 ]; then
             exit "${go_status}"
+          fi
+          if [ "${seed_status}" -ne 0 ]; then
+            exit "${seed_status}"
           fi
           exit "${install_status}"
       - name: Verify loading boundaries and report bundle growth
@@ -173,7 +234,7 @@ jobs:
           git diff --check
           git status --short
           test -z "$(git status --porcelain)"
-      - name: Run full built-artifact acceptance on every event
+      - name: Run full built-artifact acceptance
         env:
           OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
           OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
@@ -207,14 +268,184 @@ jobs:
         env:
           BUNDLE_OUTCOME: ${{ steps.bundle.outcome }}
         run: test "${BUNDLE_OUTCOME}" = success
+
+  native-web:
     needs: identity
+    if: needs.identity.outputs.split_native == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.identity.outputs.revision }}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          cache: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.23.4
+          package-manager-cache: false
+      - name: Require unchanged release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.identity.outputs.tag }}
+          RELEASE_REVISION: ${{ needs.identity.outputs.revision }}
+        run: node scripts/release-identity.mjs
+      - run: pnpm install --frozen-lockfile
+      - name: Build and validate embedded console once
+        env:
+          RELEASE_TAG: ${{ needs.identity.outputs.tag }}
+        run: node scripts/native-release.mjs --web-only
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-web-dist
+          path: internal/web/dist
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  native-build:
+    needs:
+      - identity
+      - native-web
+    if: needs.identity.outputs.split_native == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: darwin/amd64
+            slug: darwin-amd64
+          - target: darwin/arm64
+            slug: darwin-arm64
+          - target: windows/amd64
+            slug: windows-amd64
+          - target: windows/arm64
+            slug: windows-arm64
+          - target: linux/amd64
+            slug: linux-amd64
+          - target: linux/arm64
+            slug: linux-arm64
+          - target: freebsd/amd64
+            slug: freebsd-amd64
+          - target: freebsd/arm64
+            slug: freebsd-arm64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.identity.outputs.revision }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.23.4
+          package-manager-cache: false
+      - name: Require unchanged release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.identity.outputs.tag }}
+          RELEASE_REVISION: ${{ needs.identity.outputs.revision }}
+        run: node scripts/release-identity.mjs
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.27.3
+          cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: native-web-dist
+          path: internal/web/dist
+      - name: Build and package target archive
+        env:
+          RELEASE_TAG: ${{ needs.identity.outputs.tag }}
+        run: node scripts/native-release.mjs --target "${{ matrix.target }}" --skip-web-build
+      - name: Require clean generated state
+        run: test -z "$(git status --porcelain)"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-target-${{ matrix.slug }}
+          path: tmp/native-release/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  native:
+    needs:
+      - identity
+      - native-build
+    if: always() && needs.identity.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.identity.outputs.revision }}
+      - name: Require split native builds when enabled
+        if: needs.identity.outputs.split_native == 'true'
+        env:
+          NATIVE_BUILD_RESULT: ${{ needs.native-build.result }}
+        run: test "$NATIVE_BUILD_RESULT" = success
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.23.4
+          package-manager-cache: false
+      - name: Require unchanged release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.identity.outputs.tag }}
+          RELEASE_REVISION: ${{ needs.identity.outputs.revision }}
+        run: node scripts/release-identity.mjs
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        if: needs.identity.outputs.split_native == 'true'
+        with:
+          pattern: native-target-*
+          merge-multiple: true
+          path: tmp/native-release
+      - name: Finalize installation assets and checksums
+        if: needs.identity.outputs.split_native == 'true'
+        env:
+          RELEASE_TAG: ${{ needs.identity.outputs.tag }}
+        run: node scripts/native-release.mjs --finalize
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        if: needs.identity.outputs.split_native != 'true'
+        with:
+          cache: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        if: needs.identity.outputs.split_native != 'true'
+        with:
+          go-version: 1.27.3
+          cache: false
+      - name: Build legacy native archives from tag source
+        if: needs.identity.outputs.split_native != 'true'
+        env:
+          RELEASE_TAG: ${{ needs.identity.outputs.tag }}
+        run: |
+          pnpm install --frozen-lockfile
+          node scripts/native-release.mjs
+      - name: Verify the extracted native package
+        env:
+          RELEASE_TAG: ${{ needs.identity.outputs.tag }}
+        run: node scripts/native-release-smoke.mjs
+      - name: Require clean generated state
+        run: test -z "$(git status --porcelain)"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-release
+          path: tmp/native-release/*
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     needs:
       - identity
-      - static
+      - static-go
+      - static-frontend
       - browser
+      - native
     if: always()
     outputs:
       tag: ${{ needs.identity.outputs.tag }}
@@ -223,19 +454,24 @@ jobs:
       tags: ${{ needs.identity.outputs.tags }}
       is_latest: ${{ needs.identity.outputs.is_latest }}
     steps:
-      - name: Require all release verification
+      - name: Require all release verification and candidate packaging
         env:
           IDENTITY: ${{ needs.identity.result }}
-          STATIC: ${{ needs.static.result }}
+          STATIC_GO: ${{ needs.static-go.result }}
+          STATIC_FRONTEND: ${{ needs.static-frontend.result }}
           BROWSER: ${{ needs.browser.result }}
+          NATIVE: ${{ needs.native.result }}
         run: |-
           test "$IDENTITY" = success
-          test "$STATIC" = success
+          test "$STATIC_GO" = success
+          test "$STATIC_FRONTEND" = success
           test "$BROWSER" = success
+          test "$NATIVE" = success
+
   publish:
     needs: verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 25
     outputs:
       digest: ${{ steps.image.outputs.digest }}
     steps:
@@ -246,6 +482,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22.23.4
+          package-manager-cache: false
       - name: Require unchanged release tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -263,8 +500,6 @@ jobs:
           build-args: |
             VERSION=${{ needs.verify.outputs.tag }}
             REVISION=${{ needs.verify.outputs.revision }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
       - name: Verify packaged image, permissions, base paths and running version
         env:
           RELEASE_TAG: ${{ needs.verify.outputs.tag }}
@@ -291,54 +526,9 @@ jobs:
           build-args: |
             VERSION=${{ needs.verify.outputs.tag }}
             REVISION=${{ needs.verify.outputs.revision }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           provenance: mode=max
           sbom: true
-  native:
-    needs: verify
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-          ref: ${{ needs.verify.outputs.revision }}
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
-        with:
-          cache: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: 22.23.4
-          package-manager-cache: false
-      - name: Require unchanged release tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
-          RELEASE_REVISION: ${{ needs.verify.outputs.revision }}
-        run: node scripts/release-identity.mjs
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        with:
-          go-version: 1.27.3
-          cache: false
-      - run: pnpm install --frozen-lockfile
-      - name: Build all native archives and checksums
-        env:
-          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
-        run: node scripts/native-release.mjs
-      - name: Verify the extracted native package
-        env:
-          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
-        run: node scripts/native-release-smoke.mjs
-      - name: Require clean generated state
-        run: test -z "$(git status --porcelain)"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: native-release
-          path: tmp/native-release/*
-          if-no-files-found: error
-          retention-days: 7
-          compression-level: 0
+
   release:
     needs:
       - verify
@@ -356,6 +546,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22.23.4
+          package-manager-cache: false
       - name: Require unchanged release tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -405,6 +596,7 @@ jobs:
           IS_LATEST=$(node scripts/release-plan.mjs | jq -r .isLatest)
           node scripts/release-identity.mjs
           gh release edit "$RELEASE_TAG" --draft=false --latest="$IS_LATEST"
+
   promote:
     needs:
       - verify
@@ -420,6 +612,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22.23.4
+          package-manager-cache: false
       - name: Require unchanged release tag
         env:
           GH_TOKEN: ${{ github.token }}
