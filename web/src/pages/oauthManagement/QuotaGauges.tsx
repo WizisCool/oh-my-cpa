@@ -16,17 +16,19 @@ import styles from './QuotaGauges.module.css';
  * place on every credential. Further limits follow two to a line, and a limit left alone draws
  * across both tracks as one long bar.
  */
-export function QuotaLines({ lines, provider, isMuted, nowMS, owner }: {
+export function QuotaLines({ lines, provider, isMuted, isRefreshing = false, nowMS, owner }: {
   lines: QuotaLine[];
   provider: string;
   isMuted: boolean;
+  /** A live read of this credential is out; its bars breathe until the reading lands. */
+  isRefreshing?: boolean;
   nowMS: number;
   owner?: QuotaCapacityOwner;
 }) {
   const t = useT();
   const allWindows = lines.flatMap((line) => line.cells.map((cell) => cell.window));
   return (
-    <div className={styles.lines}>
+    <div className={styles.lines} data-refreshing={isRefreshing ? 'true' : undefined} aria-busy={isRefreshing || undefined}>
       {packQuotaLines(lines).map(({ line, cell }) => (
         <QuotaReading
           key={cell.key}

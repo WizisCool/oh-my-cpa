@@ -196,7 +196,7 @@
 }
 
 :global(:root:not([data-reduced-motion='true'])) .meter > :global(.meter-fill) {
-  transition: inline-size 240ms var(--ease-out);
+  transition: inline-size var(--motion-slow) var(--ease-out);
 }
 
 .foot-figure {

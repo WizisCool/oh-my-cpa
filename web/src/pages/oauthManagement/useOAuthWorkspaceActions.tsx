@@ -606,8 +606,20 @@ export function useOAuthWorkspaceActions(
     // outcome, then what was never eligible.
     const unknowns: ToastItem[] = conflicting.map((index) => ({ name: index, reason: t('omc.operation_conflict') }));
     markQuotaBusy(targetIndexes, true);
+    // A credential is settled as soon as its own reading lands: it stops reading as refreshing and
+    // is free for another action while the rest of the run is still out. Only what is still
+    // pending is released at the end, so a later action on a settled credential keeps its claim.
+    const pendingIndexes = new Set(targetIndexes);
+    const settle = (indexes: string[]) => {
+      markQuotaBusy(indexes, false);
+      releaseTargets(indexes.map((index) => `quota:${index}`));
+    };
     try {
-      const outcome = await refreshCredentialQuotas(targetIndexes, mergeReturnedQuota);
+      const outcome = await refreshCredentialQuotas(targetIndexes, (item) => {
+        mergeReturnedQuota([item]);
+        if (!pendingIndexes.delete(item.auth_index)) return;
+        settle([item.auth_index]);
+      });
       const failures: ToastItem[] = outcome.failures.map((failure) => ({
         name: failure.name,
         reason: quotaRefreshFailureReason(failure, t),
@@ -645,10 +657,9 @@ export function useOAuthWorkspaceActions(
       }
       await queryClient.invalidateQueries({ queryKey: ['management-quota'] });
     } finally {
-      markQuotaBusy(targetIndexes, false);
-      releaseTargets(reserved);
+      settle([...pendingIndexes]);
     }
-  }, [mergeReturnedQuota, toast, queryClient, releaseTargets, reserveTargets, t]);
+  }, [markQuotaBusy, mergeReturnedQuota, toast, queryClient, releaseTargets, reserveTargets, t]);
 
   const refreshQuotaForRecord = React.useCallback(async (record: OAuthWorkspaceRecord) => {
     if (!record.canRefreshQuota || !record.authIndex) return;

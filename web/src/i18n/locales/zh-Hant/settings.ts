@@ -247,6 +247,7 @@ export default {
   "omc.operation_conflict": "同一目標已有操作進行中",
   "omc.quota_refresh_none": "沒有可重新整理的配額目標",
   "omc.quota_refresh_unknown": "回應未包含該目標結果",
+  "omc.quota_refresh_cut": "連線在該目標結果傳回前中斷",
   "omc.quota_refresh_report": "配額重新整理：成功 {succeeded}，失敗或未知 {failed}，略過 {skipped}",
   "omc.quota_refresh_report_clean": "配額重新整理完成：成功 {succeeded}，略過 {skipped}",
   "omc.quota_skip_missing-auth-index": "缺少認證索引",

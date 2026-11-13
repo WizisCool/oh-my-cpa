@@ -70,6 +70,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The figure takes the bar's tone below the low threshold; it turns with the bar, not ahead of it. */
+:global(:root:not([data-reduced-motion='true'])) .value b {
+  transition: color var(--motion-slow) var(--ease-out);
+}
+
 /* Tall enough to hold its colour beside a labelled figure, on an ink wash so the empty share does
    not turn into a block. A meter takes the mark step, as every bar in the console does. */
 .bar {
@@ -81,6 +86,34 @@
 
 .bar > :global(.meter-fill) {
   border-radius: inherit;
+}
+
+/* A refreshed reading settles from the old share to the new one, as the capacity dialog's bars do,
+   and its band colour crosses over on the same curve, so a bar that falls below a threshold changes
+   colour as it arrives rather than before it moves. A first render has nothing to transition from
+   and lands as it is. */
+:global(:root:not([data-reduced-motion='true'])) .bar > :global(.meter-fill) {
+  transition:
+    width var(--motion-slow) var(--ease-out),
+    background-color var(--motion-slow) var(--ease-out);
+}
+
+/* While a live read of the credential is out, its fills breathe in opacity, as a placeholder does:
+   the bar keeps its length and colour, so the reading being replaced stays legible, and nothing
+   travels along it to suggest a measure of progress the read does not have. The breath is shallow,
+   so the fill returning to full ink as the reading lands reads as part of the bar settling. */
+:global(:root:not([data-reduced-motion='true'])) .lines[data-refreshing='true'] .bar > :global(.meter-fill) {
+  animation: quota-refresh-breathe 1400ms var(--ease-standard) infinite alternate both;
+}
+
+/* Reduced motion keeps the cue as a still, lighter fill. */
+:global(:root[data-reduced-motion='true']) .lines[data-refreshing='true'] .bar > :global(.meter-fill) {
+  opacity: 0.6;
+}
+
+@keyframes quota-refresh-breathe {
+  from { opacity: 1; }
+  to { opacity: 0.5; }
 }
 
 .estimate,
@@ -105,6 +138,12 @@
    but steps back. */
 .muted > * {
   opacity: 0.5;
+}
+
+/* A stale reading that a refresh brings back up to date steps forward with its new figures. */
+:global(:root:not([data-reduced-motion='true'])) .cell > *,
+:global(:root:not([data-reduced-motion='true'])) .metrics > * {
+  transition: opacity var(--motion-slow) var(--ease-out);
 }
 
 /* On a narrow track the two readings of a line keep their figures; the bar and its colour already

@@ -247,6 +247,7 @@ export default {
   "omc.operation_conflict": "Operasi lain pada sasaran yang sama sedang berjalan",
   "omc.quota_refresh_none": "Tiada sasaran kuota untuk dimuat semula",
   "omc.quota_refresh_unknown": "Respons tidak menyertakan hasil untuk sasaran ini",
+  "omc.quota_refresh_cut": "Sambungan terputus sebelum hasil sasaran ini diterima",
   "omc.quota_refresh_report": "Muat semula kuota: {succeeded} berjaya, {failed} gagal atau tidak diketahui, {skipped} dilangkau",
   "omc.quota_refresh_report_clean": "Muat semula kuota selesai: {succeeded} berjaya, {skipped} dilangkau",
   "omc.quota_skip_missing-auth-index": "Indeks pengesahan tiada",

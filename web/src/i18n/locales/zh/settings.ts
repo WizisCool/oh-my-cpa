@@ -244,6 +244,7 @@ export default {
   'omc.operation_conflict': '同一目标已有操作进行中',
   'omc.quota_refresh_none': '没有可刷新的配额目标',
   'omc.quota_refresh_unknown': '响应未包含该目标结果',
+  'omc.quota_refresh_cut': '连接在该目标结果返回前中断',
   'omc.quota_refresh_report': '配额刷新：成功 {succeeded}，失败或未知 {failed}，跳过 {skipped}',
   'omc.quota_refresh_report_clean': '配额刷新完成：成功 {succeeded}，跳过 {skipped}',
   'omc.quota_skip_missing-auth-index': '缺少认证索引',

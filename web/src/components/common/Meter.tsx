@@ -22,8 +22,9 @@ export interface MeterProps {
 /**
  * A reading drawn as a share of a track.
  *
- * The fill does not animate: a quota or a success rate that slid into place would read as a
- * change the operator had caused.
+ * The fill does not animate by default: a success rate that slid into place would read as a
+ * change the operator had caused. A reading the operator refreshes on purpose - a quota window -
+ * opts in from its own stylesheet, keyed on `data-reduced-motion`.
  */
 export function Meter({ value, max = 100, color, size = 'default', label, className }: MeterProps) {
   const share = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
