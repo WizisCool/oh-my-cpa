@@ -178,16 +178,18 @@
   }
 
   /* The chips become a list here. They are the grid's children, addressed as such because their
-     own class belongs to the shared workspace stylesheet. */
-  .examples > * {
+     own class belongs to the shared workspace stylesheet; scoping under `.shell` outranks
+     `.example` regardless of stylesheet order, and clearing `box-shadow` drops the card ring. */
+  .shell .examples > * {
     min-height: 48px;
     padding: 10px 6px;
     border: 0;
     border-top: 1px solid var(--thread-hairline);
     border-radius: 0;
+    box-shadow: none;
   }
 
-  .examples > *:first-child {
+  .shell .examples > *:first-child {
     border-top: 0;
   }
 
