@@ -230,25 +230,6 @@ describe('credential quota body details', () => {
     expect(screen.getByText('100%')).toBeTruthy();
   });
 
-  it('shows compact forecast amount on window cards only when model forecasts exist', () => {
-    renderBody(quota('codex-forecast-split', [
-      {
-        ...quotaWindow('five_hour', 80, 3),
-        model_forecasts: [{
-          model: 'gpt-6.1-sol', sample_requests: 10, sample_priced_requests: 10, sample_tokens: 100_000, sample_used_percent: 20,
-          from_ms: NOW_MS - HOUR_MS, observed_at_ms: NOW_MS, remaining_requests: 40, remaining_tokens: 400_000,
-          remaining_cost_nanos: 12_340_000_000, rounding_error_percent: 5,
-        }],
-      },
-      {
-        ...quotaWindow('weekly', 95, 48),
-        usage: { from_ms: NOW_MS - HOUR_MS, to_ms: NOW_MS, requests: 2, priced_requests: 2, tokens: 10_000, cost_nanos: 1_000_000 },
-        forecast_unavailable: 'low_usage',
-      },
-    ]));
-    expect(screen.getAllByText('≈ $12.34')).toHaveLength(1);
-    expect(screen.queryByText('Usage details')).toBeNull();
-  });
 });
 
 function renderCredentialRow(

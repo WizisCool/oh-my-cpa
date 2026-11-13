@@ -21,6 +21,8 @@ test('forecasts show available cost alongside remaining requests, tokens, and co
   assert.equal(reading.tokens, '≈ 700K');
   assert.equal(reading.cacheRate, 80);
   assert.equal(compactQuotaForecast({ model_forecasts: [forecast] }, 'en-compact', t), '≈ $14.00');
+  assert.equal(compactQuotaForecast({ model_forecasts: [{ ...forecast, sample_priced_requests: 5 }] }, 'en-compact', t), '≥ $14.00');
+  assert.equal(compactQuotaForecast({ model_forecasts: [{ ...forecast, sample_priced_requests: 0, remaining_cost_nanos: undefined }] }, 'en-compact', t), '≈ 700K');
   assert.equal(compactQuotaForecast({ model_forecasts: undefined }, 'en-compact', t), null);
 
   const partial = describeForecastCard({ ...forecast, sample_priced_requests: 5 }, 'en-compact', t);

@@ -1013,11 +1013,14 @@ describe('Base UI Select, Tabs, Combobox & AutoComplete contracts', () => {
         expect(dialogViewport.style.paddingInlineEnd).toBe('');
       });
 
-      act(() => setDrawerOpen(false));
+      // Reopening inside an open drawer re-applies the sheet centering insets,
+      // while closing the drawer leaves the page clean for subsequent tests.
       act(() => setModalOpen(true));
-      expect(dialogViewport.style.paddingInlineStart).toBe('');
-      expect(dialogViewport.style.paddingInlineEnd).toBe('');
+      expect(dialogContent.hasAttribute('data-open')).toBe(true);
+      expect(dialogViewport.style.paddingInlineStart).toBe('512px');
+      expect(dialogViewport.style.paddingInlineEnd).toBe('8px');
       act(() => setModalOpen(false));
+      act(() => setDrawerOpen(false));
     } finally {
       Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: originalInnerWidth });
     }

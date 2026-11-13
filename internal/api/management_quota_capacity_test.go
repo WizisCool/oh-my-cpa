@@ -321,8 +321,18 @@ func TestQuotaForecastsKeepNativeReadingsAndSeparateRecordedCosts(t *testing.T) 
 		t.Fatalf("idle refresh changed forecasts: %+v", idle.ModelForecasts)
 	}
 	status, body := getCapacityHistory(t, handler, "?window=five_hour")
-	if status != http.StatusOK || body["model_forecasts"] == nil || body["model_projections"] != nil {
+	if status != http.StatusOK || body["model_projections"] != nil {
 		t.Fatalf("history = %d %v", status, body)
+	}
+	historyForecasts, ok := body["model_forecasts"].([]any)
+	if !ok || len(historyForecasts) != 2 {
+		t.Fatalf("history model_forecasts = %T %v", body["model_forecasts"], body["model_forecasts"])
+	}
+	for idx, wantCost := range []float64{35_000_000, 70_000_000} {
+		f, _ := historyForecasts[idx].(map[string]any)
+		if f["sample_priced_requests"] != float64(10) || f["remaining_cost_nanos"] != wantCost {
+			t.Fatalf("history forecast[%d] = %v, want priced=10 cost=%v", idx, f, wantCost)
+		}
 	}
 	if err := handler.repo.SaveQuotaRefreshAttempt(context.Background(), repository.QuotaRefreshAttemptRecord{AuthIndex: "codex-1", AttemptedAtMS: now, Outcome: repository.QuotaRefreshAttemptFailed, Error: "temporary gateway failure"}); err != nil {
 		t.Fatal(err)
@@ -454,5 +464,17 @@ func TestLegacyCalibrationIntervalsBackfillForecastCost(t *testing.T) {
 	got = window.ModelForecasts
 	if len(got) != 1 || got[0].SampleRequests != 15 || got[0].SamplePricedRequests != 15 || got[0].RemainingCostNanos == nil || *got[0].RemainingCostNanos != 75_000_000 {
 		t.Fatalf("mixed legacy+new forecast = %+v", got)
+	}
+	status, body := getCapacityHistory(t, handler, "?window=five_hour")
+	if status != http.StatusOK {
+		t.Fatalf("backfilled history status = %d (%v)", status, body)
+	}
+	historyForecasts, ok := body["model_forecasts"].([]any)
+	if !ok || len(historyForecasts) != 1 {
+		t.Fatalf("backfilled history model_forecasts = %T %v", body["model_forecasts"], body["model_forecasts"])
+	}
+	firstForecast, _ := historyForecasts[0].(map[string]any)
+	if firstForecast["sample_priced_requests"] != float64(15) || firstForecast["remaining_cost_nanos"] != float64(75_000_000) {
+		t.Fatalf("backfilled history forecast = %v", firstForecast)
 	}
 }
