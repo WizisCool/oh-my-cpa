@@ -184,6 +184,157 @@ func TestWindowDueAndGuards(t *testing.T) {
 	}
 }
 
+func TestWindowRolloverWithFutureResetAndSlidingZeroUsage(t *testing.T) {
+	zero := 0.0
+	positive := 15.0
+
+	// Providers such as Antigravity and Codex publish the next cycle's future reset timestamp as
+	// soon as the prior window rolls over. An arrived LastReset must still fire once for that
+	// reset boundary when the new cycle has zero usage, and yield when external traffic already
+	// started and used the new cycle.
+	agTask := Task{ID: "t_ag", Enabled: true, Trigger: Trigger{Kind: "window", Window: "ag_Gemini Models_gemini-5h"}}
+	marks := TaskMarks{LastReset: "2026-11-13T12:27:00.000Z"}
+	rolledUnused := &CatalogAccount{
+		AuthIndex:  "acc-ag",
+		SnapshotAt: "2026-11-13T12:27:35.000Z",
+		Windows: []QuotaWindow{{
+			ID:          "ag_Gemini Models_gemini-5h",
+			Label:       "Gemini Models · 5小时限制 (5-Hour)",
+			UsedPercent: &zero,
+			ResetsAt:    "2026-11-13T17:27:35.000Z",
+			PeriodHours: 5,
+		}},
+	}
+	nowAfterGrace := mustTime(t, "2026-11-13T12:27:35.000Z")
+	due := CurrentWindowDue(agTask, rolledUnused, marks, nowAfterGrace)
+	if due == nil || due.Idle || due.At != "2026-11-13T12:27:30.000Z" || due.ResetKey != "2026-11-13T12:27:00.000Z" {
+		t.Fatalf("expected rollover with future reset to fire for elapsed LastReset, got %+v", due)
+	}
+
+	// If the post-reset quota refresh has not succeeded yet (snapshot predates LastReset), wait
+	// for the retry rather than consuming the reset key blind.
+	staleBeforeReset := &CatalogAccount{
+		AuthIndex:  "acc-ag",
+		SnapshotAt: "2026-11-13T11:00:00.000Z",
+		Windows:    rolledUnused.Windows,
+	}
+	if got := CurrentWindowDue(agTask, staleBeforeReset, marks, nowAfterGrace); got != nil {
+		t.Fatalf("expected stale pre-reset snapshot after grace to wait for quota read, got %+v", got)
+	}
+
+	// If external traffic already consumed part of the new cycle, adopt the new boundary instead
+	// of firing a redundant warmup mid-cycle.
+	rolledUsed := &CatalogAccount{
+		AuthIndex:  "acc-ag",
+		SnapshotAt: "2026-11-13T12:27:35.000Z",
+		Windows: []QuotaWindow{{
+			ID:          "ag_Gemini Models_gemini-5h",
+			Label:       "Gemini Models · 5小时限制 (5-Hour)",
+			UsedPercent: &positive,
+			ResetsAt:    "2026-11-13T17:27:35.000Z",
+			PeriodHours: 5,
+		}},
+	}
+	reconciled, isChanged := ReconcileWindowMarks(agTask, rolledUsed, marks, nowAfterGrace)
+	if !isChanged || reconciled.LastReset != "2026-11-13T17:27:35.000Z" {
+		t.Fatalf("expected used new cycle to advance LastReset, got %+v (changed=%v)", reconciled, isChanged)
+	}
+	if nextDue := CurrentWindowDue(agTask, rolledUsed, reconciled, nowAfterGrace); nextDue == nil || nextDue.At != "2026-11-13T17:28:05.000Z" {
+		t.Fatalf("expected next cycle due at 17:28:05Z, got %+v", nextDue)
+	}
+
+	// Sliding zero-usage full window (e.g. unstarted Codex 5h window) vs fixed zero-usage active window.
+	codexTask := Task{ID: "t_codex", Enabled: true, Trigger: Trigger{Kind: "window", Window: "five_hour"}}
+	firstObsTime := mustTime(t, "2026-11-13T11:03:00.000Z")
+	firstAccount := &CatalogAccount{
+		AuthIndex:  "acc-codex",
+		SnapshotAt: FormatISO(firstObsTime),
+		Windows: []QuotaWindow{{
+			ID:          "five_hour",
+			Label:       "5h",
+			UsedPercent: &zero,
+			ResetsAt:    "2026-11-13T16:03:00.000Z",
+			PeriodHours: 5,
+		}},
+	}
+	codexMarks, isChanged := ReconcileWindowMarks(codexTask, firstAccount, TaskMarks{}, firstObsTime)
+	if !isChanged || codexMarks.IsSlidingIdle {
+		t.Fatalf("first observation must record baseline without guessing idle: %+v", codexMarks)
+	}
+	if NeedsWindowQuotaRefresh(codexTask, firstAccount, codexMarks, firstObsTime.Add(20*time.Second)) {
+		t.Fatal("must not refresh before SLIDING_CONFIRM_INTERVAL")
+	}
+	secondObsTime := firstObsTime.Add(time.Minute)
+	if !NeedsWindowQuotaRefresh(codexTask, firstAccount, codexMarks, secondObsTime) {
+		t.Fatal("expected confirmation refresh once SLIDING_CONFIRM_INTERVAL elapsed")
+	}
+
+	// Case A: Reset slid forward by 60s along with SnapshotAt -> proven idle, due immediately.
+	slidingAccount := &CatalogAccount{
+		AuthIndex:  "acc-codex",
+		SnapshotAt: FormatISO(secondObsTime),
+		Windows: []QuotaWindow{{
+			ID:          "five_hour",
+			Label:       "5h",
+			UsedPercent: &zero,
+			ResetsAt:    "2026-11-13T16:04:00.000Z",
+			PeriodHours: 5,
+		}},
+	}
+	slidingMarks, isChanged := ReconcileWindowMarks(codexTask, slidingAccount, codexMarks, secondObsTime)
+	if !isChanged || !slidingMarks.IsSlidingIdle || slidingMarks.LastReset != "" {
+		t.Fatalf("expected sliding zero-usage window to become idle, got %+v", slidingMarks)
+	}
+	if slidingDue := CurrentWindowDue(codexTask, slidingAccount, slidingMarks, secondObsTime); slidingDue == nil || !slidingDue.Idle || slidingDue.At != FormatISO(secondObsTime) {
+		t.Fatalf("expected sliding idle window to be due immediately, got %+v", slidingDue)
+	}
+
+	// Case B: Reset stayed fixed at 16:03:00Z -> proven active, no further confirmation polling.
+	fixedAccount := &CatalogAccount{
+		AuthIndex:  "acc-codex",
+		SnapshotAt: FormatISO(secondObsTime),
+		Windows: []QuotaWindow{{
+			ID:          "five_hour",
+			Label:       "5h",
+			UsedPercent: &zero,
+			ResetsAt:    "2026-11-13T16:03:00.000Z",
+			PeriodHours: 5,
+		}},
+	}
+	fixedMarks, isChanged := ReconcileWindowMarks(codexTask, fixedAccount, codexMarks, secondObsTime)
+	if !isChanged || fixedMarks.IsSlidingIdle || fixedMarks.ConfirmedReset != "2026-11-13T16:03:00.000Z" {
+		t.Fatalf("expected fixed zero-usage window to confirm active boundary, got %+v", fixedMarks)
+	}
+	if NeedsWindowQuotaRefresh(codexTask, fixedAccount, fixedMarks, secondObsTime.Add(10*time.Minute)) {
+		t.Fatal("confirmed active zero-usage window must not poll quota again before reset")
+	}
+
+	// Case C: Manual post-reset send retires pending LastReset so a 0%-usage snapshot does not double-send.
+	manualBoundary := time.Date(2026, 11, 13, 10, 0, 0, 0, time.UTC)
+	manualSnapshot := &CatalogAccount{
+		AuthIndex:  "acc-codex",
+		SnapshotAt: "2026-11-13T10:00:30.000Z",
+		Windows: []QuotaWindow{{
+			ID:          "five_hour",
+			Label:       "5h",
+			UsedPercent: &zero,
+			ResetsAt:    "2026-11-13T15:00:20.000Z",
+			PeriodHours: 5,
+		}},
+	}
+	marksAfterManualSend := TaskMarks{
+		LastReset: FormatISO(manualBoundary),
+		LastSent:  "2026-11-13T10:00:20.000Z",
+	}
+	retiredMarks, isChanged := ReconcileWindowMarks(codexTask, manualSnapshot, marksAfterManualSend, manualBoundary.Add(31*time.Second))
+	if !isChanged || retiredMarks.LastReset != "2026-11-13T15:00:20.000Z" || len(retiredMarks.ResetKeys) != 1 || retiredMarks.ResetKeys[0] != FormatISO(manualBoundary) {
+		t.Fatalf("expected post-reset manual send to retire pending reset and advance LastReset, got %+v", retiredMarks)
+	}
+	if nextDue := CurrentWindowDue(codexTask, manualSnapshot, marksAfterManualSend, manualBoundary.Add(31*time.Second)); nextDue == nil || nextDue.At != "2026-11-13T15:00:50.000Z" || nextDue.ResetKey != "2026-11-13T15:00:20.000Z" {
+		t.Fatalf("expected post-reset manual send to advance due slot to next cycle (15:00:50Z) instead of overdue 10:00:30Z, got %+v", nextDue)
+	}
+}
+
 func TestValidateTask(t *testing.T) {
 	valid := TaskInput{
 		Provider:  "claude",

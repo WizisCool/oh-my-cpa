@@ -339,6 +339,262 @@ func hourFloorISO(t time.Time) string {
 	return FormatISO(floored)
 }
 
+// IdleResetKey names the once-per-hour deduplication key for an idle quota window.
+func IdleResetKey(instant time.Time) string {
+	return "idle:" + hourFloorISO(instant)
+}
+
+func absDuration(duration time.Duration) time.Duration {
+	if duration < 0 {
+		return -duration
+	}
+	return duration
+}
+
+// WindowPeriod returns the duration covered by a quota window, falling back to canonical IDs.
+func WindowPeriod(window *QuotaWindow) time.Duration {
+	if window == nil {
+		return 0
+	}
+	if window.PeriodHours > 0 {
+		return time.Duration(window.PeriodHours * float64(time.Hour))
+	}
+	switch window.ID {
+	case "five_hour":
+		return 5 * time.Hour
+	case "seven_day", "weekly":
+		return 7 * 24 * time.Hour
+	case "daily":
+		return 24 * time.Hour
+	default:
+		return 0
+	}
+}
+
+func isFullZeroUsageWindow(window *QuotaWindow, snapshotAt time.Time) bool {
+	if window == nil || window.UsedPercent == nil || *window.UsedPercent != 0 {
+		return false
+	}
+	resetAt, hasReset := ParseISO(window.ResetsAt)
+	if !hasReset || !resetAt.After(snapshotAt) {
+		return false
+	}
+	period := WindowPeriod(window)
+	if period <= 0 {
+		return false
+	}
+	remaining := resetAt.Sub(snapshotAt)
+	return remaining >= period-SLIDING_FULL_MARGIN && remaining <= period+SLIDING_FULL_MARGIN
+}
+
+func equalTaskMarks(first, second TaskMarks) bool {
+	return first.LastDue == second.LastDue &&
+		first.LastReset == second.LastReset &&
+		first.LastSent == second.LastSent &&
+		first.ObservedAt == second.ObservedAt &&
+		first.ObservedResetsAt == second.ObservedResetsAt &&
+		first.ConfirmedReset == second.ConfirmedReset &&
+		first.IsSlidingIdle == second.IsSlidingIdle &&
+		slices.Equal(first.ResetKeys, second.ResetKeys)
+}
+
+// ReconcileWindowMarks updates persisted window tracking from the latest quota snapshot.
+//
+// Providers differ in how they report an unstarted cycle after a reset: Claude omits resets_at,
+// whereas Codex and Antigravity publish a future reset boundary immediately (with Codex advancing
+// that boundary on every read until a request actually starts the window). Reconciling both
+// preserves an arrived LastReset until it fires and detects a sliding zero-usage horizon across
+// two observations without polling active windows.
+func ReconcileWindowMarks(task Task, account *CatalogAccount, marks TaskMarks, now time.Time) (TaskMarks, bool) {
+	if task.Trigger.Kind != "window" || account == nil || strings.TrimSpace(account.SnapshotAt) == "" {
+		return marks, false
+	}
+	snapshotAt, hasSnapshot := ParseISO(account.SnapshotAt)
+	if !hasSnapshot {
+		return marks, false
+	}
+	window := FindAccountWindow(account, task.Trigger.Window)
+	if window == nil {
+		return marks, false
+	}
+	original := marks
+
+	if lastResetAt, ok := ParseISO(marks.LastReset); ok && !slices.Contains(marks.ResetKeys, marks.LastReset) && !now.Before(lastResetAt) {
+		if sentAt, hasSent := ParseISO(marks.LastSent); hasSent && !sentAt.Before(lastResetAt) {
+			// A manual or earlier send after the reset boundary already woke the new cycle, even if
+			// the provider rounds a 1-token warmup down to 0% usage.
+			marks.ResetKeys = append(marks.ResetKeys, FormatISO(lastResetAt))
+			if len(marks.ResetKeys) > MAX_RESET_KEYS {
+				marks.ResetKeys = marks.ResetKeys[len(marks.ResetKeys)-MAX_RESET_KEYS:]
+			}
+		} else {
+			if now.Before(lastResetAt.Add(WINDOW_GRACE)) || snapshotAt.Before(lastResetAt) {
+				return marks, false
+			}
+			windowReset, hasWindowReset := ParseISO(window.ResetsAt)
+			if !hasWindowReset || !windowReset.After(snapshotAt) {
+				marks.LastReset = ""
+				marks.ConfirmedReset = ""
+				marks.IsSlidingIdle = false
+				marks.ObservedAt = ""
+				marks.ObservedResetsAt = ""
+				return marks, !equalTaskMarks(original, marks)
+			}
+			if windowReset.After(lastResetAt) && (window.UsedPercent == nil || *window.UsedPercent == 0) {
+				return marks, false
+			}
+		}
+	}
+
+	windowReset, hasWindowReset := ParseISO(window.ResetsAt)
+	if !hasWindowReset || !windowReset.After(snapshotAt) {
+		marks.IsSlidingIdle = false
+		marks.ConfirmedReset = ""
+		marks.ObservedAt = ""
+		marks.ObservedResetsAt = ""
+		if lastResetAt, ok := ParseISO(marks.LastReset); ok && !lastResetAt.After(now) {
+			marks.LastReset = ""
+		}
+		return marks, !equalTaskMarks(original, marks)
+	}
+
+	if !isFullZeroUsageWindow(window, snapshotAt) {
+		marks.IsSlidingIdle = false
+		marks.ObservedAt = ""
+		marks.ObservedResetsAt = ""
+		marks.ConfirmedReset = window.ResetsAt
+		if windowReset.After(now) {
+			marks.LastReset = window.ResetsAt
+		} else if lastResetAt, ok := ParseISO(marks.LastReset); ok && !lastResetAt.After(now) {
+			marks.LastReset = ""
+		}
+		return marks, !equalTaskMarks(original, marks)
+	}
+
+	sentAt, hasSent := ParseISO(marks.LastSent)
+	period := WindowPeriod(window)
+	if hasSent && !snapshotAt.Before(sentAt.Add(POST_SEND_SETTLE)) && period > 0 && snapshotAt.Add(period).Sub(windowReset) >= SLIDING_CONFIRM_INTERVAL {
+		marks.ConfirmedReset = window.ResetsAt
+		marks.IsSlidingIdle = false
+		marks.ObservedAt = FormatISO(snapshotAt)
+		marks.ObservedResetsAt = window.ResetsAt
+		if windowReset.After(now) {
+			marks.LastReset = window.ResetsAt
+		}
+		return marks, !equalTaskMarks(original, marks)
+	}
+
+	if marks.ConfirmedReset == window.ResetsAt {
+		marks.IsSlidingIdle = false
+		if windowReset.After(now) {
+			marks.LastReset = window.ResetsAt
+		}
+		return marks, !equalTaskMarks(original, marks)
+	}
+
+	observedAt, hasObservedAt := ParseISO(marks.ObservedAt)
+	observedReset, hasObservedReset := ParseISO(marks.ObservedResetsAt)
+	if !hasObservedAt || !hasObservedReset || (hasSent && !sentAt.Before(observedAt)) || snapshotAt.Before(observedAt) {
+		marks.ObservedAt = FormatISO(snapshotAt)
+		marks.ObservedResetsAt = window.ResetsAt
+		marks.IsSlidingIdle = false
+		if windowReset.After(now) {
+			marks.LastReset = window.ResetsAt
+		}
+		return marks, !equalTaskMarks(original, marks)
+	}
+
+	if snapshotAt.Equal(observedAt) {
+		if !marks.IsSlidingIdle && windowReset.After(now) && marks.LastReset == "" {
+			marks.LastReset = window.ResetsAt
+		}
+		return marks, !equalTaskMarks(original, marks)
+	}
+
+	elapsed := snapshotAt.Sub(observedAt)
+	if elapsed < SLIDING_CONFIRM_INTERVAL {
+		return marks, !equalTaskMarks(original, marks)
+	}
+
+	shift := windowReset.Sub(observedReset)
+	switch {
+	case absDuration(shift) <= SLIDING_FIXED_TOLERANCE:
+		marks.ConfirmedReset = window.ResetsAt
+		marks.IsSlidingIdle = false
+		marks.ObservedAt = FormatISO(snapshotAt)
+		marks.ObservedResetsAt = window.ResetsAt
+		if windowReset.After(now) {
+			marks.LastReset = window.ResetsAt
+		}
+	case absDuration(shift-elapsed) <= SLIDING_DRIFT_TOLERANCE:
+		marks.IsSlidingIdle = true
+		marks.ConfirmedReset = ""
+		marks.LastReset = ""
+		marks.ObservedAt = FormatISO(snapshotAt)
+		marks.ObservedResetsAt = window.ResetsAt
+	default:
+		marks.IsSlidingIdle = false
+		marks.ConfirmedReset = ""
+		marks.ObservedAt = FormatISO(snapshotAt)
+		marks.ObservedResetsAt = window.ResetsAt
+		if windowReset.After(now) {
+			marks.LastReset = window.ResetsAt
+		}
+	}
+	return marks, !equalTaskMarks(original, marks)
+}
+
+// NeedsWindowQuotaRefresh reports whether the scheduler should read fresh upstream quota before
+// evaluating a window warmup task.
+func NeedsWindowQuotaRefresh(task Task, account *CatalogAccount, marks TaskMarks, now time.Time) bool {
+	if account == nil || strings.TrimSpace(account.SnapshotAt) == "" {
+		return true
+	}
+	snapshotAt, hasSnapshot := ParseISO(account.SnapshotAt)
+	if !hasSnapshot {
+		return true
+	}
+	if sentAt, ok := ParseISO(marks.LastSent); ok {
+		settleAt := sentAt.Add(POST_SEND_SETTLE)
+		if !now.Before(settleAt) && snapshotAt.Before(settleAt) {
+			return true
+		}
+	}
+	window := FindAccountWindow(account, task.Trigger.Window)
+	if window == nil {
+		return false
+	}
+	if lastResetAt, ok := ParseISO(marks.LastReset); ok && !slices.Contains(marks.ResetKeys, marks.LastReset) {
+		graceAt := lastResetAt.Add(WINDOW_GRACE)
+		if !now.Before(graceAt) && snapshotAt.Before(graceAt) {
+			return true
+		}
+	}
+	if resetAt, ok := ParseISO(window.ResetsAt); ok {
+		graceAt := resetAt.Add(WINDOW_GRACE)
+		if !now.Before(graceAt) && snapshotAt.Before(graceAt) {
+			return true
+		}
+	}
+	if isFullZeroUsageWindow(window, snapshotAt) && marks.ConfirmedReset != window.ResetsAt && !marks.IsSlidingIdle {
+		if !now.Before(snapshotAt.Add(SLIDING_CONFIRM_INTERVAL)) {
+			return true
+		}
+	}
+	isIdle := strings.TrimSpace(window.ResetsAt) == "" || marks.IsSlidingIdle
+	if !isIdle {
+		if resetAt, ok := ParseISO(window.ResetsAt); ok && !resetAt.After(snapshotAt) {
+			isIdle = true
+		}
+	}
+	if isIdle && hourFloorISO(snapshotAt) != hourFloorISO(now) {
+		if !slices.Contains(marks.ResetKeys, IdleResetKey(now)) {
+			return true
+		}
+	}
+	return false
+}
+
 // WindowDue evaluates when a quota window is due for warmup.
 // An idle window (no resets_at, or resets_at <= snapshot_at) is due immediately at most once per hour.
 // An active window is due 30s after resets_at.
@@ -353,7 +609,7 @@ func WindowDue(window *QuotaWindow, snapshotAt string) *WindowDueResult {
 		}
 		return &WindowDueResult{
 			At:       FormatISO(snap),
-			ResetKey: "idle:" + hourFloorISO(snap),
+			ResetKey: IdleResetKey(snap),
 			Idle:     true,
 		}
 	}
@@ -364,7 +620,7 @@ func WindowDue(window *QuotaWindow, snapshotAt string) *WindowDueResult {
 	if snap, ok := ParseISO(snapshotAt); ok && !resetAt.After(snap) {
 		return &WindowDueResult{
 			At:       FormatISO(snap),
-			ResetKey: "idle:" + hourFloorISO(snap),
+			ResetKey: IdleResetKey(snap),
 			Idle:     true,
 		}
 	}
@@ -404,19 +660,54 @@ func CurrentWindowDue(task Task, account *CatalogAccount, marks TaskMarks, now t
 	if task.Trigger.Kind != "window" || account == nil || strings.TrimSpace(account.SnapshotAt) == "" {
 		return nil
 	}
-	win := FindAccountWindow(account, task.Trigger.Window)
-	if win == nil {
+	snapshotAt, hasSnapshot := ParseISO(account.SnapshotAt)
+	if !hasSnapshot {
 		return nil
 	}
-	due := WindowDue(win, account.SnapshotAt)
+	window := FindAccountWindow(account, task.Trigger.Window)
+	if window == nil {
+		return nil
+	}
+	marks, _ = ReconcileWindowMarks(task, account, marks, now)
+
+	if lastResetAt, ok := ParseISO(marks.LastReset); ok && !slices.Contains(marks.ResetKeys, marks.LastReset) && !now.Before(lastResetAt) {
+		graceAt := lastResetAt.Add(WINDOW_GRACE)
+		if now.Before(graceAt) {
+			return &WindowDueResult{
+				At:       FormatISO(graceAt),
+				ResetKey: FormatISO(lastResetAt),
+				Idle:     false,
+			}
+		}
+		if snapshotAt.Before(lastResetAt) {
+			return nil
+		}
+		windowReset, hasWindowReset := ParseISO(window.ResetsAt)
+		if hasWindowReset && windowReset.After(snapshotAt) && windowReset.After(lastResetAt) && (window.UsedPercent == nil || *window.UsedPercent == 0) {
+			return &WindowDueResult{
+				At:       FormatISO(graceAt),
+				ResetKey: FormatISO(lastResetAt),
+				Idle:     false,
+			}
+		}
+	}
+
+	var due *WindowDueResult
+	if marks.IsSlidingIdle {
+		due = &WindowDueResult{
+			At:       FormatISO(snapshotAt),
+			ResetKey: IdleResetKey(snapshotAt),
+			Idle:     true,
+		}
+	} else {
+		due = WindowDue(window, account.SnapshotAt)
+	}
 	if due == nil {
 		return nil
 	}
 	if due.Idle {
-		if sentAt, ok1 := ParseISO(marks.LastSent); ok1 {
-			if snapAt, ok2 := ParseISO(account.SnapshotAt); ok2 && snapAt.Sub(sentAt) < POST_SEND_SETTLE {
-				return nil
-			}
+		if sentAt, ok := ParseISO(marks.LastSent); ok && snapshotAt.Sub(sentAt) < POST_SEND_SETTLE {
+			return nil
 		}
 		if lastResetAt, ok := ParseISO(marks.LastReset); ok && lastResetAt.After(now) {
 			return nil

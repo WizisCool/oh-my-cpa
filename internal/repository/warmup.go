@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -66,15 +67,163 @@ func (repository *Repository) ReadWarmupTask(ctx context.Context, instance, task
 }
 
 func (repository *Repository) WriteWarmupTask(ctx context.Context, instance string, task warmup.Task, nowMS int64) error {
-	raw, err := json.Marshal(task)
+	return repository.WriteWarmupTaskWithMarks(ctx, instance, task, false, nowMS, nil)
+}
+
+// WriteWarmupTaskWithMarks persists a warmup task and, when reconcile is provided, reads the
+// currently persisted task and scheduling marks inside the same SQLite transaction so concurrent
+// saves and scheduler mark writes always reconcile against authoritative state.
+func (repository *Repository) WriteWarmupTaskWithMarks(
+	ctx context.Context,
+	instance string,
+	task warmup.Task,
+	requireExisting bool,
+	nowMS int64,
+	reconcile func(persisted *warmup.Task, current warmup.TaskMarks) (*warmup.TaskMarks, error),
+) error {
+	target := warmupTaskTarget(task.ID)
+	if !requireExisting && reconcile == nil {
+		rawTask, err := json.Marshal(task)
+		if err != nil {
+			return fmt.Errorf("marshal warmup task: %w", err)
+		}
+		if _, err := repository.SQL().ExecContext(ctx,
+			`INSERT INTO credential_warmup_policies(instance_id,scope,target,document_json,updated_at_ms) VALUES(?,?,?,?,?) ON CONFLICT(instance_id,scope,target) DO UPDATE SET document_json=excluded.document_json,updated_at_ms=excluded.updated_at_ms`,
+			instance, "credential", target, string(rawTask), nowMS,
+		); err != nil {
+			return fmt.Errorf("write warmup task: %w", err)
+		}
+		return nil
+	}
+	tx, err := repository.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin warmup task transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	persisted, err := readWarmupTaskTx(ctx, tx, instance, task.ID)
 	if err != nil {
 		return err
 	}
-	_, err = repository.SQL().ExecContext(ctx,
+	if requireExisting {
+		if persisted == nil {
+			return sql.ErrNoRows
+		}
+		task.CreatedAt = persisted.CreatedAt
+	}
+	rawTask, err := json.Marshal(task)
+	if err != nil {
+		return fmt.Errorf("marshal warmup task: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO credential_warmup_policies(instance_id,scope,target,document_json,updated_at_ms) VALUES(?,?,?,?,?) ON CONFLICT(instance_id,scope,target) DO UPDATE SET document_json=excluded.document_json,updated_at_ms=excluded.updated_at_ms`,
-		instance, "credential", warmupTaskTarget(task.ID), string(raw), nowMS,
-	)
-	return err
+		instance, "credential", target, string(rawTask), nowMS,
+	); err != nil {
+		return fmt.Errorf("write warmup task: %w", err)
+	}
+	if reconcile != nil {
+		current, err := readWarmupMarksTx(ctx, tx, instance, task.ID)
+		if err != nil {
+			return err
+		}
+		nextMarks, err := reconcile(persisted, current)
+		if err != nil {
+			return fmt.Errorf("reconcile warmup marks: %w", err)
+		}
+		if nextMarks != nil {
+			if err := writeWarmupMarksTx(ctx, tx, instance, task.ID, *nextMarks, nowMS); err != nil {
+				return err
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit warmup task transaction: %w", err)
+	}
+	return nil
+}
+
+// UpdateWarmupMarks atomically reads, transforms, and persists a task's scheduling marks inside a
+// single SQLite transaction so concurrent scheduler and operator updates never clobber ResetKeys.
+func (repository *Repository) UpdateWarmupMarks(
+	ctx context.Context,
+	instance, taskID string,
+	nowMS int64,
+	mutate func(current warmup.TaskMarks) (warmup.TaskMarks, bool, error),
+) (warmup.TaskMarks, error) {
+	tx, err := repository.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		return warmup.TaskMarks{}, fmt.Errorf("begin warmup marks transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	current, err := readWarmupMarksTx(ctx, tx, instance, taskID)
+	if err != nil {
+		return warmup.TaskMarks{}, err
+	}
+	updated, shouldWrite, err := mutate(current)
+	if !shouldWrite {
+		return updated, err
+	}
+	if writeErr := writeWarmupMarksTx(ctx, tx, instance, taskID, updated, nowMS); writeErr != nil {
+		return warmup.TaskMarks{}, writeErr
+	}
+	if commitErr := tx.Commit(); commitErr != nil {
+		return warmup.TaskMarks{}, fmt.Errorf("commit warmup marks transaction: %w", commitErr)
+	}
+	return updated, err
+}
+
+func readWarmupTaskTx(ctx context.Context, tx *sql.Tx, instance, taskID string) (*warmup.Task, error) {
+	var raw string
+	err := tx.QueryRowContext(ctx,
+		`SELECT document_json FROM credential_warmup_policies WHERE instance_id=? AND scope='credential' AND target=?`,
+		instance, warmupTaskTarget(taskID),
+	).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read warmup task: %w", err)
+	}
+	var task warmup.Task
+	if err := json.Unmarshal([]byte(raw), &task); err != nil {
+		return nil, fmt.Errorf("unmarshal warmup task: %w", err)
+	}
+	return &task, nil
+}
+
+func readWarmupMarksTx(ctx context.Context, tx *sql.Tx, instance, taskID string) (warmup.TaskMarks, error) {
+	var raw string
+	err := tx.QueryRowContext(ctx,
+		`SELECT document_json FROM credential_warmup_state WHERE instance_id=? AND auth_index=?`,
+		instance, warmupTaskTarget(taskID),
+	).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return warmup.TaskMarks{}, nil
+	}
+	if err != nil {
+		return warmup.TaskMarks{}, fmt.Errorf("read warmup marks: %w", err)
+	}
+	var marks warmup.TaskMarks
+	if err := json.Unmarshal([]byte(raw), &marks); err != nil {
+		return warmup.TaskMarks{}, fmt.Errorf("unmarshal warmup marks: %w", err)
+	}
+	return marks, nil
+}
+
+func writeWarmupMarksTx(ctx context.Context, tx *sql.Tx, instance, taskID string, marks warmup.TaskMarks, nowMS int64) error {
+	if len(marks.ResetKeys) > warmup.MAX_RESET_KEYS {
+		marks.ResetKeys = marks.ResetKeys[len(marks.ResetKeys)-warmup.MAX_RESET_KEYS:]
+	}
+	raw, err := json.Marshal(marks)
+	if err != nil {
+		return fmt.Errorf("marshal warmup marks: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO credential_warmup_state(instance_id,auth_index,document_json,updated_at_ms) VALUES(?,?,?,?) ON CONFLICT(instance_id,auth_index) DO UPDATE SET document_json=excluded.document_json,updated_at_ms=excluded.updated_at_ms`,
+		instance, warmupTaskTarget(taskID), string(raw), nowMS,
+	); err != nil {
+		return fmt.Errorf("write warmup marks: %w", err)
+	}
+	return nil
 }
 
 func (repository *Repository) DeleteWarmupTask(ctx context.Context, instance, taskID string) error {
