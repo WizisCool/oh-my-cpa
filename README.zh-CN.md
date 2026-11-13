@@ -37,8 +37,7 @@
 
 </div>
 
-[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)（CPA）是一个 API 网关，负责协议适配、凭据管理与请求代理。
-**Oh My CPA**（OMC）是面向 **CLIProxyAPI v8+** 的 Web 控制台，基于 `shadcn/ui` 构建，拥有现代化的 UI/UX、细腻的动效以及桌面与移动端适配：在网关之上集中管理提供商、OAuth 账号、可视化路由与内置插件生态，并提供完善的请求记录、实时路由、多维度的定价统计、额度窗口预热与预测及 Agent/MCP 工具。静态数据采用 AES-GCM 加密并在修改配置前自动备份，登录使用 CPA 的管理密钥。
+**Oh My CPA**（OMC）是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) v8+ 的 Web 控制台，基于 `shadcn/ui` 构建，拥有现代化的 UI/UX、细腻的动效以及桌面与移动端适配。控制台集中管理提供商、OAuth 账号、可视化路由与内置插件生态，并提供完善的请求记录、实时路由、多维度的定价统计、额度窗口预热与预测及 Agent/MCP 工具；静态数据采用 AES-GCM 加密并在修改配置前自动备份，使用 CPA 的管理密钥登录。
 
 > [!TIP]
 > **[立即体验 Live Demo](https://omc-demo.junze.dev)**

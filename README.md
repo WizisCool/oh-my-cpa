@@ -37,15 +37,13 @@ Management · Routing · Observability · Agent & MCP
 
 </div>
 
-[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (CPA) is an API gateway: it
-adapts protocols, holds credentials and proxies requests. **Oh My CPA** (OMC) is a
-web console for **CLIProxyAPI v8+**, built on `shadcn/ui` with a modern UI/UX, fluid
-motion, and desktop and mobile layouts. Above the gateway, OMC centralizes providers,
-OAuth accounts, visual routing and a built-in plugin ecosystem, and provides
-comprehensive request records, live routing, multi-dimensional pricing analytics, quota
-window warmup and forecasting, and Agent/MCP tools. Data is protected with AES-GCM
-encryption and automatic config backups, and the console signs in with CPA's management
-key.
+**Oh My CPA** (OMC) is a web console for [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) v8+,
+built on `shadcn/ui` with a modern UI/UX, fluid motion, and desktop and mobile layouts.
+OMC centralizes providers, OAuth accounts, visual routing and a built-in plugin
+ecosystem, and provides comprehensive request records, live routing, multi-dimensional
+pricing analytics, quota window warmup and forecasting, and Agent/MCP tools. Data is
+protected with AES-GCM encryption and automatic config backups, and the console signs
+in with CPA's management key.
 
 > [!TIP]
 > **[Try the Live Demo](https://omc-demo.junze.dev)**
