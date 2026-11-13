@@ -5,7 +5,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '../../../api/client';
 import { Panel } from '../../common/Panel';
-import { Placeholder } from '../../common/Placeholder';
 import { LoadFailure } from '../../feedback';
 import { useLiveRevision } from '../../../hooks/useLiveRevision';
 import { useProviderBranding } from '../../../hooks/useProviderBranding';
@@ -27,6 +26,7 @@ import {
   type UsageRoutingResponse,
 } from '../../../types/usageRouting';
 import { RoutingMap, type RoutingArrivals } from './RoutingMap';
+import { RoutingMapSkeleton } from './RoutingMapSkeleton';
 import type { IdentitySources } from './routingIdentity';
 import styles from './RoutingPanel.module.css';
 import { Tooltip } from '../../common/Tooltip';
@@ -297,7 +297,7 @@ export const RoutingPanel = React.memo(function RoutingPanel() {
           onRetry={() => void routing.refetch()}
         />
       )}
-      {!model && !routing.isError && <Placeholder width="100%" height={260} />}
+      {!model && !routing.isError && <RoutingMapSkeleton />}
       {model && (
         <RoutingMap
           model={model}

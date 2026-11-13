@@ -9,6 +9,7 @@ import {
 } from '../../types/dashboardLayout';
 import { LoadingRegion, PageHeadPlaceholder, Placeholder } from '../common/Placeholder';
 import { Panel } from '../common/Panel';
+import { RoutingMapSkeleton } from './routing/RoutingMapSkeleton';
 import './dashboardGrid.css';
 
 /**
@@ -57,10 +58,15 @@ export function DashboardTilesPlaceholder({ layout }: { layout: DashboardLayout 
           >
             {spec.isMetric ? (
               <DashboardKpiTilePlaceholder id={item.id} index={index} />
+            ) : item.id === 'routing' ? (
+              <Panel className="dashboard-tile">
+                <Placeholder width="24%" row={index} className="placeholder-line is-meta" />
+                <RoutingMapSkeleton className="tile-placeholder-spark" />
+              </Panel>
             ) : (
               <Panel className="dashboard-tile">
                 <Placeholder width="32%" row={index} className="placeholder-line is-meta" />
-                <Placeholder width="100%" height={item.id === 'routing' ? 260 : 180} row={index + 1} className="tile-placeholder-spark" />
+                <Placeholder width="100%" height={180} row={index + 1} className="tile-placeholder-spark" />
               </Panel>
             )}
           </div>
