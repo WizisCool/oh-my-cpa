@@ -7,9 +7,9 @@
   <img src="web/src/assets/brand/omc-wordmark-dark.svg#gh-dark-mode-only" alt="Oh-My-CPA" width="340">
 </a>
 
-### Manage APIs and OAuth in one place, visualize requests, cost and usage
+### Centralize APIs, OAuth and routing, observe requests, quota and cost
 
-MCP · Visualization · Management
+Management · Routing · Observability · Agent & MCP
 
 <br />
 
@@ -38,11 +38,14 @@ MCP · Visualization · Management
 </div>
 
 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (CPA) is an API gateway: it
-adapts protocols, holds credentials and proxies requests. **Oh My CPA** (OMC) is a web
-console for it. OMC manages the gateway's providers, credentials and configuration, and
-records the usage and cost of every request. It is a single Go
-binary with the React console embedded and a local SQLite database, runs offline, and
-signs in with CPA's management key.
+adapts protocols, holds credentials and proxies requests. **Oh My CPA** (OMC) is a
+web console for **CLIProxyAPI v8+**, built on `shadcn/ui` with a modern UI/UX, fluid
+motion, and desktop and mobile layouts. Above the gateway, OMC centralizes providers,
+OAuth accounts, visual routing and a built-in plugin ecosystem, and provides
+comprehensive request records, live routing, multi-dimensional pricing analytics, quota
+window warmup and forecasting, and Agent/MCP tools. Data is protected with AES-GCM
+encryption and automatic config backups, and the console signs in with CPA's management
+key.
 
 > [!TIP]
 > **[Try the Live Demo](https://omc-demo.junze.dev)**
