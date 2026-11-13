@@ -5,7 +5,9 @@ import { formatUsd } from '../../types/pricingDisplay';
 import { quotaWindowFullName, quotaWindowKindOf } from './quotaWindowSelection';
 
 const FIVE_HOURS_MS = 5 * 3_600_000;
-const UNSTARTED_CODEX_WINDOW_TOLERANCE_MS = 60_000;
+// Absorbs integer-second reset truncation and minor clock skew at observation without masking
+// active cycles observed shortly after starting.
+const UNSTARTED_CODEX_WINDOW_TOLERANCE_MS = 5_000;
 
 const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
 

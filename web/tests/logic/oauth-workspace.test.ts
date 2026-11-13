@@ -1006,6 +1006,16 @@ test('isUnusedFullCodexFiveHourWindow distinguishes unstarted windows from start
     isUnusedFullCodexFiveHourWindow('codex', { ...base, reset_at_ms: observedAt + 3 * 3_600_000 + 4 * 60_000 }, observedAt, observedAt),
     false,
   );
+  // Active cycle observed 30s after starting with no local requests, evaluated 2h later
+  assert.equal(
+    isUnusedFullCodexFiveHourWindow(
+      'codex',
+      { ...base, reset_at_ms: observedAt + fiveHours - 30_000 },
+      observedAt,
+      observedAt + 2 * 3_600_000,
+    ),
+    false,
+  );
   // Active cycle 2 minutes after warmup
   assert.equal(
     isUnusedFullCodexFiveHourWindow('codex', { ...base, reset_at_ms: observedAt + fiveHours - 124_000 }, observedAt, observedAt),
