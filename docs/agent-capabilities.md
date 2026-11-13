@@ -65,7 +65,8 @@ proof that the data stayed local.
 ## Quota evidence
 
 Quota windows retain upstream percentages, native amounts and reset times. Recorded
-`usage.cost_nanos` is API-equivalent consumption. Optional `model_forecasts` describe
+`usage.cost_nanos` is API-equivalent consumption; compare `usage.priced_requests`
+with `usage.requests` to identify a partial cost total. Optional `model_forecasts` describe
 remaining requests and tokens for directly observed models and service tiers, with
 sample request counts, consumed percentage and observation times. Forecasts are
 conditioned on similar request sizes and cache rates in the current window;

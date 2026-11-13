@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 )
@@ -100,5 +102,33 @@ func TestSaveDemoQuotaSnapshotWrapMarshalFailure(t *testing.T) {
 	var marshalError *json.UnsupportedValueError
 	if !errors.As(err, &marshalError) || !strings.Contains(err.Error(), "marshal quota snapshot for auth-test") {
 		t.Fatalf("marshal failure must identify the credential and preserve its cause: %v", err)
+	}
+}
+
+func TestModelQuotaCheckpointsAllowOverlappingWindows(t *testing.T) {
+	repo, now, _ := seededDatabase(t)
+	ctx := context.Background()
+	latest, err := repo.GetLatestQuotaSnapshots(ctx, []string{"auth-codex-01"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var windows []quota.QuotaWindow
+	if err := json.Unmarshal([]byte(latest["auth-codex-01"].WindowsJSON), &windows); err != nil {
+		t.Fatal(err)
+	}
+	for index := range 5 {
+		at := now.Add(-time.Hour).UnixMilli() + int64(index)
+		if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO usage_events (instance_id,event_key,api_group_key,auth_index,model,timestamp_ms,created_at_ms,total_tokens)
+			VALUES ('default', ?, 'group', 'auth-overlap', 'gpt-6.1-sol', ?, ?, 100)`, fmt.Sprintf("overlap-%d", index), at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, window := range windows {
+		if err := seedModelQuotaObservations(ctx, repo, "auth-overlap", "codex", nil, window, now.UnixMilli()); err != nil {
+			t.Fatalf("overlapping window %s: %v", window.ID, err)
+		}
+	}
+	if err := saveDemoQuotaSnapshot(ctx, repo, "auth-overlap", "codex", nil, windows, now.UnixMilli()); err != nil {
+		t.Fatal(err)
 	}
 }

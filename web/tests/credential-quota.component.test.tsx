@@ -12,6 +12,7 @@ import { resolveCredentialMark } from '../src/types/brandMark';
 import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
 import { QuotaCapacityButton, QuotaCapacityScope } from '../src/pages/quota/QuotaCapacityButton';
 import QuotaCapacityDialog from '../src/pages/quota/QuotaCapacityDialog';
+import { formatShortDateTime } from '../src/pages/quota/quotaFormat';
 import { CredentialList } from '../src/pages/oauthManagement/CredentialList';
 import { ProviderStrip } from '../src/pages/oauthManagement/ProviderStrip';
 import type { CredentialActions } from '../src/pages/oauthManagement/CredentialParts';
@@ -455,6 +456,7 @@ describe('quota consumption and model forecast dialog', () => {
       await waitFor(() => expect(within(dialog).getByTestId('quota-capacity-model-select')).toBeTruthy());
       const forecastCard = within(dialog).getByRole('region', { name: 'Available this window' });
       expect(forecastCard.textContent).toContain('890');
+      expect(forecastCard.textContent).toContain(`${formatShortDateTime(NOW_MS - HOUR_MS)} – ${formatShortDateTime(NOW_MS)}`);
       expect(forecastCard.textContent).not.toContain('$');
       expect(within(dialog).getByRole('region', { name: 'This window' }).textContent).toContain('$10.00');
       fireEvent.click(within(dialog).getByTestId('quota-capacity-model-select'));

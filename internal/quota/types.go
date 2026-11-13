@@ -212,6 +212,8 @@ type NormalizedQuota struct {
 	// RateLimit is set when the provider refused the read for asking too often. It schedules the
 	// next read and never leaves the process: the reading's Error already tells the operator.
 	RateLimit *RateLimitSignal `json:"-"`
+	// HasFailedRead separates forecast eligibility from cooldown presentation.
+	HasFailedRead bool `json:"-"`
 	// IsDeferred marks a reading answered without a read; see Service.DeferredReading.
 	IsDeferred bool `json:"-"`
 }

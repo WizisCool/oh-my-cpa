@@ -36,6 +36,7 @@ type CalibrationPoint struct {
 	UnmatchedRequests int64                   `json:"unmatched,omitempty"`
 	IntervalModels    []ModelCalibrationUsage `json:"interval_models,omitempty"`
 	HasUsageGap       bool                    `json:"has_usage_gap,omitempty"`
+	UsageWatermarkID  int64                   `json:"usage_watermark_id,omitempty"`
 }
 
 // CycleCalibration is the evidence one cycle of a window has gathered.
@@ -97,17 +98,23 @@ func NextCalibrationCycle(cycles []CycleCalibration, provider string, window Quo
 	}
 	_, _, boundaryReason := WindowCycleRange(window, observedAtMS, observedAtMS)
 	hasBoundary := boundaryReason == ""
-	if index := liveCycleIndex(window, observedAtMS, cycles); index >= 0 && sameCalibrationPlan(cycles[index], plan) && len(cycles[index].Points) > 0 {
+	if index := liveCycleIndex(window, observedAtMS, cycles); index >= 0 && len(cycles[index].Points) > 0 {
 		latest := &cycles[index]
 		last := latest.Points[len(latest.Points)-1]
-		isRise := used >= last.UsedPercent+1-1e-9
-		isReset := used < last.UsedPercent-capacityResetTolerancePercent
-		if observedAtMS <= last.ObservedAtMS || len(latest.Points) >= capacityMaxPoints || !isRise && !isReset {
+		if observedAtMS <= last.ObservedAtMS {
 			return CycleCalibration{}, false
 		}
-		cycle := *latest
-		cycle.Points = slices.Clone(latest.Points)
-		return cycle, true
+		if sameCalibrationPlan(*latest, plan) {
+			cycle := *latest
+			cycle.Points = slices.Clone(latest.Points)
+			isRise := used >= last.UsedPercent+1-1e-9
+			isReset := used < last.UsedPercent-capacityResetTolerancePercent
+			if len(latest.Points) >= capacityMaxPoints || !isRise && !isReset {
+				// The live cycle still lets persistence check late arrivals without adding a point.
+				return cycle, false
+			}
+			return cycle, true
+		}
 	}
 	if !hasBoundary {
 		return CycleCalibration{}, false

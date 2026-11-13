@@ -245,3 +245,36 @@ func TestModelQuotaForecastSeparatesServiceTiers(t *testing.T) {
 		t.Fatalf("tier forecasts = %+v, %q", forecasts, reason)
 	}
 }
+
+func TestModelQuotaForecastInvalidatesMixedIntervalWorkload(t *testing.T) {
+	initial := modelSample("gpt-6.1-sol", 10, 1000)
+	larger := modelSample(initial.Model, 5, 5000)
+	cached := modelSample(initial.Model, 5, 500)
+	cached.CachedTokens = 400
+	mixedTier := modelSample(initial.Model, 5, 500)
+	mixedTier.HasMixedServiceTiers = true
+	for _, changed := range []ModelCalibrationUsage{larger, cached, mixedTier} {
+		stored := cycle(modelPoint(6, 0), modelPoint(7, 10, initial), modelPoint(8, 20, changed, modelSample("gpt-6.1-terra", 5, 500)))
+		if got, _ := BuildModelForecasts(capacityWindow(20), nil, 9*hourMS, []CycleCalibration{stored}); len(got) != 0 {
+			t.Fatalf("mixed interval retained a changed workload: %+v", got)
+		}
+	}
+	stored := cycle(modelPoint(6, 0), modelPoint(7, 10, initial), modelPoint(8, 20, modelSample(initial.Model, 5, 500), modelSample("gpt-6.1-terra", 5, 500)))
+	if got, _ := BuildModelForecasts(capacityWindow(20), nil, 9*hourMS, []CycleCalibration{stored}); len(got) != 1 || got[0].SampleRequests != 10 {
+		t.Fatalf("unchanged model lost its earlier direct sample: %+v", got)
+	}
+}
+
+func TestNextCalibrationCycleRejectsOlderPlanReading(t *testing.T) {
+	stored := cycle(modelPoint(8, 20))
+	stored.PlanType, stored.PlanTier = "pro", "elite"
+	if _, ok := NextCalibrationCycle([]CycleCalibration{stored}, "codex", capacityWindow(10), &QuotaPlan{PlanType: "free", Tier: "basic"}, 7*hourMS); ok {
+		t.Fatal("an older plan reading replaced the newer plan's cycle")
+	}
+	reset := modelPoint(8, 0)
+	reset.HasUsageGap = true
+	withReset := cycle(modelPoint(6, 0), modelPoint(7, 20, modelSample("gpt-6.1-sol", 10, 1000)), reset)
+	if got, reason := BuildModelForecasts(capacityWindow(0), nil, 9*hourMS, []CycleCalibration{withReset}); len(got) != 0 || reason != CapacityReasonResetMidCycle {
+		t.Fatalf("mid-cycle reset with usage gap = %+v, %q", got, reason)
+	}
+}

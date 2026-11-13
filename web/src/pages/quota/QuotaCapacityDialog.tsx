@@ -164,9 +164,10 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
           foot={(
             <>
               {activeForecast ? (
-                <span className={styles['foot-text']} data-tip={`${formatShortDateTime(activeForecast.from_ms)} – ${formatShortDateTime(activeForecast.observed_at_ms)}`}>
+                <MetaLine tone="quiet" className={styles['foot-text']}>
                   {t('quota.capacity_sample', { n: activeForecast.sample_requests, percent: Number(activeForecast.sample_used_percent.toFixed(1)) })}
-                </span>
+                  {`${formatShortDateTime(activeForecast.from_ms)} – ${formatShortDateTime(activeForecast.observed_at_ms)}`}
+                </MetaLine>
               ) : (
                 <span className={styles['foot-text']}>{pendingNote ?? t('quota.capacity_reason_low_usage')}</span>
               )}

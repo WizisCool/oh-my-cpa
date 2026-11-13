@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
@@ -20,11 +21,36 @@ import (
 
 func capacityTestHandler(t *testing.T) *Handler {
 	t.Helper()
+	const managementKey = "management-secret"
+	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "Bearer "+managementKey {
+			writer.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/v8/management/credentials":
+			_, _ = writer.Write([]byte(`{"files":[{"id":"f-1","name":"codex-1.json","auth_index":"codex-1","type":"codex","provider":"codex"}]}`))
+		case "/v8/management/config/oauth/model-alias":
+			_, _ = writer.Write([]byte(`{}`))
+		default:
+			writer.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(cpaServer.Close)
 	handler := testHandler(t, "")
+	cipher, err := crypto.New("01234567890123456789012345678901")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ciphertext, nonce, err := cipher.Encrypt([]byte(managementKey))
+	if err != nil {
+		t.Fatal(err)
+	}
 	now := time.Now().UTC()
 	if err := handler.repo.UpsertInstance(context.Background(), domain.CPAInstance{
-		ID: "default", Name: "Default", BaseURL: "http://127.0.0.1:8317", UsageAddr: "127.0.0.1:8317",
-		ManagementKeyCiphertext: []byte{0}, ManagementKeyNonce: []byte{0}, CreatedAt: now, UpdatedAt: now,
+		ID: "default", Name: "Default", BaseURL: cpaServer.URL, UsageAddr: "127.0.0.1:8317",
+		ManagementKeyCiphertext: ciphertext, ManagementKeyNonce: nonce, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -302,6 +328,40 @@ func TestQuotaForecastsKeepNativeReadingsAndSeparateRecordedCosts(t *testing.T) 
 	status, body = getCapacityHistory(t, handler, "?window=five_hour")
 	if status != http.StatusOK || body["model_forecasts"] != nil || body["forecast_unavailable"] != quota.CapacityReasonNoReading {
 		t.Fatalf("failed refresh reused a forecast: %d %v", status, body)
+	}
+
+	if _, err := handler.repo.SQL().ExecContext(context.Background(), `INSERT INTO error_events (
+		instance_id, event_key, provider, model, auth_index, status_code, body,
+		retryable, auth_status, auth_disabled, auth_unavailable, quota_exceeded,
+		quota_reason, next_recover_at_ms, timestamp_ms, created_at_ms
+	) VALUES ('default', 'cooldown-1', 'codex', 'gpt-6.1-sol', 'codex-1', 429, 'Rate limit', 1, 'active', 0, 0, 1, 'rate limited', ?, ?, ?)`,
+		now+60_000, now-1000, now-1000,
+	); err != nil {
+		t.Fatal(err)
+	}
+	client, err := handler.capabilityClient(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	overview, err := handler.buildQuotaOverview(context.Background(), client)
+	if err != nil || len(overview.Quotas) != 1 {
+		t.Fatalf("overview = %+v, %v", overview, err)
+	}
+	if item := overview.Quotas[0]; item.Status != "cooldown" || len(item.Windows[0].ModelForecasts) != 0 || item.Windows[0].ForecastUnavailable != quota.CapacityReasonNoReading {
+		t.Fatalf("overview failed refresh during cooldown = %+v", item)
+	}
+	detailRouter := chi.NewRouter()
+	detailRouter.Get("/quota/{authIndex}", handler.getCredentialQuotaDetail)
+	detailRecorder := httptest.NewRecorder()
+	detailRouter.ServeHTTP(detailRecorder, httptest.NewRequest(http.MethodGet, "/quota/codex-1", nil))
+	var detail struct {
+		Quota quota.NormalizedQuota `json:"quota"`
+	}
+	if detailRecorder.Code != http.StatusOK || json.Unmarshal(detailRecorder.Body.Bytes(), &detail) != nil {
+		t.Fatalf("detail = %d %s", detailRecorder.Code, detailRecorder.Body.String())
+	}
+	if detail.Quota.Status != "cooldown" || len(detail.Quota.Windows[0].ModelForecasts) != 0 || detail.Quota.Windows[0].ForecastUnavailable != quota.CapacityReasonNoReading {
+		t.Fatalf("detail failed refresh during cooldown = %+v", detail.Quota)
 	}
 
 	for _, status := range []string{"stale", "error"} {

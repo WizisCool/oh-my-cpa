@@ -194,3 +194,12 @@ func IsModelInWindowScope(window QuotaWindow, rawModel string) bool {
 	isMatch, _ := matchWindowModelScope(window, families, exactModel, name)
 	return isMatch
 }
+
+// CanAffectWindowForecast reports whether a request for rawModel can change or
+// obscure window's attribution. Known models outside a scoped window's pool do not.
+func CanAffectWindowForecast(window QuotaWindow, rawModel string) bool {
+	if capacityModelFamily(normalizeCapacityModel(rawModel)) == "" {
+		return true
+	}
+	return IsModelInWindowScope(window, rawModel)
+}

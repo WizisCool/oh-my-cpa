@@ -74,12 +74,6 @@ func BuildModelForecasts(window QuotaWindow, plan *QuotaPlan, observedAtMS int64
 		if point.ObservedAtMS > observedAtMS {
 			break
 		}
-		if point.HasUsageGap {
-			// Earlier rates used incomplete attribution; only fresh intervals can rebuild them.
-			clear(samples)
-			active = nil
-			reason = CapacityReasonLowUsage
-		}
 		rise := point.UsedPercent - previous.UsedPercent
 		if rise < -capacityResetTolerancePercent {
 			clear(samples)
@@ -87,9 +81,26 @@ func BuildModelForecasts(window QuotaWindow, plan *QuotaPlan, observedAtMS int64
 			reason = CapacityReasonResetMidCycle
 			continue
 		}
+		if point.HasUsageGap {
+			// Earlier rates used incomplete attribution; only fresh intervals can rebuild them.
+			clear(samples)
+			active = nil
+			reason = CapacityReasonLowUsage
+			continue
+		}
 		if rise <= 0 || point.ObservedAtMS <= previous.ObservedAtMS {
 			active = nil
 			continue
+		}
+		for key, sample := range samples {
+			for _, model := range point.IntervalModels {
+				if model.Requests <= 0 || !strings.EqualFold(sample.Model, model.Model) {
+					continue
+				}
+				if model.HasMixedServiceTiers || sample.ServiceTier == model.ServiceTier && !hasSimilarWorkload(sample.ModelCalibrationUsage, model) {
+					delete(samples, key)
+				}
+			}
 		}
 		model, ok := singleIntervalModel(window, point.IntervalModels)
 		if !ok {

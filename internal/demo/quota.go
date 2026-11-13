@@ -76,8 +76,12 @@ func saveDemoQuotaSnapshot(ctx context.Context, repo *repository.Repository, aut
 	if err != nil {
 		return fmt.Errorf("marshal quota snapshot for %s: %w", authIndex, err)
 	}
+	windowKey := "all"
+	if len(windows) == 1 {
+		windowKey = windows[0].ID
+	}
 	record := repository.QuotaSnapshotRecord{
-		ID:           "demo-quota-" + authIndex + "-" + strconv.FormatInt(observedAtMS, 10),
+		ID:           "demo-quota-" + authIndex + "-" + windowKey + "-" + strconv.FormatInt(observedAtMS, 10),
 		CreatedAtMS:  observedAtMS,
 		AuthIndex:    authIndex,
 		Provider:     provider,

@@ -72,13 +72,17 @@ func HasRestoredCapacity(reading *NormalizedQuota, readStartedAtMS int64) bool {
 // which is what stops the credential, and the reset-driven read answers the question within
 // minutes of a boundary.
 func ApplyReadingHealth(q *NormalizedQuota, attempt *ReadAttempt, hasStoredReading bool, nowMS int64) {
-	if q == nil || q.Disabled {
+	if q == nil {
+		return
+	}
+	q.HasFailedRead = attempt != nil && attempt.IsFailed && (!hasStoredReading || attempt.AttemptedAtMS >= q.ObservedAtMS)
+	if q.Disabled {
 		return
 	}
 	if (q.ActiveCooldown != nil && q.ActiveCooldown.IsActive) || q.Status == "cooldown" {
 		return
 	}
-	if attempt != nil && attempt.IsFailed && (!hasStoredReading || attempt.AttemptedAtMS >= q.ObservedAtMS) {
+	if q.HasFailedRead {
 		q.Error = attempt.Failure
 		if looksLikeAuthFailure(attempt.Failure) {
 			q.Status = "error"

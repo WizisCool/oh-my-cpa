@@ -46,7 +46,7 @@ func (h *Handler) attachQuotaForecasts(ctx context.Context, observation *quota.N
 			window.ForecastUnavailable = reason
 			continue
 		}
-		if observation.Status == "stale" || observation.Status == "error" || observation.Error != "" || observation.Disabled {
+		if observation.Status == "stale" || observation.Status == "error" || observation.Error != "" || observation.Disabled || observation.HasFailedRead {
 			window.ForecastUnavailable = quota.CapacityReasonNoReading
 			continue
 		}
