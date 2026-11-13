@@ -259,6 +259,18 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
     });
     expect(header.classList.contains('is-collapsed')).toBe(false);
     expect(animateCalls).toBe(callsBeforeReduced);
+    // A trackpad flick drifts sideways and coasts into the top as a tail of small deltas; their sum
+    // still restores the header.
+    act(() => {
+      scrollArea.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, bubbles: true, cancelable: true }));
+    });
+    expect(header.classList.contains('is-collapsed')).toBe(true);
+    act(() => {
+      for (const deltaY of [-9, -8, -6, -5]) {
+        scrollArea.dispatchEvent(new WheelEvent('wheel', { deltaY, deltaX: 1.5, bubbles: true, cancelable: true }));
+      }
+    });
+    expect(header.classList.contains('is-collapsed')).toBe(false);
   });
 
   it('auto-collapses on mobile downward touch scroll and restores on top pull-down or footer restore tap', () => {
@@ -399,5 +411,24 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
 
     fireEvent.click(backBtn!);
     expect(screen.getAllByTestId('virtual-req-row')[0].textContent).toBe('row-42');
+  });
+
+  it('numbers rows by their place within the group, so interleaved groups still alternate', () => {
+    const items = [
+      { id: 'a1', group: 'A' },
+      { id: 'b1', group: 'B' },
+      { id: 'a2', group: 'A' },
+      { id: 'a3', group: 'A' },
+    ];
+    renderWithOmc(
+      <RequestVirtualList
+        virtual={false}
+        items={items}
+        getItemKey={(item) => item.id}
+        group={{ key: (item) => item.group, title: (key) => key }}
+        renderItem={(item, position) => <div data-testid="grouped-row">{`${item.id}:${position}`}</div>}
+      />,
+    );
+    expect(screen.getAllByTestId('grouped-row').map((row) => row.textContent)).toEqual(['a1:0', 'a2:1', 'a3:2', 'b1:0']);
   });
 });

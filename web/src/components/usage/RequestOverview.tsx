@@ -23,6 +23,7 @@ import {
 } from '../../types/usageEventMetrics';
 import { requestFailureCause, tokenComposition, type TokenSegmentKey } from '../../types/requestDetailSummary';
 import './RequestList.css';
+import { Tag } from '../common/Tag';
 
 type DetailEvent = UsageEventDetail['event'];
 
@@ -105,7 +106,7 @@ function RouteNode({ icon, label, value, badge }: { icon: React.ReactNode; label
           {value || t('events.not_captured')}
         </strong>
       </span>
-      {badge && <span className="req-route-badge">{badge}</span>}
+      {badge && <Tag size="small" className="req-route-badge">{badge}</Tag>}
     </li>
   );
 }
@@ -286,9 +287,9 @@ function SettingsCard({ event }: { event: DetailEvent }) {
           <dt>{t('events.reasoning_effort')}</dt>
           <dd>
             {effortName ? (
-              <span className="req-effort-badge" style={effortHue ? ({ '--effort-hue': effortHue } as React.CSSProperties) : undefined}>
+              <Tag size="small" className="req-effort-badge" style={effortHue ? ({ '--effort-hue': effortHue } as React.CSSProperties) : undefined}>
                 {effortName}
-              </span>
+              </Tag>
             ) : missing}
           </dd>
         </div>

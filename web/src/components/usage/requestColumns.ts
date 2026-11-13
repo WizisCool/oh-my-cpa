@@ -45,8 +45,8 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     id: 'result',
     labelKey: 'events.col_result',
     align: 'left',
-    defaultWidth: 88,
-    minWidth: 78,
+    defaultWidth: 68,
+    minWidth: 64,
     maxWidth: 130,
     flexGrow: 0,
     resizable: true,
@@ -58,23 +58,32 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     defaultWidth: 210,
     minWidth: 140,
     maxWidth: 480,
-    flexGrow: 1.6,
+    flexGrow: 1,
     resizable: true,
   },
   {
+    // A row reads as three groups: the request itself (time, verdict, provider,
+    // model), how it performed (mode to cache rate), and who called (key, client).
+    // The first is what a reader looks for, so its two names take all the row's
+    // spare room, in equal shares, and the group holds the left and centre of the
+    // row; the other two keep tight fixed tracks at the right. The model's column
+    // opens with a space of its own, so the two names never run together
+    // (`UsageEventsPage.css`).
     id: 'model',
     labelKey: 'events.col_model',
     align: 'left',
-    defaultWidth: 175,
+    defaultWidth: 250,
     minWidth: 130,
     maxWidth: 440,
-    flexGrow: 1.3,
+    flexGrow: 1,
     resizable: true,
   },
   {
     // How the request was made, apart from which model answered it: the reasoning
     // effort and the marks for a non-streamed response. Rigid, because its content
     // is a badge and a couple of icons whose width does not depend on the record.
+    // It opens the performance group at the group's left edge, and its track
+    // leaves room after the marks so they never crowd the throughput beside it.
     id: 'mode',
     labelKey: 'events.col_mode',
     align: 'left',
@@ -83,7 +92,7 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     maxWidth: 180,
     flexGrow: 0,
     resizable: true,
-    foldOrder: 5,
+    foldOrder: 4,
   },
   {
     id: 'tps',
@@ -94,14 +103,17 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     maxWidth: 140,
     flexGrow: 0,
     resizable: true,
-    foldOrder: 3,
+    foldOrder: 5,
   },
   {
+    // The total sits over the time to first token, the longer line: a
+    // first token minutes late is `TTFT 1234.56 s` (84px at the 12px size), and the
+    // track keeps it clear of the throughput beside it.
     id: 'latency',
     labelKey: 'events.col_latency',
     align: 'right',
-    defaultWidth: 76,
-    minWidth: 68,
+    defaultWidth: 88,
+    minWidth: 80,
     maxWidth: 140,
     flexGrow: 0,
     resizable: true,
@@ -125,8 +137,8 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     id: 'cost',
     labelKey: 'events.col_cost',
     align: 'right',
-    defaultWidth: 64,
-    minWidth: 58,
+    defaultWidth: 56,
+    minWidth: 52,
     maxWidth: 140,
     flexGrow: 0,
     resizable: true,
@@ -135,20 +147,27 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     id: 'cache',
     labelKey: 'events.col_cache_rate',
     align: 'right',
-    defaultWidth: 64,
-    minWidth: 58,
+    defaultWidth: 52,
+    minWidth: 48,
     maxWidth: 130,
     flexGrow: 0,
     resizable: true,
-    foldOrder: 4,
+    foldOrder: 3,
   },
   {
+    // Who called is secondary to what the request did, so the caller's key and
+    // client keep fixed tracks and leave the spare room to the request's own
+    // facts. The key's track holds a full key mask (20 characters at the 12px
+    // size) after its leading space; a longer alias truncates with its full value
+    // in the tooltip. The leading space is the seam after the right-aligned cache
+    // rate, where a short alias would otherwise sit against the figure
+    // (`UsageEventsPage.css`).
     id: 'key',
     labelKey: 'events.col_key',
     align: 'left',
-    defaultWidth: 124,
-    minWidth: 110,
-    maxWidth: 220,
+    defaultWidth: 136,
+    minWidth: 96,
+    maxWidth: 320,
     flexGrow: 0,
     resizable: true,
     foldOrder: 2,
@@ -157,9 +176,9 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     id: 'ua',
     labelKey: 'events.col_ua',
     align: 'left',
-    defaultWidth: 76,
-    minWidth: 60,
-    maxWidth: 180,
+    defaultWidth: 120,
+    minWidth: 80,
+    maxWidth: 320,
     flexGrow: 0,
     resizable: true,
     foldOrder: 1,
@@ -169,21 +188,27 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
 export const CHEVRON_TRACK_WIDTH = 14;
 
 /**
- * The space between neighbouring tracks, and the row's inline padding. A
- * right-aligned figure ends where its track ends and a left-aligned label starts
- * where the next begins, so this gap is all that separates the cache rate from
- * the caller key beside it; at 12px the two read as one value.
+ * The space between neighbouring tracks, and the row's inline padding. Where the
+ * right-aligned cache rate meets the left-aligned caller key, the key's column
+ * adds a space of its own (`UsageEventsPage.css`).
  */
 export const REQUEST_GRID_GAP = 16;
-export const REQUEST_PAD_INLINE = 12;
+export const REQUEST_PAD_INLINE = 20;
 
 /** The leading track that holds each row's selection checkbox. */
 export const SELECT_TRACK_WIDTH = 20;
 
-/** Which fixed tracks surround the data columns: the list while choosing has both, an exported sheet neither. */
+/** Which fixed tracks surround the data columns: the list has both, an exported sheet neither. */
 export interface RequestGridChrome {
   hasSelection: boolean;
   hasChevron: boolean;
+  /**
+   * The selection track is shut to no width while no choice is under way. It stays in the track
+   * list, so opening and closing it is a change of one width the grid can animate, and the first
+   * data column pulls back over its gap (`.request-stream:not(.is-selecting)`), so a shut track
+   * takes no room.
+   */
+  isSelectionClosed?: boolean;
 }
 
 export const LIST_GRID_CHROME: RequestGridChrome = { hasSelection: true, hasChevron: true };
@@ -265,7 +290,7 @@ export function buildGridTemplateColumns(
     return `${col.defaultWidth}px`;
   });
 
-  if (chrome.hasSelection) tracks.unshift(`${SELECT_TRACK_WIDTH}px`);
+  if (chrome.hasSelection) tracks.unshift(`${chrome.isSelectionClosed ? 0 : SELECT_TRACK_WIDTH}px`);
   if (chrome.hasChevron) tracks.push(`${CHEVRON_TRACK_WIDTH}px`);
   return tracks.join(' ');
 }
@@ -297,7 +322,7 @@ export function computeGridMinWidth(
     return sum + (col.flexGrow > 0 ? col.minWidth : col.defaultWidth);
   }, 0);
   const fixedTracks = [
-    chrome.hasSelection ? SELECT_TRACK_WIDTH : null,
+    chrome.hasSelection && !chrome.isSelectionClosed ? SELECT_TRACK_WIDTH : null,
     chrome.hasChevron ? CHEVRON_TRACK_WIDTH : null,
   ].filter((width): width is number => width !== null);
   // One gap between each pair of neighbouring tracks, data and fixed alike.
@@ -338,3 +363,4 @@ export function foldRequestColumns(
   }
   return folded;
 }
+

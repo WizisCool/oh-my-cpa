@@ -82,13 +82,10 @@
   }
 }
 .req-back-to-top-btn:hover {
-  background: var(--surface);
-  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
-  color: var(--accent);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-raised);
+  color: var(--fg);
 }
 .req-back-to-top-btn.is-live {
-  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
   color: var(--accent);
 }
 .req-back-to-top-btn.is-live .omc-icon {

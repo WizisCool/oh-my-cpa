@@ -47,6 +47,7 @@ import { useToast } from '../feedback';
 import { isRangeCheckboxClick, rowClickIntent } from '../../types/rowSelection';
 import './RequestList.css';
 import './requestMarks.css';
+import { Tag } from '../common/Tag';
 
 export interface RequestRowProps {
   event: UsageEvent;
@@ -65,6 +66,9 @@ export interface RequestRowProps {
   isSelected?: boolean;
   /** Whether the row is picked. */
   isChecked?: boolean;
+  /** The row's place counted from one: every other row carries a band, and which of the two does
+      depends on the mode (RequestList.css). */
+  isOddRow?: boolean;
   /** Whether a choice is under way: the row shows its checkbox, and a plain click picks it. */
   isSelecting?: boolean;
   /** A pick of the row; `isRange` is a Shift click, which runs from the last row picked. */
@@ -85,6 +89,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     onOpen,
     isSelected = false,
     isChecked = false,
+    isOddRow = false,
     isSelecting = false,
     onToggleSelect,
   }) => {
@@ -198,7 +203,7 @@ export const RequestRow = React.memo<RequestRowProps>(
       <div
         role="button"
         tabIndex={0}
-        className={`request-row${isSelected ? ' is-selected' : ''}${isChecked ? ' is-checked' : ''}`}
+        className={`request-row${isSelected ? ' is-selected' : ''}${isChecked ? ' is-checked' : ''}${isOddRow ? ' is-odd' : ' is-even'}`}
         // Shift extends a choice, so it must not also start a text selection across the rows.
         onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }}
         onClick={(e) => {
@@ -215,22 +220,22 @@ export const RequestRow = React.memo<RequestRowProps>(
         }}
         aria-label={`${t('common.details')}: ${displayModel}, ${event.request_id || event.id}`}
       >
-        {/* The checkbox picks the row; neither a click nor a key on it may also reach the row. */}
-        {isSelecting && (
-          <label
-            className="req-select"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <input
-              type="checkbox"
-              className="req-select-box"
-              checked={isChecked}
-              aria-label={t('events.select_row', { id: event.request_id || event.id })}
-              onChange={(e) => onToggleSelect(event.id, isRangeCheckboxClick(e.nativeEvent as MouseEvent))}
-            />
-          </label>
-        )}
+        {/* The checkbox picks the row; neither a click nor a key on it may also reach the row. It
+            stays mounted so its column can open and close around it. */}
+        <label
+          className="req-select select-reveal"
+          data-hidden={isSelecting ? undefined : ''}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            className="req-select-box"
+            checked={isChecked}
+            aria-label={t('events.select_row', { id: event.request_id || event.id })}
+            onChange={(e) => onToggleSelect(event.id, isRangeCheckboxClick(e.nativeEvent as MouseEvent))}
+          />
+        </label>
 
         {/* Column 1: timestamp */}
         <div className={`req-col req-col-time ${requestColumnAlignClass('time')}`}>
@@ -304,14 +309,14 @@ export const RequestRow = React.memo<RequestRowProps>(
                 {providerInfo.title}
               </strong>
               {providerInfo.isOAuth && (
-                <span className="req-badge-oauth" data-request-tooltip={t('events.oauth_badge')}>
+                <Tag size="small" className="req-badge-oauth" data-request-tooltip={t('events.oauth_badge')}>
                   OAuth
-                </span>
+                </Tag>
               )}
               {providerInfo.isIdentityUnknown && (
-                <span className="req-badge-unresolved" data-request-tooltip={t('events.provider_unresolved')}>
+                <Tag size="small" tone="warn" className="req-badge-unresolved" data-request-tooltip={t('events.provider_unresolved')}>
                   {t('events.provider_unresolved_badge')}
-                </span>
+                </Tag>
               )}
             </div>
             {providerInfo.isOAuth && providerInfo.credential && (
@@ -354,9 +359,9 @@ export const RequestRow = React.memo<RequestRowProps>(
               {displayModel}
             </strong>
             {!event.generate && (
-              <span className="req-preflight-badge" data-request-tooltip={t('events.preflight_hint')}>
+              <Tag size="small" className="req-preflight-badge" data-request-tooltip={t('events.preflight_hint')}>
                 {t('events.preflight')}
-              </span>
+              </Tag>
             )}
           </div>
           {/* Substitutions take priority over routing detail to keep the cell
@@ -391,13 +396,14 @@ export const RequestRow = React.memo<RequestRowProps>(
           {event.reasoning_effort || isFastTier || transport === 'websocket' || transport === 'http' ? (
             <div className="req-mode-marks">
               {event.reasoning_effort && (
-                <span
+                <Tag
+                  size="small"
                   className="req-effort-badge"
                   style={effortHue ? ({ '--effort-hue': effortHue } as React.CSSProperties) : undefined}
                   data-request-tooltip={`${t('events.reasoning_effort')}: ${effortLabel}`}
                 >
                   {effortLabel}
-                </span>
+                </Tag>
               )}
               {isFastTier && (
                 <span

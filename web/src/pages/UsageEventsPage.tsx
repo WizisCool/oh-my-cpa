@@ -520,9 +520,10 @@ export const UsageEventsPage: React.FC = () => {
   }, [credentials, grouping, multipleAuthSources, providerName, t, unknownCredentialLabel, unknownProviderLabel]);
 
   const renderRequestRow = React.useCallback(
-    (event: UsageEvent) => (
+    (event: UsageEvent, position: number) => (
       <RequestRow
         event={event}
+        isOddRow={position % 2 === 0}
         credentials={credentials}
         providerIcons={providerIcons}
         configuredProviders={configuredProviders}
@@ -709,15 +710,6 @@ export const UsageEventsPage: React.FC = () => {
           aria-busy={result.isFetching}
           style={streamStyle}
         >
-          {isSelecting && (
-            <RequestSelectionBar
-              count={selection.size}
-              isEveryLoadedSelected={loadedSelectionState(selection, events) === 'all'}
-              onSelectLoaded={() => handleToggleAll(true)}
-              onClear={clearSelection}
-              onExport={() => setIsExportOpen(true)}
-            />
-          )}
           <div ref={scrollAreaRef} className="request-table-scroll-area">
             <RequestStreamHeader
               colWidths={colWidths}
@@ -771,6 +763,15 @@ export const UsageEventsPage: React.FC = () => {
             onPageSizeChange={setPageSize}
             onPrev={handlePrevPage}
             onNext={handleNextPage}
+            dock={isSelecting && (
+              <RequestSelectionBar
+                count={selection.size}
+                isEveryLoadedSelected={loadedSelectionState(selection, events) === 'all'}
+                onSelectLoaded={() => handleToggleAll(true)}
+                onClear={clearSelection}
+                onExport={() => setIsExportOpen(true)}
+              />
+            )}
           />
         </section>
         <RequestBackToTop scrolledDown={scrolledDown} pendingCount={pendingCount} onBackToTop={handleBackToTop} />
