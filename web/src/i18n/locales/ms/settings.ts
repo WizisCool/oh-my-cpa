@@ -201,6 +201,7 @@ export default {
   "omc.quota_family_code_review": "Semakan kod",
   "omc.quota_remaining_prefix": "Baki",
   "omc.quota_reading_name": "{family} {period}",
+  "omc.quota_allowance_name": "{name} ({allowance})",
   "omc.section_select": "Pilih setiap kelayakan {provider} pada halaman ini",
   "omc.fleet_providers": "Penyedia",
   "omc.fleet_all_accounts": "Semua akaun",
