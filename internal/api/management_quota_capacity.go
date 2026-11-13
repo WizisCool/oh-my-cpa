@@ -19,14 +19,14 @@ func (h *Handler) resolveCurrentCycleUsage(
 	window quota.QuotaWindow,
 	plan *quota.QuotaPlan,
 	observedAtMS, fromMS, toMS int64,
-	cycles []quota.CycleCalibration,
+	reconciledCycles []quota.CycleCalibration,
 ) (quota.WindowUsage, string, error) {
 	live, scopeReason, err := h.repo.QueryCapacityUsage(ctx, authIndex, window, fromMS, toMS)
 	if err != nil || scopeReason != "" {
 		return quota.WindowUsage{}, scopeReason, err
 	}
-	effective := quota.EffectiveWindowUsage(window, plan, observedAtMS, live, cycles)
-	if latest, ok := quota.LatestLiveCalibrationPoint(window, plan, observedAtMS, cycles); ok {
+	effective := quota.EffectiveWindowUsage(window, plan, observedAtMS, live, reconciledCycles)
+	if latest, ok := quota.LatestLiveCalibrationPoint(window, plan, observedAtMS, reconciledCycles); ok {
 		fromPoint := quota.WindowUsage{
 			FromMS:            fromMS,
 			ToMS:              toMS,
@@ -39,19 +39,8 @@ func (h *Handler) resolveCurrentCycleUsage(
 			CostNanos:         latest.CostNanos,
 			UnmatchedRequests: latest.UnmatchedRequests,
 		}
-		preCutoffMS := min(latest.ObservedAtMS, toMS)
-		if latest.HasUsageGap && preCutoffMS > fromMS {
-			if freshBefore, reason, freshErr := h.repo.QueryCapacityUsage(ctx, authIndex, window, fromMS, preCutoffMS); freshErr == nil && reason == "" && freshBefore.Requests > fromPoint.Requests {
-				fromPoint = freshBefore
-				fromPoint.ToMS = toMS
-			}
-		} else if latest.UsageWatermarkID > 0 && preCutoffMS > fromMS {
-			if lateBefore, reason, lateErr := h.repo.QueryCapacityUsageAfterWatermark(ctx, authIndex, window, fromMS, preCutoffMS, latest.UsageWatermarkID); lateErr == nil && reason == "" {
-				fromPoint = quota.AddWindowUsage(fromPoint, lateBefore)
-			}
-		}
 		if latest.ObservedAtMS < toMS {
-			if postPoint, reason, postErr := h.repo.QueryCapacityUsage(ctx, authIndex, window, max(fromMS, latest.ObservedAtMS), toMS); postErr == nil && reason == "" {
+			if postPoint, reason, postErr := h.repo.QueryCapacityUsageSinceCycleStart(ctx, authIndex, window, fromMS, max(fromMS, latest.ObservedAtMS), toMS); postErr == nil && reason == "" {
 				fromPoint = quota.AddWindowUsage(fromPoint, postPoint)
 			}
 		}
@@ -86,11 +75,11 @@ func (h *Handler) attachQuotaCapacity(ctx context.Context, observation *quota.No
 			continue
 		}
 		windowKey := quota.CapacityWindowKey(observation.Provider, *window)
+		var windowCycles []quota.CycleCalibration
+		if loadCycles() {
+			windowCycles = h.repo.ReconcileLiveCycleForRead(ctx, observation.AuthIndex, *window, observation.Plan, observation.ObservedAtMS, cycles[windowKey])
+		}
 		if fromMS, toMS, reason := quota.WindowCycleRange(*window, observation.ObservedAtMS, observation.ObservedAtMS); reason == "" {
-			var windowCycles []quota.CycleCalibration
-			if loadCycles() {
-				windowCycles = cycles[windowKey]
-			}
 			usage, scopeReason, err := h.resolveCurrentCycleUsage(ctx, observation.AuthIndex, *window, observation.Plan, observation.ObservedAtMS, fromMS, toMS, windowCycles)
 			if err != nil {
 				window.CapacityUnavailable = quota.CapacityReasonUsageUnavailable
@@ -116,7 +105,7 @@ func (h *Handler) attachQuotaCapacity(ctx context.Context, observation *quota.No
 			continue
 		}
 		estimateUsage := window.Usage
-		if cutoff, watermarkID, ok := quota.ExhaustionCutoffPoint(*window, observation.Plan, observation.ObservedAtMS, cycles[windowKey]); ok && estimateUsage != nil && cutoff.ObservedAtMS < observation.ObservedAtMS && cutoff.ObservedAtMS > estimateUsage.FromMS {
+		if cutoff, _, ok := quota.ExhaustionCutoffPoint(*window, observation.Plan, observation.ObservedAtMS, windowCycles); ok && estimateUsage != nil && cutoff.ObservedAtMS < observation.ObservedAtMS && cutoff.ObservedAtMS > estimateUsage.FromMS {
 			preFull := quota.WindowUsage{
 				FromMS:            estimateUsage.FromMS,
 				ToMS:              cutoff.ObservedAtMS,
@@ -132,25 +121,6 @@ func (h *Handler) attachQuotaCapacity(ctx context.Context, observation *quota.No
 			if livePreFull, scopeReason, err := h.repo.QueryCapacityUsage(ctx, observation.AuthIndex, *window, estimateUsage.FromMS, cutoff.ObservedAtMS); err == nil && scopeReason == "" && livePreFull.Requests > preFull.Requests {
 				preFull = livePreFull
 			}
-			if !cutoff.HasUsageGap && watermarkID > 0 {
-				if delta, scopeReason, err := h.repo.QueryCapacityUsageAfterWatermark(ctx, observation.AuthIndex, *window, estimateUsage.FromMS, cutoff.ObservedAtMS, watermarkID); err == nil && scopeReason == "" {
-					withDelta := quota.AddWindowUsage(quota.WindowUsage{
-						FromMS:            estimateUsage.FromMS,
-						ToMS:              cutoff.ObservedAtMS,
-						Requests:          cutoff.Requests,
-						PricedRequests:    cutoff.PricedRequests,
-						Tokens:            cutoff.Tokens,
-						PromptTokens:      cutoff.PromptTokens,
-						CachedTokens:      cutoff.CachedTokens,
-						CacheRate:         quota.ComputeCacheRate(cutoff.CachedTokens, cutoff.PromptTokens),
-						CostNanos:         cutoff.CostNanos,
-						UnmatchedRequests: cutoff.UnmatchedRequests,
-					}, delta)
-					if withDelta.Requests > preFull.Requests {
-						preFull = withDelta
-					}
-				}
-			}
 			estimateUsage = &preFull
 		}
 		window.Capacity, window.CapacityUnavailable = quota.EstimateWindowCapacity(
@@ -159,7 +129,7 @@ func (h *Handler) attachQuotaCapacity(ctx context.Context, observation *quota.No
 			observation.ObservedAtMS,
 			nowMS,
 			estimateUsage,
-			cycles[windowKey],
+			windowCycles,
 		)
 	}
 }
@@ -219,7 +189,8 @@ func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *h
 	}
 
 	windowKey := quota.CapacityWindowKey(snapshot.Provider, window)
-	previous := quota.PreviousCapacityCycle(window, plan, snapshot.ObservedAtMS, cycles[windowKey])
+	windowCycles := h.repo.ReconcileLiveCycleForRead(ctx, authIndex, window, plan, snapshot.ObservedAtMS, cycles[windowKey])
+	previous := quota.PreviousCapacityCycle(window, plan, snapshot.ObservedAtMS, windowCycles)
 
 	response := map[string]any{"window_id": window.ID, "current": nil, "previous": nil}
 	var currentFromMS *int64
@@ -229,7 +200,7 @@ func (h *Handler) getQuotaCapacityHistory(writer http.ResponseWriter, request *h
 		if used, hasReading := quota.WindowUsedPercent(window); hasReading {
 			current.UsedPercent = &used
 		}
-		if usage, scopeReason, err := h.resolveCurrentCycleUsage(ctx, authIndex, window, plan, snapshot.ObservedAtMS, fromMS, toMS, cycles[windowKey]); err == nil && scopeReason == "" {
+		if usage, scopeReason, err := h.resolveCurrentCycleUsage(ctx, authIndex, window, plan, snapshot.ObservedAtMS, fromMS, toMS, windowCycles); err == nil && scopeReason == "" {
 			current.Usage = &usage
 		}
 		response["current"] = current

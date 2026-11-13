@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,6 +22,19 @@ const (
 type capacityQuerier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func cycleNeedsLegacyReconcile(points []quota.CalibrationPoint) bool {
+	if len(points) == 0 {
+		return false
+	}
+	for index := range points {
+		if points[index].HasUsageGap {
+			return true
+		}
+	}
+	last := points[len(points)-1]
+	return last.UsageWatermarkID == 0 && (last.Requests > 0 || last.UnmatchedRequests > 0)
 }
 
 // recordCapacityCycles records a snapshot's cycle consumption inside the
@@ -67,7 +81,7 @@ func recordCapacityCycles(ctx context.Context, tx *sql.Tx, snapshot QuotaSnapsho
 			}
 			last := &cycle.Points[len(cycle.Points)-1]
 			effectiveWatermark := max(watermark, last.UsageWatermarkID)
-			isLegacyUnwatermarked := last.HasUsageGap || (last.UsageWatermarkID == 0 && (last.Requests > 0 || last.UnmatchedRequests > 0))
+			isLegacyUnwatermarked := cycleNeedsLegacyReconcile(cycle.Points)
 			if !isLegacyUnwatermarked && effectiveWatermark <= last.UsageWatermarkID {
 				continue
 			}
@@ -133,35 +147,93 @@ type lateUsageEntry struct {
 	usage    quota.WindowUsage
 }
 
+// ReconcileLiveCycleForRead returns a read-time copy of cycles where the live
+// cycle's checkpoints (including mid-cycle reset baselines and initial 100%
+// cutoffs) incorporate delayed usage arrivals not yet persisted by a snapshot.
+func (r *Repository) ReconcileLiveCycleForRead(
+	ctx context.Context,
+	authIndex string,
+	window quota.QuotaWindow,
+	plan *quota.QuotaPlan,
+	observedAtMS int64,
+	cycles []quota.CycleCalibration,
+) []quota.CycleCalibration {
+	if r == nil || r.SQL() == nil || len(cycles) == 0 {
+		return cycles
+	}
+	live := quota.LiveCycleIndex(window, observedAtMS, cycles)
+	if live < 0 || !quota.SameCalibrationPlan(cycles[live], plan) || len(cycles[live].Points) == 0 {
+		return cycles
+	}
+	last := cycles[live].Points[len(cycles[live].Points)-1]
+	isLegacy := cycleNeedsLegacyReconcile(cycles[live].Points)
+	var watermark int64
+	if err := r.SQL().QueryRowContext(ctx, `SELECT COALESCE(MAX(id), 0) FROM usage_events`).Scan(&watermark); err != nil {
+		return cycles
+	}
+	effectiveWatermark := max(watermark, last.UsageWatermarkID)
+	if !isLegacy && effectiveWatermark <= last.UsageWatermarkID {
+		return cycles
+	}
+	cloned := slices.Clone(cycles)
+	cloned[live].Points = slices.Clone(cycles[live].Points)
+	if _, ok, err := reconcileCycleLateUsage(ctx, r.SQL(), strings.TrimSpace(authIndex), window, &cloned[live], effectiveWatermark); err != nil || !ok {
+		return cycles
+	}
+	return cloned
+}
+
 // reconcileCycleLateUsage incorporates rows inserted after last.UsageWatermarkID
 // whose completion instant predates existing points, preserving frozen cutoff
-// instants (such as the first 100% exhaustion observation) and retained sums.
+// instants (such as the first 100% exhaustion observation), reset baselines,
+// and retained cumulative sums.
 func reconcileCycleLateUsage(ctx context.Context, q capacityQuerier, authIndex string, window quota.QuotaWindow, cycle *quota.CycleCalibration, watermark int64) (changed bool, ok bool, err error) {
 	if len(cycle.Points) == 0 {
 		return false, true, nil
 	}
 	last := &cycle.Points[len(cycle.Points)-1]
-	if last.HasUsageGap || (last.UsageWatermarkID == 0 && (last.Requests > 0 || last.UnmatchedRequests > 0)) {
-		fresh, _, scopeReason, err := queryCapacityUsageBounded(ctx, q, authIndex, window, max(0, cycle.CycleStartMS()-capacityLatencyLookbackMS), cycle.CycleStartMS(), last.ObservedAtMS, watermark)
-		if err != nil || scopeReason != "" {
-			return false, false, err
-		}
-		if fresh.Requests > last.Requests {
-			last.Requests = fresh.Requests
-			last.PricedRequests = fresh.PricedRequests
-			last.Tokens = fresh.Tokens
-			last.PromptTokens = fresh.PromptTokens
-			last.CachedTokens = fresh.CachedTokens
-			last.CostNanos = fresh.CostNanos
-			changed = true
-		}
-		if fresh.UnmatchedRequests > last.UnmatchedRequests {
-			last.UnmatchedRequests = fresh.UnmatchedRequests
-			changed = true
-		}
-		if last.HasUsageGap {
-			last.HasUsageGap = false
-			changed = true
+	if cycleNeedsLegacyReconcile(cycle.Points) {
+		startLowerBoundMS := max(0, cycle.CycleStartMS()-capacityLatencyLookbackMS)
+		cycleStartMS := cycle.CycleStartMS()
+		for index := range cycle.Points {
+			point := &cycle.Points[index]
+			fresh, _, scopeReason, err := queryCapacityUsageBounded(ctx, q, authIndex, window, startLowerBoundMS, cycleStartMS, point.ObservedAtMS, watermark)
+			if err != nil || scopeReason != "" {
+				return false, false, err
+			}
+			if fresh.Requests > point.Requests {
+				point.Requests = fresh.Requests
+				point.PricedRequests = fresh.PricedRequests
+				point.Tokens = fresh.Tokens
+				point.PromptTokens = fresh.PromptTokens
+				point.CachedTokens = fresh.CachedTokens
+				point.CostNanos = fresh.CostNanos
+				changed = true
+			}
+			if fresh.UnmatchedRequests > point.UnmatchedRequests {
+				point.UnmatchedRequests = fresh.UnmatchedRequests
+				changed = true
+			}
+			if index > 0 {
+				prev := &cycle.Points[index-1]
+				if prev.Requests > point.Requests {
+					point.Requests = prev.Requests
+					point.PricedRequests = max(point.PricedRequests, prev.PricedRequests)
+					point.Tokens = max(point.Tokens, prev.Tokens)
+					point.PromptTokens = max(point.PromptTokens, prev.PromptTokens)
+					point.CachedTokens = max(point.CachedTokens, prev.CachedTokens)
+					point.CostNanos = max(point.CostNanos, prev.CostNanos)
+					changed = true
+				}
+				if prev.UnmatchedRequests > point.UnmatchedRequests {
+					point.UnmatchedRequests = prev.UnmatchedRequests
+					changed = true
+				}
+			}
+			if point.HasUsageGap {
+				point.HasUsageGap = false
+				changed = true
+			}
 		}
 		last.UsageWatermarkID = watermark
 		return changed, true, nil
@@ -388,32 +460,16 @@ func (r *Repository) QueryCapacityUsage(ctx context.Context, authIndex string, w
 	return usage, reason, err
 }
 
-// QueryCapacityUsageAfterWatermark sums requests inserted after minExclusiveID
-// that completed within [fromMS, toMS), so read-time displays and exhaustion
-// cutoffs remain exact across retention pruning and delayed usage arrivals.
-func (r *Repository) QueryCapacityUsageAfterWatermark(ctx context.Context, authIndex string, window quota.QuotaWindow, fromMS, toMS, minExclusiveID int64) (quota.WindowUsage, string, error) {
+// QueryCapacityUsageSinceCycleStart sums requests completing in [fromMS, toMS)
+// while keeping the start-timestamp lower bound anchored at cycleStartMS - 15m,
+// so internal checkpoint-tail queries include long-running requests that started
+// more than 15 minutes before the checkpoint.
+func (r *Repository) QueryCapacityUsageSinceCycleStart(ctx context.Context, authIndex string, window quota.QuotaWindow, cycleStartMS, fromMS, toMS int64) (quota.WindowUsage, string, error) {
 	if r == nil || r.SQL() == nil {
 		return quota.WindowUsage{}, "", errors.New("repository is not initialized")
 	}
-	if minExclusiveID <= 0 || toMS <= fromMS {
-		return quota.WindowUsage{FromMS: fromMS, ToMS: toMS}, "", nil
-	}
-	var maxID int64
-	if err := r.SQL().QueryRowContext(ctx, `SELECT COALESCE(MAX(id), 0) FROM usage_events`).Scan(&maxID); err != nil {
-		return quota.WindowUsage{}, "", fmt.Errorf("read quota usage watermark: %w", err)
-	}
-	if maxID <= minExclusiveID {
-		return quota.WindowUsage{FromMS: fromMS, ToMS: toMS}, "", nil
-	}
-	entries, reason, err := queryLateCapacityEntries(ctx, r.SQL(), strings.TrimSpace(authIndex), window, fromMS, toMS, minExclusiveID, maxID)
-	if err != nil || reason != "" {
-		return quota.WindowUsage{}, reason, err
-	}
-	out := quota.WindowUsage{FromMS: fromMS, ToMS: toMS}
-	for _, entry := range entries {
-		out = quota.AddWindowUsage(out, entry.usage)
-	}
-	return out, "", nil
+	usage, _, reason, err := queryCapacityUsageSince(ctx, r.SQL(), strings.TrimSpace(authIndex), window, max(0, min(cycleStartMS, fromMS)-capacityLatencyLookbackMS), fromMS, toMS)
+	return usage, reason, err
 }
 
 // QueryCapacityUsageWithModels returns both the aggregated window usage and the

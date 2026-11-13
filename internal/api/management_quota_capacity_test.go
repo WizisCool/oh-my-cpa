@@ -380,3 +380,45 @@ func TestWindowCapacityHandlesMixedModelsRetentionAndHealthGates(t *testing.T) {
 		t.Fatalf("expired = %+v", expired.Windows[0])
 	}
 }
+
+func TestAttachQuotaCapacityReconcilesPreResetLateUsageAndLongRunningTail(t *testing.T) {
+	handler := capacityTestHandler(t)
+	ctx := context.Background()
+	const hour = int64(3600 * 1000)
+	now := time.Now().UnixMilli()
+	reset := now + hour
+	cycleStart := reset - 5*hour
+
+	// Pre-reset 50% -> mid-cycle 0% reset (with 10 recorded requests) -> post-reset 10% (with 2 new requests = 12 total -> capacity 20).
+	insertTraffic(t, handler, "gemini-4-hydrogen", 10, cycleStart+hour)
+	observeCapacity(t, handler, capacityReading(cycleStart+2*hour, reset, 5, 50), now)
+	observeCapacity(t, handler, capacityReading(cycleStart+3*hour, reset, 5, 0), now)
+	insertTraffic(t, handler, "gemini-4-hydrogen", 2, cycleStart+3*hour+10_000)
+	observeCapacity(t, handler, capacityReading(cycleStart+3*hour+60_000, reset, 5, 10), now)
+
+	// Prune 9 of the 10 pre-reset rows so reconstruction via checkpoint wins over raw live scan.
+	if _, err := handler.repo.SQL().ExecContext(ctx, `DELETE FROM usage_events WHERE id IN (SELECT id FROM usage_events ORDER BY id ASC LIMIT 9)`); err != nil {
+		t.Fatal(err)
+	}
+	// A delayed pre-reset request arrives after the 10% checkpoint, plus a long-running request that started 20m before the checkpoint and finished after it.
+	insertCapacityUsage(t, handler, "delayed-pre-reset", cycleStart+2*hour+30_000, 1000, 1_000_000)
+	if _, err := handler.repo.SQL().ExecContext(ctx, `INSERT INTO usage_events (
+		instance_id, event_key, api_group_key, auth_index, model, timestamp_ms, latency_ms, created_at_ms, input_tokens, total_tokens, cost_nanos
+	) VALUES ('default', 'long-tail-post-checkpoint', 'group', 'codex-1', 'gemini-4-hydrogen', ?, ?, ?, 1000, 1000, 1000000)`,
+		cycleStart+3*hour+60_000-20*60*1000, 25*60*1000, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	readBack := capacityReading(cycleStart+4*hour, reset, 5, 10)
+	handler.attachQuotaCapacity(ctx, readBack, now)
+	got := readBack.Windows[0]
+	// Total usage = 10 original + 2 post-reset + 1 delayed pre-reset + 1 long-running post-checkpoint = 14 requests.
+	// Post-reset segment = 14 total - 11 reconciled reset baseline = 3 requests at 10% => 30 estimated requests (not 40 from stale baseline 10, nor 20 from dropped long-tail).
+	if got.Usage == nil || got.Usage.Requests != 14 {
+		t.Fatalf("reconstructed usage = %+v, want 14 requests (including delayed pre-reset and >15m long-running tail)", got.Usage)
+	}
+	if got.Capacity == nil || got.Capacity.Requests != 30 {
+		t.Fatalf("post-reset capacity = %+v, want 30 requests after reconciling reset baseline", got.Capacity)
+	}
+}

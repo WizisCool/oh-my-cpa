@@ -539,8 +539,11 @@ describe('quota consumption and window capacity dialog', () => {
     const view = renderWithOmc(<QuotaCapacityDialog open onClose={vi.fn()} owner={{ authIndex: 'mixed-seat', credentialName: 'Gemini Pro' }} window={windowItem} />);
     try {
       const dialog = await screen.findByRole('dialog');
-      await waitFor(() => expect(within(dialog).getByText('No requests recorded yet')).toBeTruthy());
-      expect(within(dialog).getByRole('region', { name: 'Estimated quota' }).textContent).not.toContain('123');
+      const capacityCard = within(dialog).getByRole('region', { name: 'Estimated quota' });
+      await waitFor(() => {
+        expect(within(capacityCard).getByText('No requests recorded yet')).toBeTruthy();
+        expect(capacityCard.textContent).not.toContain('123');
+      });
     } finally { view.unmount(); }
   });
 });

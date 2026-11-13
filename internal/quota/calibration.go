@@ -179,6 +179,16 @@ func AppendCalibrationPoint(points []CalibrationPoint, point CalibrationPoint) [
 	return append(points, point)
 }
 
+// LiveCycleIndex returns the index of the live cycle matching window at observedAtMS, or -1.
+func LiveCycleIndex(window QuotaWindow, observedAtMS int64, cycles []CycleCalibration) int {
+	return liveCycleIndex(window, observedAtMS, cycles)
+}
+
+// SameCalibrationPlan reports whether cycle belongs to plan.
+func SameCalibrationPlan(cycle CycleCalibration, plan *QuotaPlan) bool {
+	return sameCalibrationPlan(cycle, plan)
+}
+
 func liveCycleIndex(window QuotaWindow, observedAtMS int64, cycles []CycleCalibration) int {
 	_, _, boundaryReason := WindowCycleRange(window, observedAtMS, observedAtMS)
 	for index := range cycles {

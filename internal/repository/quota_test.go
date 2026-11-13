@@ -847,27 +847,38 @@ func TestQuotaCapacityHealsLateUsageAndFreezesAtExhaustion(t *testing.T) {
 		t.Fatalf("100%% cutoff or post-exhaustion checkpoint mismatch: %+v", pts)
 	}
 
-	// Legacy pre-upgrade points marked with has_usage_gap reconcile full retained usage before trusting their watermark.
-	legacyJSON := fmt.Sprintf(`[{"at":%d,"used":20,"requests":1,"priced":1,"tokens":100,"cost_nanos":1000,"usage_watermark_id":999999,"has_usage_gap":true}]`, start+3*hour)
+	// Unwatermarked / has_usage_gap legacy cycles refresh earlier reset baselines alongside the latest point so post-reset deltas stay exact.
+	legacyJSON := fmt.Sprintf(`[{"at":%d,"used":50,"requests":1,"priced":1,"tokens":100,"cost_nanos":1000},{"at":%d,"used":0,"requests":1,"priced":1,"tokens":100,"cost_nanos":1000},{"at":%d,"used":10,"requests":2,"priced":2,"tokens":200,"cost_nanos":2000,"usage_watermark_id":0,"has_usage_gap":true}]`, start+2*hour, start+3*hour, start+3*hour+1800*1000)
 	if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO quota_capacity_cycles (auth_index, window_key, cycle_reset_at_ms, period_hours, plan_type, plan_tier, points_json, updated_at_ms)
-		VALUES ('auth-legacy', ?, ?, 5, '', '', ?, ?)`, key, reset, legacyJSON, start+3*hour); err != nil {
+		VALUES ('auth-legacy', ?, ?, 5, '', '', ?, ?)`, key, reset, legacyJSON, start+3*hour+1800*1000); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO usage_events (instance_id, event_key, api_group_key, auth_index, model, timestamp_ms, created_at_ms, total_tokens, cost_nanos)
-		VALUES ('default', 'leg-1', 'group', 'auth-legacy', 'gpt-6.1-sol', ?, ?, 100, 1000),
-		       ('default', 'leg-2', 'group', 'auth-legacy', 'gpt-6.1-sol', ?, ?, 100, 1000)`, start+hour, start+hour, start+2*hour, start+2*hour); err != nil {
+		VALUES ('default', 'leg-pre-1', 'group', 'auth-legacy', 'gpt-6.1-sol', ?, ?, 100, 1000),
+		       ('default', 'leg-pre-2', 'group', 'auth-legacy', 'gpt-6.1-sol', ?, ?, 100, 1000),
+		       ('default', 'leg-post', 'group', 'auth-legacy', 'gpt-6.1-sol', ?, ?, 100, 1000)`,
+		start+hour, start+hour, start+2*hour+500, start+2*hour+500, start+3*hour+500, start+3*hour+500); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.SaveQuotaSnapshot(ctx, QuotaSnapshotRecord{
 		AuthIndex: "auth-legacy", Provider: "codex", Status: "healthy",
-		WindowsJSON:  fmt.Sprintf(`[{"id":"five_hour","scope":"standard","used_percent":20,"reset_at_ms":%d,"period_hours":5,"reset_accuracy":"exact"}]`, reset),
+		WindowsJSON:  fmt.Sprintf(`[{"id":"five_hour","scope":"standard","used_percent":10,"reset_at_ms":%d,"period_hours":5,"reset_accuracy":"exact"}]`, reset),
 		ObservedAtMS: start + 4*hour,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	legacyCycles, err := repo.LoadCapacityCycles(ctx, "auth-legacy")
-	if err != nil || len(legacyCycles[key]) == 0 || legacyCycles[key][0].Points[0].Requests != 2 || legacyCycles[key][0].Points[0].HasUsageGap {
-		t.Fatalf("legacy has_usage_gap point was not repaired: %+v (err=%v)", legacyCycles[key], err)
+	if err != nil || len(legacyCycles[key]) == 0 {
+		t.Fatalf("legacy cycles = %+v (err=%v)", legacyCycles[key], err)
+	}
+	lpts := legacyCycles[key][0].Points
+	if len(lpts) != 3 || lpts[1].Requests != 2 || lpts[2].Requests != 3 || lpts[2].HasUsageGap {
+		t.Fatalf("legacy reset baseline was not refreshed alongside final point: %+v", lpts)
+	}
+	legacyWin := window
+	legacyWin.UsedPercent = new(float64(10))
+	if capEst, reason := quota.EstimateWindowCapacity(legacyWin, nil, start+4*hour, start+4*hour, nil, legacyCycles[key]); reason != "" || capEst == nil || capEst.Requests != 10 {
+		t.Fatalf("legacy post-reset capacity = %+v, reason = %q, want 10 requests", capEst, reason)
 	}
 }
 
