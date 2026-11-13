@@ -1,5 +1,4 @@
 import React from 'react';
-import { useT } from '../../i18n';
 import type { QuotaWindow } from '../../types/quota';
 import QuotaCapacityDialog from './QuotaCapacityDialog';
 import styles from './QuotaPresentation.module.css';
@@ -34,9 +33,8 @@ export interface QuotaCapacityButtonProps {
   children: React.ReactNode;
 }
 
-/** A window's estimate that opens its capacity details. */
+/** Opens recorded consumption and model-conditioned forecast details. */
 export function QuotaCapacityButton({ owner, window, windows, className, children }: QuotaCapacityButtonProps) {
-  const t = useT();
   const scope = React.useContext(QuotaCapacityScopeContext);
   const isBlocked = Boolean(scope?.isBlocked);
   const [isOpen, setIsOpen] = React.useState(false);
@@ -52,7 +50,6 @@ export function QuotaCapacityButton({ owner, window, windows, className, childre
         type="button"
         className={className ?? styles['capacity-trigger']}
         aria-haspopup="dialog"
-        data-tip={t('quota.capacity_open_details')}
         // A row or reading around the estimate may answer clicks of its own.
         onClick={(event) => {
           event.stopPropagation();

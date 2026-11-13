@@ -3,8 +3,6 @@ import { quotaWindowFullName } from '../quota/quotaWindowSelection';
 import { Meter } from '../../components/common/Meter';
 import { useT } from '../../i18n';
 import type { QuotaMetric } from '../../types/quota';
-import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import { compactQuotaCapacity } from '../quota/quotaCapacity';
 import { QuotaCapacityButton, type QuotaCapacityOwner } from '../quota/QuotaCapacityButton';
 import { formatQuotaMetric, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown } from '../quota/quotaFormat';
 import { QUOTA_LOW_PERCENT, quotaRemainingStroke } from '../quota/quotaThresholds';
@@ -48,9 +46,8 @@ export function QuotaLines({ lines, provider, isMuted, nowMS, owner }: {
 }
 
 /**
- * One reading: its name and the share left, the bar, then the window's estimated size and when it
- * resets. Explicitly unused, full Codex five-hour readings show the window duration; rounded or
- * unknown usage keeps a countdown. The estimate opens the window's capacity details.
+ * One reading: its name and the native share left, the bar, consumption details and reset time. Explicitly unused, full Codex five-hour readings show the window duration; rounded or
+ * unknown usage keeps a countdown. The details open the window's consumption history.
  */
 function QuotaReading({ cell, siblings, name, provider, isMuted, nowMS, owner }: {
   cell: QuotaLineCell;
@@ -62,7 +59,6 @@ function QuotaReading({ cell, siblings, name, provider, isMuted, nowMS, owner }:
   owner?: QuotaCapacityOwner;
 }) {
   const t = useT();
-  const { style: tokenStyle } = useTokenDisplayStyle();
   const { window } = cell;
   const remaining = quotaRemainingPercent(window);
   // Use the unrounded upstream reading: a displayed 100% alone does not prove zero usage.
@@ -74,8 +70,8 @@ function QuotaReading({ cell, siblings, name, provider, isMuted, nowMS, owner }:
     && window.used_percent === 0
     && (window.remaining_percent ?? 100) === 100;
   const reset = isUnusedFullCodexWindow ? t('quota.duration_hours', { n: 5 }) : quotaResetCountdown(window, nowMS, t);
-  // A plugin window has no estimate; its own words for what is left take the estimate's place.
-  const estimate = compactQuotaCapacity(window, tokenStyle, t) ?? window.description;
+  const hasDetails = Boolean(window.model_forecasts?.length || window.usage || window.forecast_unavailable);
+  const detailsLabel = owner && hasDetails ? t('quota.capacity_open_details') : window.description;
   return (
     <div
       className={clsx(
@@ -95,11 +91,11 @@ function QuotaReading({ cell, siblings, name, provider, isMuted, nowMS, owner }:
           <b style={remaining != null && remaining < QUOTA_LOW_PERCENT ? { color: quotaRemainingStroke(remaining) } : undefined}>{quotaRemainingText(window)}</b>
         </span>
         <Meter className={styles.bar} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : quotaWindowFullName(window)} />
-        {estimate && (owner && window.capacity ? (
+        {detailsLabel && (owner && hasDetails ? (
           <span className={styles.estimate}>
-            <QuotaCapacityButton owner={owner} window={window} windows={siblings}>{estimate}</QuotaCapacityButton>
+            <QuotaCapacityButton owner={owner} window={window} windows={siblings}>{detailsLabel}</QuotaCapacityButton>
           </span>
-        ) : <span className={styles.estimate}>{estimate}</span>)}
+        ) : <span className={styles.estimate}>{detailsLabel}</span>)}
         {reset && <span className={styles.reset}>{reset}</span>}
       </div>
     </div>

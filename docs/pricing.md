@@ -76,8 +76,9 @@ See [`accounting.go`](../internal/usage/accounting.go).
 Permanent usage facts retain aggregates after request detail expires. Cost explanations
 must use the locked snapshot rather than today's price, today's provider layout or an
 inferred service tier from latency. Display currency conversion is presentation only;
-recorded costs remain USD. A quota-capacity estimate consumes these locked costs but
-is neither a new price nor an upstream bill.
+recorded costs remain USD. Recorded API-equivalent consumption is separate from
+subscription quota. Model quota forecasts use direct quota-consumption observations
+within the current window, independently of the price book.
 
 ## Extending pricing
 

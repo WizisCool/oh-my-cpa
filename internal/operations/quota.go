@@ -45,7 +45,7 @@ func (s *Service) registerQuota(registry *capability.Registry) error {
 	type Output struct {
 		Items []Quota `json:"items"`
 	}
-	if err := read(registry, "quota_list", "Read subscription plan labels and tiers, normalized quota windows, scoped capacity estimates and explicitly historical previous-cycle references. Missing or stale observations are not zero quota; estimates are not balances.", func(ctx context.Context, input Input) (Output, error) {
+	if err := read(registry, "quota_list", "Read subscription plans, upstream quota percentages and reset times, recorded API-equivalent usage, and current-window model forecasts with direct sample evidence. Missing or stale observations remain unknown.", func(ctx context.Context, input Input) (Output, error) {
 		items, err := s.Quotas(ctx)
 		output := Output{Items: []Quota{}}
 		for _, item := range items {
@@ -60,7 +60,7 @@ func (s *Service) registerQuota(registry *capability.Registry) error {
 	}); err != nil {
 		return err
 	}
-	metadata := Meta("quota_refresh", "Refresh one credential's quota observation, subscription tier and scoped capacity estimate, with historical basis when applicable; does not reset or spend quota credits. Meta observes quota through its key-exchange endpoint, which may mint a key; returned keys are discarded.", "write", "low")
+	metadata := Meta("quota_refresh", "Refresh one credential's upstream quota observation, subscription tier and directly observed model forecasts; does not reset or spend quota credits. Meta observes quota through its key-exchange endpoint, which may mint a key; returned keys are discarded.", "write", "low")
 	metadata.Invalidates = []string{"management-quota"}
 	return capability.Register(registry, metadata, nil, func(ctx context.Context, input struct {
 		AuthIndex string `json:"auth_index"`

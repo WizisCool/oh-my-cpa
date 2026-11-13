@@ -1,7 +1,6 @@
 package quota
 
 import (
-	"math"
 	"slices"
 	"strings"
 )
@@ -21,40 +20,22 @@ const (
 // two full climbs; its later readings are ignored.
 const capacityMaxPoints = 256
 
-// capacityMaxErrorPercent is the most rounding error a figure may carry on its
-// own. A smaller sample still refines a reference, weighted by its precision.
-const capacityMaxErrorPercent = 25.0
-
-// capacityReferenceErrorPercent is the least error an earlier climb carries when
-// it stands in for the current one: both meter the same plan, but not the same
-// mix of models, cache hits and prompt lengths.
-const capacityReferenceErrorPercent = 5.0
-
-// CalibrationPoint is a reading that moved the used share, with the usage this
-// gateway recorded from the cycle start until the reading. The usage is frozen
-// when the point is written, so neither idle refreshes nor request-record
-// retention can move an estimate afterwards.
+// CalibrationPoint is an explicit baseline or changed quota reading. Cumulative
+// usage preserves consumption history; interval models freeze the attribution
+// needed for forecasts, independently of request-record retention.
 type CalibrationPoint struct {
-	ObservedAtMS      int64   `json:"at"`
-	UsedPercent       float64 `json:"used"`
-	Requests          int64   `json:"requests"`
-	PricedRequests    int64   `json:"priced"`
-	Tokens            int64   `json:"tokens"`
-	PricedTokens      int64   `json:"priced_tokens,omitempty"`
-	PromptTokens      int64   `json:"prompt_tokens,omitempty"`
-	CachedTokens      int64   `json:"cached_tokens,omitempty"`
-	CostNanos         int64   `json:"cost_nanos"`
-	UnmatchedRequests int64   `json:"unmatched,omitempty"`
-}
-
-func (point CalibrationPoint) pricedTokens() int64 {
-	if point.PricedTokens > 0 {
-		return min(point.PricedTokens, max(point.Tokens, 0))
-	}
-	if point.Requests > 0 && point.PricedRequests >= point.Requests {
-		return max(point.Tokens, 0)
-	}
-	return 0
+	ObservedAtMS      int64                   `json:"at"`
+	UsedPercent       float64                 `json:"used"`
+	Requests          int64                   `json:"requests"`
+	PricedRequests    int64                   `json:"priced"`
+	Tokens            int64                   `json:"tokens"`
+	PricedTokens      int64                   `json:"priced_tokens,omitempty"`
+	PromptTokens      int64                   `json:"prompt_tokens,omitempty"`
+	CachedTokens      int64                   `json:"cached_tokens,omitempty"`
+	CostNanos         int64                   `json:"cost_nanos"`
+	UnmatchedRequests int64                   `json:"unmatched,omitempty"`
+	IntervalModels    []ModelCalibrationUsage `json:"interval_models,omitempty"`
+	HasUsageGap       bool                    `json:"has_usage_gap,omitempty"`
 }
 
 // CycleCalibration is the evidence one cycle of a window has gathered.
@@ -116,7 +97,7 @@ func NextCalibrationCycle(cycles []CycleCalibration, provider string, window Quo
 	}
 	_, _, boundaryReason := WindowCycleRange(window, observedAtMS, observedAtMS)
 	hasBoundary := boundaryReason == ""
-	if index := liveCycleIndex(window, observedAtMS, cycles); index >= 0 && len(cycles[index].Points) > 0 {
+	if index := liveCycleIndex(window, observedAtMS, cycles); index >= 0 && sameCalibrationPlan(cycles[index], plan) && len(cycles[index].Points) > 0 {
 		latest := &cycles[index]
 		last := latest.Points[len(latest.Points)-1]
 		isRise := used >= last.UsedPercent+1-1e-9
@@ -128,7 +109,7 @@ func NextCalibrationCycle(cycles []CycleCalibration, provider string, window Quo
 		cycle.Points = slices.Clone(latest.Points)
 		return cycle, true
 	}
-	if !hasBoundary || used <= 0 {
+	if !hasBoundary {
 		return CycleCalibration{}, false
 	}
 	cycle := CycleCalibration{
@@ -140,168 +121,6 @@ func NextCalibrationCycle(cycles []CycleCalibration, provider string, window Quo
 		cycle.PlanType, cycle.PlanTier = plan.PlanType, plan.Tier
 	}
 	return cycle, true
-}
-
-type capacitySegment struct {
-	cycle          *CycleCalibration
-	points         []CalibrationPoint
-	fromCycleStart bool
-}
-
-func cycleSegments(cycle *CycleCalibration, observedAtMS int64) []capacitySegment {
-	points := cycle.Points
-	for len(points) > 0 && points[len(points)-1].ObservedAtMS > observedAtMS {
-		points = points[:len(points)-1]
-	}
-	var segments []capacitySegment
-	start := 0
-	for i := 1; i <= len(points); i++ {
-		if i == len(points) || points[i].UsedPercent < points[i-1].UsedPercent-capacityResetTolerancePercent {
-			segments = append(segments, capacitySegment{cycle: cycle, points: points[start:i], fromCycleStart: start == 0})
-			start = i
-		}
-	}
-	return segments
-}
-
-// estimateSegment divides the usage recorded while the share rose by the rise.
-// Summing consecutive changes telescopes, so only the ends of the climb carry
-// rounding, and the cycle start carries none.
-//
-// A rise during which this gateway recorded nothing was spent elsewhere, and is
-// left out with its share. Cleanly priced intervals anchor the dollar estimate
-// directly; partially priced climbs scale by priced token share when at least
-// half of recorded tokens carry a price.
-func estimateSegment(segment capacitySegment) (*WindowCapacity, string) {
-	points := segment.points
-	previous := CalibrationPoint{ObservedAtMS: segment.cycle.CycleStartMS()}
-	if !segment.fromCycleStart {
-		previous, points = points[0], points[1:]
-	}
-	var share, cleanShare, cleanCost float64
-	var usage WindowUsage
-	roundedEnds := 0
-	isMeasuring, hasRise, hasUnmatched := false, false, false
-	isFirstMeasured := false
-	for index, point := range points {
-		rise := point.UsedPercent - previous.UsedPercent
-		tokens := point.Tokens - previous.Tokens
-		cost := point.CostNanos - previous.CostNanos
-		hasRise = hasRise || rise > 0
-		if rise <= 0 || tokens <= 0 && cost <= 0 {
-			hasUnmatched = hasUnmatched || point.UnmatchedRequests > previous.UnmatchedRequests
-			isMeasuring = false
-			previous = point
-			continue
-		}
-		if !isMeasuring {
-			roundedEnds++
-			if !segment.fromCycleStart || index > 0 {
-				roundedEnds++
-			}
-			isFirstMeasured = isFirstMeasured || segment.fromCycleStart && index == 0
-		}
-		isMeasuring = true
-		dReqs := max(point.Requests-previous.Requests, 0)
-		dPriced := max(point.PricedRequests-previous.PricedRequests, 0)
-		dToks := max(tokens, 0)
-		dPricedToks := min(max(point.pricedTokens()-previous.pricedTokens(), 0), dToks)
-		dCost := max(cost, 0)
-
-		share += rise
-		usage.Requests += dReqs
-		usage.PricedRequests += dPriced
-		usage.Tokens += dToks
-		usage.PricedTokens += dPricedToks
-		usage.CostNanos += dCost
-		if dReqs > 0 && float64(dPriced) >= float64(dReqs)*capacityCleanPricedShare {
-			cleanShare += rise
-			cleanCost += float64(dCost)
-		}
-		previous = point
-	}
-	if share <= 0 {
-		switch {
-		case !segment.fromCycleStart && len(points) == 0:
-			return nil, CapacityReasonResetMidCycle
-		case hasUnmatched:
-			return nil, CapacityReasonScopeUnknown
-		case hasRise:
-			return nil, CapacityReasonNoTraffic
-		}
-		return nil, CapacityReasonLowUsage
-	}
-	rounding := usedPercentHalfStep * float64(roundedEnds)
-	capacity := &WindowCapacity{
-		Requests:     int64(math.Round(float64(usage.Requests) * 100 / share)),
-		Tokens:       int64(math.Round(float64(usage.Tokens) * 100 / share)),
-		Basis:        "observed_delta",
-		ObservedAtMS: segment.points[len(segment.points)-1].ObservedAtMS,
-		FromMS:       segment.points[0].ObservedAtMS,
-		ResetAtMS:    segment.cycle.CycleResetAtMS,
-		ErrorPercent: math.Round(rounding/math.Max(share-rounding, rounding)*1000) / 10,
-	}
-	if isFirstMeasured {
-		capacity.Basis, capacity.FromMS = "current_cycle", segment.cycle.CycleStartMS()
-	}
-	switch {
-	case cleanShare >= 5.0 || cleanShare > 0 && cleanShare >= share*0.5:
-		cost := int64(math.Round(cleanCost * 100 / cleanShare))
-		capacity.CostNanos = &cost
-	case usage.Tokens > 0 && usage.PricedTokens > 0 && float64(usage.PricedTokens) >= float64(usage.Tokens)*capacityMinImputedShare:
-		scaled := float64(usage.CostNanos) * float64(usage.Tokens) / float64(usage.PricedTokens)
-		cost := int64(math.Round(scaled * 100 / share))
-		capacity.CostNanos = &cost
-	}
-	return capacity, ""
-}
-
-// EstimateWindowCapacity sizes a window from the stored evidence alone, so the
-// figure changes only when a reading moves the share. cycles are newest first.
-func EstimateWindowCapacity(window QuotaWindow, plan *QuotaPlan, observedAtMS int64, cycles []CycleCalibration) (*WindowCapacity, string) {
-	_, _, boundaryReason := WindowCycleRange(window, observedAtMS, observedAtMS)
-	live := liveCycleIndex(window, observedAtMS, cycles)
-	prior := priorCompletedCycles(window, plan, observedAtMS, cycles)
-
-	var references []capacitySegment
-	for index := len(prior) - 1; index >= 0; index-- {
-		references = append(references, cycleSegments(prior[index], observedAtMS)...)
-	}
-
-	var current *WindowCapacity
-	reason := CapacityReasonLowUsage
-	switch {
-	case live >= 0:
-		liveSegments := cycleSegments(&cycles[live], observedAtMS)
-		if len(liveSegments) > 0 {
-			current, reason = estimateSegment(liveSegments[len(liveSegments)-1])
-			references = append(references, liveSegments[:len(liveSegments)-1]...)
-		}
-	case boundaryReason != "":
-		reason = boundaryReason
-	}
-	if _, hasReading := WindowUsedPercent(window); !hasReading {
-		reason = CapacityReasonNoReading
-	}
-
-	var reference *WindowCapacity
-	for index := len(references) - 1; index >= 0; index-- {
-		candidate, _ := estimateSegment(references[index])
-		if candidate != nil && candidate.ErrorPercent <= capacityMaxErrorPercent {
-			candidate.Basis = "previous_cycle"
-			candidate.ErrorPercent = max(candidate.ErrorPercent, capacityReferenceErrorPercent)
-			reference = candidate
-			break
-		}
-	}
-	if reference == nil && current != nil && current.ErrorPercent > capacityMaxErrorPercent {
-		return nil, CapacityReasonLowUsage
-	}
-	capacity := blendWindowCapacity(current, reference)
-	if capacity == nil {
-		return nil, reason
-	}
-	return capacity, ""
 }
 
 func liveCycleIndex(window QuotaWindow, observedAtMS int64, cycles []CycleCalibration) int {
@@ -356,50 +175,4 @@ func PreviousCapacityCycle(window QuotaWindow, plan *QuotaPlan, observedAtMS int
 		return prior[0]
 	}
 	return nil
-}
-
-// blendWindowCapacity weights the current sample and the reference by inverse
-// error variance. When both carry dollar capacity, tokens and requests scale by
-// the current climb's rate so model or cache-rate changes between cycles do not
-// average incompatible token counts.
-func blendWindowCapacity(current, reference *WindowCapacity) *WindowCapacity {
-	if current == nil {
-		return reference
-	}
-	if reference == nil {
-		return current
-	}
-	currentError := max(current.ErrorPercent, 0.1)
-	referenceError := max(reference.ErrorPercent, 0.1)
-	weight := referenceError * referenceError / (currentError*currentError + referenceError*referenceError)
-	if weight >= 0.99 {
-		return current
-	}
-	blend := func(value, prior int64) int64 {
-		return int64(math.Round(float64(value)*weight + float64(prior)*(1-weight)))
-	}
-	result := *current
-	result.Basis = "blended"
-	result.Requests = blend(current.Requests, reference.Requests)
-	result.Tokens = blend(current.Tokens, reference.Tokens)
-	switch {
-	case current.CostNanos != nil && reference.CostNanos != nil:
-		cost := blend(*current.CostNanos, *reference.CostNanos)
-		result.CostNanos = &cost
-		if *current.CostNanos > 0 {
-			scale := float64(cost) / float64(*current.CostNanos)
-			result.Tokens = int64(math.Round(float64(current.Tokens) * scale))
-			result.Requests = int64(math.Round(float64(current.Requests) * scale))
-		}
-	case current.CostNanos != nil:
-		cost := *current.CostNanos
-		result.CostNanos = &cost
-	case reference.CostNanos != nil:
-		cost := *reference.CostNanos
-		result.CostNanos = &cost
-	default:
-		result.CostNanos = nil
-	}
-	result.ErrorPercent = math.Round(currentError*referenceError/math.Hypot(currentError, referenceError)*10) / 10
-	return &result
 }

@@ -45,12 +45,29 @@ func TestSeedQuotaObservationsIncludeScopedAndPreviousCycles(t *testing.T) {
 	if _, reason := quota.SelectWindowUsage(windows[len(windows)-1], nil); reason != "" {
 		t.Fatalf("demo weekly-only family is not a known capacity family: %q", reason)
 	}
+	primary := latest["auth-codex-01"]
+	observationWindows := []quota.QuotaWindow{}
+	if err := json.Unmarshal([]byte(primary.WindowsJSON), &observationWindows); err != nil {
+		t.Fatal(err)
+	}
+	primaryCycles, err := repo.LoadCapacityCycles(ctx, "auth-codex-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hasForecast := false
+	for _, window := range observationWindows {
+		forecasts, _ := quota.BuildModelForecasts(window, nil, primary.ObservedAtMS, primaryCycles[quota.CapacityWindowKey("codex", window)])
+		hasForecast = hasForecast || len(forecasts) > 0
+	}
+	if !hasForecast {
+		t.Fatalf("demo direct model sample missing: %+v", primaryCycles)
+	}
+
 	windows = nil
 	if err := json.Unmarshal([]byte(latest["auth-codex-02"].WindowsJSON), &windows); err != nil {
 		t.Fatal(err)
 	}
-	// The previous cycle is calibrated by real recorded usage and stays the
-	// reference the current cycle's small climb leans on.
+	// Retained consumption remains inspectable independently of current forecasts.
 	cycles, err := repo.LoadCapacityCycles(ctx, "auth-codex-02")
 	if err != nil {
 		t.Fatal(err)
@@ -59,18 +76,20 @@ func TestSeedQuotaObservationsIncludeScopedAndPreviousCycles(t *testing.T) {
 	if len(evidence) != 2 || len(evidence[1].Points) == 0 || evidence[1].Points[0].Requests == 0 {
 		t.Fatalf("demo previous cycle has no recorded evidence: %+v", evidence)
 	}
-	capacity, reason := quota.EstimateWindowCapacity(windows[0], nil, latest["auth-codex-02"].ObservedAtMS, evidence)
-	if capacity == nil || capacity.Basis != "blended" && capacity.Basis != "previous_cycle" {
-		t.Fatalf("demo current cycle does not lean on the previous one: %+v %q", capacity, reason)
+	forecasts, _ := quota.BuildModelForecasts(windows[0], nil, latest["auth-codex-02"].ObservedAtMS, evidence)
+	for _, forecast := range forecasts {
+		if forecast.FromMS < evidence[0].CycleStartMS() {
+			t.Fatalf("previous cycle supplied a forecast: %+v", forecast)
+		}
 	}
 }
 
-func TestSeedQuotaObservationsWrapSnapshotFailure(t *testing.T) {
+func TestSeedQuotaObservationsWrapCancellation(t *testing.T) {
 	repo, now, _ := seededDatabase(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	err := seedQuotaObservations(ctx, repo, now)
-	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "save quota snapshot for auth-codex-01") {
+	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "for auth-codex-01") {
 		t.Fatalf("seed failure must identify the credential and preserve cancellation: %v", err)
 	}
 }

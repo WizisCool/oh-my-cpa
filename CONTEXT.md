@@ -64,13 +64,12 @@ free usage and must not be represented as an observed zero cost.
 **Quota Reading**: What an upstream published at an observation time. Unknown,
 unpublished, stale and failed are not interchangeable with exhausted or zero.
 
-**Estimated Window Capacity**: A quota window expressed in the recent workload's
-tokens and API-equivalent cost, with an estimated remaining amount. It informs the
-operator; availability and routing use upstream quota readings.
+**Model Quota Forecast**: The remaining requests and tokens for a particular model
+and service tier, conditioned on that model's directly observed consumption and a
+similar workload within the current quota window.
 
-**Capacity Reference**: The size measured by the latest earlier climb of the same
-credential, quota scope and plan, blended into the current climb's estimate by
-relative precision until the current readings carry comparable weight.
+**Quota Consumption Sample**: A continuous sequence of single-model observations
+pairing completed requests with a change in the upstream quota reading.
 
 **Window Warmup**: A policy-approved request intended to activate a credential's
 billing window. An uncertain attempt is not permission to issue another one.

@@ -181,9 +181,9 @@ func demoExportCases() []demoExportCase {
 		{Name: "quota", Path: "/api/v1/management/quota"},
 		// One credential's quota detail, for the page the quota list links into.
 		{Name: "quota-codex", Path: "/api/v1/management/quota/auth-codex-01"},
-		// The capacity details of the windows whose estimates the list shows. Every
+		// Consumption details for observable windows. Every
 		// sibling window of each demo credential is exported so switching periods inside
-		// the capacity dialog works on the static demo Worker too.
+		// the consumption dialog works on the static demo Worker too.
 		{Name: "quota-capacity-auth-codex-01-five_hour", Path: "/api/v1/management/quota/auth-codex-01/capacity?window=five_hour", Route: "/api/v1/management/quota/{authIndex}/capacity"},
 		{Name: "quota-capacity-auth-codex-01-weekly", Path: "/api/v1/management/quota/auth-codex-01/capacity?window=weekly", Route: "/api/v1/management/quota/{authIndex}/capacity"},
 		{Name: "quota-capacity-auth-codex-02-five_hour", Path: "/api/v1/management/quota/auth-codex-02/capacity?window=five_hour", Route: "/api/v1/management/quota/{authIndex}/capacity"},
@@ -477,7 +477,7 @@ func buildDemoExportDataset(t *testing.T) (demoExportResponses, []byte) {
 		normalised[name] = response
 	}
 
-	assertDemoQuotaCapacityExamples(t, normalised, seededAt.UnixMilli())
+	assertDemoQuotaEvidenceExamples(t, normalised, seededAt.UnixMilli())
 	var notices SystemUpdatesDTO
 	var store struct {
 		Plugins []StorePluginItemDTO `json:"plugins"`
@@ -662,7 +662,7 @@ func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 	case map[string]any:
 		// Quota reads and their seeded history already use the fixed handler clock,
 		// including future reset bounds. Moving them again would expire valid cycles.
-		if typed["auth_index"] != nil && typed["observed_at_ms"] != nil && (typed["windows"] != nil || typed["windows_json"] != nil) {
+		if typed["auth_index"] != nil && typed["observed_at_ms"] != nil && (typed["windows"] != nil || typed["windows_json"] != nil) || typed["window_id"] != nil && (typed["current"] != nil || typed["model_forecasts"] != nil) {
 			deltaMS = 0
 		}
 		// A warmup catalog account restates that same observation as instants - `snapshot_at`
@@ -1365,10 +1365,10 @@ func TestDemoExportCasesAllSucceed(t *testing.T) {
 	if len(failed) > 0 {
 		t.Fatalf("exported responses that are not successes:\n  %s", strings.Join(failed, "\n  "))
 	}
-	assertDemoQuotaCapacityExamples(t, exported.Responses, exported.ReferenceMS)
+	assertDemoQuotaEvidenceExamples(t, exported.Responses, exported.ReferenceMS)
 }
 
-func assertDemoQuotaCapacityExamples(t *testing.T, responses map[string]demoExportResponse, referenceMS int64) {
+func assertDemoQuotaEvidenceExamples(t *testing.T, responses map[string]demoExportResponse, referenceMS int64) {
 	t.Helper()
 	var quotas struct {
 		Quotas []quota.NormalizedQuota `json:"quotas"`
@@ -1376,28 +1376,29 @@ func assertDemoQuotaCapacityExamples(t *testing.T, responses map[string]demoExpo
 	if err := json.Unmarshal([]byte(responses["quota"].Body), &quotas); err != nil {
 		t.Fatal(err)
 	}
-	expected := map[string]string{
-		"auth-codex-01/five_hour":                               "current_cycle",
-		"auth-codex-02/five_hour":                               "blended",
-		"auth-claude-01/five_hour":                              "current_cycle",
-		"auth-claude-01/seven_day":                              "current_cycle",
-		"auth-antigravity-01/ag_Gemini Models_gemini-shared-5h": "current_cycle",
+	expected := map[string]bool{
+		"auth-codex-01/five_hour":                               true,
+		"auth-codex-02/five_hour":                               true,
+		"auth-claude-01/five_hour":                              true,
+		"auth-claude-01/seven_day":                              true,
+		"auth-antigravity-01/ag_Gemini Models_gemini-shared-5h": true,
 	}
 	for _, observation := range quotas.Quotas {
 		for _, window := range observation.Windows {
 			key := observation.AuthIndex + "/" + window.ID
-			basis, isExpected := expected[key]
-			if !isExpected {
+			if !expected[key] {
 				continue
 			}
-			if window.Capacity == nil || window.Capacity.Basis != basis || window.Capacity.Tokens <= 0 || window.Usage == nil || window.Usage.ToMS != observation.ObservedAtMS || window.ResetAtMS == nil || *window.ResetAtMS <= referenceMS {
-				t.Fatalf("invalid exported capacity example %s: %+v", key, window)
+			if window.Usage == nil || window.Usage.ToMS != observation.ObservedAtMS || window.ResetAtMS == nil || *window.ResetAtMS <= referenceMS {
+				t.Fatalf("invalid exported quota evidence %s: %+v", key, window)
 			}
-			if window.CapacityUnavailable != "" || window.Capacity.RemainingTokens == nil {
-				t.Fatalf("capacity result should include remaining capacity without a refusal: %+v", window)
+			if len(window.ModelForecasts) == 0 && window.ForecastUnavailable == "" {
+				t.Fatalf("missing forecast evidence state: %+v", window)
 			}
-			if basis == "blended" && window.Capacity.ObservedAtMS != observation.ObservedAtMS {
-				t.Fatalf("blended estimate is not dated by the current reading: %+v", window)
+			for _, forecast := range window.ModelForecasts {
+				if forecast.SampleRequests < 5 || forecast.SampleUsedPercent < 5 || forecast.FromMS < window.Usage.FromMS || forecast.Model == "" {
+					t.Fatalf("unattributed model forecast: %+v", forecast)
+				}
 			}
 			delete(expected, key)
 		}
@@ -1405,6 +1406,7 @@ func assertDemoQuotaCapacityExamples(t *testing.T, responses map[string]demoExpo
 	if len(expected) != 0 {
 		t.Fatalf("missing quota examples: %v", expected)
 	}
+
 }
 
 func demoExportPlaygroundModelsPath(captured map[string]demoExportResponse) (string, error) {
@@ -1554,9 +1556,9 @@ func TestDemoExportPreservesSeededQuotaCyclesAndUsageEnds(t *testing.T) {
 	input := map[string]any{
 		"auth_index": "demo-auth", "observed_at_ms": reference,
 		"windows": []any{map[string]any{
-			"reset_at_ms": reference + 3600000,
-			"usage":       map[string]any{"from_ms": reference - 3600000, "to_ms": reference},
-			"capacity":    map[string]any{"basis": "previous_cycle", "from_ms": reference - 7200000, "observed_at_ms": reference - 3600000, "reset_at_ms": reference - 1800000},
+			"reset_at_ms":     reference + 3600000,
+			"usage":           map[string]any{"from_ms": reference - 3600000, "to_ms": reference},
+			"model_forecasts": []any{map[string]any{"model": "gpt-6.1-sol", "from_ms": reference - 7200000, "observed_at_ms": reference - 3600000}},
 		}},
 	}
 	output := demoExportRebase(input, -90*86400000, map[string]int{}).(map[string]any)
@@ -1571,10 +1573,20 @@ func TestDemoExportPreservesSeededQuotaCyclesAndUsageEnds(t *testing.T) {
 	if usage["to_ms"] != reference {
 		t.Fatalf("usage was treated as an incomplete calendar day: %+v", usage)
 	}
-	capacity := window["capacity"].(map[string]any)
-	if capacity["basis"] != "previous_cycle" || capacity["observed_at_ms"] != float64(reference-3600000) {
-		t.Fatalf("historical provenance shifted: %+v", capacity)
+	forecast := window["model_forecasts"].([]any)[0].(map[string]any)
+	if forecast["observed_at_ms"] != float64(reference-3600000) {
+		t.Fatalf("forecast observation shifted: %+v", forecast)
 	}
+	history := map[string]any{
+		"window_id": "five_hour", "current": map[string]any{"from_ms": reference - 3600000, "reset_at_ms": reference + 3600000},
+		"model_forecasts": []any{map[string]any{"model": "gpt-6.1-sol", "from_ms": reference - 7200000, "observed_at_ms": reference - 3600000}},
+	}
+	rebased := demoExportRebase(history, -90*86400000, map[string]int{}).(map[string]any)
+	modelForecast := rebased["model_forecasts"].([]any)[0].(map[string]any)
+	if modelForecast["observed_at_ms"] != float64(reference-3600000) {
+		t.Fatalf("quota detail forecast was shifted twice: %+v", modelForecast)
+	}
+
 }
 
 func TestDemoExportPreservesSeededLatencyAndSourceSize(t *testing.T) {
