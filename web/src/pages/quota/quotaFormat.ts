@@ -1,8 +1,11 @@
 import dayjs from '../../utils/time';
 import type { TFunc } from '../../i18n';
-import type { QuotaItem, QuotaMetric } from '../../types/quota';
+import type { QuotaItem, QuotaMetric, QuotaWindow } from '../../types/quota';
 import { formatUsd } from '../../types/pricingDisplay';
-import { quotaWindowFullName } from './quotaWindowSelection';
+import { quotaWindowFullName, quotaWindowKindOf } from './quotaWindowSelection';
+
+const FIVE_HOURS_MS = 5 * 3_600_000;
+const UNSTARTED_CODEX_WINDOW_TOLERANCE_MS = 60_000;
 
 const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
 
@@ -104,6 +107,32 @@ export function quotaResetCountdown(
   if (countdown) return `${approximate}${countdown}`;
   if (approximate) return window.reset_label ? `${approximate}${window.reset_label}` : '';
   return t('quota.recovered');
+}
+
+/**
+ * Whether a Codex five-hour reading represents an unstarted (idle) window rather than an active
+ * cycle.
+ *
+ * OpenAI's usage endpoint returns `used_percent: 0` both before a five-hour window starts (where
+ * `reset_at` tracks `now + 5h` on every read) and after small requests start the window with usage
+ * still rounding to `0%` (where `reset_at` is fixed to `start + 5h` and counts down). Only an
+ * absent reset or one still ~5h out from the observation indicates an unstarted window; once the
+ * reset has counted down below that window, both list and detail views must show the countdown.
+ */
+export function isUnusedFullCodexFiveHourWindow(
+  provider: string | undefined,
+  window: QuotaWindow,
+  observedAtMS: number | undefined,
+  nowMS: number,
+): boolean {
+  if (provider?.trim().toLowerCase() !== 'codex') return false;
+  if (window.scope !== 'standard' || quotaWindowKindOf(window) !== 'five_hour') return false;
+  if (window.used_percent !== 0 || (window.remaining_percent ?? 100) !== 100) return false;
+  if (window.usage && window.usage.requests > 0) return false;
+  if (window.reset_at_ms == null) return true;
+  if (window.reset_at_ms <= nowMS) return false;
+  const referenceMS = observedAtMS != null && observedAtMS > 0 ? observedAtMS : nowMS;
+  return window.reset_at_ms - referenceMS >= FIVE_HOURS_MS - UNSTARTED_CODEX_WINDOW_TOLERANCE_MS;
 }
 
 /** The message an empty window list carries, as the dictionary key that states it. */

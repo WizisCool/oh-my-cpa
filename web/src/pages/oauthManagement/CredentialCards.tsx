@@ -132,7 +132,7 @@ function CredentialCard({ record, providerName, isSelected, hasSelection, nowMS,
 
       <div className={styles.readings} data-quota-missing={!hasLines && metrics.length === 0 ? 'true' : undefined}>
         {/* The list's two tracks: the five-hour and weekly limits side by side, further limits under them. */}
-        {hasLines && <QuotaLines lines={facts.quotaLines} provider={record.displayProvider} isMuted={facts.isQuotaMuted} isRefreshing={facts.isRefreshing} nowMS={nowMS} owner={owner} />}
+        {hasLines && <QuotaLines lines={facts.quotaLines} provider={record.displayProvider} observedAtMS={record.quota?.observed_at_ms} isMuted={facts.isQuotaMuted} isRefreshing={facts.isRefreshing} nowMS={nowMS} owner={owner} />}
         {metrics.length > 0 && <QuotaMetrics metrics={metrics} isMuted={facts.isQuotaMuted} isStandalone={!hasLines} />}
         {!hasLines && metrics.length === 0 && (
           <span className={styles.quiet}>{facts.explanation ?? t('omc.quota_unobserved')}</span>

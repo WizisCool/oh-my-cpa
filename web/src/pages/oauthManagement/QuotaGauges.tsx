@@ -6,9 +6,8 @@ import type { QuotaMetric } from '../../types/quota';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { compactQuotaCapacity } from '../quota/quotaCapacity';
 import { QuotaCapacityButton, type QuotaCapacityOwner } from '../quota/QuotaCapacityButton';
-import { formatQuotaMetric, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown } from '../quota/quotaFormat';
+import { formatQuotaMetric, isUnusedFullCodexFiveHourWindow, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown } from '../quota/quotaFormat';
 import { QUOTA_LOW_PERCENT, quotaRemainingStroke } from '../quota/quotaThresholds';
-import { quotaWindowKindOf } from '../quota/quotaWindowSelection';
 import { packQuotaLines, quotaReadingName, type QuotaLine, type QuotaLineCell } from './credentialSections';
 import styles from './QuotaGauges.module.css';
 
@@ -18,9 +17,10 @@ import styles from './QuotaGauges.module.css';
  * place on every credential. Further limits follow two to a line, and a limit left alone draws
  * across both tracks as one long bar.
  */
-export function QuotaLines({ lines, provider, isMuted, isRefreshing = false, nowMS, owner }: {
+export function QuotaLines({ lines, provider, observedAtMS, isMuted, isRefreshing = false, nowMS, owner }: {
   lines: QuotaLine[];
   provider: string;
+  observedAtMS?: number;
   isMuted: boolean;
   /** A live read of this credential is out; its bars breathe until the reading lands. */
   isRefreshing?: boolean;
@@ -40,6 +40,7 @@ export function QuotaLines({ lines, provider, isMuted, isRefreshing = false, now
           // mistaken for each other without a header to read them by.
           name={quotaReadingName(line, cell, t)}
           provider={provider}
+          observedAtMS={observedAtMS}
           isMuted={isMuted}
           nowMS={nowMS}
           owner={owner}
@@ -50,14 +51,16 @@ export function QuotaLines({ lines, provider, isMuted, isRefreshing = false, now
 }
 
 /**
- * One reading: its name and the native share left, the bar, consumption details and reset time. Explicitly unused, full Codex five-hour readings show the window duration; rounded or
- * unknown usage keeps a countdown. The details open the window's consumption history.
+ * One reading: its name and the native share left, the bar, consumption details and reset time.
+ * Unstarted Codex five-hour readings show the window duration; active cycles (even when usage
+ * rounds to 0%) keep the countdown. The details open the window's consumption history.
  */
-function QuotaReading({ cell, siblings, name, provider, isMuted, nowMS, owner }: {
+function QuotaReading({ cell, siblings, name, provider, observedAtMS, isMuted, nowMS, owner }: {
   cell: QuotaLineCell;
   siblings: readonly QuotaLineCell['window'][];
   name: string;
   provider: string;
+  observedAtMS?: number;
   isMuted: boolean;
   nowMS: number;
   owner?: QuotaCapacityOwner;
@@ -66,15 +69,9 @@ function QuotaReading({ cell, siblings, name, provider, isMuted, nowMS, owner }:
   const { style: tokenStyle } = useTokenDisplayStyle();
   const { window } = cell;
   const remaining = quotaRemainingPercent(window);
-  // Use the unrounded upstream reading: a displayed 100% alone does not prove zero usage.
-  // Show the unused window's duration, independent of its moving reset estimate: zero usage does not
-  // prove whether the upstream window has started.
-  const isUnusedFullCodexWindow = provider === 'codex'
-    && window.scope === 'standard'
-    && quotaWindowKindOf(window) === 'five_hour'
-    && window.used_percent === 0
-    && (window.remaining_percent ?? 100) === 100;
-  const reset = isUnusedFullCodexWindow ? t('quota.duration_hours', { n: 5 }) : quotaResetCountdown(window, nowMS, t);
+  const reset = isUnusedFullCodexFiveHourWindow(provider, window, observedAtMS, nowMS)
+    ? t('quota.duration_hours', { n: 5 })
+    : quotaResetCountdown(window, nowMS, t);
   const forecastLabel = owner ? compactQuotaCapacity(window, tokenStyle, t) : null;
   const hasForecast = Boolean(forecastLabel);
   const hasDialogEvidence = Boolean(owner && (hasForecast || window.usage || window.capacity_unavailable));

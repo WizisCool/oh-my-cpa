@@ -4,7 +4,7 @@ import type { QuotaWindow } from '../../types/quota';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { compactQuotaCapacity } from './quotaCapacity';
 import { QuotaCapacityButton, type QuotaCapacityOwner } from './QuotaCapacityButton';
-import { quotaRemainingPercent, quotaResetCountdown, quotaResetText } from './quotaFormat';
+import { isUnusedFullCodexFiveHourWindow, quotaRemainingPercent, quotaResetCountdown, quotaResetText } from './quotaFormat';
 import { quotaWindowFullName } from './quotaWindowSelection';
 import { quotaRemainingStroke } from './quotaThresholds';
 import { quotaWindowGroupName, quotaWindowName } from './quotaWindowSelection';
@@ -15,6 +15,8 @@ export interface QuotaWindowCardsProps {
   nowMS: number;
   /** The credential whose recorded consumption and forecasts the details show. */
   owner?: QuotaCapacityOwner;
+  provider?: string;
+  observedAtMS?: number;
 }
 
 /**
@@ -22,7 +24,7 @@ export interface QuotaWindowCardsProps {
  * read once and every card names only its period. Native remaining shares and reset times
  * lead; recorded consumption and model-conditioned forecasts live in the details.
  */
-export function QuotaWindowCards({ windows, nowMS, owner }: QuotaWindowCardsProps) {
+export function QuotaWindowCards({ windows, nowMS, owner, provider, observedAtMS }: QuotaWindowCardsProps) {
   const t = useT();
   const groups: Array<{ name: string | null; windows: QuotaWindow[] }> = [];
   for (const window of windows) {
@@ -38,7 +40,7 @@ export function QuotaWindowCards({ windows, nowMS, owner }: QuotaWindowCardsProp
           {group.name && <div className={styles['group-name']}>{group.name}</div>}
           <div className={styles.grid}>
             {group.windows.map((window) => (
-              <QuotaWindowCard key={window.id} window={window} siblings={group.windows} name={quotaWindowName(window, t)} nowMS={nowMS} owner={owner} />
+              <QuotaWindowCard key={window.id} window={window} siblings={group.windows} name={quotaWindowName(window, t)} nowMS={nowMS} owner={owner} provider={provider} observedAtMS={observedAtMS} />
             ))}
           </div>
         </section>
@@ -47,18 +49,21 @@ export function QuotaWindowCards({ windows, nowMS, owner }: QuotaWindowCardsProp
   );
 }
 
-function QuotaWindowCard({ window, siblings, name, nowMS, owner }: {
+function QuotaWindowCard({ window, siblings, name, nowMS, owner, provider, observedAtMS }: {
   window: QuotaWindow;
   siblings: readonly QuotaWindow[];
   name: string;
   nowMS: number;
   owner?: QuotaWindowCardsProps['owner'];
+  provider?: string;
+  observedAtMS?: number;
 }) {
   const t = useT();
   const { style: tokenStyle } = useTokenDisplayStyle();
   const remaining = quotaRemainingPercent(window);
   const stroke = quotaRemainingStroke(remaining);
-  const reset = quotaResetCountdown(window, nowMS, t);
+  const isUnusedWindow = isUnusedFullCodexFiveHourWindow(provider, window, observedAtMS, nowMS);
+  const reset = isUnusedWindow ? t('quota.duration_hours', { n: 5 }) : quotaResetCountdown(window, nowMS, t);
   const resetTitle = window.reset_accuracy && window.reset_accuracy !== 'exact' ? t('quota.reset_estimated_hint') : quotaResetText(window, nowMS, t);
   const forecastLabel = owner ? compactQuotaCapacity(window, tokenStyle, t) : null;
   // Consumption details stay available on the card while usage is accumulating.
@@ -78,7 +83,7 @@ function QuotaWindowCard({ window, siblings, name, nowMS, owner }: {
         <span className={styles.estimate}>
           {forecastLabel}
         </span>
-        {reset && <span className={styles.reset} data-tip={resetTitle}>{reset === t('quota.recovered') ? reset : t('quota.capacity_resets', { when: reset })}</span>}
+        {reset && <span className={styles.reset} data-tip={resetTitle}>{isUnusedWindow || reset === t('quota.recovered') ? reset : t('quota.capacity_resets', { when: reset })}</span>}
       </span>
     </>
   );

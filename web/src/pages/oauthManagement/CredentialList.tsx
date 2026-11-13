@@ -224,7 +224,7 @@ function CredentialRow({ record, isSelected, hasSelection, hasHandle, nowMS, act
   // Provider summary figures sit below the limit readings, or stand alone for a provider without any.
   const quota = hasLines || metrics.length > 0 ? (
     <>
-      {hasLines && <QuotaLines lines={facts.quotaLines} provider={record.displayProvider} isMuted={facts.isQuotaMuted} isRefreshing={facts.isRefreshing} nowMS={nowMS} owner={owner} />}
+      {hasLines && <QuotaLines lines={facts.quotaLines} provider={record.displayProvider} observedAtMS={record.quota?.observed_at_ms} isMuted={facts.isQuotaMuted} isRefreshing={facts.isRefreshing} nowMS={nowMS} owner={owner} />}
       {metrics.length > 0 && <QuotaMetrics metrics={metrics} isMuted={facts.isQuotaMuted} isStandalone={!hasLines} />}
     </>
   ) : <span className={styles.missing}>{facts.explanation ?? t('omc.fleet_no_reading')}</span>;
