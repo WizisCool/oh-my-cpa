@@ -216,6 +216,21 @@ func (h *Handler) resolveDashboardAPIKey(request *http.Request) string {
 	return fp
 }
 
+// @Summary Get usage analytics dashboard
+// @Description Return aggregated request, token, cost, latency, and pipeline coverage metrics for a time window.
+// @Tags Dashboard
+// @Produce json
+// @Security CookieAuth
+// @Param preset query string false "Time range preset (15m, 1h, 6h, 24h, 7d, 30d, 90d, today, yesterday, this_week, last_week, this_month, last_month, all)"
+// @Param from query integer false "Custom window start timestamp in Unix milliseconds"
+// @Param to query integer false "Custom window end timestamp in Unix milliseconds"
+// @Param open_end query boolean false "Whether custom window tracks current time"
+// @Param api_key query string false "Filter by client API key or hmac fingerprint"
+// @Success 200 {object} dashboardResponse
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/dashboard [get]
 func (h *Handler) dashboard(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 
@@ -277,12 +292,21 @@ func (h *Handler) dashboard(writer http.ResponseWriter, request *http.Request) {
 
 // dashboardTail is the live-poll sibling of dashboard.
 //
-// A sliding relative window has no cheap "nothing changed" answer: its totals
-// move on every tick even when no request arrived, because the left edge keeps
-// dropping old events. So this endpoint recomputes the whole window's numbers —
-// exactly the ones the KPI tiles print — and only trims what the browser
-// already holds: the two series ship their last buckets instead of the full
-// grid, and the collector stats are left out.
+// @Summary Poll dashboard tail metrics
+// @Description Recompute window totals and return the trailing series buckets for live dashboard polling.
+// @Tags Dashboard
+// @Produce json
+// @Security CookieAuth
+// @Param preset query string false "Time range preset"
+// @Param from query integer false "Custom window start timestamp in Unix milliseconds"
+// @Param to query integer false "Custom window end timestamp in Unix milliseconds"
+// @Param open_end query boolean false "Whether custom window tracks current time"
+// @Param api_key query string false "Filter by client API key or hmac fingerprint"
+// @Success 200 {object} dashboardTailResponse
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/dashboard/tail [get]
 func (h *Handler) dashboardTail(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 
@@ -574,7 +598,154 @@ func dashboardComparisonBounds(window dashboardWindow, zone *time.Location) (fro
 	return fromMS, toMS, false, true
 }
 
+// UsageIngestCollectorDTO describes the usage collector state within pipeline status responses.
+type UsageIngestCollectorDTO struct {
+	Mode          string     `json:"mode"`
+	Running       bool       `json:"running"`
+	Captured      int64      `json:"captured"`
+	ControlFrames int64      `json:"control_frames"`
+	CoverageGaps  int64      `json:"coverage_gaps"`
+	LastError     string     `json:"last_error,omitempty"`
+	Failing       bool       `json:"failing,omitempty"`
+	AuthRejected  bool       `json:"auth_rejected,omitempty"`
+	LastCaptureAt *time.Time `json:"last_capture_at,omitempty"`
+	LastErrorAt   *time.Time `json:"last_error_at,omitempty"`
+	RefreshSignal *time.Time `json:"refresh_signal_at,omitempty"`
+}
+
+// UsageIngestDecoderDTO describes the usage decoder loop state within pipeline status responses.
+type UsageIngestDecoderDTO struct {
+	Running     bool       `json:"running"`
+	Decoded     int64      `json:"decoded"`
+	Discarded   int64      `json:"discarded"`
+	LastError   string     `json:"last_error,omitempty"`
+	LastErrorAt *time.Time `json:"last_error_at,omitempty"`
+}
+
+// UsageIngestMaintenanceDTO describes the usage folding and retention maintenance loop state.
+type UsageIngestMaintenanceDTO struct {
+	Running         bool       `json:"running"`
+	Folded          int64      `json:"folded"`
+	Purged          int64      `json:"purged"`
+	LastError       string     `json:"last_error,omitempty"`
+	LastErrorAt     *time.Time `json:"last_error_at,omitempty"`
+	LastRunAt       *time.Time `json:"last_run_at,omitempty"`
+	LastRetentionAt *time.Time `json:"last_retention_at,omitempty"`
+	NextRetentionAt *time.Time `json:"next_retention_at,omitempty"`
+	ReleasedPages   int64      `json:"released_pages"`
+}
+
+// UsageIngestStatsDTO describes persisted usage pipeline counters while preserving wire field names.
+type UsageIngestStatsDTO struct {
+	Events          int64  `json:"Events"`
+	ErrorEvents     int64  `json:"ErrorEvents"`
+	Pending         int64  `json:"Pending"`
+	Processed       int64  `json:"Processed"`
+	Discarded       int64  `json:"Discarded"`
+	FirstEventMS    *int64 `json:"FirstEventMS"`
+	LastEventMS     *int64 `json:"LastEventMS"`
+	CheckpointFacts int64  `json:"CheckpointFacts"`
+}
+
+// UsageIngestGapDTO describes a recorded usage ingestion coverage gap.
+type UsageIngestGapDTO struct {
+	ID               int64  `json:"id"`
+	InstanceID       string `json:"instance_id"`
+	SourceMode       string `json:"source_mode"`
+	StartedAtMS      int64  `json:"started_at_ms"`
+	EndedAtMS        int64  `json:"ended_at_ms"`
+	EstimatedCount   int    `json:"estimated_count"`
+	ReasonCode       string `json:"reason_code"`
+	Summary          string `json:"summary"`
+	AcknowledgedAtMS *int64 `json:"acknowledged_at_ms,omitempty"`
+}
+
+// UsageIngestStatusResponseDTO describes the usage ingestion pipeline status response for enabled and disabled states.
+type UsageIngestStatusResponseDTO struct {
+	Enabled     bool                       `json:"enabled"`
+	Note        string                     `json:"note,omitempty"`
+	Collector   *UsageIngestCollectorDTO   `json:"collector,omitempty"`
+	Decoder     *UsageIngestDecoderDTO     `json:"decoder,omitempty"`
+	Maintenance *UsageIngestMaintenanceDTO `json:"maintenance,omitempty"`
+	Stats       *UsageIngestStatsDTO       `json:"stats,omitempty"`
+	RecentGaps  []UsageIngestGapDTO        `json:"recent_gaps,omitempty"`
+	Healthy     bool                       `json:"healthy,omitempty"`
+}
+
+func projectUsageIngestStatusDTO(status ingest.PipelineStatus) UsageIngestStatusResponseDTO {
+	gaps := make([]UsageIngestGapDTO, 0, len(status.RecentGaps))
+	for _, gap := range status.RecentGaps {
+		gaps = append(gaps, UsageIngestGapDTO{
+			ID:               gap.ID,
+			InstanceID:       gap.InstanceID,
+			SourceMode:       gap.SourceMode,
+			StartedAtMS:      gap.StartedAtMS,
+			EndedAtMS:        gap.EndedAtMS,
+			EstimatedCount:   gap.EstimatedCount,
+			ReasonCode:       gap.ReasonCode,
+			Summary:          gap.Summary,
+			AcknowledgedAtMS: gap.AcknowledgedAtMS,
+		})
+	}
+	return UsageIngestStatusResponseDTO{
+		Enabled: status.Enabled,
+		Collector: &UsageIngestCollectorDTO{
+			Mode:          string(status.Collector.Mode),
+			Running:       status.Collector.Running,
+			Captured:      status.Collector.Captured,
+			ControlFrames: status.Collector.ControlFrames,
+			CoverageGaps:  status.Collector.CoverageGaps,
+			LastError:     status.Collector.LastError,
+			Failing:       status.Collector.Failing,
+			AuthRejected:  status.Collector.AuthRejected,
+			LastCaptureAt: status.Collector.LastCaptureAt,
+			LastErrorAt:   status.Collector.LastErrorAt,
+			RefreshSignal: status.Collector.RefreshSignal,
+		},
+		Decoder: &UsageIngestDecoderDTO{
+			Running:     status.Decoder.Running,
+			Decoded:     status.Decoder.Decoded,
+			Discarded:   status.Decoder.Discarded,
+			LastError:   status.Decoder.LastError,
+			LastErrorAt: status.Decoder.LastErrorAt,
+		},
+		Maintenance: &UsageIngestMaintenanceDTO{
+			Running:         status.Maintenance.Running,
+			Folded:          status.Maintenance.Folded,
+			Purged:          status.Maintenance.Purged,
+			LastError:       status.Maintenance.LastError,
+			LastErrorAt:     status.Maintenance.LastErrorAt,
+			LastRunAt:       status.Maintenance.LastRunAt,
+			LastRetentionAt: status.Maintenance.LastRetentionAt,
+			NextRetentionAt: status.Maintenance.NextRetentionAt,
+			ReleasedPages:   status.Maintenance.ReleasedPages,
+		},
+		Stats: &UsageIngestStatsDTO{
+			Events:          status.Stats.Events,
+			ErrorEvents:     status.Stats.ErrorEvents,
+			Pending:         status.Stats.Pending,
+			Processed:       status.Stats.Processed,
+			Discarded:       status.Stats.Discarded,
+			FirstEventMS:    status.Stats.FirstEventMS,
+			LastEventMS:     status.Stats.LastEventMS,
+			CheckpointFacts: status.Stats.CheckpointFacts,
+		},
+		RecentGaps: gaps,
+		Healthy:    status.Healthy,
+	}
+}
+
 // dashboardIngestStatus reports the capture/decode/maintenance loops.
+//
+// @Summary Get usage ingestion status
+// @Description Return the current state of background usage capture, decoding, and rollup loops.
+// @Tags Usage
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} UsageIngestStatusResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Router /v1/usage/ingest-status [get]
 func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.cfg.IsDemoMode {
@@ -586,13 +757,13 @@ func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *htt
 			writeInternalError(writer, err)
 			return
 		}
-		writeJSON(writer, http.StatusOK, status)
+		writeJSON(writer, http.StatusOK, projectUsageIngestStatusDTO(status))
 		return
 	}
 	if h.usage == nil {
-		writeJSON(writer, http.StatusOK, map[string]any{
-			"enabled": false,
-			"note":    "usage ingestion is disabled for this deployment",
+		writeJSON(writer, http.StatusOK, UsageIngestStatusResponseDTO{
+			Enabled: false,
+			Note:    "usage ingestion is disabled for this deployment",
 		})
 		return
 	}
@@ -601,7 +772,7 @@ func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *htt
 		writeInternalError(writer, fmt.Errorf("read usage pipeline status: %w", err))
 		return
 	}
-	writeJSON(writer, http.StatusOK, status)
+	writeJSON(writer, http.StatusOK, projectUsageIngestStatusDTO(status))
 }
 
 // refreshUsageIngest drains CPA's usage queue now instead of waiting for the
@@ -612,6 +783,15 @@ func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *htt
 // this the refresh button is a re-read that cannot show a request CPA accepted
 // one second ago. The drain stays server-side: CPA's queue is destructive, so
 // the browser must never pop it itself.
+// @Summary Trigger immediate usage ingestion
+// @Description Drain the CPA usage queue and process captured records into queryable events.
+// @Tags Usage
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} ingest.RefreshNowResult
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Router /v1/usage/ingest/refresh [post]
 func (h *Handler) refreshUsageIngest(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.cfg.IsDemoMode {

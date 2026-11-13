@@ -59,6 +59,75 @@ func extendTransferDeadlines(writer http.ResponseWriter) {
 	_ = controller.SetWriteDeadline(deadline)
 }
 
+// FontFaceDTO describes one stored `@font-face` rule without exposing binary font content.
+type FontFaceDTO struct {
+	ID           string `json:"id"`
+	WeightMin    int    `json:"weight_min"`
+	WeightMax    int    `json:"weight_max"`
+	Style        string `json:"style"`
+	UnicodeRange string `json:"unicode_range,omitempty"`
+	Format       string `json:"format"`
+}
+
+// FontDTO describes an installed console font family and its face descriptors.
+type FontDTO struct {
+	ID          string        `json:"id"`
+	Family      string        `json:"family"`
+	Source      string        `json:"source"`
+	CreatedAtMS int64         `json:"created_at_ms"`
+	ByteSize    int64         `json:"byte_size"`
+	Faces       []FontFaceDTO `json:"faces"`
+}
+
+func projectFontDTO(font repository.Font) FontDTO {
+	faces := make([]FontFaceDTO, 0, len(font.Faces))
+	for _, face := range font.Faces {
+		faces = append(faces, FontFaceDTO{
+			ID:           face.ID,
+			WeightMin:    face.WeightMin,
+			WeightMax:    face.WeightMax,
+			Style:        face.Style,
+			UnicodeRange: face.UnicodeRange,
+			Format:       string(face.Format),
+		})
+	}
+	return FontDTO{
+		ID:          font.ID,
+		Family:      font.Family,
+		Source:      string(font.Source),
+		CreatedAtMS: font.CreatedAtMS,
+		ByteSize:    font.ByteSize,
+		Faces:       faces,
+	}
+}
+
+func projectFontDTOs(fonts []repository.Font) []FontDTO {
+	out := make([]FontDTO, 0, len(fonts))
+	for _, font := range fonts {
+		out = append(out, projectFontDTO(font))
+	}
+	return out
+}
+
+// FontListResponseDTO lists stored console font families.
+type FontListResponseDTO struct {
+	Fonts []FontDTO `json:"fonts"`
+}
+
+// InstallGoogleFontRequestDTO identifies a Google Fonts family to download and store locally.
+type InstallGoogleFontRequestDTO struct {
+	Family string `json:"family"`
+}
+
+// @Summary List stored font families
+// @Description Return metadata and face descriptors for all installed console fonts.
+// @Tags Fonts
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} FontListResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/fonts [get]
 func (h *Handler) listFonts(writer http.ResponseWriter, request *http.Request) {
 	if h.repo == nil {
 		writeError(writer, http.StatusServiceUnavailable, "repository_unavailable")
@@ -70,7 +139,7 @@ func (h *Handler) listFonts(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	writer.Header().Set("Cache-Control", "no-store")
-	writeJSON(writer, http.StatusOK, map[string]any{"fonts": fonts})
+	writeJSON(writer, http.StatusOK, FontListResponseDTO{Fonts: projectFontDTOs(fonts)})
 }
 
 func (h *Handler) googleFonts() (*fontasset.GoogleInstaller, error) {
@@ -86,14 +155,27 @@ func (h *Handler) googleFonts() (*fontasset.GoogleInstaller, error) {
 	return h.fontInstaller, h.fontInstallerErr
 }
 
+// @Summary Install a Google Font family
+// @Description Download a Google Fonts family server-side and store its faces locally for offline serving.
+// @Tags Fonts
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body InstallGoogleFontRequestDTO true "Google Fonts family name"
+// @Success 201 {object} FontDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/fonts/google [post]
 func (h *Handler) installGoogleFont(writer http.ResponseWriter, request *http.Request) {
 	if h.repo == nil {
 		writeError(writer, http.StatusServiceUnavailable, "repository_unavailable")
 		return
 	}
-	var input struct {
-		Family string `json:"family"`
-	}
+	var input InstallGoogleFontRequestDTO
 	if !decodeCustomIconRequest(writer, request, &input) {
 		return
 	}
@@ -113,11 +195,27 @@ func (h *Handler) installGoogleFont(writer http.ResponseWriter, request *http.Re
 		writeFontError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusCreated, font)
+	writeJSON(writer, http.StatusCreated, projectFontDTO(font))
 }
 
 // uploadFont stores the files of one family. The family's name is the operator's when
 // given and otherwise the one the first file declares in its own name table.
+//
+// @Summary Upload custom font files
+// @Description Upload up to 12 font files via multipart/form-data and store them as a local font family.
+// @Tags Fonts
+// @Accept multipart/form-data
+// @Produce json
+// @Security CookieAuth
+// @Param family formData string false "Optional family name override"
+// @Param file formData file true "Font file(s)"
+// @Success 201 {object} FontDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/fonts/upload [post]
 func (h *Handler) uploadFont(writer http.ResponseWriter, request *http.Request) {
 	if h.repo == nil {
 		writeError(writer, http.StatusServiceUnavailable, "repository_unavailable")
@@ -180,7 +278,7 @@ func (h *Handler) uploadFont(writer http.ResponseWriter, request *http.Request) 
 		writeFontError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusCreated, font)
+	writeJSON(writer, http.StatusCreated, projectFontDTO(font))
 }
 
 func readFontPart(part *multipart.Part) (fontasset.Face, string, error) {
@@ -218,6 +316,17 @@ func writeFontUploadReadError(writer http.ResponseWriter, err error) {
 	writeFontError(writer, fontasset.ErrInvalid)
 }
 
+// @Summary Delete a stored font family
+// @Description Remove an uploaded or Google-installed font family from storage.
+// @Tags Fonts
+// @Security CookieAuth
+// @Param id path string true "Font family ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/fonts/{id} [delete]
 func (h *Handler) deleteFont(writer http.ResponseWriter, request *http.Request) {
 	if h.repo == nil {
 		writeError(writer, http.StatusServiceUnavailable, "repository_unavailable")
@@ -234,6 +343,20 @@ func (h *Handler) deleteFont(writer http.ResponseWriter, request *http.Request) 
 // a family is replaced by deleting and installing it again - so the response is
 // cacheable for good, which is what keeps a CJK family's slices from being revalidated
 // one request each on every page load.
+//
+// @Summary Serve font face file
+// @Description Stream an immutable stored font face file by family ID and face ID.
+// @Tags Fonts
+// @Produce octet-stream
+// @Security CookieAuth
+// @Param id path string true "Font family ID"
+// @Param faceId path string true "Font face ID"
+// @Success 200 {file} binary
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/fonts/{id}/faces/{faceId} [get]
+// @Router /v1/fonts/{id}/faces/{faceId} [head]
 func (h *Handler) fontFaceContent(writer http.ResponseWriter, request *http.Request) {
 	if h.repo == nil {
 		writeError(writer, http.StatusServiceUnavailable, "repository_unavailable")

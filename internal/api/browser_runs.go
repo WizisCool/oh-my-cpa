@@ -357,9 +357,59 @@ func (run *browserRun) serve(writer http.ResponseWriter, request *http.Request) 
 	}
 }
 
+// BrowserRunSummaryDTO describes an active or most recent Agent/Playground browser run.
+type BrowserRunSummaryDTO struct {
+	ID          string          `json:"id"`
+	StartedAtMS int64           `json:"started_at_ms"`
+	IsRunning   bool            `json:"is_running"`
+	Request     json.RawMessage `json:"request"`
+}
+
+// CurrentBrowserRunResponseDTO wraps the active or most recent workspace run.
+type CurrentBrowserRunResponseDTO struct {
+	Run *BrowserRunSummaryDTO `json:"run"`
+}
+
+// CancelBrowserRunResponseDTO reports whether a running browser run was cancelled.
+type CancelBrowserRunResponseDTO struct {
+	IsCancelled bool `json:"is_cancelled"`
+}
+
+// @Summary Start an Agent run
+// @Description Start an Agent conversation turn streamed as AG-UI SSE events. Passing X-OMC-Run-ID enables detached, recoverable execution for active-run lookup, replay, and cancellation; omitting it streams directly without creating a recoverable run, and demo mode serves the direct stream directly.
+// @Tags Agent
+// @Accept json
+// @Produce text/event-stream
+// @Security CookieAuth
+// @Param X-OMC-Run-ID header string false "Optional run identifier enabling detached execution, replay, and cancellation"
+// @Param body body object true "AG-UI run input payload"
+// @Success 200 {string} string "AG-UI event stream"
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
+// @Failure 429 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/agent/run [post]
 func (h *Handler) startAgentRun(writer http.ResponseWriter, request *http.Request) {
 	h.startBrowserRun("agent", h.runAgent, writer, request)
 }
+
+// @Summary Start a Playground chat run
+// @Description Start a Playground inference stream against the selected gateway key. Passing X-OMC-Run-ID enables detached, recoverable execution for active-run lookup, replay, and cancellation; omitting it streams directly without creating a recoverable run, and demo mode ignores run tracking.
+// @Tags Playground
+// @Accept json
+// @Produce text/event-stream
+// @Security CookieAuth
+// @Param X-OMC-Run-ID header string false "Optional run identifier enabling detached execution, replay, and cancellation"
+// @Param body body playgroundRequest true "Playground chat request"
+// @Success 200 {string} string "Playground SSE stream"
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
+// @Failure 429 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/playground/chat [post]
 func (h *Handler) startPlaygroundRun(writer http.ResponseWriter, request *http.Request) {
 	h.startBrowserRun("playground", h.chatPlayground, writer, request)
 }
@@ -369,11 +419,20 @@ func (h *Handler) browserRunKind(request *http.Request) string {
 	}
 	return "agent"
 }
+
+// @Summary Get current workspace run
+// @Description Return the active or most recent run metadata for the Agent or Playground workspace.
+// @Tags Runs
+// @Produce json
+// @Security CookieAuth
+// @Param workspace path string true "Workspace name" Enums(agent, playground)
+// @Success 200 {object} CurrentBrowserRunResponseDTO
+// @Router /v1/{workspace}/runs/active [get]
 func (h *Handler) currentBrowserRun(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	run := h.browserRuns.find(h.browserRunKind(request), "")
 	if run == nil {
-		writeJSON(writer, 200, map[string]any{"run": nil})
+		writeJSON(writer, 200, CurrentBrowserRunResponseDTO{Run: nil})
 		return
 	}
 	run.mu.Lock()
@@ -383,8 +442,24 @@ func (h *Handler) currentBrowserRun(writer http.ResponseWriter, request *http.Re
 		input = nil
 	}
 	run.mu.Unlock()
-	writeJSON(writer, 200, map[string]any{"run": map[string]any{"id": run.id, "started_at_ms": run.startedAt, "is_running": isRunning, "request": input}})
+	writeJSON(writer, 200, CurrentBrowserRunResponseDTO{Run: &BrowserRunSummaryDTO{
+		ID:          run.id,
+		StartedAtMS: run.startedAt,
+		IsRunning:   isRunning,
+		Request:     input,
+	}})
 }
+
+// @Summary Subscribe to a workspace run stream
+// @Description Attach to or replay the buffered SSE/HTTP output of a detached Agent or Playground run.
+// @Tags Runs
+// @Produce text/event-stream
+// @Security CookieAuth
+// @Param workspace path string true "Workspace name" Enums(agent, playground)
+// @Param id path string true "Run ID"
+// @Success 200 {string} string "Event stream replay and live updates"
+// @Failure 404 {object} ErrorResponseDTO
+// @Router /v1/{workspace}/runs/{id} [get]
 func (h *Handler) subscribeBrowserRun(writer http.ResponseWriter, request *http.Request) {
 	run := h.browserRuns.find(h.browserRunKind(request), chi.URLParam(request, "id"))
 	if run == nil {
@@ -393,6 +468,17 @@ func (h *Handler) subscribeBrowserRun(writer http.ResponseWriter, request *http.
 	}
 	run.serve(writer, request)
 }
+
+// @Summary Cancel a workspace run
+// @Description Cancel an in-progress Agent or Playground run by ID.
+// @Tags Runs
+// @Produce json
+// @Security CookieAuth
+// @Param workspace path string true "Workspace name" Enums(agent, playground)
+// @Param id path string true "Run ID"
+// @Success 200 {object} CancelBrowserRunResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Router /v1/{workspace}/runs/{id}/cancel [post]
 func (h *Handler) cancelBrowserRun(writer http.ResponseWriter, request *http.Request) {
 	run := h.browserRuns.find(h.browserRunKind(request), chi.URLParam(request, "id"))
 	if run == nil {
@@ -405,7 +491,7 @@ func (h *Handler) cancelBrowserRun(writer http.ResponseWriter, request *http.Req
 	if isRunning {
 		run.cancel()
 	}
-	writeJSON(writer, 200, map[string]bool{"is_cancelled": isRunning})
+	writeJSON(writer, 200, CancelBrowserRunResponseDTO{IsCancelled: isRunning})
 }
 
 // CloseBrowserRuns stops admission and joins detached work before its database and upstream

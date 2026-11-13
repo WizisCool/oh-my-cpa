@@ -290,12 +290,33 @@ func probeSecrets(apiKey string, headers map[string]string) []string {
 	return secrets
 }
 
+// ProbeProviderResponseDTO reports the connectivity and inference probe outcome for a provider.
+type ProbeProviderResponseDTO struct {
+	OK         bool   `json:"ok"`
+	StatusCode int    `json:"status_code,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
 // probeProvider answers whether one provider entry can actually serve: it sends
 // the family's fixed minimal inference request with the operator's values and
 // reports the outcome. Stored entries resolve server-side through provider_id,
 // so the browser never holds their secrets; typed values win over stored ones.
 // The upstream body is discarded — only the status and a redacted snippet come
 // back, so a relay that echoes the request cannot hand the key to the caller.
+//
+// @Summary Probe provider connectivity
+// @Description Send a minimal inference request against a draft or stored provider entry and return redacted diagnostics.
+// @Tags Providers
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body probeProviderRequest true "Probe target and model"
+// @Success 200 {object} ProbeProviderResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/providers/probe [post]
 func (h *Handler) probeProvider(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var req probeProviderRequest
@@ -469,17 +490,17 @@ func (h *Handler) probeProvider(writer http.ResponseWriter, request *http.Reques
 			}
 			refusal = security.RedactText(refusal, secrets...)
 			auditOutcome("failure", map[string]any{"error": refusal})
-			writeJSON(writer, http.StatusOK, map[string]any{"ok": false, "error": refusal})
+			writeJSON(writer, http.StatusOK, ProbeProviderResponseDTO{OK: false, Error: refusal})
 			return
 		}
 		auditOutcome("failure", map[string]any{"error": security.RedactText(probeTransportError(err), secrets...)})
-		writeJSON(writer, http.StatusOK, map[string]any{"ok": false, "error": security.RedactText(probeTransportError(err), secrets...)})
+		writeJSON(writer, http.StatusOK, ProbeProviderResponseDTO{OK: false, Error: security.RedactText(probeTransportError(err), secrets...)})
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		auditOutcome("success", map[string]any{"status_code": resp.StatusCode})
-		writeJSON(writer, http.StatusOK, map[string]any{"ok": true, "status_code": resp.StatusCode})
+		writeJSON(writer, http.StatusOK, ProbeProviderResponseDTO{OK: true, StatusCode: resp.StatusCode})
 		return
 	}
 	// Never expose a partial response: it can contain a truncated secret.
@@ -498,10 +519,10 @@ func (h *Handler) probeProvider(writer http.ResponseWriter, request *http.Reques
 		}
 	}
 	auditOutcome("failure", map[string]any{"status_code": resp.StatusCode})
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"ok":          false,
-		"status_code": resp.StatusCode,
-		"error":       fmt.Sprintf("upstream answered %d: %s", resp.StatusCode, security.RedactText(reason, secrets...)),
+	writeJSON(writer, http.StatusOK, ProbeProviderResponseDTO{
+		OK:         false,
+		StatusCode: resp.StatusCode,
+		Error:      fmt.Sprintf("upstream answered %d: %s", resp.StatusCode, security.RedactText(reason, secrets...)),
 	})
 }
 

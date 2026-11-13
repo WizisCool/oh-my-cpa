@@ -82,6 +82,54 @@ func (h *Handler) applyManagementAuthFileFields(ctx context.Context, client *man
 	return payload, nil
 }
 
+// AuthFileFieldsPatchRequestDTO documents editable auth file metadata fields.
+type AuthFileFieldsPatchRequestDTO struct {
+	Name      string  `json:"name"`
+	AuthIndex string  `json:"auth_index,omitempty"`
+	Priority  *int    `json:"priority,omitempty"`
+	Weight    *int64  `json:"weight,omitempty"`
+	Prefix    *string `json:"prefix,omitempty"`
+	ProxyURL  *string `json:"proxy_url,omitempty"`
+	// Headers sets custom HTTP headers keyed by header name; sending null clears the override.
+	Headers         map[string]string           `json:"headers,omitempty"`
+	Expired         *string                     `json:"expired,omitempty"`
+	DisableCooling  *bool                       `json:"disable_cooling,omitempty"`
+	Websockets      *bool                       `json:"websockets,omitempty"`
+	UsingAPI        *bool                       `json:"using_api,omitempty"`
+	UseSIWC         *bool                       `json:"use_siwc,omitempty"`
+	Note            *string                     `json:"note,omitempty"`
+	ExcludedModels  []string                    `json:"excluded_models,omitempty"`
+	RequestRetry    *int                        `json:"request_retry,omitempty"`
+	ErrorRules      []ProviderErrorRuleDTO      `json:"request_scoped_errors,omitempty"`
+	ModelAliases    []managementOAuthModelAlias `json:"model_aliases,omitempty"`
+	OpenAPI         *bool                       `json:"openapi,omitempty"`
+	OpenAPILocation *string                     `json:"openapi_location,omitempty"`
+	OpenAPIModels   []string                    `json:"openapi_models,omitempty"`
+}
+
+// AuthFileFieldsPatchResponseDTO wraps the verified auth file projection after patching metadata fields.
+type AuthFileFieldsPatchResponseDTO struct {
+	Status string                        `json:"status"`
+	File   managementAuthFileResponse    `json:"file"`
+	Fields *managementAuthFileSafeFields `json:"fields,omitempty"`
+}
+
+// @Summary Patch auth file metadata fields
+// @Description Update editable credential fields (priority, weight, prefix, proxy, aliases, OpenAPI overrides) and verify readback.
+// @Tags AuthFiles
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body AuthFileFieldsPatchRequestDTO true "Auth file fields patch"
+// @Success 200 {object} AuthFileFieldsPatchResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files/fields [patch]
 func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, request *http.Request) {
 	if err := h.providerWrites.acquire(request.Context()); err != nil {
 		writeError(writer, http.StatusServiceUnavailable, "management write busy")

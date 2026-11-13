@@ -46,6 +46,21 @@ func validateVertexServiceAccount(data []byte) (projectID string, err error) {
 	return strings.TrimSpace(key.ProjectID), nil
 }
 
+// @Summary Import Google Vertex service account
+// @Description Validate a Google Cloud service account JSON key and import it into CPA as a Vertex credential.
+// @Tags AuthFiles
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param location query string false "Google Cloud Vertex location (e.g. us-central1, global)"
+// @Param body body object true "Google Cloud service account JSON key"
+// @Success 200 {object} VertexImportDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files/vertex-import [post]
 func (h *Handler) importVertexServiceAccount(writer http.ResponseWriter, request *http.Request) {
 	request.Body = http.MaxBytesReader(writer, request.Body, managementAuthFileUploadLimit)
 	location := strings.TrimSpace(request.URL.Query().Get("location"))

@@ -228,6 +228,15 @@ func (h *Handler) readRoutingBoard(ctx context.Context, client *management.Clien
 	return operations.NewRoutingBoard(settings, members, partial), nil
 }
 
+// @Summary Get routing board
+// @Description Return CPA routing settings, provider/credential priorities and weights, and board revision.
+// @Tags Routing
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} routingBoardDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/routing [get]
 func (h *Handler) getRouting(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -242,6 +251,20 @@ func (h *Handler) getRouting(writer http.ResponseWriter, request *http.Request) 
 	writeJSON(writer, http.StatusOK, projectRoutingBoard(board))
 }
 
+// @Summary Apply routing plan
+// @Description Apply updated routing settings, provider weights/priorities, and credential priorities under revision guard.
+// @Tags Routing
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body operations.RoutingPlan true "Routing rearrangement plan"
+// @Success 200 {object} routingOutcomeDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/routing [patch]
 func (h *Handler) patchRouting(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var submitted operations.RoutingPlan
@@ -589,6 +612,16 @@ func intWeight(weight *int64) *int {
 // board's model lens. Configured providers are read from their model lists (or
 // CPA's built-in list for a family entry that names none); a credential is read
 // from CPA's registry, which already applies its aliases, prefix and exclusions.
+//
+// @Summary Get callable models per routing member
+// @Description Resolve the callable model IDs for every provider and credential on the routing board.
+// @Tags Routing
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} routingModelsDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/routing/models [get]
 func (h *Handler) getRoutingModels(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)

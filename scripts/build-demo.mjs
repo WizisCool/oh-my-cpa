@@ -37,23 +37,32 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = join(root, 'internal', 'web', 'dist');
 const STAGE = join(root, 'tmp', 'cloudflare-demo', 'assets');
 
+function normalizeBasePath(basePath = '') {
+  const trimmed = basePath.trim();
+  if (!trimmed || trimmed === '/') return '';
+  const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeading.replace(/\/+$/, '');
+}
+
 /**
  * The runtime configuration the demonstration's page carries.
  *
  * `demo: true` is the flag the console reads to render its own notices and to explain
- * a refused write before the request is made. `basePath` is empty because the
- * demonstration is the whole site, and `apiBaseUrl` is absolute for the same reason.
+ * a refused write before the request is made.
  */
-const RUNTIME_CONFIG = {
-  basePath: '',
-  apiBaseUrl: '/api/v1',
-  mediaBaseUrl: '/media',
-  appName: 'Oh My CPA',
-  demo: true,
-  // The demonstration's own build version, so a page that names the running build does not
-  // fall back to the source default and claim to be a release it is not.
-  version: 'v0.1.0-demo',
-};
+function buildRuntimeConfig(basePath = '') {
+  const normalizedBase = normalizeBasePath(basePath);
+  return {
+    basePath: normalizedBase,
+    apiBaseUrl: `${normalizedBase}/api/v1`,
+    mediaBaseUrl: `${normalizedBase}/media`,
+    appName: 'Oh My CPA',
+    demo: true,
+    // The demonstration's own build version, so a page that names the running build does not
+    // fall back to the source default and claim to be a release it is not.
+    version: 'v0.1.0-demo',
+  };
+}
 
 /** The marker the Go server writes, which this replaces. */
 const CONFIG_MARKER = '__OMCPA_CONFIG__';
@@ -61,14 +70,16 @@ const CONFIG_MARKER = '__OMCPA_CONFIG__';
 /**
  * Rewrites a built HTML file for a static host.
  */
-export function rewriteHtml(html) {
+export function rewriteHtml(html, { basePath = '' } = {}) {
   let output = html;
+  const runtimeConfig = buildRuntimeConfig(basePath);
+  const baseHref = runtimeConfig.basePath ? `${runtimeConfig.basePath}/` : '/';
 
-  // The same tag the Go server writes for a root base path (`internal/api/handler.go`).
+  // The same tag the Go server writes for this base path (`internal/api/handler.go`).
   if (output.includes('<base ')) throw new Error('the built index.html already carries a <base> tag');
-  output = output.replace('<head>', '<head>\n    <base href="/">');
+  output = output.replace('<head>', `<head>\n    <base href="${baseHref}">`);
 
-  const script = `<script>window.${CONFIG_MARKER} = ${JSON.stringify(RUNTIME_CONFIG)};</script>`;
+  const script = `<script>window.${CONFIG_MARKER} = ${JSON.stringify(runtimeConfig)};</script>`;
   if (!output.includes(CONFIG_MARKER)) {
     throw new Error('the built index.html has no runtime configuration to replace');
   }
@@ -77,7 +88,7 @@ export function rewriteHtml(html) {
   // in the first frame.
   output = output.replace(/<script>[\s\S]*?__OMCPA_CONFIG__[\s\S]*?<\/script>/, script);
 
-  if (!output.includes('<base href="/">')) {
+  if (!output.includes(`<base href="${baseHref}">`)) {
     throw new Error('the built index.html has no <head> to carry the base URL');
   }
   if (!output.includes('"demo":true') && !output.includes('"demo": true')) {
@@ -86,7 +97,12 @@ export function rewriteHtml(html) {
   return output;
 }
 
-export async function stageDemo({ sourceDirectory = SOURCE, stageDirectory = STAGE } = {}) {
+export async function stageDemo({
+  sourceDirectory = SOURCE,
+  stageDirectory = STAGE,
+  basePath = '',
+  includeHeaders = true,
+} = {}) {
   // The directory exists in every checkout, held by its tracked `.gitkeep`; only an
   // entry document says a build is there.
   if (!existsSync(join(sourceDirectory, 'index.html'))) {
@@ -100,11 +116,13 @@ export async function stageDemo({ sourceDirectory = SOURCE, stageDirectory = STA
   // The header rules live beside this deployment's config rather than in the built
   // console, because they describe how this host should serve the console rather than
   // anything about the console itself.
-  await cp(join(root, 'deploy', 'cloudflare', '_headers'), join(stageDirectory, '_headers'));
+  if (includeHeaders) {
+    await cp(join(root, 'deploy', 'cloudflare', '_headers'), join(stageDirectory, '_headers'));
+  }
 
   const index = join(stageDirectory, 'index.html');
   const original = await readFile(index, 'utf8');
-  await writeFile(index, rewriteHtml(original));
+  await writeFile(index, rewriteHtml(original, { basePath }));
 
   return { stageDirectory };
 }

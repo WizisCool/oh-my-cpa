@@ -37,9 +37,10 @@ and shipped-artifact checks strict.
 4. **Shared environment discipline (`isolate: false`)**: Both Vitest projects run with `isolate: false` so modules and the jsdom window are reused across files in each worker. `web/tests/setup.ts` cleans up React trees, query clients, timers, storage, and mocked API handlers in `afterEach`. Do not mutate module-level singletons without restoring them in `afterEach`.
 5. **Deterministic assertions**: For a bug fix, verify the regression test fails without the fix before restoring the fix. Never paper over timing or state leaks with retries, fixed sleeps, or longer timeouts.
 
-## Golden data and demo dataset
+## Golden data, OpenAPI spec, and demo dataset
 
 - **Go golden files**: Regenerate only the owning package with `UPDATE_GOLDEN=1 go test ./<package>`.
+- **OpenAPI / Swagger 2.0 spec**: Regenerate `docs/openapi/swagger.json` with `pnpm openapi:generate` whenever `/api` routes, annotations, or DTOs change. `pnpm check:openapi` (in `verify:static:repository`), `TestOpenAPIRouteCoverage`, and `TestOpenAPISpecFreshness` (`internal/api/openapi_test.go`) enforce 100% route parity and freshness.
 - **Cloudflare demo dataset**: Generated on demand (and in CI / Workers Builds) from real Go handlers over the deterministic demo fixture rather than committed to Git. Run `pnpm check:demo` to verify route coverage and privacy, and `TestExportDemoDataset` (`internal/api/demo_export_test.go`) to validate in-memory export invariants and dashboard health parity.
 
 ## Browser acceptance diagnostics

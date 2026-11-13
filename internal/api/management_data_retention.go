@@ -78,6 +78,16 @@ func (h *Handler) usageRetentionDefaults() repository.UsageRetention {
 	return repository.UsageRetention{RequestRecordDays: h.cfg.Usage.RetentionDays, PayloadDays: h.cfg.Usage.InboxRetentionDays}
 }
 
+// @Summary Get data retention configuration and status
+// @Description Return configured request/payload retention horizons, lifecycle deletion progress, and SQLite auto-vacuum stats.
+// @Tags System
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} DataRetentionDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/system/data-retention [get]
 func (h *Handler) getDataRetention(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
@@ -159,6 +169,21 @@ func autoVacuumName(mode int64) string {
 //
 // Shortening retention deletes request records for good, so the change is
 // audited before it is stored, and refused when it cannot be.
+//
+// @Summary Update data retention horizons
+// @Description Persist new request/payload retention days under optimistic concurrency check and wake the maintenance loop.
+// @Tags System
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body dataRetentionRequest true "Retention settings with expected current horizon"
+// @Success 200 {object} DataRetentionDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/system/data-retention [put]
 func (h *Handler) putDataRetention(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var req dataRetentionRequest

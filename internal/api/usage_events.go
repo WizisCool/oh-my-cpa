@@ -444,8 +444,73 @@ func usageEventFilterFromRequest(request *http.Request, window dashboardWindow) 
 	return filter, nil
 }
 
+// UsageEventListResponseDTO returns paginated usage request records within a window.
+type UsageEventListResponseDTO struct {
+	Window       dashboardWindow      `json:"window"`
+	Items        []usageEventResponse `json:"items"`
+	NextCursor   string               `json:"next_cursor"`
+	HasMore      bool                 `json:"has_more"`
+	Limit        int                  `json:"limit"`
+	ArrivedCount int64                `json:"arrived_count"`
+}
+
+// UsageEventDetailDTO documents the single-record detail projection returned by GET /v1/usage/events/{id}.
+type UsageEventDetailDTO struct {
+	usageEventResponse
+	FailBody        string                          `json:"fail_body"`
+	ResponseHeaders []usage.ResponseHeader          `json:"response_headers"`
+	AccessProvider  string                          `json:"access_provider"`
+	IsNativeKey     bool                            `json:"is_native_key"`
+	ClientIP        string                          `json:"client_ip"`
+	XForwardedFor   string                          `json:"x_forwarded_for"`
+	FailCode        string                          `json:"fail_code,omitempty"`
+	StructuredUsage *structuredUsageDetailsResponse `json:"structured_usage,omitempty"`
+}
+
+// UsageEventDetailResponseDTO wraps a single usage event detail, correlated errors, and cost breakdown.
+type UsageEventDetailResponseDTO struct {
+	Event         UsageEventDetailDTO              `json:"event"`
+	RelatedErrors []repository.ErrorEventRow       `json:"related_errors,omitempty"`
+	CostBreakdown *repository.RequestCostBreakdown `json:"cost_breakdown,omitempty"`
+	PartialErrors []string                         `json:"partial_errors,omitempty"`
+}
+
+// UsageFacetsResponseDTO returns available filter facets over a dashboard time window.
+type UsageFacetsResponseDTO struct {
+	Window dashboardWindow        `json:"window"`
+	Facets repository.UsageFacets `json:"facets"`
+}
+
 // listUsageEvents serves the shared request-record query used by the detail
 // table, drill-downs and (later) ranking and export.
+//
+// @Summary Query usage request events
+// @Description List usage request records with keyset cursor pagination and multi-dimensional filtering.
+// @Tags Usage
+// @Produce json
+// @Security CookieAuth
+// @Param preset query string false "Time range preset"
+// @Param from query integer false "Custom window start timestamp in Unix milliseconds"
+// @Param to query integer false "Custom window end timestamp in Unix milliseconds"
+// @Param result query string false "Result filter" Enums(all, success, failed)
+// @Param cost query string false "Cost state filter" Enums(priced, unpriced)
+// @Param served query string false "Served model filter" Enums(substituted, matched)
+// @Param transport query string false "Transport filter" Enums(websocket, sse, http)
+// @Param cursor query string false "Keyset pagination cursor"
+// @Param since query integer false "Record ID boundary for arrived_count"
+// @Param limit query integer false "Page size"
+// @Param q query string false "Search text"
+// @Param model query []string false "Upstream model filters" collectionFormat(multi)
+// @Param model_alias query []string false "Call point filters" collectionFormat(multi)
+// @Param provider query []string false "Provider filters" collectionFormat(multi)
+// @Param api_key query []string false "Client API key fingerprint filters" collectionFormat(multi)
+// @Param auth_index query []string false "Credential auth_index filters" collectionFormat(multi)
+// @Success 200 {object} UsageEventListResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/usage/events [get]
 func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
@@ -526,13 +591,13 @@ func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Requ
 	// alias, because it is a read-time label over credentials CPA currently holds
 	// rather than a fact stored with the record.
 	h.attachProviderKeyMasks(request, items)
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"window":        window,
-		"items":         items,
-		"next_cursor":   page.NextCursor,
-		"has_more":      page.HasMore,
-		"limit":         page.Limit,
-		"arrived_count": page.ArrivedCount,
+	writeJSON(writer, http.StatusOK, UsageEventListResponseDTO{
+		Window:       window,
+		Items:        items,
+		NextCursor:   page.NextCursor,
+		HasMore:      page.HasMore,
+		Limit:        page.Limit,
+		ArrivedCount: page.ArrivedCount,
 	})
 }
 
@@ -579,6 +644,18 @@ func (h *Handler) attachClientKeyAliases(request *http.Request, items []usageEve
 
 // getUsageEvent returns one record plus the credential errors that happened
 // around it, which is what makes a failed request diagnosable in one call.
+//
+// @Summary Get usage event details
+// @Description Retrieve full single-record diagnostics, correlated credential errors, and cost breakdown for an event ID.
+// @Tags Usage
+// @Produce json
+// @Security CookieAuth
+// @Param id path integer true "Usage event ID"
+// @Success 200 {object} UsageEventDetailResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Router /v1/usage/events/{id} [get]
 func (h *Handler) getUsageEvent(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	id, err := parseEventID(request)
@@ -708,6 +785,21 @@ const requestLogNotFoundCode = "request_log_not_found"
 // The browser never learns CPA's management key or the log endpoint: it asks us
 // by event id, and we fetch it server-side. The id is validated, and the
 // download is an explicit action rather than something a list view triggers.
+//
+// @Summary Download request log for a usage event
+// @Description Fetch CPA's raw request log corresponding to the specified usage event ID.
+// @Tags Usage
+// @Produce text/plain
+// @Security CookieAuth
+// @Param id path integer true "Usage event ID"
+// @Success 200 {string} string "Plain-text request log"
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/usage/events/{id}/request-log [get]
 func (h *Handler) downloadUsageEventRequestLog(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	id, err := parseEventID(request)
@@ -767,6 +859,20 @@ func (h *Handler) downloadUsageEventRequestLog(writer http.ResponseWriter, reque
 }
 
 // listUsageFacets returns the filter values actually present in a window.
+//
+// @Summary List usage filter facets
+// @Description Return distinct filter values observed within the requested time window.
+// @Tags Usage
+// @Produce json
+// @Security CookieAuth
+// @Param preset query string false "Time range preset"
+// @Param from query integer false "Custom window start timestamp in Unix milliseconds"
+// @Param to query integer false "Custom window end timestamp in Unix milliseconds"
+// @Success 200 {object} UsageFacetsResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/usage/facets [get]
 func (h *Handler) listUsageFacets(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	window, windowErr := dashboardWindowFromRequest(request, time.Now().UTC())
@@ -780,7 +886,7 @@ func (h *Handler) listUsageFacets(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	h.attachFacetAliases(request, &facets)
-	writeJSON(writer, http.StatusOK, map[string]any{"window": window, "facets": facets})
+	writeJSON(writer, http.StatusOK, UsageFacetsResponseDTO{Window: window, Facets: facets})
 }
 
 // attachFacetAliases labels the caller-key facet options with their names.

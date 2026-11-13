@@ -45,6 +45,19 @@ type usageRoutingResponse struct {
 // `after=<record id>` it is only what was recorded since, which is how the
 // panel follows the live stream without re-reading the minute it already holds.
 // The browser ages attempts out of the window on its own clock.
+// usageRouting answers the attempts of the rolling routing window.
+//
+// @Summary Get live routing attempts and credential cooldowns
+// @Description Return request routing attempts and active credential cooldowns within the trailing 1-minute window.
+// @Tags Usage
+// @Produce json
+// @Security CookieAuth
+// @Param after query integer false "Only return records with ID greater than this value"
+// @Success 200 {object} usageRoutingResponse
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/usage/routing [get]
 func (h *Handler) usageRouting(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
@@ -495,5 +498,69 @@ func TestQuotaSnapshotRoundTripsPlanLabelsWithoutRewritingHistory(t *testing.T) 
 				t.Fatalf("historical plan was rewritten: %+v", oldPlan)
 			}
 		})
+	}
+}
+
+func TestBatchQuotaRefreshPreservesEmptyQuotasAndTotal(t *testing.T) {
+	fakeCPA := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if strings.HasPrefix(request.URL.Path, "/v8/management/credentials") {
+			_, _ = writer.Write([]byte(`{"files":[]}`))
+			return
+		}
+		_, _ = writer.Write([]byte(`{}`))
+	}))
+	t.Cleanup(fakeCPA.Close)
+
+	db, err := repository.Open(context.Background(), fmt.Sprintf("file:mem_quota_empty_batch_%d?mode=memory&cache=shared", time.Now().UnixNano()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	repo := repository.New(db)
+	cipher, err := crypto.New("01234567890123456789012345678901")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ciphertext, nonce, err := cipher.Encrypt([]byte("cpa-management-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.UpsertInstance(context.Background(), domain.CPAInstance{
+		ID:                      "default",
+		Name:                    "Default",
+		BaseURL:                 fakeCPA.URL,
+		ManagementKeyCiphertext: ciphertext,
+		ManagementKeyNonce:      nonce,
+		CreatedAt:               time.Now().UTC(),
+		UpdatedAt:               time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	authManager, err := auth.New("app-admin-secret", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(config.Config{BasePath: "", CPA: config.CPAConfig{BaseURL: fakeCPA.URL, ManagementKey: "app-admin-secret"}}, repo, cipher, nil, authManager)
+	appServer := httptest.NewServer(handler.Router())
+	t.Cleanup(appServer.Close)
+
+	client := signedInClient(t, appServer.URL+"/api/auth/login", "app-admin-secret")
+	resp, err := client.Post(appServer.URL+"/api/v1/management/quota/refresh", "application/json", bytes.NewBufferString(`{"auth_indexes":["unknown-idx-1","unknown-idx-2"]}`))
+	if err != nil {
+		t.Fatalf("POST /quota/refresh failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var rawBody bytes.Buffer
+	if _, err := rawBody.ReadFrom(resp.Body); err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"status":"ok","quotas":[],"total":0}`
+	if strings.TrimSpace(rawBody.String()) != want {
+		t.Fatalf("body = %s, want %s", strings.TrimSpace(rawBody.String()), want)
 	}
 }

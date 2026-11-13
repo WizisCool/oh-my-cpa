@@ -120,6 +120,16 @@ func projectPluginSettings(revision string, settings configyaml.PluginSettings, 
 	return dto
 }
 
+// @Summary Get plugin host settings
+// @Description Return CPA plugin global toggle, store registries, auth rules, and managed OMC source status.
+// @Tags Plugins
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} PluginSettingsDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 422 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/plugins/settings [get]
 func (h *Handler) getPluginSettings(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -256,6 +266,22 @@ func isRegistryURL(raw string) bool {
 	return scheme == "https" || scheme == "http"
 }
 
+// @Summary Update plugin host settings
+// @Description Replace CPA plugin global toggle, third-party registries, and store auth rules under revision guard.
+// @Tags Plugins
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body putPluginSettingsRequest true "Plugin settings payload"
+// @Success 200 {object} PluginSettingsDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 422 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/plugins/settings [put]
 func (h *Handler) putPluginSettings(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 

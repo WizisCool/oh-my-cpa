@@ -62,7 +62,7 @@ and operator procedures.
 
 - **Backend layered structure**:
   - `cmd/oh-my-cpa/`: CLI entrypoints (`serve`, `updater`, `mcp`, `database`).
-  - `internal/api/`: HTTP transport, auth/CSRF middleware, handwritten DTO projections, SSE streaming.
+  - `internal/api/`: HTTP transport, auth/CSRF middleware, handwritten DTO projections, SSE streaming, and `swaggo` Swagger 2.0 annotations.
   - `internal/operations/`: Shared business mutations (validation, revision checks, write gates, backups, readback) consumed by both HTTP handlers and Agent/MCP capabilities.
   - `internal/capability/`, `internal/agent/`, `internal/mcpbridge/`: Capability registry, Agent loop/persistence, and MCP transport adapters.
   - `internal/cpa/`: Gateway v8 management client, lossless YAML patching (`configyaml`), credential discovery.
@@ -83,6 +83,10 @@ and operator procedures.
   - One replica per SQLite data directory. Migrations are strictly forward-only; never edit applied migration files. Price versions and audit logs are append-only.
   - Only the updater container holds the Docker socket; the console stays socket-free, read-only and unprivileged. OMC updates verify Ed25519-signed manifests and pull by digest.
   - The production SPA is embedded into the Go binary (`internal/web`). Both root (`/`) and configured `OMCPA_BASE_PATH` must work.
+- **OpenAPI / Swagger contract (`docs/openapi/swagger.json`)**:
+  - Every `/api` route registered in `internal/api/handler.go` MUST carry `swaggo` annotations (`@Summary`, `@Description`, `@Tags`, `@Param`, `@Success`, `@Failure`, `@Security`, `@Router` relative to `@BasePath /api`) referencing explicit, safe DTO structs (never unprojected domain/repository/secret-bearing models or inline `map[string]any` payloads for documented responses).
+  - After adding, modifying, or removing any `/api` handler, route, or DTO, regenerate `docs/openapi/swagger.json` with `pnpm openapi:generate` and commit the updated spec.
+  - `TestOpenAPIRouteCoverage` and `TestOpenAPISpecFreshness` (`internal/api/openapi_test.go`) plus `pnpm check:openapi` enforce 100% bidirectional route parity and spec freshness in Go tests and CI (`verify:static:repository`).
 
 ## Testing governance & anti-bloat rules
 
@@ -103,6 +107,7 @@ To keep local feedback and CI fast, follow the 3-tier testing pyramid in [Testin
 ## Verification workflow
 
 - `pnpm test:fast`: Fast local verification (`pnpm type-check && pnpm test:logic && go test -short ./...`). Runs in seconds without building the binary or launching a browser.
+- `pnpm openapi:generate` / `pnpm check:openapi`: Regenerates `docs/openapi/swagger.json` via the pinned `swag` Go tool (`go tool swag`) or verifies it is up to date without mutating the worktree.
 - `pnpm test:frontend`: Runs all Vitest `logic` and `components` suites (`~20s`). For targeted iteration, run `pnpm exec vitest run --config web/vitest.config.ts <file>`.
 - `pnpm verify:browser:smoke`: Builds the embedded SPA + Go binary and runs the fast end-to-end Chromium smoke check.
 - `pnpm verify`: Runs `test:fast`, `test:components`, and `verify:build` (`type-check`, `build`, `check:bundle`).

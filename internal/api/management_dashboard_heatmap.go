@@ -90,6 +90,17 @@ type dashboardTokenHeatmapDay struct {
 // with the request list. And the panel is allowed to fail on its own: an unavailable read
 // should not blank the six tiles beside it, which is the same reasoning that put
 // `partial_errors` on the overview.
+// @Summary Get 53-week daily token heatmap
+// @Description Return daily token and request totals over the rolling 53-week calendar grid.
+// @Tags Dashboard
+// @Produce json
+// @Security CookieAuth
+// @Param tz query string false "IANA timezone override (defaults to OMC configured timezone)"
+// @Success 200 {object} dashboardTokenHeatmapResponse
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/dashboard/token-heatmap [get]
 func (h *Handler) dashboardTokenHeatmap(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {

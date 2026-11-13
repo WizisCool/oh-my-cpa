@@ -24,11 +24,97 @@ type clientKeyAliasRequest struct {
 	Version        int64  `json:"version"`
 }
 
+// ClientKeyAliasDTO projects an operator-assigned caller key alias record.
+type ClientKeyAliasDTO struct {
+	KeyFingerprint string `json:"key_fingerprint"`
+	Alias          string `json:"alias"`
+	Version        int64  `json:"version"`
+	CreatedAtMS    int64  `json:"created_at_ms"`
+	UpdatedAtMS    int64  `json:"updated_at_ms"`
+}
+
+// ClientKeyUsageDTO projects observed request usage for one caller key in a window.
+type ClientKeyUsageDTO struct {
+	KeyFingerprint string `json:"key_fingerprint"`
+	Requests       int64  `json:"requests"`
+	Failed         int64  `json:"failed"`
+	TotalTokens    int64  `json:"total_tokens"`
+	LastUsedMS     int64  `json:"last_used_ms"`
+}
+
+func projectClientKeyAliasDTO(alias repository.ClientKeyAlias) ClientKeyAliasDTO {
+	return ClientKeyAliasDTO{
+		KeyFingerprint: alias.KeyFingerprint,
+		Alias:          alias.Alias,
+		Version:        alias.Version,
+		CreatedAtMS:    alias.CreatedAtMS,
+		UpdatedAtMS:    alias.UpdatedAtMS,
+	}
+}
+
+func projectClientKeyAliasesDTO(aliases map[string]repository.ClientKeyAlias) map[string]ClientKeyAliasDTO {
+	out := make(map[string]ClientKeyAliasDTO, len(aliases))
+	for key, alias := range aliases {
+		out[key] = projectClientKeyAliasDTO(alias)
+	}
+	return out
+}
+
+func projectClientKeyUsageDTOs(usage []repository.ClientKeyUsage) []ClientKeyUsageDTO {
+	out := make([]ClientKeyUsageDTO, 0, len(usage))
+	for _, entry := range usage {
+		out = append(out, ClientKeyUsageDTO{
+			KeyFingerprint: entry.KeyFingerprint,
+			Requests:       entry.Requests,
+			Failed:         entry.Failed,
+			TotalTokens:    entry.TotalTokens,
+			LastUsedMS:     entry.LastUsedMS,
+		})
+	}
+	return out
+}
+
+// ClientKeyAliasesResponseDTO maps usage key fingerprints to operator-assigned aliases.
+type ClientKeyAliasesResponseDTO struct {
+	Aliases map[string]ClientKeyAliasDTO `json:"aliases"`
+}
+
+// ClientKeyAliasPutResponseDTO returns the persisted client key alias record.
+type ClientKeyAliasPutResponseDTO struct {
+	Status string            `json:"status"`
+	Alias  ClientKeyAliasDTO `json:"alias"`
+}
+
+// ClientKeyAliasConflictResponseDTO describes an optimistic version conflict when updating a client key alias.
+type ClientKeyAliasConflictResponseDTO struct {
+	Error  string            `json:"error"`
+	Code   string            `json:"code"`
+	Alias  ClientKeyAliasDTO `json:"alias"`
+	Detail string            `json:"detail"`
+}
+
+// ClientKeyUsageResponseDTO returns per-key usage aggregates for a dashboard time window.
+type ClientKeyUsageResponseDTO struct {
+	Window dashboardWindow     `json:"window"`
+	Usage  []ClientKeyUsageDTO `json:"usage"`
+}
+
 // listClientKeyAliases returns every stored alias for the instance.
 //
 // This is management metadata only: it carries no key material, so it is an
 // ordinary authenticated read. The console joins it to the key list from CPA by
 // fingerprint.
+//
+// @Summary List client key aliases
+// @Description Return all local operator-assigned aliases keyed by usage fingerprint.
+// @Tags ClientKeys
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} ClientKeyAliasesResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/client-key-aliases [get]
 func (h *Handler) listClientKeyAliases(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
@@ -40,7 +126,7 @@ func (h *Handler) listClientKeyAliases(writer http.ResponseWriter, request *http
 		writeError(writer, http.StatusInternalServerError, "failed to read client key aliases")
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"aliases": aliases})
+	writeJSON(writer, http.StatusOK, ClientKeyAliasesResponseDTO{Aliases: projectClientKeyAliasesDTO(aliases)})
 }
 
 // putClientKeyAlias names or clears one key.
@@ -53,6 +139,21 @@ func (h *Handler) listClientKeyAliases(writer http.ResponseWriter, request *http
 // The write is audited fail-closed, like the other identity operations. The alias
 // text itself is not copied into the audit details - it is operator-supplied
 // prose, and the fingerprint already identifies the row.
+//
+// @Summary Set or clear a client key alias
+// @Description Assign or clear a local display alias for a caller key fingerprint with optimistic version locking.
+// @Tags ClientKeys
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body clientKeyAliasRequest true "Client key alias payload"
+// @Success 200 {object} ClientKeyAliasPutResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ClientKeyAliasConflictResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/client-key-aliases [put]
 func (h *Handler) putClientKeyAlias(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
@@ -93,11 +194,11 @@ func (h *Handler) putClientKeyAlias(writer http.ResponseWriter, request *http.Re
 		case errors.Is(err, repository.ErrClientKeyAliasVersionConflict):
 			// 409 with the stored version so the console can reload and retry
 			// against the current state instead of guessing.
-			writeJSON(writer, http.StatusConflict, map[string]any{
-				"error":  "the alias was changed by another session; reload and try again",
-				"code":   "alias_version_conflict",
-				"alias":  stored,
-				"detail": err.Error(),
+			writeJSON(writer, http.StatusConflict, ClientKeyAliasConflictResponseDTO{
+				Error:  "the alias was changed by another session; reload and try again",
+				Code:   "alias_version_conflict",
+				Alias:  projectClientKeyAliasDTO(stored),
+				Detail: err.Error(),
 			})
 		case errors.Is(err, repository.ErrClientKeyAliasInvalid):
 			writeError(writer, http.StatusBadRequest, err.Error())
@@ -108,7 +209,7 @@ func (h *Handler) putClientKeyAlias(writer http.ResponseWriter, request *http.Re
 	}
 
 	_ = h.recordAudit(request, action, "client_key", target, "success", map[string]any{"cleared": normalized == ""})
-	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "alias": stored})
+	writeJSON(writer, http.StatusOK, ClientKeyAliasPutResponseDTO{Status: "ok", Alias: projectClientKeyAliasDTO(stored)})
 }
 
 // clientKeyUsage returns per-key request counts and last-use times.
@@ -117,6 +218,21 @@ func (h *Handler) putClientKeyAlias(writer http.ResponseWriter, request *http.Re
 // they describe what this console has actually observed. A key with no observed
 // requests reports zero rather than a guessed creation date: CPA publishes no
 // such date, and inventing one would be a fact the system does not have.
+//
+// @Summary Get per-key usage summary
+// @Description Return observed request counts and last-use timestamps grouped by client key fingerprint.
+// @Tags ClientKeys
+// @Produce json
+// @Security CookieAuth
+// @Param preset query string false "Time range preset"
+// @Param from query integer false "Custom window start timestamp in Unix milliseconds"
+// @Param to query integer false "Custom window end timestamp in Unix milliseconds"
+// @Success 200 {object} ClientKeyUsageResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/client-key-usage [get]
 func (h *Handler) clientKeyUsage(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
@@ -135,9 +251,9 @@ func (h *Handler) clientKeyUsage(writer http.ResponseWriter, request *http.Reque
 		writeError(writer, http.StatusInternalServerError, "failed to read client key usage")
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"window": window,
-		"usage":  usage,
+	writeJSON(writer, http.StatusOK, ClientKeyUsageResponseDTO{
+		Window: window,
+		Usage:  projectClientKeyUsageDTOs(usage),
 	})
 }
 
@@ -145,6 +261,21 @@ func (h *Handler) clientKeyUsage(writer http.ResponseWriter, request *http.Reque
 //
 // Provided as its own route so clearing a name from a table row does not need the
 // caller to know that an empty alias string is how the same state is expressed.
+//
+// @Summary Delete a client key alias
+// @Description Clear the local alias for a client API key fingerprint with optional optimistic version check.
+// @Tags ClientKeys
+// @Produce json
+// @Security CookieAuth
+// @Param fingerprint path string true "Usage key fingerprint"
+// @Param version query integer false "Expected alias version for optimistic locking"
+// @Success 200 {object} StatusOKResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/client-key-aliases/{fingerprint} [delete]
 func (h *Handler) deleteClientKeyAlias(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
@@ -190,5 +321,5 @@ func (h *Handler) deleteClientKeyAlias(writer http.ResponseWriter, request *http
 		return
 	}
 	_ = h.recordAudit(request, "client_key.alias_clear", "client_key", target, "success", nil)
-	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok"})
+	writeJSON(writer, http.StatusOK, StatusOKResponseDTO{Status: "ok"})
 }

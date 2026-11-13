@@ -250,6 +250,24 @@ func revealedProviderKeyCount(items []ProviderItemDTO) int {
 	return count
 }
 
+// ManagementProviderListResponseDTO lists configured provider entries and optional state version.
+type ManagementProviderListResponseDTO struct {
+	Providers []ProviderItemDTO `json:"providers"`
+	Total     int               `json:"total"`
+	Version   uint64            `json:"version,omitempty"`
+}
+
+// @Summary List configured AI providers
+// @Description Return configured AI providers with optional raw API key reveal (audited fail-closed when include_keys=true).
+// @Tags Providers
+// @Produce json
+// @Security CookieAuth
+// @Param include_keys query boolean false "Include raw API keys (audited fail-closed; refused in demo)"
+// @Success 200 {object} ManagementProviderListResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/providers [get]
 func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -283,14 +301,11 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 		}
 	}
 	setStateVersionHeader(writer, version)
-	body := map[string]any{
-		"providers": items,
-		"total":     len(items),
-	}
-	if version > 0 {
-		body["version"] = version
-	}
-	writeJSON(writer, http.StatusOK, body)
+	writeJSON(writer, http.StatusOK, ManagementProviderListResponseDTO{
+		Providers: items,
+		Total:     len(items),
+		Version:   version,
+	})
 }
 
 func (h *Handler) readProviderItems(ctx context.Context, client *management.Client) []ProviderItemDTO {

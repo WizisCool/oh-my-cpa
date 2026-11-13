@@ -107,6 +107,20 @@ func (h *Handler) insightsRangeFromRequest(ctx context.Context, request *http.Re
 	return resolved, message, err
 }
 
+// @Summary Query multi-dimensional insights cube
+// @Description Return usage facts partitioned by bucket, client key, call point, model, provider, and credential.
+// @Tags Insights
+// @Produce json
+// @Security CookieAuth
+// @Param preset query string false "Insights time preset (today, yesterday, this_week, last_week, this_month, last_month, 24h, 7d, 30d, 90d, all)"
+// @Param from query integer false "Custom window start timestamp in Unix milliseconds"
+// @Param to query integer false "Custom window end timestamp in Unix milliseconds"
+// @Param compare query string false "Comparison window mode"
+// @Success 200 {object} insightsCubeResponse
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/insights/cube [get]
 func (h *Handler) insightsCube(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
@@ -421,6 +435,24 @@ func (h *Handler) insightsRhythmFilters(request *http.Request) map[repository.Us
 // insightsRhythm answers when in the week usage happens. It needs local hours,
 // which the cube's coarser buckets cannot give, so it is its own read; it honours
 // the same filters the page applies to the cube.
+// @Summary Query weekly usage rhythm
+// @Description Return a 7x24 weekday-by-hour usage matrix under optional Insights dimension filters.
+// @Tags Insights
+// @Produce json
+// @Security CookieAuth
+// @Param preset query string false "Insights time preset"
+// @Param from query integer false "Custom window start timestamp in Unix milliseconds"
+// @Param to query integer false "Custom window end timestamp in Unix milliseconds"
+// @Param api_key query []string false "Client API key or hmac fingerprint filters" collectionFormat(multi)
+// @Param model query []string false "Upstream model filters" collectionFormat(multi)
+// @Param model_alias query []string false "Call point filters" collectionFormat(multi)
+// @Param provider query []string false "Provider filters" collectionFormat(multi)
+// @Param auth_index query []string false "Credential auth_index filters" collectionFormat(multi)
+// @Success 200 {object} insightsRhythmResponse
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/insights/rhythm [get]
 func (h *Handler) insightsRhythm(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {

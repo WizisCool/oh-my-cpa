@@ -2,7 +2,7 @@ import React from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { api } from '../../api/client';
-import { GithubOutlined, LogoutOutlined, ReloadOutlined, RollbackOutlined, Star } from '../icons';
+import { BookOpenOutlined, GithubOutlined, LogoutOutlined, ReloadOutlined, RollbackOutlined, Star } from '../icons';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { useI18n, LANGUAGES } from '../../i18n';
 import { useTheme } from '../../theme/ThemeContext';
@@ -11,6 +11,7 @@ import { ConfirmAction } from './ConfirmAction';
 import { HeaderAction } from './HeaderAction';
 import { PreferenceMenus } from './PreferenceMenus';
 import { useT } from '../../i18n';
+import { getAppConfig, resolveApiDocsUrl } from '../../types/config';
 import { isDemoMode } from '../../types/demoMode';
 import { formatStarCount } from '../../utils/format';
 import { Tooltip } from './Tooltip';
@@ -77,6 +78,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   const { confirm } = useConfirmModal();
   const queryClient = useQueryClient();
   const isDemo = isDemoMode();
+  const apiDocsUrl = resolveApiDocsUrl(getAppConfig().basePath);
   const isPhone = useIsPhoneViewport();
   const { lang, setLang } = useI18n();
   const { modePreference, setModePreference } = useTheme();
@@ -145,6 +147,11 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
               {language.name}
             </Button>
           ))}
+          {isDemo && (
+            <Button variant="ghost" icon={<BookOpenOutlined />} href={apiDocsUrl} target="_blank" rel="noopener noreferrer" data-testid="demo-api-docs-link">
+              {t('header.open_api_docs')}
+            </Button>
+          )}
           <Button variant="ghost" icon={<GithubOutlined />} href={REPOSITORY_URL} target="_blank" rel="noopener noreferrer">
             {t('header.open_repository')}
             {stars === null ? null : <span className="header-star-count">{stars}</span>}
@@ -181,6 +188,16 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
             </ConfirmAction>
           )}
         </>
+      )}
+      {isDemo && (
+        <HeaderAction
+          label={t('header.open_api_docs')}
+          icon={<BookOpenOutlined />}
+          href={apiDocsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="demo-api-docs-link"
+        />
       )}
       <HeaderAction
         label={t('header.open_repository')}

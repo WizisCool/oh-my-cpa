@@ -59,6 +59,24 @@ func pullProtocol(family string) string {
 	return "openai"
 }
 
+// PullProviderModelsResponseDTO lists model IDs discovered from an upstream provider endpoint.
+type PullProviderModelsResponseDTO struct {
+	Models []string `json:"models"`
+	Total  int      `json:"total"`
+}
+
+// @Summary Pull upstream provider model list
+// @Description Query an upstream provider's models directory using supplied or stored provider credentials.
+// @Tags Providers
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body pullModelsRequest true "Provider endpoint and optional stored provider ID"
+// @Success 200 {object} PullProviderModelsResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/providers/pull-models [post]
 func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var req pullModelsRequest
@@ -141,9 +159,9 @@ func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"models": models,
-		"total":  len(models),
+	writeJSON(writer, http.StatusOK, PullProviderModelsResponseDTO{
+		Models: models,
+		Total:  len(models),
 	})
 }
 

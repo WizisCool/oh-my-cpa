@@ -722,6 +722,15 @@ func (h *Handler) snapshotPluginsBeforeDelete(ctx context.Context, client *manag
 // Unlike raw management endpoints that fail when CPA is unreachable, this
 // endpoint degrades gracefully to the SQLite presentation archive so historical
 // usage, routing, and insights surfaces stay readable even during gateway restarts.
+//
+// @Summary Get unified identity directory
+// @Description Return live and archived provider, credential, and plugin identities with display metadata and catalog status.
+// @Tags Providers
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} IdentityDirectoryResponse
+// @Failure 401 {object} ErrorResponseDTO
+// @Router /v1/management/identity-directory [get]
 func (h *Handler) getIdentityDirectory(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	ctx := request.Context()

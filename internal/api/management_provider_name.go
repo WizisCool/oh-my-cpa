@@ -10,6 +10,20 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
+// PutProviderNameRequestDTO sets or clears Oh My CPA's display name for a provider row.
+type PutProviderNameRequestDTO struct {
+	Name              string `json:"name"`
+	ExpectedAuthIndex string `json:"expected_auth_index,omitempty"`
+	ExpectedName      string `json:"expected_name,omitempty"`
+}
+
+// PutProviderNameResponseDTO returns the persisted provider ID and display name.
+type PutProviderNameResponseDTO struct {
+	Status string `json:"status"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+}
+
 // putManagementProviderName names one provider row or clears its name.
 //
 // The name is Oh My CPA's own overlay, so this never writes CPA's configuration:
@@ -22,17 +36,31 @@ import (
 // operator saw: a delete that shifted it turns the rename into a conflict rather
 // than relabelling its neighbour. Like a credential rename it is audited
 // fail-closed, and the name stays out of the audit details.
+//
+// @Summary Set provider display name
+// @Description Set or clear Oh My CPA's local display name overlay for a configured provider row.
+// @Tags Providers
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path string true "Provider ID"
+// @Param body body PutProviderNameRequestDTO true "Provider display name and stale-index guard"
+// @Success 200 {object} PutProviderNameResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/providers/{id}/name [put]
 func (h *Handler) putManagementProviderName(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
 		writeError(writer, http.StatusServiceUnavailable, "database is unavailable")
 		return
 	}
-	var payload struct {
-		Name              string `json:"name"`
-		ExpectedAuthIndex string `json:"expected_auth_index,omitempty"`
-		ExpectedName      string `json:"expected_name,omitempty"`
-	}
+	var payload PutProviderNameRequestDTO
 	if err := decodeManagementJSON(writer, request, 8*1024, &payload); err != nil {
 		return
 	}
@@ -67,7 +95,7 @@ func (h *Handler) putManagementProviderName(writer http.ResponseWriter, request 
 		return
 	}
 	_ = h.recordAudit(request, action, "provider", id, "success", nil)
-	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "id": id, "name": name})
+	writeJSON(writer, http.StatusOK, PutProviderNameResponseDTO{Status: "ok", ID: id, Name: name})
 }
 
 // writeProviderName checks the row still exists as the operator saw it and then

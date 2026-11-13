@@ -14,10 +14,11 @@ import { fileURLToPath } from 'node:url';
 export const SHARED_INPUTS = /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.node-version|\.nvmrc|tsconfig\.tooling\.json|scripts\/tools-versions\.json|\.github\/workflows\/ci\.yml|\.github\/actions\/.*|scripts\/ci-scope\.(?:mjs|test\.mjs))$/;
 
 const DOCKER_INPUTS = /^(?:Dockerfile|\.dockerignore|deploy\/(?:base-path|healthcheck)\.sh)$/;
-const GO_ONLY = /(?:\.go$|^go\.(?:mod|sum)$|^\.golangci\.yml$|^(?:cmd|internal|migrations)\/|^scripts\/fixture\/)/;
-const GO_CROSS_FRONTEND = /^(?:internal\/(?:api|demo|web)\/|migrations\/|go\.(?:mod|sum)$)/;
+const GO_ONLY = /(?:\.go$|^go\.(?:mod|sum)$|^\.golangci\.yml$|^\.swaggo$|^(?:cmd|internal|migrations)\/|^scripts\/fixture\/)/;
+const GO_CROSS_FRONTEND = /^(?:internal\/(?:api|demo|domain|web)\/|migrations\/|^\.swaggo$|go\.(?:mod|sum)$)/;
+const OPENAPI_SPEC = /^docs\/openapi\/swagger\.json$/;
 const GO_READS_WEB = /^(?:scripts\/acceptance\/contracts\/|web\/public\/|web\/index\.html$)/;
-const WEB = /^(?:web\/|vitest\.config\.[cm]?[jt]s$|deploy\/cloudflare\/|scripts\/acceptance\/|scripts\/(?:api-target|browser-acceptance|build-demo|compact-locales|dev-base-redirect|fake-cpa|generate-demo-data|install-chromium|check-bundle-budget|sync-web-dist|sync-lobe-icons|bundle-[^/]+|generate-lucide-icons|sync-lobe-icon-catalog|sync-brand)\.(?:mjs|ts|json)$)/;
+const WEB = /^(?:web\/|vitest\.config\.[cm]?[jt]s$|deploy\/(?:cloudflare|site)\/|scripts\/acceptance\/|scripts\/(?:api-target|browser-acceptance|build-demo|build-site|compact-locales|dev-base-redirect|fake-cpa|generate-demo-data|install-chromium|check-bundle-budget|sync-web-dist|sync-lobe-icons|bundle-[^/]+|generate-lucide-icons|sync-lobe-icon-catalog|sync-brand)\.(?:mjs|ts|json)$)/;
 const DEPLOY_OR_WORKFLOW = /^(?:deploy\/[^/]+\.ya?ml$|deploy\/native\.env\.example$|\.env\.example$|\.github\/workflows\/.+\.ya?ml$)/;
 const SCRIPTS_OTHER = /^scripts\/.+/;
 // Always verified by the unconditional `static-repo` lane (workflow lint, docs links, secret scan).
@@ -62,6 +63,11 @@ export function scopeOf(files) {
     if (SCRIPTS_OTHER.test(file)) {
       frontend = true;
       if (file === 'scripts/docker-smoke.mjs') docker = true;
+      matched = true;
+    }
+    if (OPENAPI_SPEC.test(file)) {
+      go = true;
+      frontend = true;
       matched = true;
     }
     if (!matched && REPO_HYGIENE.test(file)) {

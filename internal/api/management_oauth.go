@@ -52,10 +52,52 @@ func supportedOAuthProviders() []OAuthProviderDTO {
 	return providers
 }
 
+// OAuthProviderListResponseDTO lists built-in OAuth authorization providers.
+type OAuthProviderListResponseDTO struct {
+	Providers []OAuthProviderDTO `json:"providers"`
+}
+
+// StartOAuthResponseDTO returns the authorization URL, state token, and optional device-code metadata.
+type StartOAuthResponseDTO struct {
+	URL       string `json:"url"`
+	State     string `json:"state"`
+	SessionID string `json:"session_id"`
+	Provider  string `json:"provider"`
+	Flow      string `json:"flow,omitempty"`
+	UserCode  string `json:"user_code,omitempty"`
+	ExpiresIn int    `json:"expires_in,omitempty"`
+}
+
+// OAuthStatusResponseDTO reports normalized OAuth session status (`ok`, `wait`, or `error`).
+type OAuthStatusResponseDTO struct {
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}
+
+// OAuthCallbackResponseDTO confirms OAuth callback submission.
+type OAuthCallbackResponseDTO struct {
+	Status    string `json:"status"`
+	Completed bool   `json:"completed,omitempty"`
+}
+
+// OAuthCancelResponseDTO reports whether the OAuth session was cancelled.
+type OAuthCancelResponseDTO struct {
+	Status    string `json:"status"`
+	Cancelled bool   `json:"cancelled"`
+}
+
+// @Summary List built-in OAuth providers
+// @Description Return the catalog of built-in OAuth authorization flows supported by CPA.
+// @Tags OAuth
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} OAuthProviderListResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Router /v1/management/oauth/providers [get]
 func (h *Handler) listOAuthProviders(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"providers": supportedOAuthProviders(),
+	writeJSON(writer, http.StatusOK, OAuthProviderListResponseDTO{
+		Providers: supportedOAuthProviders(),
 	})
 }
 
@@ -82,6 +124,21 @@ func normalizeOAuthStatus(status string) string {
 	}
 }
 
+// @Summary Start an OAuth credential flow
+// @Description Initiate a built-in or plugin OAuth sign-in or token-refresh flow via CPA.
+// @Tags OAuth
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body startOAuthRequest true "OAuth start parameters"
+// @Success 200 {object} StartOAuthResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/oauth/start [post]
 func (h *Handler) startOAuthFlow(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if query := request.URL.Query(); query.Has("proxy_url") || query.Has("proxy-url") {
@@ -150,28 +207,33 @@ func (h *Handler) startOAuthFlow(writer http.ResponseWriter, request *http.Reque
 	sessionID := strings.TrimSpace(authRes.State)
 	_ = h.recordAudit(request, "oauth.start", auditType, auditTarget, "success", nil)
 
-	response := map[string]any{
-		"url":        authRes.URL,
-		"state":      authRes.State,
-		"session_id": sessionID,
-		"provider":   provider,
-	}
-	// Device-code providers answer with the flow label and the code the
-	// operator types on the vendor page. Passing them through keeps the
-	// console from having to infer the flow from the provider id.
-	if flow := strings.TrimSpace(authRes.Flow); flow != "" {
-		response["flow"] = flow
-	}
-	if userCode := strings.TrimSpace(authRes.UserCode); userCode != "" {
-		response["user_code"] = userCode
+	response := StartOAuthResponseDTO{
+		URL:       authRes.URL,
+		State:     authRes.State,
+		SessionID: sessionID,
+		Provider:  provider,
+		Flow:      strings.TrimSpace(authRes.Flow),
+		UserCode:  strings.TrimSpace(authRes.UserCode),
 	}
 	if authRes.ExpiresIn > 0 {
-		response["expires_in"] = authRes.ExpiresIn
+		response.ExpiresIn = authRes.ExpiresIn
 	}
 
 	writeJSON(writer, http.StatusOK, response)
 }
 
+// @Summary Poll OAuth session status
+// @Description Check the current status of an in-flight OAuth authorization session.
+// @Tags OAuth
+// @Produce json
+// @Security CookieAuth
+// @Param state query string false "OAuth state token"
+// @Param session_id query string false "Legacy alias for OAuth state token"
+// @Success 200 {object} OAuthStatusResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/oauth/status [get]
 func (h *Handler) getOAuthStatus(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -206,10 +268,10 @@ func (h *Handler) getOAuthStatus(writer http.ResponseWriter, request *http.Reque
 		}
 		h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 	}
-	payload := map[string]any{"status": status}
+	payload := OAuthStatusResponseDTO{Status: status}
 	if status == "error" {
 		if message := sanitizeOAuthFailureMessage(firstNonEmpty(resp.Message, resp.Error), token); message != "" {
-			payload["message"] = message
+			payload.Message = message
 		}
 	}
 	writeJSON(writer, http.StatusOK, payload)
@@ -229,6 +291,19 @@ type oauthCallbackRequest struct {
 	RedirectURL string `json:"redirect_url"`
 }
 
+// @Summary Submit manual OAuth callback redirect URL
+// @Description Forward a manually pasted OAuth callback URL to CPA to complete an OAuth flow.
+// @Tags OAuth
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body oauthCallbackRequest true "OAuth provider and redirect URL"
+// @Success 200 {object} OAuthCallbackResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/oauth/callback [post]
 func (h *Handler) handleOAuthCallback(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var req oauthCallbackRequest
@@ -273,9 +348,9 @@ func (h *Handler) handleOAuthCallback(writer http.ResponseWriter, request *http.
 		_ = h.recordAudit(request, "oauth.callback", "oauth_callback", security.RedactText(auditIdentifier), "success", map[string]any{"already_completed": true})
 		h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 
-		writeJSON(writer, http.StatusOK, map[string]any{
-			"status":    "ok",
-			"completed": true,
+		writeJSON(writer, http.StatusOK, OAuthCallbackResponseDTO{
+			Status:    "ok",
+			Completed: true,
 		})
 		return
 	}
@@ -283,11 +358,24 @@ func (h *Handler) handleOAuthCallback(writer http.ResponseWriter, request *http.
 	_ = h.recordAudit(request, "oauth.callback", "oauth_callback", security.RedactText(auditIdentifier), "success", nil)
 	h.invalidateCoordinator("management-auth-files", "management-routing", "management-quota")
 
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status": "ok",
+	writeJSON(writer, http.StatusOK, OAuthCallbackResponseDTO{
+		Status: "ok",
 	})
 }
 
+// @Summary Cancel an OAuth session
+// @Description Cancel an active OAuth authorization session by state or session ID.
+// @Tags OAuth
+// @Produce json
+// @Security CookieAuth
+// @Param state query string false "OAuth state token"
+// @Param session_id query string false "Legacy alias for OAuth state token"
+// @Success 200 {object} OAuthCancelResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/oauth/session [delete]
 func (h *Handler) cancelOAuthSession(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	sessionID := strings.TrimSpace(request.URL.Query().Get("state"))
@@ -316,11 +404,8 @@ func (h *Handler) cancelOAuthSession(writer http.ResponseWriter, request *http.R
 	}
 	_ = h.recordAudit(request, "oauth.cancel", "oauth_session", "session", "success", map[string]any{"cancelled": result.Cancelled})
 
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status": "ok",
-		// A session that already completed or expired cannot be cancelled.
-		// Reporting plain success there would tell the operator a sign-in was
-		// abandoned that in fact saved a credential, so the outcome is kept.
-		"cancelled": result.Cancelled,
+	writeJSON(writer, http.StatusOK, OAuthCancelResponseDTO{
+		Status:    "ok",
+		Cancelled: result.Cancelled,
 	})
 }

@@ -8,6 +8,36 @@ import (
 	"strings"
 )
 
+// AuthFileDeleteRequestDTO names one or more credential auth files to delete.
+type AuthFileDeleteRequestDTO struct {
+	Name  string   `json:"name,omitempty"`
+	Names []string `json:"names,omitempty"`
+}
+
+// AuthFileDeleteResponseDTO summarizes deleted auth files and any per-file failures.
+type AuthFileDeleteResponseDTO struct {
+	Status  string                      `json:"status"`
+	Deleted int                         `json:"deleted"`
+	Files   []string                    `json:"files"`
+	Failed  []authFileDeleteFailureItem `json:"failed,omitempty"`
+}
+
+// @Summary Delete credential auth file(s)
+// @Description Archive identity metadata and delete one or more auth files from CPA via query param or JSON body.
+// @Tags AuthFiles
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param name query []string false "Auth file name(s) to delete" collectionFormat(multi)
+// @Param body body AuthFileDeleteRequestDTO false "Batch delete payload"
+// @Success 200 {object} AuthFileDeleteResponseDTO
+// @Success 207 {object} AuthFileDeleteResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files [delete]
 func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request *http.Request) {
 	if err := h.providerWrites.acquire(request.Context()); err != nil {
 		writeError(writer, http.StatusServiceUnavailable, "management write busy")
@@ -23,10 +53,7 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 	if queryNames := request.URL.Query()["name"]; len(queryNames) > 0 {
 		names = append(names, queryNames...)
 	} else {
-		var payload struct {
-			Name  string   `json:"name"`
-			Names []string `json:"names"`
-		}
+		var payload AuthFileDeleteRequestDTO
 		decoder := json.NewDecoder(request.Body)
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&payload); err != nil && !errors.Is(err, io.EOF) {
@@ -103,15 +130,15 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 	}
 
 	if outcomeStatus != "ok" {
-		writeJSON(writer, http.StatusMultiStatus, map[string]any{
-			"status":  outcomeStatus,
-			"deleted": len(confirmedDeleted),
-			"files":   confirmedDeleted,
-			"failed":  normalizedFailures,
+		writeJSON(writer, http.StatusMultiStatus, AuthFileDeleteResponseDTO{
+			Status:  outcomeStatus,
+			Deleted: len(confirmedDeleted),
+			Files:   confirmedDeleted,
+			Failed:  normalizedFailures,
 		})
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "deleted": len(confirmedDeleted), "files": confirmedDeleted})
+	writeJSON(writer, http.StatusOK, AuthFileDeleteResponseDTO{Status: "ok", Deleted: len(confirmedDeleted), Files: confirmedDeleted})
 }
 
 type authFileDeleteFailureItem struct {

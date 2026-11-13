@@ -38,13 +38,51 @@ type siwcBindingStore struct {
 	sessions map[string]*siwcBinding
 }
 
+// SIWCBindRequestDTO identifies a Codex auth file to bind via Sign in with ChatGPT.
+type SIWCBindRequestDTO struct {
+	Name      string `json:"name"`
+	AuthIndex string `json:"auth_index"`
+	Rebind    bool   `json:"rebind,omitempty"`
+}
+
+// SIWCBindResponseDTO returns the ChatGPT authorization URL and state token.
+type SIWCBindResponseDTO struct {
+	URL       string `json:"url"`
+	State     string `json:"state"`
+	Flow      string `json:"flow"`
+	ExpiresIn int    `json:"expires_in"`
+}
+
+// SIWCStatusResponseDTO reports credential-scoped SIWC binding completion and updated auth file projection.
+type SIWCStatusResponseDTO struct {
+	Status    string                      `json:"status"`
+	Completed bool                        `json:"completed,omitempty"`
+	File      *managementAuthFileResponse `json:"file,omitempty"`
+}
+
+// SIWCCallbackRequestDTO carries the local redirect URL captured during SIWC binding.
+type SIWCCallbackRequestDTO struct {
+	RedirectURL string `json:"redirect_url"`
+}
+
+// @Summary Start Codex SIWC binding
+// @Description Initiate a credential-scoped Sign-in-with-ChatGPT binding flow for a Codex auth file.
+// @Tags OAuth
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body SIWCBindRequestDTO true "Target Codex credential selector"
+// @Success 200 {object} SIWCBindResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 429 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/oauth/siwc/bind [post]
 func (h *Handler) startSIWCBinding(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	var payload struct {
-		Name      string `json:"name"`
-		AuthIndex string `json:"auth_index"`
-		Rebind    bool   `json:"rebind"`
-	}
+	var payload SIWCBindRequestDTO
 	if err := decodeManagementJSON(writer, request, 8*1024, &payload); err != nil {
 		return
 	}
@@ -115,7 +153,7 @@ func (h *Handler) startSIWCBinding(writer http.ResponseWriter, request *http.Req
 	h.siwcBindings.sessions[result.State] = &siwcBinding{gateway: client.BaseURL(), name: managedName, authIndex: file.AuthIndex, targetID: firstNonEmpty(file.ID, file.Name), expiresAt: now.Add(SIWC_BINDING_TTL), retainUntil: now.Add(2 * SIWC_BINDING_TTL)}
 	h.siwcBindings.mu.Unlock()
 	_ = h.recordAudit(request, "oauth.siwc.bind", "auth_file", managedName, "success", nil)
-	writeJSON(writer, http.StatusOK, map[string]any{"url": result.URL, "state": result.State, "flow": "siwc_bind", "expires_in": 300})
+	writeJSON(writer, http.StatusOK, SIWCBindResponseDTO{URL: result.URL, State: result.State, Flow: "siwc_bind", ExpiresIn: 300})
 }
 
 // Match the browser's exact identity, then ensure CPA's ID-first resolver cannot
@@ -184,6 +222,20 @@ func (h *Handler) withSIWCBinding(writer http.ResponseWriter, request *http.Requ
 	action(session, client)
 }
 
+// @Summary Poll Codex SIWC binding status
+// @Description Check the status of a credential-scoped SIWC binding session and confirm credential update.
+// @Tags OAuth
+// @Produce json
+// @Security CookieAuth
+// @Param state query string true "SIWC binding state token"
+// @Success 200 {object} SIWCStatusResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 410 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/oauth/siwc/status [get]
 func (h *Handler) getSIWCBindingStatus(writer http.ResponseWriter, request *http.Request) {
 	h.withSIWCBinding(writer, request, func(session *siwcBinding, client *management.Client) {
 		if !session.isCompleted {
@@ -194,10 +246,10 @@ func (h *Handler) getSIWCBindingStatus(writer http.ResponseWriter, request *http
 			}
 			switch normalizeOAuthStatus(result.Status) {
 			case "error":
-				writeJSON(writer, http.StatusOK, map[string]any{"status": "error"})
+				writeJSON(writer, http.StatusOK, SIWCStatusResponseDTO{Status: "error"})
 				return
 			case "wait":
-				writeJSON(writer, http.StatusOK, map[string]any{"status": "wait"})
+				writeJSON(writer, http.StatusOK, SIWCStatusResponseDTO{Status: "wait"})
 				return
 			}
 			session.isCompleted = true
@@ -205,23 +257,39 @@ func (h *Handler) getSIWCBindingStatus(writer http.ResponseWriter, request *http
 		// A completed mutation is never retried because its subsequent read failed.
 		files, err := client.AuthFiles(request.Context())
 		if err != nil {
-			writeJSON(writer, http.StatusOK, map[string]any{"status": "wait", "completed": true})
+			writeJSON(writer, http.StatusOK, SIWCStatusResponseDTO{Status: "wait", Completed: true})
 			return
 		}
 		file, ok := resolveSIWCBindingTarget(files.Files, session.name, session.authIndex)
 		if !ok || firstNonEmpty(file.ID, file.Name) != session.targetID || !file.UseSIWC || !file.SIWCBound {
-			writeJSON(writer, http.StatusOK, map[string]any{"status": "error", "completed": true})
+			writeJSON(writer, http.StatusOK, SIWCStatusResponseDTO{Status: "error", Completed: true})
 			return
 		}
 		h.invalidateCoordinator("management-auth-files", "management-quota")
-		writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "completed": true, "file": projectManagementAuthFile(file)})
+		projected := projectManagementAuthFile(file)
+		writeJSON(writer, http.StatusOK, SIWCStatusResponseDTO{Status: "ok", Completed: true, File: &projected})
 	})
 }
 
+// @Summary Submit Codex SIWC callback URL
+// @Description Forward the localhost SIWC callback URL to CPA for the active binding state.
+// @Tags OAuth
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param state query string true "SIWC binding state token"
+// @Param body body SIWCCallbackRequestDTO true "Callback URL payload"
+// @Success 200 {object} StatusOKResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 410 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/oauth/siwc/callback [post]
 func (h *Handler) submitSIWCBindingCallback(writer http.ResponseWriter, request *http.Request) {
-	var payload struct {
-		RedirectURL string `json:"redirect_url"`
-	}
+	var payload SIWCCallbackRequestDTO
 	if err := decodeManagementJSON(writer, request, 16*1024, &payload); err != nil {
 		return
 	}
@@ -256,10 +324,25 @@ func (h *Handler) submitSIWCBindingCallback(writer http.ResponseWriter, request 
 			return
 		}
 		_ = h.recordAudit(request, "oauth.siwc.callback", "auth_file", session.name, "success", nil)
-		writeJSON(writer, http.StatusOK, map[string]any{"status": "ok"})
+		writeJSON(writer, http.StatusOK, StatusOKResponseDTO{Status: "ok"})
 	})
 }
 
+// @Summary Cancel Codex SIWC binding session
+// @Description Cancel an active credential-scoped SIWC binding session by state token.
+// @Tags OAuth
+// @Produce json
+// @Security CookieAuth
+// @Param state query string true "SIWC binding state token"
+// @Success 200 {object} OAuthCancelResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 410 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/oauth/siwc/session [delete]
 func (h *Handler) cancelSIWCBinding(writer http.ResponseWriter, request *http.Request) {
 	h.withSIWCBinding(writer, request, func(session *siwcBinding, client *management.Client) {
 		if err := h.recordAudit(request, "oauth.siwc.cancel", "auth_file", session.name, "attempt", nil); err != nil {
@@ -274,7 +357,7 @@ func (h *Handler) cancelSIWCBinding(writer http.ResponseWriter, request *http.Re
 		}
 		session.isCancelled = result.Cancelled
 		_ = h.recordAudit(request, "oauth.siwc.cancel", "auth_file", session.name, "success", map[string]any{"cancelled": result.Cancelled})
-		writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "cancelled": result.Cancelled})
+		writeJSON(writer, http.StatusOK, OAuthCancelResponseDTO{Status: "ok", Cancelled: result.Cancelled})
 	})
 }
 

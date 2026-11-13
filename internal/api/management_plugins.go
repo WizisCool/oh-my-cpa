@@ -88,7 +88,73 @@ func isPluginErrorCode(code string) bool {
 	return strings.HasPrefix(code, "plugin_")
 }
 
+// PluginListResponseDTO lists installed plugins and global plugin settings.
+type PluginListResponseDTO struct {
+	PluginsEnabled bool            `json:"plugins_enabled"`
+	PluginsDir     string          `json:"plugins_dir"`
+	Plugins        []PluginItemDTO `json:"plugins"`
+	Total          int             `json:"total"`
+}
+
+// SetPluginEnabledResponseDTO reports the updated plugin enabled state.
+type SetPluginEnabledResponseDTO struct {
+	Status  string `json:"status"`
+	ID      string `json:"id"`
+	Enabled bool   `json:"enabled"`
+}
+
+// PluginConfigResponseDTO wraps a plugin's configuration object.
+type PluginConfigResponseDTO struct {
+	ID     string         `json:"id"`
+	Config map[string]any `json:"config"`
+}
+
+// SetPluginConfigResponseDTO confirms a plugin config save.
+type SetPluginConfigResponseDTO struct {
+	Status string `json:"status"`
+	ID     string `json:"id"`
+}
+
+// DeletePluginResponseDTO reports plugin removal and whether a gateway restart is required.
+type DeletePluginResponseDTO struct {
+	Status            string `json:"status"`
+	ID                string `json:"id"`
+	FileDeleted       bool   `json:"file_deleted"`
+	ConfiguredRemoved bool   `json:"configured_removed"`
+	RestartRequired   bool   `json:"restart_required"`
+}
+
+// PluginStoreResponseDTO lists store plugins, configured registries, and per-source errors.
+type PluginStoreResponseDTO struct {
+	PluginsEnabled bool                        `json:"plugins_enabled"`
+	PluginsDir     string                      `json:"plugins_dir"`
+	Sources        []PluginStoreSourceDTO      `json:"sources"`
+	SourceErrors   []PluginStoreSourceErrorDTO `json:"source_errors"`
+	Plugins        []StorePluginItemDTO        `json:"plugins"`
+	Total          int                         `json:"total"`
+}
+
+// InstallPluginResponseDTO summarizes a plugin installation or update from the store.
+type InstallPluginResponseDTO struct {
+	Status          string `json:"status"`
+	ID              string `json:"id"`
+	Version         string `json:"version"`
+	SourceName      string `json:"source_name"`
+	PluginsEnabled  bool   `json:"plugins_enabled"`
+	RestartRequired bool   `json:"restart_required"`
+}
+
 // listPlugins is the installed list with the global plugin switch it depends on.
+//
+// @Summary List installed plugins
+// @Description Return installed CPA plugins joined with store display metadata.
+// @Tags Plugins
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} PluginListResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/plugins [get]
 func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -108,11 +174,11 @@ func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request)
 
 	projected := projectPluginItems(list.Plugins, h.cfg.IsDemoMode)
 	_ = h.observePluginIdentities(request.Context(), projected)
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"plugins_enabled": list.PluginsEnabled,
-		"plugins_dir":     boundedText(list.PluginsDir, pluginTextLimit),
-		"plugins":         projected,
-		"total":           len(projected),
+	writeJSON(writer, http.StatusOK, PluginListResponseDTO{
+		PluginsEnabled: list.PluginsEnabled,
+		PluginsDir:     boundedText(list.PluginsDir, pluginTextLimit),
+		Plugins:        projected,
+		Total:          len(projected),
 	})
 }
 
@@ -144,6 +210,22 @@ type setPluginEnabledRequest struct {
 	Enabled *bool `json:"enabled"`
 }
 
+// @Summary Enable or disable a plugin
+// @Description Toggle the enabled flag for an installed CPA plugin under config write lock.
+// @Tags Plugins
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path string true "Plugin ID"
+// @Param body body setPluginEnabledRequest true "Plugin enabled flag"
+// @Success 200 {object} SetPluginEnabledResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/plugins/{id}/enabled [patch]
 func (h *Handler) setPluginEnabled(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	pluginID, ok := pluginIDFromRequest(writer, request)
@@ -187,10 +269,10 @@ func (h *Handler) setPluginEnabled(writer http.ResponseWriter, request *http.Req
 
 	_ = h.recordAudit(request, action, "plugin", target, "success", nil)
 
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status":  "ok",
-		"id":      pluginID,
-		"enabled": *req.Enabled,
+	writeJSON(writer, http.StatusOK, SetPluginEnabledResponseDTO{
+		Status:  "ok",
+		ID:      pluginID,
+		Enabled: *req.Enabled,
 	})
 }
 
@@ -201,6 +283,19 @@ func (h *Handler) setPluginEnabled(writer http.ResponseWriter, request *http.Req
 // and writes exactly this object - so projecting it would remove the capability rather
 // than protect anything. It is not a place this project keeps a secret: nothing OMC or
 // CPA holds is written into it, and the route is management-authenticated.
+//
+// @Summary Get plugin configuration
+// @Description Return the plugin-owned JSON configuration document for an installed plugin.
+// @Tags Plugins
+// @Produce json
+// @Security CookieAuth
+// @Param id path string true "Plugin ID"
+// @Success 200 {object} PluginConfigResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/plugins/{id}/config [get]
 func (h *Handler) getPluginConfig(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	pluginID, ok := pluginIDFromRequest(writer, request)
@@ -216,9 +311,9 @@ func (h *Handler) getPluginConfig(writer http.ResponseWriter, request *http.Requ
 		writePluginFacadeError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"id":     pluginID,
-		"config": config,
+	writeJSON(writer, http.StatusOK, PluginConfigResponseDTO{
+		ID:     pluginID,
+		Config: config,
 	})
 }
 
@@ -226,6 +321,22 @@ type setPluginConfigRequest struct {
 	Config json.RawMessage `json:"config"`
 }
 
+// @Summary Update plugin configuration
+// @Description Save a plugin's configuration object under config write serialization.
+// @Tags Plugins
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path string true "Plugin ID"
+// @Param body body setPluginConfigRequest true "Plugin configuration object"
+// @Success 200 {object} SetPluginConfigResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/plugins/{id}/config [put]
 func (h *Handler) setPluginConfig(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	pluginID, ok := pluginIDFromRequest(writer, request)
@@ -266,12 +377,25 @@ func (h *Handler) setPluginConfig(writer http.ResponseWriter, request *http.Requ
 
 	_ = h.recordAudit(request, "plugin.config", "plugin", target, "success", nil)
 
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status": "ok",
-		"id":     pluginID,
+	writeJSON(writer, http.StatusOK, SetPluginConfigResponseDTO{
+		Status: "ok",
+		ID:     pluginID,
 	})
 }
 
+// @Summary Delete an installed plugin
+// @Description Archive plugin identity metadata and uninstall a plugin from CPA.
+// @Tags Plugins
+// @Produce json
+// @Security CookieAuth
+// @Param id path string true "Plugin ID"
+// @Success 200 {object} DeletePluginResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/plugins/{id} [delete]
 func (h *Handler) deletePlugin(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	pluginID, ok := pluginIDFromRequest(writer, request)
@@ -315,18 +439,29 @@ func (h *Handler) deletePlugin(writer http.ResponseWriter, request *http.Request
 		"configured_removed": result.ConfiguredRemoved,
 	})
 
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status":             "ok",
-		"id":                 pluginID,
-		"file_deleted":       result.FileDeleted,
-		"configured_removed": result.ConfiguredRemoved,
-		"restart_required":   result.RestartRequired,
+	writeJSON(writer, http.StatusOK, DeletePluginResponseDTO{
+		Status:            "ok",
+		ID:                pluginID,
+		FileDeleted:       result.FileDeleted,
+		ConfiguredRemoved: result.ConfiguredRemoved,
+		RestartRequired:   result.RestartRequired,
 	})
 }
 
 // listPluginStore is the catalog every configured registry offers, joined by CPA
 // with what is installed. A registry that failed is reported beside the entries the
 // others returned rather than failing the page.
+//
+// @Summary List plugin store catalog
+// @Description Return available plugins across configured store registries alongside installed state and per-source errors.
+// @Tags Plugins
+// @Produce json
+// @Security CookieAuth
+// @Param refresh query boolean false "Force refresh of remote plugin store registries"
+// @Success 200 {object} PluginStoreResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/plugin-store [get]
 func (h *Handler) listPluginStore(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -352,13 +487,13 @@ func (h *Handler) listPluginStore(writer http.ResponseWriter, request *http.Requ
 	}
 
 	projected := projectStorePlugins(store.Plugins, h.cfg.IsDemoMode)
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"plugins_enabled": store.PluginsEnabled,
-		"plugins_dir":     boundedText(store.PluginsDir, pluginTextLimit),
-		"sources":         projectPluginStoreSources(store.Sources),
-		"source_errors":   projectPluginStoreSourceErrors(store.SourceErrors),
-		"plugins":         projected,
-		"total":           len(projected),
+	writeJSON(writer, http.StatusOK, PluginStoreResponseDTO{
+		PluginsEnabled: store.PluginsEnabled,
+		PluginsDir:     boundedText(store.PluginsDir, pluginTextLimit),
+		Sources:        projectPluginStoreSources(store.Sources),
+		SourceErrors:   projectPluginStoreSourceErrors(store.SourceErrors),
+		Plugins:        projected,
+		Total:          len(projected),
 	})
 }
 
@@ -370,6 +505,24 @@ type installPluginRequest struct {
 // installPlugin installs a store plugin, or updates an installed one to the newest
 // (or a named) release. The body is optional: without it the newest release from the
 // only registry listing the id is installed.
+//
+// @Summary Install or update a store plugin
+// @Description Install a plugin from the configured plugin store registries, optionally pinning source_id and version.
+// @Tags Plugins
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path string true "Plugin ID"
+// @Param body body installPluginRequest false "Optional source_id and version"
+// @Success 200 {object} InstallPluginResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 429 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/plugin-store/{id}/install [post]
 func (h *Handler) installPlugin(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	pluginID, ok := pluginIDFromRequest(writer, request)
@@ -440,13 +593,13 @@ func (h *Handler) installPlugin(writer http.ResponseWriter, request *http.Reques
 
 	_ = h.recordAudit(request, "plugin.install", "plugin_store", target, "success", map[string]any{"version": boundedText(result.Version, 128)})
 
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status":           "ok",
-		"id":               pluginID,
-		"version":          boundedText(result.Version, pluginTextLimit),
-		"source_name":      boundedText(result.SourceName, pluginTextLimit),
-		"plugins_enabled":  result.PluginsEnabled,
-		"restart_required": result.RestartRequired,
+	writeJSON(writer, http.StatusOK, InstallPluginResponseDTO{
+		Status:          "ok",
+		ID:              pluginID,
+		Version:         boundedText(result.Version, pluginTextLimit),
+		SourceName:      boundedText(result.SourceName, pluginTextLimit),
+		PluginsEnabled:  result.PluginsEnabled,
+		RestartRequired: result.RestartRequired,
 	})
 }
 

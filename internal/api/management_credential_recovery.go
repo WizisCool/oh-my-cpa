@@ -9,13 +9,37 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
 )
 
+// AuthFileVerifyRequestDTO selects a credential and optional model to verify via live inference.
+type AuthFileVerifyRequestDTO struct {
+	Name      string `json:"name,omitempty"`
+	AuthIndex string `json:"auth_index,omitempty"`
+	Model     string `json:"model,omitempty"`
+}
+
+// AuthFileVerifyResponseDTO reports whether credential inference verification succeeded.
+type AuthFileVerifyResponseDTO struct {
+	Status   string `json:"status"`
+	Verified bool   `json:"verified"`
+}
+
+// @Summary Verify a credential via live inference
+// @Description Run a minimal verification request against the target credential and optional model.
+// @Tags AuthFiles
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body AuthFileVerifyRequestDTO true "Credential verification target"
+// @Success 200 {object} AuthFileVerifyResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/auth-files/verify [post]
 func (h *Handler) verifyManagementAuthFile(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	var input struct {
-		Name      string `json:"name"`
-		AuthIndex string `json:"auth_index"`
-		Model     string `json:"model,omitempty"`
-	}
+	var input AuthFileVerifyRequestDTO
 	if err := decodeManagementJSON(writer, request, managementAuthFileRequestLimit, &input); err != nil {
 		return
 	}
@@ -59,5 +83,5 @@ func (h *Handler) verifyManagementAuthFile(writer http.ResponseWriter, request *
 	// a retry that consumes tokens again.
 	_ = h.recordAudit(request, "auth_file.verify", "auth_file", target, "success", map[string]any{"verified": verified})
 	h.invalidateCoordinator("management-auth-files")
-	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "verified": verified})
+	writeJSON(writer, http.StatusOK, AuthFileVerifyResponseDTO{Status: "ok", Verified: verified})
 }

@@ -89,6 +89,81 @@ func (h *Handler) readyAgent(writer http.ResponseWriter) bool {
 	}
 	return true
 }
+
+// CapabilityDefinitionDTO is the API-owned projection of an agent/MCP capability definition.
+type CapabilityDefinitionDTO struct {
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Version      int      `json:"version"`
+	Permission   string   `json:"permission"`
+	Risk         string   `json:"risk"`
+	Adapters     []string `json:"adapters"`
+	Invalidates  []string `json:"invalidates,omitempty"`
+	HumanInput   string   `json:"human_input,omitempty"`
+	InputSchema  any      `json:"input_schema"`
+	OutputSchema any      `json:"output_schema"`
+}
+
+func projectCapabilityDefinitions(defs []*capability.Definition) []CapabilityDefinitionDTO {
+	out := make([]CapabilityDefinitionDTO, 0, len(defs))
+	for _, def := range defs {
+		if def == nil {
+			continue
+		}
+		out = append(out, CapabilityDefinitionDTO{
+			Name:         def.Name,
+			Description:  def.Description,
+			Version:      def.Version,
+			Permission:   def.Permission,
+			Risk:         def.Risk,
+			Adapters:     def.Adapters,
+			Invalidates:  def.Invalidates,
+			HumanInput:   def.HumanInput,
+			InputSchema:  def.InputSchema,
+			OutputSchema: def.OutputSchema,
+		})
+	}
+	return out
+}
+
+// CapabilityListResponseDTO lists the capabilities visible to the caller principal.
+type CapabilityListResponseDTO struct {
+	Capabilities []CapabilityDefinitionDTO `json:"capabilities"`
+}
+
+// InvokeCapabilityRequestDTO specifies a capability name and JSON argument payload.
+type InvokeCapabilityRequestDTO struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
+}
+
+// DecideAgentOperationRequestDTO carries operator approval or denial for a pending operation.
+type DecideAgentOperationRequestDTO struct {
+	Approve bool            `json:"approve"`
+	Secret  string          `json:"secret,omitempty"`
+	Answer  json.RawMessage `json:"answer,omitempty"`
+}
+
+// ResetAgentRequestDTO carries the expected conversation revision for resetting the Agent session.
+type ResetAgentRequestDTO struct {
+	Revision int64 `json:"revision"`
+}
+
+// AgentDataRowsRequestDTO requests rows from a stored conversation data reference.
+type AgentDataRowsRequestDTO struct {
+	DataRef string `json:"data_ref"`
+}
+
+// @Summary List capabilities
+// @Description Return the capability definitions authorized for the caller principal.
+// @Tags Capabilities
+// @Produce json
+// @Security CookieAuth
+// @Security BearerAuth
+// @Success 200 {object} CapabilityListResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/capabilities [get]
 func (h *Handler) listCapabilities(writer http.ResponseWriter, request *http.Request) {
 	if !h.readyAgent(writer) {
 		return
@@ -101,8 +176,22 @@ func (h *Handler) listCapabilities(writer http.ResponseWriter, request *http.Req
 	if h.cfg.IsDemoMode {
 		principal = agent.PRINCIPAL
 	}
-	writeJSON(writer, 200, map[string]any{"capabilities": h.agent.executor.Registry.List(principal)})
+	writeJSON(writer, 200, CapabilityListResponseDTO{Capabilities: projectCapabilityDefinitions(h.agent.executor.Registry.List(principal))})
 }
+
+// @Summary Invoke a capability
+// @Description Execute an authorized capability synchronously or start an approval-gated operation.
+// @Tags Capabilities
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Security BearerAuth
+// @Param body body InvokeCapabilityRequestDTO true "Capability invocation"
+// @Success 200 {object} capability.Result
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/capabilities/invoke [post]
 func (h *Handler) invokeCapability(writer http.ResponseWriter, request *http.Request) {
 	if !h.readyAgent(writer) {
 		return
@@ -112,10 +201,7 @@ func (h *Handler) invokeCapability(writer http.ResponseWriter, request *http.Req
 		writePlaygroundError(writer, 401, "authentication_required")
 		return
 	}
-	var input struct {
-		Name      string          `json:"name"`
-		Arguments json.RawMessage `json:"arguments"`
-	}
+	var input InvokeCapabilityRequestDTO
 	if !readAgentInput(writer, request, &input) {
 		return
 	}
@@ -126,6 +212,20 @@ func (h *Handler) invokeCapability(writer http.ResponseWriter, request *http.Req
 	}
 	writeJSON(writer, 200, result)
 }
+
+// @Summary Get capability operation status
+// @Description Retrieve the current status of a pending or completed capability operation.
+// @Tags Capabilities
+// @Produce json
+// @Security CookieAuth
+// @Security BearerAuth
+// @Param id path string true "Operation ID"
+// @Success 200 {object} capability.Operation
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/capabilities/operations/{id} [get]
+// @Router /v1/agent/operations/{id} [get]
 func (h *Handler) getCapabilityOperation(writer http.ResponseWriter, request *http.Request) {
 	if !h.readyAgent(writer) {
 		return
@@ -142,6 +242,21 @@ func (h *Handler) getCapabilityOperation(writer http.ResponseWriter, request *ht
 	}
 	writeJSON(writer, 200, operation)
 }
+
+// @Summary Decide a pending Agent operation
+// @Description Approve or deny a pending human-in-the-loop capability operation from a browser origin.
+// @Tags Agent
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param id path string true "Operation ID"
+// @Param body body DecideAgentOperationRequestDTO true "Decision payload"
+// @Success 200 {object} capability.Operation
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 403 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/agent/operations/{id}/decision [post]
 func (h *Handler) decideAgentOperation(writer http.ResponseWriter, request *http.Request) {
 	// Approvals require an actual browser origin, unlike ordinary script-compatible APIs.
 	if request.Header.Get("Origin") == "" || !sameOrigin(request) || request.Header.Get("Authorization") != "" {
@@ -153,11 +268,7 @@ func (h *Handler) decideAgentOperation(writer http.ResponseWriter, request *http
 	}
 	// One decision: allow or deny. A secret or an answer rides along only when the operation asks
 	// for one, and never both.
-	var input struct {
-		Approve bool            `json:"approve"`
-		Secret  string          `json:"secret"`
-		Answer  json.RawMessage `json:"answer"`
-	}
+	var input DecideAgentOperationRequestDTO
 	if !readAgentInput(writer, request, &input) {
 		return
 	}
@@ -176,6 +287,16 @@ func (h *Handler) decideAgentOperation(writer http.ResponseWriter, request *http
 	}
 	writeJSON(writer, 200, operation)
 }
+
+// @Summary Get current Agent session
+// @Description Return the current Agent conversation transcript and active run identifier.
+// @Tags Agent
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} agentConversationDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/agent/session [get]
 func (h *Handler) currentAgent(writer http.ResponseWriter, request *http.Request) {
 	if !h.readyAgent(writer) {
 		return
@@ -195,13 +316,24 @@ func (h *Handler) currentAgent(writer http.ResponseWriter, request *http.Request
 	}
 	writeJSON(writer, 200, projected)
 }
+
+// @Summary Reset Agent session
+// @Description Start a fresh Agent conversation when the supplied revision matches the stored session.
+// @Tags Agent
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body ResetAgentRequestDTO true "Expected session revision"
+// @Success 200 {object} agentConversationDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/agent/session/reset [post]
 func (h *Handler) resetAgent(writer http.ResponseWriter, request *http.Request) {
 	if !h.readyAgent(writer) {
 		return
 	}
-	var input struct {
-		Revision int64 `json:"revision"`
-	}
+	var input ResetAgentRequestDTO
 	if !readAgentInput(writer, request, &input) {
 		return
 	}
@@ -241,6 +373,16 @@ const MAX_AGENT_RUN_BYTES = 128<<10 + agui.MAX_MESSAGE_IMAGES*(agui.MAX_IMAGE_BY
 // agentImage serves one image of the current conversation to the page that shows it. The bytes
 // are the operator's own upload, already validated as an image of the declared type; they are
 // served as that type only, never sniffed, and sandboxed so opening one directly runs nothing.
+// @Summary Serve Agent uploaded image
+// @Description Fetch a sandboxed image attachment belonging to the current Agent conversation.
+// @Tags Agent
+// @Produce octet-stream
+// @Security CookieAuth
+// @Param id path string true "Image identifier"
+// @Success 200 {file} binary
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/agent/images/{id} [get]
 func (h *Handler) agentImage(writer http.ResponseWriter, request *http.Request) {
 	if !h.readyAgent(writer) {
 		return
@@ -266,13 +408,23 @@ func (h *Handler) agentImage(writer http.ResponseWriter, request *http.Request) 
 // conversation names, projected to the scalar fields its data_sources entry listed. It is a read of
 // a result the console already received, so it needs nothing beyond the console session; a
 // reference the conversation does not hold is refused with a detail the interface shows.
+// @Summary Read OpenUI data rows
+// @Description Resolve tabular data rows referenced by a data_ref in the current Agent conversation.
+// @Tags Agent
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body AgentDataRowsRequestDTO true "Data reference"
+// @Success 200 {object} capability.Result
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/agent/data-rows [post]
 func (h *Handler) agentDataRows(writer http.ResponseWriter, request *http.Request) {
 	if !h.readyAgent(writer) {
 		return
 	}
-	var input struct {
-		DataRef string `json:"data_ref"`
-	}
+	var input AgentDataRowsRequestDTO
 	if !readAgentInput(writer, request, &input) {
 		return
 	}

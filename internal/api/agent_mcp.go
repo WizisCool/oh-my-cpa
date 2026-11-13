@@ -73,6 +73,79 @@ func (h *Handler) mcpHandler() (http.Handler, error) {
 	return h.agent.mcp, nil
 }
 
+// MCPJSONRPCRequestDTO describes a JSON-RPC 2.0 request or notification sent to the Streamable HTTP MCP endpoint.
+type MCPJSONRPCRequestDTO struct {
+	JSONRPC string `json:"jsonrpc"`
+	ID      any    `json:"id,omitempty"`
+	Method  string `json:"method"`
+	Params  any    `json:"params,omitempty"`
+}
+
+// MCPJSONRPCErrorDTO describes a JSON-RPC 2.0 error object returned by the MCP endpoint.
+type MCPJSONRPCErrorDTO struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
+}
+
+// MCPJSONRPCResponseDTO describes a JSON-RPC 2.0 response envelope returned by POST /mcp.
+type MCPJSONRPCResponseDTO struct {
+	JSONRPC string              `json:"jsonrpc"`
+	ID      any                 `json:"id,omitempty"`
+	Result  any                 `json:"result,omitempty"`
+	Error   *MCPJSONRPCErrorDTO `json:"error,omitempty"`
+}
+
+// @Summary Call Streamable HTTP MCP endpoint
+// @Description Invoke Oh My CPA capabilities via JSON-RPC 2.0 over Streamable HTTP. Clients must send Content-Type: application/json and Accept: application/json, text/event-stream; notifications return 202 with an empty body.
+// @Tags MCP
+// @Accept json
+// @Produce json,text/event-stream
+// @Security BearerAuth
+// @Param body body MCPJSONRPCRequestDTO true "JSON-RPC 2.0 request or notification"
+// @Success 200 {object} MCPJSONRPCResponseDTO
+// @Success 202 {string} string "Accepted (JSON-RPC notification or response)"
+// @Failure 400 {string} string "Missing or invalid Accept header or malformed JSON-RPC payload"
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 415 {string} string "Unsupported Media Type (Content-Type must be application/json)"
+// @Failure 429 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /mcp [post]
+func (h *Handler) serveMCPPost(writer http.ResponseWriter, request *http.Request) {
+	h.serveMCP(writer, request)
+}
+
+// @Summary Open Streamable HTTP MCP event stream
+// @Description Stateless Streamable HTTP MCP endpoint; SSE GET streams are disabled and authenticated requests with Accept: text/event-stream receive 405 Method Not Allowed (Allow: POST).
+// @Tags MCP
+// @Produce text/event-stream
+// @Security BearerAuth
+// @Failure 400 {string} string "Missing text/event-stream in Accept header"
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 405 {string} string "Method not allowed in stateless MCP mode (Allow: POST)"
+// @Failure 429 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /mcp [get]
+func (h *Handler) serveMCPGet(writer http.ResponseWriter, request *http.Request) {
+	h.serveMCP(writer, request)
+}
+
+// @Summary Close Streamable HTTP MCP session
+// @Description Terminate a Streamable HTTP MCP session when an Mcp-Session-Id header is provided (no-op 204 in stateless mode).
+// @Tags MCP
+// @Produce json
+// @Security BearerAuth
+// @Param Mcp-Session-Id header string true "MCP session identifier"
+// @Success 204 {string} string "Session closed"
+// @Failure 400 {string} string "Missing Mcp-Session-Id header"
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 429 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /mcp [delete]
+func (h *Handler) serveMCPDelete(writer http.ResponseWriter, request *http.Request) {
+	h.serveMCP(writer, request)
+}
+
 // serveMCP is the capability registry as a Streamable HTTP MCP endpoint.
 //
 // It accepts the management key as a bearer token and nothing else: a session cookie is not

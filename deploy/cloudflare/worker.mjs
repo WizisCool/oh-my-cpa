@@ -326,34 +326,94 @@ function serveLive(nowMs) {
   });
 }
 
-export default {
-  async fetch(request, env) {
-    const { pathname } = new URL(request.url);
+function normalizeMountPrefix(basePath = '') {
+  const trimmed = basePath.trim();
+  if (!trimmed || trimmed === '/') return '';
+  const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeading.replace(/\/+$/, '');
+}
 
-    if (!pathname.startsWith('/api/')) {
-      // Not an API path, so it belongs to the static assets. Handing the request back
-      // to the asset binding is what lets the SPA's routes and its chunks coexist with
-      // these responses.
-      return env.ASSETS.fetch(request);
-    }
+function isStaticAssetSubpath(innerPath) {
+  if (
+    innerPath.startsWith('/assets/') ||
+    innerPath.startsWith('/lobe-icons/') ||
+    innerPath.startsWith('/icons/')
+  ) {
+    return true;
+  }
+  const lastSegment = innerPath.split('/').at(-1) ?? '';
+  return /\.[a-z0-9]{1,12}$/i.test(lastSegment);
+}
 
-    if (isRefused(request)) return refusedResponse();
+/**
+ * Builds the Worker fetch handler for either a root deployment (`''`, e.g. `omc-demo.junze.dev`)
+ * or a subpath mount (`'/demo'`, e.g. `omc.junze.dev/demo/`).
+ */
+export function createDemoHandler({ basePath = '' } = {}) {
+  const prefix = normalizeMountPrefix(basePath);
 
-    // Every read comes from the dataset, including `/api/healthz`.
-    //
-    // That endpoint was hardcoded here first, with a minimal `{status, version}` body,
-    // on the reasoning that a health check deserves a cheaper answer than a JSON walk.
-    // It cost more than it saved: the console's header reads `cpa_connected` from that
-    // response to decide whether to show the gateway as reachable, so the field's
-    // absence made the demonstration display "CPA offline" on every page while the
-    // overview reported the gateway connected. A hand-written response beside a generated
-    // dataset is one that drifts from it, and this one drifted immediately.
-    const name = responseNameFor(request);
-    if (name === 'usage-routing') return serveRouting(new URL(request.url), Date.now());
-    if (name === 'usage-live') return serveLive(Date.now());
-    const entry = name ? DATASET.responses[name] : undefined;
-    if (!entry) return notFoundResponse(pathname);
+  return {
+    async fetch(request, env) {
+      const url = new URL(request.url);
+      let innerPath = url.pathname;
 
-    return serve(entry, Date.now(), new URL(request.url));
-  },
-};
+      if (prefix) {
+        if (url.pathname === prefix) {
+          return new Response(null, {
+            status: 308,
+            headers: { Location: `${prefix}/${url.search}` },
+          });
+        }
+        if (!url.pathname.startsWith(`${prefix}/`)) {
+          return env.ASSETS.fetch(request);
+        }
+        innerPath = url.pathname.slice(prefix.length) || '/';
+      }
+
+      if (!innerPath.startsWith('/api/')) {
+        // Not an API path, so it belongs to the static assets. Under a subpath mount,
+        // deep-linked SPA routes (e.g. `/demo/dashboard`) fall back to `/demo/` rather
+        // than the site root's `index.html`.
+        const assetResponse = await env.ASSETS.fetch(request);
+        if (!prefix || assetResponse.status !== 404) {
+          return assetResponse;
+        }
+        const method = request.method.toUpperCase();
+        if ((method !== 'GET' && method !== 'HEAD') || isStaticAssetSubpath(innerPath)) {
+          return assetResponse;
+        }
+        return env.ASSETS.fetch(
+          new Request(new URL(`${prefix}/`, request.url), {
+            method: request.method,
+            headers: request.headers,
+          }),
+        );
+      }
+
+      const apiUrl = new URL(request.url);
+      apiUrl.pathname = innerPath;
+      const apiRequest = prefix ? { method: request.method, url: apiUrl.toString() } : request;
+
+      if (isRefused(apiRequest)) return refusedResponse();
+
+      // Every read comes from the dataset, including `/api/healthz`.
+      //
+      // That endpoint was hardcoded here first, with a minimal `{status, version}` body,
+      // on the reasoning that a health check deserves a cheaper answer than a JSON walk.
+      // It cost more than it saved: the console's header reads `cpa_connected` from that
+      // response to decide whether to show the gateway as reachable, so the field's
+      // absence made the demonstration display "CPA offline" on every page while the
+      // overview reported the gateway connected. A hand-written response beside a generated
+      // dataset is one that drifts from it, and this one drifted immediately.
+      const name = responseNameFor(apiRequest);
+      if (name === 'usage-routing') return serveRouting(apiUrl, Date.now());
+      if (name === 'usage-live') return serveLive(Date.now());
+      const entry = name ? DATASET.responses[name] : undefined;
+      if (!entry) return notFoundResponse(innerPath);
+
+      return serve(entry, Date.now(), apiUrl);
+    },
+  };
+}
+
+export default createDemoHandler();

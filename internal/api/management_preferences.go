@@ -63,10 +63,29 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceOMCPluginSource:        true,
 }
 
-// preferenceValue is a stored JSON document kept exactly as the client sent it.
-// The console owns each key's shape; the server only checks that it parses.
-type preferenceValue = json.RawMessage
+// PreferenceListResponseDTO returns all allowlisted console UI preferences and the configured timezone.
+// Each stored JSON document is kept as the client sent it; the console owns each key's shape while
+// the server checks only that it parses.
+type PreferenceListResponseDTO struct {
+	Preferences map[string]any          `json:"preferences"`
+	TimeZone    repository.TimezoneInfo `json:"time_zone"`
+}
 
+// PreferencePutResponseDTO returns the persisted preference key and JSON value.
+type PreferencePutResponseDTO struct {
+	Key   string `json:"key"`
+	Value any    `json:"value"`
+}
+
+// @Summary List console preferences
+// @Description Return all allowlisted server-persisted UI preferences and the configured OMC timezone.
+// @Tags Preferences
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} PreferenceListResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/preferences [get]
 func (h *Handler) listPreferences(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.repo == nil {
@@ -81,7 +100,7 @@ func (h *Handler) listPreferences(writer http.ResponseWriter, request *http.Requ
 		writeInternalError(writer, fmt.Errorf("list preferences: %w", err))
 		return
 	}
-	preferences := map[string]preferenceValue{}
+	preferences := map[string]any{}
 	for key, raw := range stored {
 		if !knownPreferences[key] || !json.Valid([]byte(raw)) {
 			// A value written by an older build that no longer parses must not
@@ -89,16 +108,31 @@ func (h *Handler) listPreferences(writer http.ResponseWriter, request *http.Requ
 			// default for that key.
 			continue
 		}
-		preferences[key] = preferenceValue(raw)
+		preferences[key] = json.RawMessage(raw)
 	}
 	zone, err := h.repo.ReadTimezone(ctx)
 	if err != nil {
 		writeInternalError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"preferences": preferences, "time_zone": zone})
+	writeJSON(writer, http.StatusOK, PreferenceListResponseDTO{Preferences: preferences, TimeZone: zone})
 }
 
+// @Summary Update a console preference
+// @Description Validate and persist an allowlisted console UI preference JSON document.
+// @Tags Preferences
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param key path string true "Allowlisted preference key"
+// @Param body body any true "Valid JSON value (object, array, string, number, boolean, or null) for the preference key"
+// @Success 200 {object} PreferencePutResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/preferences/{key} [put]
 func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	key := chi.URLParam(request, "key")
@@ -214,5 +248,5 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 		}
 		h.publishStateSync("management-providers", "management-providers-sanitized", stateScopeIdentityDirectory)
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"key": key, "value": preferenceValue(body)})
+	writeJSON(writer, http.StatusOK, PreferencePutResponseDTO{Key: key, Value: json.RawMessage(body)})
 }

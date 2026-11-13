@@ -28,6 +28,7 @@ import {
   type NavGroup,
   type NavOrder,
 } from '../../src/types/sidebarNav.ts';
+import { resolveApiDocsUrl } from '../../src/types/config.ts';
 import { test } from 'vitest';
 
 test('sidebar nav', () => {
@@ -257,4 +258,11 @@ test('sidebar nav', () => {
     ['/dashboard', '/agent', '/playground', '/logs', '/audit', '/omc-settings'],
     'ordering does not mutate the model it is given',
   );
+
+  // ── demo header API documentation target ────────────────────────────────────
+
+  assert.equal(resolveApiDocsUrl('/demo'), '/api-docs/');
+  assert.equal(resolveApiDocsUrl(''), 'https://omc.junze.dev/api-docs/');
+  assert.equal(resolveApiDocsUrl('/'), 'https://omc.junze.dev/api-docs/');
+  assert.equal(resolveApiDocsUrl('/omc'), 'https://omc.junze.dev/api-docs/');
 });

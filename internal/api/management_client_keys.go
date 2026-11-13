@@ -80,6 +80,41 @@ func (h *Handler) projectClientAPIKeyItems(keys []string, aliases map[string]rep
 	return items
 }
 
+// ClientAPIKeyListResponseDTO lists configured client API keys (masked unless explicitly revealed).
+type ClientAPIKeyListResponseDTO struct {
+	Keys    []ClientAPIKeyItemDTO `json:"keys"`
+	Total   int                   `json:"total"`
+	Version uint64                `json:"version,omitempty"`
+}
+
+// ClientAPIKeyMutationResponseDTO returns the masked key and fingerprints after creating or updating a key.
+type ClientAPIKeyMutationResponseDTO struct {
+	Status           string `json:"status"`
+	Index            int    `json:"index"`
+	Key              string `json:"key"`
+	Fingerprint      string `json:"fingerprint"`
+	UsageFingerprint string `json:"usage_fingerprint,omitempty"`
+	Version          uint64 `json:"version,omitempty"`
+}
+
+// ClientAPIKeyDeleteResponseDTO confirms deletion of a client API key by index.
+type ClientAPIKeyDeleteResponseDTO struct {
+	Status  string `json:"status"`
+	Deleted int    `json:"deleted"`
+	Version uint64 `json:"version,omitempty"`
+}
+
+// @Summary List client API keys
+// @Description Return caller API key masks, fingerprints, and aliases (or raw keys when include_keys=true with fail-closed audit).
+// @Tags ClientKeys
+// @Produce json
+// @Security CookieAuth
+// @Param include_keys query boolean false "Include raw key strings (audited fail-closed; refused in demo)"
+// @Success 200 {object} ClientAPIKeyListResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Router /v1/management/api-keys [get]
 func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -137,14 +172,11 @@ func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Re
 	}
 
 	setStateVersionHeader(writer, version)
-	body := map[string]any{
-		"keys":  items,
-		"total": len(items),
-	}
-	if version > 0 {
-		body["version"] = version
-	}
-	writeJSON(writer, http.StatusOK, body)
+	writeJSON(writer, http.StatusOK, ClientAPIKeyListResponseDTO{
+		Keys:    items,
+		Total:   len(items),
+		Version: version,
+	})
 }
 
 type createClientKeyRequest struct {
@@ -152,6 +184,21 @@ type createClientKeyRequest struct {
 	ExpectedFingerprint string `json:"expected_fingerprint,omitempty"`
 }
 
+// @Summary Create a client API key
+// @Description Append a new caller API key to CPA and return its masked representation and fingerprints.
+// @Tags ClientKeys
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body createClientKeyRequest true "New client API key"
+// @Success 200 {object} ClientAPIKeyMutationResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/api-keys [post]
 func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var req createClientKeyRequest
@@ -212,17 +259,14 @@ func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.R
 		}
 		h.invalidateClientKeyCatalog()
 		setStateVersionHeader(writer, version)
-		resp := map[string]any{
-			"status":      "ok",
-			"index":       createdIndex,
-			"key":         security.MaskSecret(newKey),
-			"fingerprint": fingerprint,
-			"version":     version,
-		}
-		if usageFingerprint != "" {
-			resp["usage_fingerprint"] = usageFingerprint
-		}
-		writeJSON(writer, http.StatusOK, resp)
+		writeJSON(writer, http.StatusOK, ClientAPIKeyMutationResponseDTO{
+			Status:           "ok",
+			Index:            createdIndex,
+			Key:              security.MaskSecret(newKey),
+			Fingerprint:      fingerprint,
+			UsageFingerprint: usageFingerprint,
+			Version:          version,
+		})
 		return
 	}
 
@@ -250,18 +294,32 @@ func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.R
 
 	_ = h.recordAudit(request, "api_key.create", "client_api_key", fmt.Sprintf("index:%d", len(currentKeys)), "success", nil)
 
-	resp := map[string]any{
-		"status":      "ok",
-		"index":       createdIndex,
-		"key":         security.MaskSecret(newKey),
-		"fingerprint": fingerprint,
-	}
-	if usageFingerprint != "" {
-		resp["usage_fingerprint"] = usageFingerprint
-	}
-	writeJSON(writer, http.StatusOK, resp)
+	writeJSON(writer, http.StatusOK, ClientAPIKeyMutationResponseDTO{
+		Status:           "ok",
+		Index:            createdIndex,
+		Key:              security.MaskSecret(newKey),
+		Fingerprint:      fingerprint,
+		UsageFingerprint: usageFingerprint,
+	})
 }
 
+// @Summary Update a client API key
+// @Description Replace an existing caller API key at the given positional index with optional fingerprint guard.
+// @Tags ClientKeys
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param index path integer true "Positional key index"
+// @Param body body createClientKeyRequest true "Replacement client API key"
+// @Success 200 {object} ClientAPIKeyMutationResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/api-keys/{index} [put]
 func (h *Handler) updateClientAPIKey(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	rawIndex := chi.URLParam(request, "index")
@@ -358,17 +416,14 @@ func (h *Handler) updateClientAPIKey(writer http.ResponseWriter, request *http.R
 		}
 		h.invalidateClientKeyCatalog()
 		setStateVersionHeader(writer, version)
-		resp := map[string]any{
-			"status":      "ok",
-			"index":       index,
-			"key":         security.MaskSecret(updatedKey),
-			"fingerprint": fingerprint,
-			"version":     version,
-		}
-		if usageFingerprint != "" {
-			resp["usage_fingerprint"] = usageFingerprint
-		}
-		writeJSON(writer, http.StatusOK, resp)
+		writeJSON(writer, http.StatusOK, ClientAPIKeyMutationResponseDTO{
+			Status:           "ok",
+			Index:            index,
+			Key:              security.MaskSecret(updatedKey),
+			Fingerprint:      fingerprint,
+			UsageFingerprint: usageFingerprint,
+			Version:          version,
+		})
 		return
 	}
 
@@ -410,18 +465,31 @@ func (h *Handler) updateClientAPIKey(writer http.ResponseWriter, request *http.R
 	}
 	h.invalidateClientKeyCatalog()
 	_ = h.recordAudit(request, "api_key.update", "client_api_key", targetLabel, "success", nil)
-	resp := map[string]any{
-		"status":      "ok",
-		"index":       index,
-		"key":         security.MaskSecret(updatedKey),
-		"fingerprint": fingerprint,
-	}
-	if usageFingerprint != "" {
-		resp["usage_fingerprint"] = usageFingerprint
-	}
-	writeJSON(writer, http.StatusOK, resp)
+	writeJSON(writer, http.StatusOK, ClientAPIKeyMutationResponseDTO{
+		Status:           "ok",
+		Index:            index,
+		Key:              security.MaskSecret(updatedKey),
+		Fingerprint:      fingerprint,
+		UsageFingerprint: usageFingerprint,
+	})
 }
 
+// @Summary Delete a client API key
+// @Description Remove a caller API key at the given positional index with optional fingerprint verification.
+// @Tags ClientKeys
+// @Produce json
+// @Security CookieAuth
+// @Param index path integer true "Positional key index"
+// @Param expected_fingerprint query string false "Expected key fingerprint for stale-index protection"
+// @Success 200 {object} ClientAPIKeyDeleteResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 502 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/api-keys/{index} [delete]
 func (h *Handler) deleteClientAPIKey(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	rawIndex := chi.URLParam(request, "index")
@@ -496,10 +564,10 @@ func (h *Handler) deleteClientAPIKey(writer http.ResponseWriter, request *http.R
 		}
 		h.invalidateClientKeyCatalog()
 		setStateVersionHeader(writer, version)
-		writeJSON(writer, http.StatusOK, map[string]any{
-			"status":  "ok",
-			"deleted": index,
-			"version": version,
+		writeJSON(writer, http.StatusOK, ClientAPIKeyDeleteResponseDTO{
+			Status:  "ok",
+			Deleted: index,
+			Version: version,
 		})
 		return
 	}
@@ -538,8 +606,8 @@ func (h *Handler) deleteClientAPIKey(writer http.ResponseWriter, request *http.R
 
 	_ = h.recordAudit(request, "api_key.delete", "client_api_key", fmt.Sprintf("index:%d", index), "success", nil)
 
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status":  "ok",
-		"deleted": index,
+	writeJSON(writer, http.StatusOK, ClientAPIKeyDeleteResponseDTO{
+		Status:  "ok",
+		Deleted: index,
 	})
 }

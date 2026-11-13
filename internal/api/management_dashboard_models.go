@@ -89,6 +89,21 @@ type dashboardModelPoint struct {
 // because the split between them is the gateway's routing detail rather than a difference
 // the caller chose. An unrecognised value is a 400 rather than a silent fallback, so a
 // typo cannot quietly change what the numbers mean.
+// @Summary Get dashboard model breakdown
+// @Description Return token, request, and cost breakdown grouped by upstream model or client call point.
+// @Tags Dashboard
+// @Produce json
+// @Security CookieAuth
+// @Param preset query string false "Time range preset"
+// @Param from query integer false "Custom window start timestamp in Unix milliseconds"
+// @Param to query integer false "Custom window end timestamp in Unix milliseconds"
+// @Param open_end query boolean false "Whether custom window tracks current time"
+// @Param group_by query string false "Grouping mode" Enums(model, call)
+// @Success 200 {object} dashboardModelsResponse
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/dashboard/models [get]
 func (h *Handler) dashboardModels(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 

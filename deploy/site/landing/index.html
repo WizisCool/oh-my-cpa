@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oh My CPA</title>
+    <meta
+      name="description"
+      content="Self-hosted control plane and usage observability console for CLIProxyAPI (CPA)."
+    />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f6f6f7;
+        --surface: #ffffff;
+        --fg: #1e1e20;
+        --muted: #5a5a63;
+        --accent: #1c6ba3;
+        --accent-fg: #ffffff;
+        --ring: rgba(30, 30, 32, 0.1);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #141416;
+          --surface: #1b1b1f;
+          --fg: #e3e3e4;
+          --muted: #a0a0ab;
+          --accent: #00a2fb;
+          --accent-fg: #0b1116;
+          --ring: rgba(227, 227, 228, 0.12);
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.5;
+      }
+
+      main {
+        width: min(560px, 100%);
+        padding: 32px;
+        border-radius: 16px;
+        background: var(--surface);
+        box-shadow: 0 0 0 1px var(--ring), 0 16px 40px -24px rgba(0, 0, 0, 0.35);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .brand img {
+        width: 32px;
+        height: 32px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+
+      p {
+        margin: 0 0 24px;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      a.button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 38px;
+        padding: 0 16px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        text-decoration: none;
+        box-shadow: 0 0 0 1px var(--ring);
+        color: var(--fg);
+        background: transparent;
+      }
+
+      a.button.primary {
+        background: var(--accent);
+        color: var(--accent-fg);
+        box-shadow: none;
+      }
+
+      a.button:hover {
+        opacity: 0.9;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">
+        <img src="./favicon.svg" alt="" width="32" height="32" />
+        <h1>Oh My CPA</h1>
+      </div>
+      <p>
+        Self-hosted control plane, OAuth management, routing, pricing, and usage observability for CLIProxyAPI v8+.
+      </p>
+      <nav class="actions" aria-label="Oh My CPA resources">
+        <a class="button primary" href="./api-docs/">API Documentation</a>
+        <a class="button" href="./api-docs/swagger.json">Swagger 2.0 JSON</a>
+        <a class="button" href="./demo/">Live Demo</a>
+        <a class="button" href="https://github.com/WizisCool/oh-my-cpa">GitHub</a>
+      </nav>
+    </main>
+  </body>
+</html>

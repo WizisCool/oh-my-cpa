@@ -20,12 +20,35 @@ type serviceLogRecordDTO struct {
 	Attrs      []applog.Attr `json:"attrs,omitempty"`
 }
 
+// ServiceLogsResponseDTO wraps Oh My CPA's recent in-memory stderr log buffer.
+type ServiceLogsResponseDTO struct {
+	Capturing   bool                  `json:"capturing"`
+	Records     []serviceLogRecordDTO `json:"records"`
+	LatestSeq   uint64                `json:"latest_seq,omitempty"`
+	OldestSeq   uint64                `json:"oldest_seq,omitempty"`
+	Gap         bool                  `json:"gap,omitempty"`
+	Capacity    int                   `json:"capacity,omitempty"`
+	StartedAtMS int64                 `json:"started_at_ms,omitempty"`
+}
+
 // serviceLogs serves Oh My CPA's own recent log records - the ones it writes to
 // stderr - so an operator can read them without shell access to the container.
 //
 // `after` resumes from the last sequence the console saw. A process built without
 // the capture (tests, embedded use) answers `capturing: false` rather than an
 // error, because "this build keeps no copy" is a state, not a failure.
+//
+// @Summary Tail OMC service logs
+// @Description Read Oh My CPA's bounded in-memory stderr log records after an optional sequence number.
+// @Tags Logs
+// @Produce json
+// @Security CookieAuth
+// @Param after query integer false "Return records with seq greater than this value"
+// @Param limit query integer false "Maximum records to return (default 500)"
+// @Success 200 {object} ServiceLogsResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Router /v1/management/service-logs [get]
 func (h *Handler) serviceLogs(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	values := request.URL.Query()
@@ -49,9 +72,9 @@ func (h *Handler) serviceLogs(writer http.ResponseWriter, request *http.Request)
 	}
 
 	if h.serviceLog == nil {
-		writeJSON(writer, http.StatusOK, map[string]any{
-			"capturing": false,
-			"records":   []serviceLogRecordDTO{},
+		writeJSON(writer, http.StatusOK, ServiceLogsResponseDTO{
+			Capturing: false,
+			Records:   []serviceLogRecordDTO{},
 		})
 		return
 	}
@@ -60,13 +83,13 @@ func (h *Handler) serviceLogs(writer http.ResponseWriter, request *http.Request)
 	for _, record := range page.Records {
 		records = append(records, serviceLogRecordDTO(record))
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"capturing":     true,
-		"records":       records,
-		"latest_seq":    page.LatestSeq,
-		"oldest_seq":    page.OldestSeq,
-		"gap":           page.Gap,
-		"capacity":      h.serviceLog.Capacity(),
-		"started_at_ms": h.serviceLog.StartedAt().UnixMilli(),
+	writeJSON(writer, http.StatusOK, ServiceLogsResponseDTO{
+		Capturing:   true,
+		Records:     records,
+		LatestSeq:   page.LatestSeq,
+		OldestSeq:   page.OldestSeq,
+		Gap:         page.Gap,
+		Capacity:    h.serviceLog.Capacity(),
+		StartedAtMS: h.serviceLog.StartedAt().UnixMilli(),
 	})
 }
