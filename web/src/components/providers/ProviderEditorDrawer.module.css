@@ -28,7 +28,7 @@
 }
 
 .icon-tile:hover {
-  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
+  box-shadow: var(--shadow-raised);
 }
 
 .icon-meta {

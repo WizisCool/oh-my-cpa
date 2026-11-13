@@ -43,16 +43,17 @@
   overflow: hidden;
   min-width: 0;
   background: var(--surface);
-  transition: box-shadow var(--motion-fast);
+  transition: var(--select-transition);
 }
 .tile-highlighted {
-  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
+  box-shadow: var(--shadow-selected);
+  background: var(--select-surface);
 }
 .tile:hover {
   box-shadow: var(--shadow-raised);
 }
 .tile-highlighted:hover {
-  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
+  box-shadow: var(--shadow-selected);
 }
 .tile-placeholder {
   display: flex;

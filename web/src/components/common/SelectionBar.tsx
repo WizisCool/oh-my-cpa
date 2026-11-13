@@ -12,8 +12,6 @@ export interface SelectionBarProps {
   selection?: React.ReactNode;
   /** What can be done with the selected rows, at the trailing edge. */
   children: React.ReactNode;
-  /** `framed` stands above a list as its own strip; `inline` is a row inside the list's frame. */
-  variant?: 'framed' | 'inline';
   className?: string;
 }
 
@@ -21,12 +19,13 @@ export interface SelectionBarProps {
  * What the operator can do with the rows they ticked.
  *
  * It exists only while something is selected, so a list nobody is selecting from carries no extra
- * chrome; the caller renders it conditionally. The count is a live region because ticking a row
- * elsewhere on the page is the only other feedback that the selection changed.
+ * chrome; the caller renders it conditionally, docked over the list's foot, so ticking a row never
+ * moves the rows. The count is a live region because ticking a row elsewhere on the page is the
+ * only other feedback that the selection changed.
  */
-export function SelectionBar({ label, summary, note, selection, children, variant = 'framed', className }: SelectionBarProps) {
+export function SelectionBar({ label, summary, note, selection, children, className }: SelectionBarProps) {
   return (
-    <div className={clsx('selection-bar', `is-${variant}`, className)} role="region" aria-label={label}>
+    <div className={clsx('selection-bar', className)} role="region" aria-label={label}>
       <div className="selection-bar-start">
         <span className="selection-bar-count" role="status">{summary}</span>
         {note !== undefined && note !== null && note !== false && <span className="selection-bar-note">{note}</span>}

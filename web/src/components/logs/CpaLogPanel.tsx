@@ -397,7 +397,7 @@ export const CpaLogPanel: React.FC = () => {
                   className={styles['filter-toggle']}
                   aria-expanded={isFiltersOpen}
                   aria-controls="log-request-filters"
-                  variant={isFiltersOpen || activeFilterCount > 0 ? 'primary' : 'secondary'}
+                  variant={isFiltersOpen || activeFilterCount > 0 ? 'active' : 'secondary'}
                   onClick={() => setIsFiltersOpen((isOpen) => !isOpen)}
                 >
                   {activeFilterCount > 0 ? <>{t('logs.filters_active')}<Count size="small">{activeFilterCount}</Count></> : t('events.more_filters')}
@@ -426,7 +426,7 @@ export const CpaLogPanel: React.FC = () => {
                   <Tooltip title={t('logs.wrap')}>
                     <Button
                       icon={<WrapTextOutlined />}
-                      variant={isWrapped ? 'primary' : 'secondary'}
+                      variant={isWrapped ? 'active' : 'secondary'}
                       aria-pressed={isWrapped}
                       aria-label={t('logs.wrap')}
                       onClick={() => patchFilters({ wrapLines: !isWrapped })}

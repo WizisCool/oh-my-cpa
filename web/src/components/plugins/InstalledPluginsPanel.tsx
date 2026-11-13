@@ -30,6 +30,7 @@ import { EmptyState } from '../common/EmptyState';
 import { ConfirmAction } from '../common/ConfirmAction';
 import { Toolbar } from '../common/Toolbar';
 import { Tooltip } from '../common/Tooltip';
+import { Tag } from '../common/Tag';
 import { UPDATE_STATUS_QUERY_KEY } from '../../hooks/useUpdateNotice';
 import { useSortableList } from '../../hooks/useSortableList';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
@@ -257,7 +258,7 @@ export function InstalledPluginsPanel({
                 const moreButton = (
                   <Button
                     size="sm"
-                    className="row-action-btn"
+                    variant="ghost" className="row-action-btn"
                     ref={(button) => {
                       if (button) moreButtonRefs.current.set(plugin.id, button);
                       else moreButtonRefs.current.delete(plugin.id);
@@ -279,9 +280,9 @@ export function InstalledPluginsPanel({
                           <span className={styles.badges}>
                             <PluginStateLabel plugin={plugin} isPluginSystemEnabled={isPluginSystemEnabled} />
                             {origin && <PluginOriginBadge origin={origin} />}
-                            {!plugin.registered && <span className={styles.badge}>{t('plugin.badge_not_registered')}</span>}
-                            {plugin.supports_oauth && <span className={styles.badge}>{t('plugin.badge_auth_provider')}</span>}
-                            {plugin.supports_quota && <span className={styles.badge}>{t('plugin.badge_quota')}</span>}
+                            {!plugin.registered && <Tag size="small">{t('plugin.badge_not_registered')}</Tag>}
+                            {plugin.supports_oauth && <Tag size="small">{t('plugin.badge_auth_provider')}</Tag>}
+                            {plugin.supports_quota && <Tag size="small">{t('plugin.badge_quota')}</Tag>}
                           </span>
                         </div>
                         {name !== plugin.id && <span className={styles['plugin-id']}>{plugin.id}</span>}
@@ -318,7 +319,7 @@ export function InstalledPluginsPanel({
                         <Tooltip title={t('plugin.configure')}>
                           <Button
                             size="sm"
-                            className="row-action-btn"
+                            variant="ghost" className="row-action-btn"
                             icon={<SettingOutlined />}
                             disabled={isDeleting}
                             onClick={() => onConfigure(plugin)}

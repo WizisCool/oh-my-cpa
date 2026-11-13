@@ -41,6 +41,16 @@ const AUTO_COLLAPSE_MIN_OVERFLOW_PX = 140;
 const TOUCH_RESTORE_PULL_PX = 28;
 
 /**
+ * Upward wheel travel at row 1 that restores the folded header. It is summed over a gesture rather
+ * than read from one event: a trackpad flick that coasts into the top arrives as a tail of small
+ * deltas, none of which alone would cross a per-event threshold.
+ */
+const WHEEL_RESTORE_PULL_PX = 24;
+
+/** A pause longer than this between wheel events starts a new gesture's sum. */
+const WHEEL_GESTURE_GAP_MS = 250;
+
+/**
  * Upper bound on how long an animated return to the top may hold the collapse
  * state. A smooth scroll to the top is a few hundred milliseconds; this is long
  * enough not to cut a legitimate animation short and short enough that a reader
@@ -182,10 +192,21 @@ export function useRequestListScroll({
     const area = scrollAreaRef.current;
     if (!area) return undefined;
 
+    let upwardPull = 0;
+    let lastWheelAt = -Infinity;
+
     const onWheel = (e: WheelEvent) => {
-      if (isNavigatingPageRef.current || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.deltaX !== 0) {
+      // A trackpad swipe almost always drifts a little sideways, so the gesture counts as vertical
+      // when its vertical part dominates; requiring a zero horizontal delta ignored most flicks on
+      // macOS and left the header folded.
+      if (
+        isNavigatingPageRef.current || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey
+        || Math.abs(e.deltaX) >= Math.abs(e.deltaY)
+      ) {
         return;
       }
+      if (e.timeStamp - lastWheelAt > WHEEL_GESTURE_GAP_MS) upwardPull = 0;
+      lastWheelAt = e.timeStamp;
 
       if (!collapse.get() && e.deltaY > 10 && lastScrollTopRef.current <= 5) {
         consumeWheel(e);
@@ -196,9 +217,15 @@ export function useRequestListScroll({
         return;
       }
 
-      if (collapse.get() && e.deltaY < -15 && lastScrollTopRef.current <= 2) {
+      if (!collapse.get() || e.deltaY >= 0 || lastScrollTopRef.current > 2) {
+        upwardPull = 0;
+        return;
+      }
+      upwardPull -= e.deltaY;
+      if (upwardPull >= WHEEL_RESTORE_PULL_PX) {
         consumeWheel(e);
         if (e.cancelable) e.preventDefault();
+        upwardPull = 0;
         collapse.set(false);
       }
     };

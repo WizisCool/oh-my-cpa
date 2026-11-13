@@ -4,7 +4,7 @@ import type { MessageKey } from '../../i18n/catalog';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
-import { FilterOutlined } from '../icons';
+import { ClearOutlined, FilterOutlined } from '../icons';
 
 import { useT } from '../../i18n';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
@@ -24,6 +24,7 @@ import { renderFacetOption, type FacetMarkRenderer } from './RequestFacetMark';
 import { ResultMarker } from './ResultMarker';
 import { TimeRangeControl } from './TimeRangeControl';
 import { SearchInput } from '../common/SearchInput';
+import { ToolButton } from '../common/ToolButton';
 import { SearchSelect } from '../common/SearchSelect';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import './RequestToolbar.css';
@@ -186,12 +187,16 @@ export const RequestToolbar = React.memo(function RequestToolbar({
       {t('events.facets_error')}
     </span>
   );
-  const resetFilters = hasActiveFilter && (
-    <Button variant="ghost" className="req-reset-filters" onClick={onClearFilters}>
+  // The reset comes last in its row, so its arrival moves nothing that was already there. On a
+  // phone it is the glyph beside the filter button; the search field gives up the room.
+  const resetFilters = hasActiveFilter && (isPhone ? (
+    <ToolButton variant="ghost" className="req-reset-filters" onClick={onClearFilters} icon={<ClearOutlined />} label={t('events.reset')} />
+  ) : (
+    <Button variant="ghost" className="req-reset-filters" onClick={onClearFilters} aria-label={t('events.reset')}>
       {t('events.reset')}
       <span className="req-reset-count">{activeFilterCount || 1}</span>
     </Button>
-  );
+  ));
   const groupingSelect = (
     <Select
       aria-label={t('events.group_by')}
@@ -226,6 +231,7 @@ export const RequestToolbar = React.memo(function RequestToolbar({
         <div className="request-filters">
           {searchInput}
           {moreFilters}
+          {resetFilters}
         </div>
         <div className="request-phone-row">
           {timeWindow}
@@ -235,7 +241,6 @@ export const RequestToolbar = React.memo(function RequestToolbar({
           {groupingSelect}
           {modelViewToggle}
         </div>
-        {resetFilters}
         {facetsNote}
       </section>
     );
@@ -254,9 +259,9 @@ export const RequestToolbar = React.memo(function RequestToolbar({
       <div className="request-toolbar-bottom">
         {facetsNote}
         <div className="request-actions">
-          {resetFilters}
           {groupingSelect}
           {modelViewToggle}
+          {resetFilters}
         </div>
       </div>
     </section>

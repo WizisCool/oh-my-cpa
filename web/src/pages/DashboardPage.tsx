@@ -525,6 +525,7 @@ export const DashboardPage: React.FC = () => {
                 size="sm"
                 className="tile-link"
                 icon={<RightOutlined />}
+                iconPlacement="end"
                 onMouseEnter={() => preloadRegisteredRoute('/usage/events')}
                 onClick={handleDrillDown}
                 disabled={!canDrillDown}

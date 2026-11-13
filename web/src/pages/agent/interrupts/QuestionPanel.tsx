@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Tag } from '../../../components/common/Tag';
 import { clsx } from 'clsx';
 import { CheckOutlined, EditOutlined, QuestionCircleOutlined } from '../../../components/icons';
 import { useI18n } from '../../../i18n';
@@ -183,7 +184,7 @@ export function QuestionPanel({ operation, onDecided }: QuestionPanelProps) {
         {question && (
           <>
             <p className={styles['question-text']} id={questionID}>
-              {!hasReview && question.header && <span className={styles['question-chip']}>{question.header}</span>}
+              {!hasReview && question.header && <Tag size="small">{question.header}</Tag>}
               {question.question}
             </p>
             {options.length > 0 ? (

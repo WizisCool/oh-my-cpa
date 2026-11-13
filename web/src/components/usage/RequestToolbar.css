@@ -15,7 +15,7 @@
   max-width: 240px;
 }
 .request-filters .request-search {
-  flex: 2 1 240px;
+  flex: 2 1 200px;
   width: auto;
 }
 /* The multi-select facets hold several tags, so they get more room than a
@@ -26,8 +26,8 @@
    "More filters" fit on one line, and the three fields take whatever the row has left above that. */
 .request-filters > .req-facet-select,
 .request-filters > .req-time-button {
-  flex: 1 1 180px;
-  min-width: 160px;
+  flex: 1 1 160px;
+  min-width: 140px;
   max-width: 280px;
 }
 .request-filters > .req-result-segmented {
@@ -43,15 +43,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 16px;
-  height: 16px;
+  min-width: 18px;
+  height: 18px;
   margin-left: 6px;
-  padding: 0 5px;
+  padding: 0 6px;
   border-radius: var(--radius-sm);
   background: var(--primary);
   color: var(--primary-on);
-  font-size: var(--text-2xs);
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: 500;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
@@ -103,6 +103,6 @@
 .request-phone-row > :is([data-slot='segmented'], .req-result-segmented, .req-model-view-toggle) {
   flex: 0 0 auto;
 }
-.request-toolbar.is-phone > .req-reset-filters {
-  align-self: flex-start;
+.request-toolbar.is-phone .req-reset-filters {
+  flex: none;
 }

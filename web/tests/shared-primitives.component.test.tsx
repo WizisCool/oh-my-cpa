@@ -232,7 +232,7 @@ describe('SelectionBar', () => {
       </SelectionBar>,
     );
     expect(screen.getByRole('status').textContent).toBe('3 selected');
-    expect(container.querySelector('.selection-bar.is-framed')).toBeTruthy();
+    expect(container.querySelector('.selection-bar')).toBeTruthy();
     expect(container.querySelector('.selection-bar-note')?.textContent).toBe('2 on other pages');
     expect(container.querySelector('.selection-bar-actions button')?.textContent).toBe('Delete');
   });

@@ -399,6 +399,10 @@ export const OAuthManagementPage: React.FC = () => {
 
   const [selectedKeys, setSelectedKeys] = React.useState<string[]>([]);
   const selectedKeySet = React.useMemo(() => new Set(selectedKeys), [selectedKeys]);
+  // A choice is under way from the toolbar's button or the first pick until it is cleared; only then
+  // do the credentials carry checkboxes, and a plain click on one picks it.
+  const [isSelectMode, setIsSelectMode] = React.useState(false);
+  const isSelecting = isSelectMode || selectedKeys.length > 0;
   /** The credential last picked without Shift, where the next Shift run starts. */
   const selectionAnchor = React.useRef<SelectionAnchor<string> | null>(null);
   const selectedRecords = React.useMemo(
@@ -650,6 +654,11 @@ export const OAuthManagementPage: React.FC = () => {
     reorder: sectionOrder.reorder,
     isOverlayBlocked: hasActiveOverlay,
   };
+  const clearSelection = () => {
+    selectionAnchor.current = null;
+    setSelectedKeys([]);
+    setIsSelectMode(false);
+  };
   const pageSelection = (
     <Checkbox
       checked={selectablePage.length > 0 && selectedOnPage === selectablePage.length}
@@ -665,6 +674,7 @@ export const OAuthManagementPage: React.FC = () => {
     groups,
     pluginLogos,
     selectedKeys: selectedKeySet,
+    isSelecting,
     nowMS: visibleNow,
     actions: credentialActions,
   };
@@ -814,6 +824,11 @@ export const OAuthManagementPage: React.FC = () => {
           }}
           layout={queryState.layout}
           onLayout={(layout) => setSearch({ layout })}
+          isSelecting={isSelecting}
+          onSelecting={() => {
+            if (isSelecting) clearSelection();
+            else setIsSelectMode(true);
+          }}
           refresh={{
             filtered: eligibleFilteredRefreshCount,
             page: pagedRecords.filter((record) => record.canRefreshQuota).length,
@@ -877,10 +892,7 @@ export const OAuthManagementPage: React.FC = () => {
             hiddenCount={hiddenSelectionCount}
             isMutating={actions.isOperating}
             onSelectPage={() => credentialActions.onSelect(selectablePage, true)}
-            onClearSelection={() => {
-              selectionAnchor.current = null;
-              setSelectedKeys([]);
-            }}
+            onClearSelection={clearSelection}
             onEnable={() => void actions.batchStatus(false, selectedRecords)}
             onDisable={() => void actions.batchStatus(true, selectedRecords)}
             onRefresh={() => void actions.batchRefresh(selectedRecords)}

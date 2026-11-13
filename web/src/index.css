@@ -86,6 +86,7 @@
   --inset-shadow-*: initial;
   --shadow-edge: var(--shadow-edge);
   --shadow-raised: var(--shadow-raised);
+  --shadow-selected: var(--shadow-selected);
   --shadow-float: var(--shadow-float);
   --shadow-overlay: var(--shadow-overlay);
   --shadow-control: var(--shadow-control);
@@ -120,23 +121,23 @@
   interpolate-size: allow-keywords;
   background: var(--bg);
   color: var(--fg);
-  --bg: #121214;
-  --surface: #1c1c1f;
+  --bg: #131314;
+  --surface: #1b1b1c;
   --bg-surface: var(--surface);
   /* The ground the navigation stands on, one step behind the content panel (`derivePalette`). */
   --canvas: #09090a;
   /* The floating-layer fill and the selected-row fill are set at runtime from the resolved palette;
      they are mirrored here so the first frame and the sign-in screen paint the same console the
      palette resolves to. */
-  --elevated: #222226;
-  --selected-inset: #2f2f38;
+  --elevated: #212123;
+  --selected-inset: #2e2e36;
   --font-mono: "Sarasa Mono SC", "OMC Noto Sans SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  --fg: #f4f4f6;
-  --fg-2: #a1a1aa;
-  --muted: #71717a;
-  --meta: #52525b;
-  --border: #2c2c30;
-  --border-soft: #212124;
+  --fg: #e3e3e4;
+  --fg-2: #a7a7ab;
+  --muted: #7b7b7f;
+  --meta: #56565a;
+  --border: #2b2b2d;
+  --border-soft: #212122;
   /* Accent ladder, hue 201. The link step is the bright one because it sits on the dark
      background (6.74:1); the two deeper steps are what white label text can sit on (4.69:1 resting,
      6.93:1 pressed). Both are measured against the *same* label, which is why the ladder solves them
@@ -169,7 +170,7 @@
      traffic and the lightest measured shade cannot be confused, and the busy stop is the theme
      accent. Everything between them is mixed in OKLCH by the browser, from a square root of the
      day's volume - see web/src/theme/heatmapRamp.ts for why that curve and not a linear one. */
-  --heatmap-quiet: #212124;
+  --heatmap-quiet: #212122;
   --heatmap-busy: #00a2fb;
   /* The comfortable cell, the space between cells, and the weekday gutter. The painted cell is
      not a token: the panel shows as many weeks as fit at the target and stretches them to its
@@ -183,15 +184,15 @@
   --heatmap-label: 20px;
   --heatmap-label-gap: 8px;
   /* The two zero states, as one ordered scale measured against the card. The panel is drawn on the
-     page's own ground (#121214), and both steps are a shade *lighter* than it, which is the
+     page's own ground (#131314), and both steps are a shade *lighter* than it, which is the
      direction GitHub's own graph uses on dark: the gaps then read as the darker card showing
      through instead of as a bright mesh drawn around every cell.
      The order is the meaning. An unrecorded day carries no information, so it is the closest to the
      card; a recorded-but-empty day is a measurement of zero, so it takes a step further; a measured
-     day is the only thing clearly louder than the card. Contrast against the card is 1.17, 1.35 and
-     up to 6.74 respectively, so the two zero states stay quiet and never compete with the ramp. */
-  --heatmap-zero-unrecorded: #212124;
-  --heatmap-zero-recorded: #2c2c30;
+     day is the only thing clearly louder than the card. Contrast against the card is 1.15, 1.31 and
+     up to 6.69 respectively, so the two zero states stay quiet and never compete with the ramp. */
+  --heatmap-zero-unrecorded: #212122;
+  --heatmap-zero-recorded: #2b2b2d;
   /* The link step of the accent ladder. The tooltip sits on the card's surface rather than the page,
      where the bright accent reads 6.12:1 - clear of AA, so the ladder's own link step is used. */
   --heatmap-tip-link: #00a2fb;
@@ -203,7 +204,7 @@
   --series-6: #14b8a6;
   /* The trend's plot floor and the ring's unfilled track: a quiet step against the card, so an empty
      stretch reads as the axis rather than as a gap in the data. */
-  --series-track: #2c2c30;
+  --series-track: #2b2b2d;
   /* Reasoning-effort scale: one cool sweep from a quiet teal to a saturated pink,
      lowest reasoning step first. It stays clear of status and timing hues;
      each step is lightened until 10px badge text clears 4.5:1 on the badge's own tint. */
@@ -274,9 +275,9 @@
      palette's edges stand the same perceptual step off its page, and the drops are cast in the
      palette's own `--shade` ink; the values here are OMC Dark's and OMC Light's, for the first
      frame. Dark pages need deeper drops to read at all, so each mode carries its own stack. */
-  --edge-share: 8.5%;
-  --lift-share: 11.5%;
-  --fine-share: 5.5%;
+  --edge-share: 9%;
+  --lift-share: 12.5%;
+  --fine-share: 6%;
   --shade: #000000;
   --edge-ring: color-mix(in srgb, var(--fg) var(--edge-share), transparent);
   --lift-ring: color-mix(in srgb, var(--fg) var(--lift-share), transparent);
@@ -303,8 +304,27 @@
     inset 0 1px 0 color-mix(in srgb, var(--fg) 6%, transparent),
     0 1px 2px color-mix(in srgb, var(--shade) 30%, transparent);
   --well-drop: inset 0 1px 2px color-mix(in srgb, var(--shade) 28%, transparent);
-  /* A state that colours an edge - selected, invalid, a drop target - swaps the ring and keeps
-     the drop: `box-shadow: 0 0 0 1px var(--accent), var(--edge-drop)`. */
+  /* A chosen thing is picked up, never outlined: it rests at the raised step, its face takes one tone
+     toward the light (`--select-surface`), and its edge catches that light at half again the lift
+     ring, so a selected card reads as the one surface standing slightly forward rather than as a
+     card with a line drawn round it. It stays within one step of its neighbours, so a strip of
+     cards keeps lying on the page. The accent ring stays for keyboard focus alone; a semantic
+     state (invalid, warning) colours the ring in its tone and keeps the drop. */
+  --select-ring: color-mix(in srgb, var(--fg) calc(var(--lift-share) * 1.5), transparent);
+  --select-halo: color-mix(in srgb, var(--fg) 6%, transparent);
+  --select-surface: var(--elevated);
+  --select-drop: var(--raised-drop);
+  --shadow-selected: 0 0 0 1px var(--select-ring), var(--select-drop);
+  /* The hand presses a choosable card in by a hair and the choice settles into place on ease-out:
+     felt under the pointer, not watched. Reduced motion zeroes every duration. */
+  --press-scale: 0.99;
+  --select-transition:
+    box-shadow var(--motion-base) var(--ease-out),
+    background-color var(--motion-base) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+  /* A list's selection column opens and closes rather than appearing: its track widens on this
+     motion while the columns after it glide over, and its checkboxes grow in with it. */
+  --select-reveal: var(--motion-slow) var(--ease-out);
   --shadow-edge: 0 0 0 1px var(--edge-ring), var(--edge-drop);
   --shadow-raised: 0 0 0 1px var(--lift-ring), var(--raised-drop);
   --shadow-float: 0 0 0 1px var(--lift-ring), var(--float-drop);
@@ -312,13 +332,13 @@
   --shadow-control: 0 0 0 1px var(--fine-ring), var(--control-drop);
   --shadow-well: inset 0 0 0 1px var(--fine-ring), var(--well-drop);
   --shadow-field-hover: inset 0 0 0 1px var(--lift-ring), var(--well-drop);
-  --shadow-field-focus: inset 0 0 0 1px var(--accent), 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+  --shadow-field-focus: inset 0 0 0 1px var(--select-ring), 0 0 0 3px var(--select-halo);
   --shadow-field-invalid: inset 0 0 0 1px var(--danger), var(--well-drop);
   --shadow-field-invalid-focus: inset 0 0 0 1px var(--danger), 0 0 0 2px color-mix(in srgb, var(--danger) 16%, transparent);
   --shadow-focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   --tooltip-bg: var(--surface);
   --tooltip-fg: var(--fg);
-  --thumb-bg: #414146;
+  --thumb-bg: #3f3f42;
   --overlay-mask: rgb(0 0 0 / 0.5);
   --thread-field: color-mix(in srgb, var(--fg) 5%, transparent);
   --thread-field-hover: color-mix(in srgb, var(--fg) 8%, transparent);
@@ -328,7 +348,7 @@
      modes disagree and the components should not have to know. */
   --hover-inset: var(--bg);
   /* The hover fill for a row or a quiet control that sits on the page or a card. */
-  --hover: #272729;
+  --hover: #272728;
   /* `fast`, `base` and `slow` are the numbers Ant Design's
      own motion tokens carry in `themeConfig.ts` (`motionDurationFast`, `Mid` and `Slow`), and
      `test-theme-presets` pins them together, so a call site and a component library cannot pay
@@ -349,9 +369,10 @@
      the reader sees the result arrive rather than watching it travel. */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   /* A settle the operator's own hand started - a dragged card landing - overshoots a little and
-     comes to rest. Only hand-driven moves use it; reduced motion zeroes it with every transition. */
-  --motion-spring: 360ms;
-  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+     comes to rest. Only hand-driven moves use it; reduced motion zeroes it with every transition.
+     The overshoot is a nudge (about 4% of the travel), felt rather than watched. */
+  --motion-spring: 320ms;
+  --ease-spring: cubic-bezier(0.3, 1.2, 0.6, 1);
   /* A side sheet arrives on a spring launched at speed - the kind of motion its dragged edge
      settles with - baked into `linear()`: it is moving from the first frame and eases to rest with
      no overshoot. It leaves on a curve gentle at both ends, so it neither jerks away nor slams off. */
@@ -373,15 +394,15 @@
 
 :root[data-theme-mode='light'] {
   color-scheme: light;
-  --bg: #ffffff;
-  --surface: #f1f1f3;
-  --canvas: #f5f5f5;
-  --elevated: #ffffff;
-  --selected-inset: #eaedef;
-  --edge-share: 8.5%;
-  --lift-share: 11%;
-  --fine-share: 7.5%;
-  --shade: #0d0d0e;
+  --bg: #f7f7f8;
+  --surface: #f0f0f2;
+  --canvas: #ededee;
+  --elevated: #fefefe;
+  --selected-inset: #e6e6ea;
+  --edge-share: 9%;
+  --lift-share: 11.5%;
+  --fine-share: 8%;
+  --shade: #0e0e0f;
   /* A light page shows a shadow well, so its ring is lighter and each drop is two layers: a tight
      contact shadow where the surface meets the page and a wide ambient one, spread inward so it
      pools under the surface rather than haloing it. Low alphas stacked read as soft light; one
@@ -406,57 +427,63 @@
     0 1px 1px color-mix(in srgb, var(--shade) 5%, transparent),
     0 1px 3px color-mix(in srgb, var(--shade) 4%, transparent);
   --well-drop: inset 0 1px 2px color-mix(in srgb, var(--shade) 5%, transparent);
+  /* A light face cannot step toward the light, so a chosen card says it by its shadow: the raised
+     drop with a firmer contact line, not a deeper pool. */
+  --select-drop:
+    0 1px 2px color-mix(in srgb, var(--shade) 8%, transparent),
+    0 4px 10px -3px color-mix(in srgb, var(--shade) 8%, transparent),
+    0 12px 24px -12px color-mix(in srgb, var(--shade) 12%, transparent);
   --overlay-mask: rgb(20 20 30 / 0.12);
   --tooltip-bg: var(--fg);
   --tooltip-fg: var(--bg);
-  --thumb-bg: #ffffff;
-  --fg: #1c1c1e;
-  --fg-2: #505055;
-  --muted: #787880;
-  --meta: #98989f;
+  --thumb-bg: #fefefe;
+  --fg: #1e1e20;
+  --fg-2: #525255;
+  --muted: #78787c;
+  --meta: #9b9b9e;
   /* The same hue a step darker, because the bright accent cannot be legible on a light page: it
      reads 2.71:1 there, while this reads 6.57:1 as a link and 7.09:1 under white text. The dark
      theme's link step is therefore this theme's filled-control step. */
-  --primary: #005d8f;
-  --primary-hover: #004a73;
-  --primary-active: #023b5d;
+  --primary: #1c6ba3;
+  --primary-hover: #175e90;
+  --primary-active: #13517d;
   --primary-on: #ffffff;
-  --accent: #005d8f;
-  --accent-hover: #004a73;
-  --accent-active: #023b5d;
+  --accent: #1c6ba3;
+  --accent-hover: #015589;
+  --accent-active: #02456f;
   --accent-on: #ffffff;
-  --border: #dcdce1;
-  --border-soft: #ebebee;
-  --hover-inset: #f2f2f2;
-  --hover: #f3f3f3;
+  --border: #dcdcde;
+  --border-soft: #e3e3e5;
+  --hover-inset: #ebebec;
+  --hover: #ececed;
   --success: #059669;
   --warn: #b45309;
   --danger: #dc2626;
-  --timing-green: #027954;
-  --timing-orange: #9d3000;
+  --timing-green: #057451;
+  --timing-orange: #952e02;
   /* The same two hues read as their darker steps on a light page; a saturated
      yellow cannot also be legible there, so the low end is ochre. */
   --cache-rate-yellow: #b45309;
   --cache-rate-green: #059669;
   /* The same ramp read on a light page: the quiet stop is this theme's empty fill and the busy stop
      is the accent step that stays legible on it. */
-  --heatmap-quiet: #ebebee;
-  --heatmap-busy: #005d8f;
+  --heatmap-quiet: #e3e3e5;
+  --heatmap-busy: #1c6ba3;
   /* On a light page the card sits on the white ground and the ramp runs the other way: both zero
      steps are a shade *darker* than it, which is GitHub's light-theme direction. Same order, same
      meaning - unrecorded 1.19, empty 1.37, measured up to 7.09 against the card. */
-  --heatmap-zero-unrecorded: #ebebee;
-  --heatmap-zero-recorded: #dcdce1;
+  --heatmap-zero-unrecorded: #e3e3e5;
+  --heatmap-zero-recorded: #dcdcde;
   /* The link step of the accent ladder for this theme; the tooltip is on the card's surface rather
      than the page, and this is the step that clears 4.5:1 there. */
-  --heatmap-tip-link: #005d8f;
+  --heatmap-tip-link: #1c6ba3;
   --series-1: #3d63cf;
   --series-2: #059669;
   --series-3: #6d47d9;
   --series-4: #e11d48;
   --series-5: #b45309;
   --series-6: #0d8a7e;
-  --series-track: #dcdce1;
+  --series-track: #dcdcde;
   /* The same sweep as its darker steps, which is what stays legible on a light page. */
   --effort-1: #39626e;
   --effort-2: #00686c;
@@ -593,12 +620,28 @@
   transition: transform var(--motion-spring) var(--ease-spring), opacity var(--motion-fast) var(--ease-standard);
 }
 :root:not([data-reduced-motion='true']) .omc-mark-pop:is([data-starting-style], [data-ending-style]) {
-  transform: scale(0.4);
+  transform: scale(0.6);
   opacity: 0;
 }
 :root:not([data-reduced-motion='true']) .omc-mark-pop[data-ending-style] {
   transition-duration: var(--motion-fast);
   transition-timing-function: var(--ease-standard);
+}
+/* A selection checkbox in a column that opens and closes: it stays mounted so the column can
+   close around it, grows in as the column opens and fades out first as it closes, and leaves the
+   focus order and the accessibility tree once it is hidden. */
+.select-reveal {
+  transition: opacity var(--select-reveal), transform var(--select-reveal), visibility 0s;
+}
+.select-reveal[data-hidden] {
+  opacity: 0;
+  transform: scale(0.6);
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard),
+    visibility 0s linear var(--motion-fast);
 }
 /* A disclosure panel folds open from nothing to its content's height and back. */
 :root:not([data-reduced-motion='true']) .omc-fold-panel {
@@ -912,13 +955,15 @@ h1, h2, h3, h4 { font-family: inherit; }
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 1px 6px;
+  height: 18px;
+  padding: 0 6px;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--notice-tone) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--notice-tone) 10%, transparent);
   color: var(--notice-tone);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  line-height: 18px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1;
   white-space: nowrap;
 }
 .omc-notice-icon { display: inline-flex; font-size: var(--text-sm); }
@@ -1280,52 +1325,70 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 }
 .toolbar-end { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-inline-start: auto; }
 
-/* SelectionBar (components/common/SelectionBar.tsx): the count and the controls that change the
-   selection lead, the actions on the selected rows trail. Link buttons lose their inline padding so
+/* SelectionBar (components/common/SelectionBar.tsx): an elevated slab docked over the foot of the
+   list it acts on, so it arrives without moving a row. The count and the controls that change the
+   selection lead, the actions on the selected rows trail; link buttons lose their inline padding so
    the bar's gap is the only spacing between them. */
 .selection-bar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  gap: 4px 12px;
-  min-height: 40px;
-  padding: 4px 16px;
-  background: var(--surface);
+  gap: 12px 20px;
+  min-height: 46px;
+  /* The trailing buttons sit 6px inside the slab's corner, concentric with it (6 + 6 = 12). */
+  padding: 6px 6px 6px 16px;
+  border-radius: var(--radius-xl);
+  background: var(--elevated);
+  box-shadow: var(--shadow-float);
   font-size: var(--text-sm);
+  animation: selection-dock-in var(--motion-base) var(--ease-out) backwards;
 }
-.selection-bar.is-framed {
-  margin-bottom: 16px;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-lg);
-}
-.selection-bar.is-inline { border-bottom: 1px solid var(--border); }
 .selection-bar-start,
-.selection-bar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; }
-.selection-bar-actions { gap: 8px; margin-inline-start: auto; }
-.selection-bar-count { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.selection-bar-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 14px; min-width: 0; }
+.selection-bar-actions {
+  gap: 8px;
+  margin-inline-start: auto;
+  padding-inline-start: 16px;
+  border-inline-start: 1px solid var(--border-soft);
+}
+@keyframes selection-dock-in {
+  from { opacity: 0; transform: translateY(8px); }
+}
+/* Where one line cannot hold both halves, the actions take a line of their own under the count. */
+@media (max-width: 900px) {
+  .selection-bar,
+  .selection-bar-start { flex-wrap: wrap; }
+  .selection-bar-actions { padding-inline-start: 0; border-inline-start: 0; }
+}
+.selection-bar-count { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .selection-bar-note { color: var(--muted); }
 .selection-bar-start [data-slot="button"][data-variant="link"] { padding-inline: 0; }
 
-/* Tag (components/common/Tag.tsx): a short label on a soft fill with no edge. A row carries
-   several facts, and an outline around each made the row a strip of boxes; a wash keeps each one
-   legible as a unit while the row reads as one line. The tone sets one custom property and the ink
-   and tint are mixed from it, so a caller that brings its own colour (a provider family's brand)
-   sets the same properties and nothing else. The edge is kept, transparent, so a tag's box does not
-   change size against an outlined control beside it. */
+/* Tag (components/common/Tag.tsx): a short label on a soft fill. A row carries several facts, and a
+   neutral outline around each made the row a strip of boxes; a wash keeps each one legible as a
+   unit while the row reads as one line. The fill's own edge is a ring of the same tone a step
+   stronger, drawn inside, so the chip has a crisp material rim without a second colour. The tone
+   sets one custom property and the ink, tint and rim are mixed from it, so a caller that brings its
+   own colour (a provider family's brand) sets the same property and nothing else. Every chip in
+   the console - labels, counts, value chips - shares the two geometries here: 22px (or 18px
+   small), 7px (6px) inline padding, the `sm` corner and the medium weight. */
 .tag {
   --tag-tone: var(--fg-2);
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  box-sizing: border-box;
   height: 22px;
   padding: 0 7px;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--fg) 6%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tag-tone) 10%, transparent);
   color: var(--tag-tone);
   font-family: inherit;
   font-size: var(--text-sm);
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -1334,7 +1397,6 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 .tag.is-small {
   height: 18px;
   padding: 0 6px;
-  border-radius: var(--radius-sm);
   font-size: var(--text-xs);
 }
 .tag.is-success { --tag-tone: var(--success); }
@@ -1347,14 +1409,14 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 .tag-icon { display: inline-flex; font-size: var(--text-sm); }
 .tag.is-toggle {
   cursor: pointer;
-  border-color: transparent;
   background: transparent;
+  box-shadow: none;
   color: var(--muted);
   transition: color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
 }
 .tag.is-toggle:hover { color: var(--fg); }
 .tag.is-toggle:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); }
-.tag.is-toggle[aria-pressed="true"] { background: color-mix(in srgb, var(--fg) 8%, transparent); color: var(--fg); }
+.tag.is-toggle[aria-pressed="true"] { background: color-mix(in srgb, var(--fg) 8%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); }
 
 /* SearchInput (components/common/SearchInput.tsx): the glyph is chrome, so it takes the muted ink
    on every surface the field appears on. */
@@ -1456,23 +1518,14 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
   [data-slot="panel-body"] { padding: 16px; }
 }
 
-/* A row's action cluster: square 28px icon buttons, 8px apart so the touch rules' 4px hit insets
-   meet rather than overlap. At rest an action is its glyph alone, and the pointer brings up a soft
-   fill under it. A destructive action shows its colour only on hover. */
+/* A row's action cluster: square 28px ghost icon buttons, 8px apart so the touch rules' 4px hit
+   insets meet rather than overlap. At rest an action is its glyph alone in the hint ink, and the
+   pointer brings up a soft fill under it. A destructive action shows its colour only on hover. */
 .row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-[data-slot="button"].row-action-btn {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  padding: 0;
-  border-color: transparent !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  color: var(--muted) !important;
-}
-[data-slot="button"].row-action-btn:not(:disabled):hover { background: color-mix(in srgb, var(--fg) 7%, transparent) !important; color: var(--fg) !important; }
-[data-slot="button"][data-danger].row-action-btn:not(:disabled):hover { background: color-mix(in srgb, var(--danger) 12%, transparent) !important; color: var(--danger) !important; }
-[data-slot="button"].row-action-btn:disabled { color: var(--meta) !important; opacity: .6; }
+[data-slot="button"].row-action-btn { width: 28px; min-width: 28px; height: 28px; padding: 0; color: var(--muted); }
+[data-slot="button"].row-action-btn:not(:disabled):hover { background: color-mix(in srgb, var(--fg) 7%, transparent); color: var(--fg); }
+[data-slot="button"][data-danger].row-action-btn:not(:disabled):hover { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+[data-slot="button"].row-action-btn:disabled { color: var(--meta); opacity: .6; }
 .terminal-title { margin: 4px 0 0; font-size: var(--text-xl); font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; }
 .terminal-panel {
   border: 0;
@@ -1646,7 +1699,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   opacity: 0;
   pointer-events: none;
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  /* The current page is a tile of the page's own material lifted off the canvas: the rail
+     points at the panel by drawing a small piece of it, where a darker wash would read as one
+     more hover. */
+  background: var(--bg);
+  box-shadow: var(--shadow-control);
   transition: transform var(--motion-slow) var(--ease-out), height var(--motion-slow) var(--ease-out), opacity var(--motion-base) var(--ease-standard);
 }
 .app-menu-item-selected,
@@ -1695,9 +1752,9 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .app-header-actions { gap: 6px; flex-shrink: 0; }
 .app-header-left > [data-slot="button"] { flex-shrink: 0; }
 .app-breadcrumb { min-width: 0; font-size: var(--text-sm); white-space: nowrap; }
-.app-breadcrumb-list { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.app-breadcrumb-list { display: flex; align-items: center; gap: 4px; margin: 0; padding: 0; list-style: none; min-width: 0; }
 .app-breadcrumb-group { color: var(--muted); flex: none; }
-.app-breadcrumb-sep { color: var(--meta); flex: none; user-select: none; }
+.app-breadcrumb-sep { display: inline-flex; color: var(--meta); flex: none; font-size: var(--text-xs); user-select: none; }
 .app-breadcrumb-item { min-width: 0; }
 .app-breadcrumb-current { display: block; overflow: hidden; text-overflow: ellipsis; color: var(--fg); font-weight: 500; }
 /* Neutral, not amber: amber is the console's warning hue, and this star is a count. */
@@ -1707,7 +1764,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 /* The demonstration's marker. It borrows the credential card's own badge language -
    accent text on the surface with a border edge - rather than introducing a hue, so it
    reads as one more label in the shell instead of as an alert. */
-.demo-chip { border: 0; display: inline-flex; align-items: center; height: 20px; padding: 0 6px;  border-radius: var(--radius-sm); background: var(--surface); color: var(--accent); font-size: var(--text-2xs); font-weight: 600; letter-spacing: 0.06em; }
+.demo-chip { border: 0; display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); font-size: var(--text-xs); font-weight: 500; }
 /* The page's one scroller is also its content's containing block. An absolutely positioned element
    with no positioned ancestor - a visually hidden label - would otherwise escape this clip and lengthen
    the document, which the shell's `overflow: hidden` stops the reader scrolling but not a script: a
@@ -1730,6 +1787,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    and nav - and uses the rail's rules. All this adds is what a full-height overlay
    needs and a rail does not: the notch inset, and a scroll region that cannot drag the
    sheet itself. The left-drawer edge rule comes from the shared drawer treatment. */
+/* The sheet takes the rail's canvas, so the selected tile is lifted off the same ground. */
+.mobile-nav-drawer { background: var(--canvas); }
 .mobile-nav-drawer [data-slot='sheet-body'] {
   padding: 0;
   padding-left: env(safe-area-inset-left);
@@ -1900,13 +1959,27 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    stays on compositor-only properties (opacity, transform), never animates
    layout, and never covers more area than it has to: the terminal look should
    feel immediate and hand-following, not decorated. */
-.route-transition {
-  /* A route change uses `base`, not the shorter acknowledgement for controls.
-     Keeping the named token preserves that distinction when durations change.
-     `backwards`, not `both`: the end state is the element's own style, and a transform animation
-     still filling after it ends makes the page the containing block of every fixed descendant,
-     which drew the routing board's drag overlay offset by the sidebar and header. */
-  animation: route-enter var(--motion-base) var(--ease-standard) backwards;
+/* A page settles in on `base` and `ease-out`, and so does whatever replaces its placeholders: the
+   lazy route's frame hands over to the page, and a page's own first-load blocks hand over to its
+   rows, each as one short settle rather than a swap. The page frame (`.terminal-page`) rises the
+   few pixels; a list or table that arrives inside a page that is already standing only fades, so
+   the two never compound into a visible drift. A workspace route has no page frame, so its route
+   wrapper carries the settle instead.
+   `backwards`, not `both`: the end state is the element's own style, and a transform animation
+   still filling after it ends makes the page the containing block of every fixed descendant,
+   which drew the routing board's drag overlay offset by the sidebar and header. */
+.route-transition.workspace-route,
+.terminal-page {
+  animation: route-enter var(--motion-base) var(--ease-out) backwards;
+}
+.data-table,
+.responsive-list {
+  animation: content-arrive var(--motion-base) var(--ease-out) backwards;
+}
+/* A placeholder waits a beat before it shows, so a load that answers within it goes straight from
+   the previous view to the content without a skeleton flashing between them. */
+.loading-region[aria-busy='true'] {
+  animation: content-arrive var(--motion-fast) var(--ease-out) 120ms backwards;
 }
 /* Held for the two frames a palette change takes to paint (ThemeContext): the console lands in
    the new palette at once instead of every surface easing its colours in a frame-dropping burst. */
@@ -1938,8 +2011,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   from { opacity: 0; transform: scale(0.985); }
 }
 @keyframes route-enter {
-  from { opacity: 0; transform: translateY(3px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
+}
+@keyframes content-arrive {
+  from { opacity: 0; }
 }
 /* ── loading: rough progress plus independent waiting activity ────────────
    Task counts and capped pending credit drive the fill, not a measurable remaining duration.
@@ -2127,7 +2203,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
     animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
   }
-  .route-transition { animation: none; }
+  .route-transition, .terminal-page, .data-table, .responsive-list, .loading-region, .selection-bar { animation: none; }
   &::view-transition-old(root),
   &::view-transition-new(root) { animation: none; }
   /* Rough progress updates on task events only; waiting activity and the completion fade are removed. */
@@ -2429,6 +2505,16 @@ input:focus-visible, textarea:focus-visible { outline: none; }
     width: 100%;
     max-width: 100%;
   }
+  /* A lone switch is narrow enough to stay beside its name at any width, where a phone reader
+     expects it; dropped under the description it read as a second, unlabelled control. */
+  .settings-toggle-row:has(> .settings-toggle-control > [role='switch']:only-child) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+  .settings-toggle-row:has(> .settings-toggle-control > [role='switch']:only-child) > .settings-toggle-control {
+    width: auto;
+    padding-top: 2px;
+  }
 }
 
 .config-page.has-dirty-bar {
@@ -2495,7 +2581,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   color: var(--fg);
   text-align: left;
   cursor: pointer;
-  transition: box-shadow var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
+  transition: var(--select-transition);
+}
+
+.theme-preset-card:active {
+  transform: scale(var(--press-scale));
 }
 
 .theme-preset-card:hover {
@@ -2504,8 +2594,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 
 .theme-preset-card.is-active {
-  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
-  background: var(--selected-inset);
+  box-shadow: var(--shadow-selected);
+  background: var(--select-surface);
 }
 
 .theme-preset-card:focus-visible {
@@ -2533,8 +2623,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   height: 34px;
 }
 
-/* A flag is drawn at a fixed size so a language switch cannot resize the control it
-   sits in. The hairline border is the same one the swatches wear: several flags carry
+/* A currency's flag is drawn at a fixed size so a change of currency cannot resize the control
+   it sits in. The hairline border is the same one the swatches wear: several flags carry
    a white field, which would otherwise dissolve into a light theme's surface. */
 .country-flag {
   display: inline-block;
@@ -2551,12 +2641,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.language-menu-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
 }
 
 /* Both language codes occupy the same slot, so the trigger keeps one width in every
@@ -2708,24 +2792,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
     touch-action: manipulation;
   }
 
-  /* iOS Safari zooms the whole page when a focused field is under 16px, and the design
-     system's base size is 14px, so every text control in the console triggered it. The
-     zoom is the browser's fix for an unreadable field - the field is what should change,
-     not the page's scale. This is also the rule that covers Monaco's hidden textarea,
-     which is an `input`-like element the editor library owns.
-
-     `!important` is deliberate here and is not a shortcut. antd injects its component styles
-     into the document at runtime, after this stylesheet, so an equal-specificity rule from
-     here loses on source order; and the console's own field wrappers
-     (`.settings-field-control`, `.settings-number-control`) raise specificity above it again.
-     Enumerating those wrappers would mean this floor silently stops applying the next time a
-     field gains one, which is the defect it exists to prevent. It is a device-level floor,
-     so it is meant to outrank the component layer. */
-  textarea,
-  input {
-    font-size: var(--text-lg) !important;
-  }
-
   /* Expand touch hit targets on icon-sized controls without inflating layout geometry. */
   [data-slot="button"][data-icon-only],
   [data-slot="input-clear"] {
@@ -2736,6 +2802,17 @@ input:focus-visible, textarea:focus-visible { outline: none; }
     content: '';
     position: absolute;
     inset: -4px;
+  }
+  /* A picker trigger keeps its 32px (28px small) face; the hand gets a taller target around it. */
+  [data-slot="select-trigger"],
+  [data-slot="combobox-trigger"] {
+    position: relative;
+  }
+  [data-slot="select-trigger"]::before,
+  [data-slot="combobox-trigger"]::before {
+    content: '';
+    position: absolute;
+    inset: -4px 0;
   }
 }
 

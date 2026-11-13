@@ -194,9 +194,6 @@ export function CredentialName({ record, facts, isRenaming, onRename, onRenamed,
   ) : null;
   return (
     <div className={clsx(styles.name, size === 'large' && styles['name-large'], facts.canRename && inlineNameEditableClass)}>
-      {facts.canRename && !isRenaming && (
-        <RenameButton label={file.name} disabled={facts.isBusy} onClick={onRename} data-testid="oauth-credential-rename" />
-      )}
       <div className={styles['name-line']}>
         {isRenaming ? (
           <InlineNameEditor
@@ -228,6 +225,10 @@ export function CredentialName({ record, facts, isRenaming, onRename, onRenamed,
             </span>
           </Tooltip>
         )}
+        {/* Last on the line: hidden, it holds its width after everything the line already shows. */}
+        {facts.canRename && !isRenaming && (
+          <RenameButton label={file.name} disabled={facts.isBusy} onClick={onRename} data-testid="oauth-credential-rename" />
+        )}
       </div>
       {facts.displayName && accountToggle && <div className={styles['account-line']}>{accountToggle}</div>}
     </div>
@@ -253,7 +254,7 @@ export function CredentialTraits({ record, facts, actions }: { record: OAuthWork
         <Tooltip title={t('omc.quota_credit_available_hint')}>
           <button
             type="button"
-            className={styles.credits}
+            className={clsx('tag is-small is-accent', styles.credits)}
             data-quota-credits={facts.credits}
             onClick={(event) => {
               event.stopPropagation();
@@ -283,20 +284,24 @@ const SIWC_STATE_GLYPHS: Record<SIWCBadgeState, React.ReactNode> = {
  * is itself the way to it. Renewal retries and a failed refresh sit beside it; SIWC, when the
  * provider offers it, follows as a quiet line that opens its settings.
  */
-export function CredentialState({ record, facts, actions, nowMS, hasSIWC = true }: {
+export function CredentialState({ record, facts, actions, nowMS, hasSIWC = true, isQuiet = false }: {
   record: OAuthWorkspaceRecord;
   facts: CredentialFacts;
   actions: CredentialActions;
   nowMS: number;
   hasSIWC?: boolean;
+  /** Says only what needs the operator: a Normal state and a settled SIWC binding go unsaid. */
+  isQuiet?: boolean;
 }) {
   const t = useT();
   const { file, quota } = record;
   const { status, explanation, failure, siwc } = facts;
+  const hasStatus = !isQuiet || status.tone !== 'success' || Boolean(explanation);
+  const hasSIWCLine = hasSIWC && siwc && (!isQuiet || siwc === 'rebind' || siwc === 'pending');
   return (
     <div className={styles.state} data-testid="oauth-credential-status" data-credential-renewal>
       <div className={styles['state-main']}>
-        <Tooltip card={{
+        {hasStatus && <Tooltip card={{
           heading: status.needsReauth ? t('omc.reauthenticate') : undefined,
           rows: [
             { label: t('recovery.renewal'), value: t(renewalLabel(file)) },
@@ -324,13 +329,13 @@ export function CredentialState({ record, facts, actions, nowMS, hasSIWC = true 
           ) : (
             <StatusLabel tone={status.tone} tabIndex={0} data-status-explained={explanation ? 'true' : undefined}>{t(status.labelKey)}</StatusLabel>
           )}
-        </Tooltip>
+        </Tooltip>}
         <CredentialRenewalBadge file={file} onOpen={() => actions.onOpen(record, 'renewal')} />
         {failure && !status.needsReauth && (
           <span className={styles.failed} data-tip={failure} data-quota-failure-line="failed">{t('omc.status_refresh_failed')}</span>
         )}
       </div>
-      {hasSIWC && siwc && (
+      {hasSIWCLine && (
         <button
           type="button"
           className={clsx(styles.siwc, styles[`siwc-${siwc}`])}
@@ -439,18 +444,22 @@ export function RefreshQuotaButton({ record, facts, actions }: { record: OAuthWo
 }
 
 type ActionKey =
-  | 'details' | 'select' | 'edit' | 'models' | 'model-rules' | 'rename' | 'reauth' | 'clear-cooldown' | 'redeem' | 'siwc' | 'download' | 'delete';
+  | 'details' | 'refresh' | 'select' | 'edit' | 'models' | 'model-rules' | 'rename' | 'reauth' | 'clear-cooldown' | 'redeem' | 'siwc' | 'download' | 'delete';
 
 /**
  * Every action one credential can take, in one order, behind a row's or card's ellipsis. What
  * cannot be done now is offered disabled rather than hidden, so the menu does not change shape
  * between credentials.
  */
-function actionList(record: OAuthWorkspaceRecord, facts: CredentialFacts, t: TFunc) {
+function actionList(record: OAuthWorkspaceRecord, facts: CredentialFacts, t: TFunc, hasRefresh: boolean) {
   const { file } = record;
   const canFile = record.canSelectForFileBatch;
   return [
     { key: 'details' as const, icon: <ProfileOutlined />, label: t('common.details'), disabled: facts.isBusy },
+    {
+      key: 'refresh' as const, icon: <SyncOutlined />, label: t('quota.btn_refresh_quota'),
+      disabled: facts.isBusy || facts.isRefreshing, hidden: !hasRefresh || !record.canRefreshQuota,
+    },
     { key: 'select' as const, icon: <CheckSquareOutlined />, label: t('omc.fleet_action_select'), disabled: facts.isBusy || !canFile },
     { key: 'edit' as const, icon: <EditOutlined />, label: t('omc.fleet_action_configure'), disabled: facts.isBusy || !canFile },
     { key: 'models' as const, icon: <AppstoreOutlined />, label: t('af.models_btn'), disabled: facts.isBusy || file.runtime_only },
@@ -471,6 +480,7 @@ function useRunAction(record: OAuthWorkspaceRecord, actions: CredentialActions, 
   return (key: ActionKey) => {
     switch (key) {
       case 'details': actions.onOpen(record, 'overview'); break;
+      case 'refresh': actions.onRefreshQuota(record); break;
       case 'select': actions.onSelect([record], true); break;
       case 'edit': actions.onOpen(record, 'configuration'); break;
       case 'models': actions.onOpen(record, 'models'); break;
@@ -495,15 +505,17 @@ function useRunAction(record: OAuthWorkspaceRecord, actions: CredentialActions, 
   };
 }
 
-export function CredentialMenu({ record, facts, actions, onRename }: {
+export function CredentialMenu({ record, facts, actions, onRename, hasRefresh = false }: {
   record: OAuthWorkspaceRecord;
   facts: CredentialFacts;
   actions: CredentialActions;
   onRename: () => void;
+  /** Offers the quota refresh, for a row that has no refresh glyph of its own. */
+  hasRefresh?: boolean;
 }) {
   const t = useT();
   const run = useRunAction(record, actions, onRename);
-  const list = actionList(record, facts, t);
+  const list = actionList(record, facts, t, hasRefresh);
   const [isOpen, setIsOpen] = React.useState(false);
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>

@@ -37,13 +37,16 @@
   background: var(--surface);
   cursor: pointer;
   user-select: none;
-  transition: box-shadow var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
+  transition: var(--select-transition);
+}
+
+.tile:active {
+  transform: scale(var(--press-scale));
 }
 
 .tile[aria-pressed="true"] {
-  border-width: 2px;
-  box-shadow: 0 0 0 1px var(--accent), var(--edge-drop);
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  box-shadow: var(--shadow-selected);
+  background: var(--select-surface);
 }
 
 /* Holds the glyph's box until the tile scrolls into view and the icon is requested. */

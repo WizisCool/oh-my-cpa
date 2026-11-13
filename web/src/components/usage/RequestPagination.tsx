@@ -28,6 +28,9 @@ interface RequestPaginationProps {
   onPageSizeChange: (limit: number) => void;
   onPrev: () => void;
   onNext: () => void;
+  /** Floats over the list's foot (the selection bar). Hung from this footer, it rides the header
+   *  fold with it instead of the stream's offset, so it always stands just above the footer. */
+  dock?: React.ReactNode;
 }
 
 /**
@@ -54,12 +57,14 @@ export const RequestPagination = React.memo(function RequestPagination({
   onPageSizeChange,
   onPrev,
   onNext,
+  dock,
 }: RequestPaginationProps) {
   const t = useT();
 
   return (
 
         <footer className="request-pagination">
+          {dock && <div className="request-selection-dock">{dock}</div>}
           <span aria-live="polite">
             <MetaLine>
               {stale

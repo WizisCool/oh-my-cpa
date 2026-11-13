@@ -65,13 +65,13 @@ function SelectTrigger({
       className={cn(
         'group/select inline-flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-md border-0 text-base text-foreground outline-none transition-[background-color,box-shadow,color] select-none',
         variant === 'borderless'
-          ? 'bg-transparent shadow-none hover:enabled:bg-hover-inset focus-visible:shadow-field-focus'
-          : 'bg-field shadow-well hover:enabled:not-data-[popup-open]:bg-field-hover hover:enabled:not-data-[popup-open]:shadow-field-hover focus-visible:shadow-field-focus data-[popup-open]:shadow-field-focus',
+          ? 'bg-transparent shadow-none hover:enabled:bg-hover-inset focus-visible:not-data-[popup-open]:shadow-focus focus-visible:data-[popup-open]:shadow-field-focus'
+          : 'bg-field shadow-well hover:enabled:not-data-[popup-open]:bg-field-hover hover:enabled:not-data-[popup-open]:shadow-field-hover focus-visible:not-data-[popup-open]:shadow-focus data-[popup-open]:shadow-field-focus',
         'disabled:cursor-not-allowed disabled:opacity-50',
         status === 'error' && 'shadow-field-invalid focus-visible:shadow-field-invalid-focus data-[popup-open]:shadow-field-invalid-focus',
         status === 'warning' && 'shadow-[inset_0_0_0_1px_var(--warn)]',
-        size === 'sm' && 'h-7 pl-2.5 pr-2 text-md [@media(pointer:coarse)]:min-h-9',
-        size === 'default' && 'h-8 pl-3 pr-2.5 text-base [@media(pointer:coarse)]:min-h-10',
+        size === 'sm' && 'h-7 pl-2.5 pr-2 text-md',
+        size === 'default' && 'h-8 pl-3 pr-2.5 text-base',
         size === 'lg' && 'h-10 pl-3.5 pr-3 text-base',
         className,
       )}

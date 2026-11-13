@@ -8,8 +8,8 @@
          canvas is a bright flash in a dark console. The two values are the shipped palettes' page
          ground (`theme/palette.ts`); `web/tests/logic/theme-boot.test.ts` holds them to it. -->
     <style>
-      html { background-color: #121214; color-scheme: dark; }
-      html[data-theme-mode='light'] { background-color: #ffffff; color-scheme: light; }
+      html { background-color: #131314; color-scheme: dark; }
+      html[data-theme-mode='light'] { background-color: #f7f7f8; color-scheme: light; }
     </style>
     <!-- The mode this browser last chose, read while the document parses, so the stylesheet's light
          block applies on its first paint rather than after the bundle mounts. The stored document
@@ -67,12 +67,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <!-- The browser UI tint follows the operating system's preference; the manifest's single
          theme_color is the console's own dark surface, which is its shipped default. -->
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#121214" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f7f7f8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#131314" media="(prefers-color-scheme: dark)" />
     <!-- `viewport-fit=cover` is what makes `env(safe-area-inset-*)` resolve on a notched phone.
-         It is deliberately not paired with `maximum-scale` or `user-scalable`: pinch-zoom is an
-         accessibility affordance, and the iOS focus zoom it would suppress is handled where it
-         belongs instead, by giving form controls a 16px font size on coarse pointers. -->
+         No `maximum-scale` or `user-scalable` here: pinch-zoom is an accessibility affordance.
+         `main.tsx` adds `maximum-scale=1` on iOS alone, where it stops the focus zoom into a
+         field and pinch-zoom survives it. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!-- Frames may only ever show this deployment's own documents. The Agent draws model-written
          canvases in sandboxed frames; the sandbox removes their origin and network, and

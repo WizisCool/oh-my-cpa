@@ -48,33 +48,9 @@
   gap: 6px 10px;
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 6px;
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--fg) 6%, transparent);
-  color: var(--fg-2);
-  font-size: var(--text-xs);
-  line-height: 18px;
-  white-space: nowrap;
-}
 
-.badge-warn {
-  background: color-mix(in srgb, var(--warn) 12%, transparent);
-  color: var(--warn);
-}
 
-.badge-success {
-  background: color-mix(in srgb, var(--success) 12%, transparent);
-  color: var(--success);
-}
 
-.badge-accent {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-}
 
 .meta {
   display: flex;
@@ -513,14 +489,6 @@
   gap: 4px;
 }
 
-.tag {
-  padding: 0 6px;
-  border-radius: var(--radius-sm);
-  background: var(--hover);
-  color: var(--fg-2);
-  font-size: var(--text-xs);
-  line-height: 20px;
-}
 
 /* A card's tag narrows the store to its kind. */
 .tag-button {

@@ -9,8 +9,10 @@
   margin-bottom: 16px;
 }
 
+/* A small basis so "Clear filters" arriving at the row's end shrinks the search instead of
+   wrapping the row and pushing the trail down; the search still takes all the slack. */
 .audit-search {
-  flex: 1 1 260px;
+  flex: 1 1 160px;
   min-width: 0;
 }
 
@@ -122,12 +124,13 @@
   max-width: 100%;
   padding: 0 6px;
   overflow: hidden;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--fg) 6%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg-2) 10%, transparent);
   color: var(--fg-2);
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  line-height: 20px;
+  font-size: var(--text-xs);
+  line-height: 18px;
   text-overflow: ellipsis;
   vertical-align: middle;
   white-space: nowrap;
@@ -271,7 +274,6 @@
 
 .phone-entry-meta .audit-target {
   min-width: 0;
-  line-height: 18px;
 }
 
 .phone-entry-chevron {

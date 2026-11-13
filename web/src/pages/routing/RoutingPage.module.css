@@ -94,7 +94,7 @@
   transition: box-shadow var(--motion-base) var(--ease-standard);
 }
 /* Only the band a card is about to land in lifts; the rest of the route stays flat. */
-.tier-over { box-shadow: 0 0 0 1px var(--accent), var(--float-drop); }
+.tier-over { box-shadow: 0 0 0 1px var(--select-ring), var(--float-drop); }
 .tier-gutter { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding-top: 2px; }
 .tier-step {
   display: inline-flex; flex: none; align-items: center; justify-content: center; width: 24px; height: 24px;

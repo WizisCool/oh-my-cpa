@@ -141,7 +141,7 @@ test('an unreadable preference leaves the shipped ground rather than taking the 
 const sourceRoot = fileURLToPath(new URL('../../src', import.meta.url));
 const STEP = '(?:xs|sm|md|lg|xl)';
 const ON_SCALE = new RegExp(
-  `^(?:0|50%|inherit|var\\(--radius-${STEP}\\)|calc\\(var\\(--radius-${STEP}\\) [+-] \\d+px\\)|min\\(var\\(--radius-${STEP}\\), \\d+%\\))$`,
+  `^(?:0|50%|9999px|inherit|var\\(--radius-${STEP}\\)|calc\\(var\\(--radius-${STEP}\\) [+-] \\d+px\\)|min\\(var\\(--radius-${STEP}\\), \\d+%\\))$`,
 );
 const TAILWIND_ROUNDED_ON_SCALE = new RegExp(
   `^rounded(?:-(?:[tblr]|tl|tr|bl|br|s|e|ss|se|es|ee))?-(?:none|${STEP}|full|\\[(?:inherit|calc\\(var\\(--radius-${STEP}\\)_[+-]_\\d+px\\))\\])$`,

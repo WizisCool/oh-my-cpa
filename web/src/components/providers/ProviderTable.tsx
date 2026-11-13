@@ -202,9 +202,6 @@ export function ProviderTable({
               <ProviderMark provider={record} sources={{ providerIcons, pluginLogos }} size={22} />
             </div>
             <div className={clsx(styles['provider-text'], inlineNameEditableClass, inlineNamePersistentClass)}>
-              {renamingID !== record.id && (
-                <RenameButton label={record.name} onClick={() => setRenamingID(record.id)} data-testid="provider-rename" />
-              )}
               <div className={styles['provider-name']}>
                 {renamingID === record.id ? (
                   <InlineNameEditor
@@ -232,6 +229,9 @@ export function ProviderTable({
                 {/* The table is wide enough for the priority to follow the name, as the OAuth list's
                     badge does, rather than take a line of its own. */}
                 {renamingID !== record.id && Boolean(record.priority) && <PriorityBadge priority={record.priority} />}
+                {renamingID !== record.id && (
+                  <RenameButton label={record.name} onClick={() => setRenamingID(record.id)} data-testid="provider-rename" />
+                )}
               </div>
               {hasMeta && (
                 <div className={styles['provider-meta']}>
@@ -404,7 +404,7 @@ export function ProviderTable({
           <Tooltip title={t('common.edit')}>
             <Button
               size="sm"
-              className="row-action-btn"
+              variant="ghost" className="row-action-btn"
               icon={<EditOutlined />}
               onClick={() => handleOpenEdit(record)}
               aria-label={`${t('common.edit')}: ${record.name}`}
@@ -419,7 +419,7 @@ export function ProviderTable({
             <Button
               size="sm"
               danger
-              className="row-action-btn"
+              variant="ghost" className="row-action-btn"
               icon={<DeleteOutlined />}
               loading={deleteProviderMutation.isPending && deleteProviderMutation.variables === record.id}
               aria-label={`${t('common.delete')}: ${record.name}`}

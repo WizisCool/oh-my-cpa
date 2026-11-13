@@ -199,12 +199,7 @@
 .req-route-badge {
   flex: none;
   align-self: flex-start;
-  padding: 0 5px;
-  font-size: var(--text-2xs);
-  line-height: 16px;
-  color: var(--muted);
-  border-radius: var(--radius-sm);
-  background: var(--thread-field);
+  --tag-tone: var(--muted);
 }
 .req-route-link {
   display: inline-flex;

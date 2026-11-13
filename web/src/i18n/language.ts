@@ -27,17 +27,16 @@ export interface LanguageOption {
   readonly id: string;
   readonly name: string;
   readonly code: string;
-  readonly country: string;
   readonly locale: string;
 }
 
 export const LANGUAGES = [
-  { id: 'zh', name: '简体中文', code: '中', country: 'CN', locale: 'zh-CN' },
+  { id: 'zh', name: '简体中文', code: '中', locale: 'zh-CN' },
   // Hong Kong usage (軟件, 網絡, 密鑰, 帳戶). The id stays `zh-Hant` because stored preferences
   // already name it; the locale says which Traditional Chinese the catalog is written in.
-  { id: 'zh-Hant', name: '繁體中文', code: '繁', country: 'HK', locale: 'zh-HK' },
-  { id: 'en', name: 'English', code: 'EN', country: 'US', locale: 'en' },
-  { id: 'ms', name: 'Bahasa Melayu', code: 'MS', country: 'MY', locale: 'ms-MY' },
+  { id: 'zh-Hant', name: '繁體中文', code: '繁', locale: 'zh-HK' },
+  { id: 'en', name: 'English', code: 'EN', locale: 'en' },
+  { id: 'ms', name: 'Bahasa Melayu', code: 'MS', locale: 'ms-MY' },
 ] as const satisfies readonly LanguageOption[];
 
 export type Lang = (typeof LANGUAGES)[number]['id'];

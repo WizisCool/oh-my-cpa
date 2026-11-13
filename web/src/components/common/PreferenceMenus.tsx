@@ -6,8 +6,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { DesktopOutlined, MoonOutlined, SunOutlined } from '../icons';
-import { CountryFlag, LANGUAGE_FLAGS } from './CountryFlag';
+import { DesktopOutlined, GlobalOutlined, MoonOutlined, SunOutlined } from '../icons';
 import { LANGUAGES, useI18n, useT, type Lang, type MessageKey } from '../../i18n';
 import { useTheme } from '../../theme/ThemeContext';
 import type { ThemeModePreference } from '../../theme/themePreference';
@@ -45,7 +44,7 @@ export const PreferenceMenus: React.FC = () => {
             <HeaderAction
               label={t('header.language')}
               tooltip={t('common.action_on', { action: t('header.language'), target: activeLanguage ? activeLanguage.name : lang })}
-              icon={activeLanguage ? <CountryFlag markup={LANGUAGE_FLAGS[activeLanguage.country]} /> : undefined}
+              icon={<GlobalOutlined />}
             >
               <span className="language-trigger-code">{activeLanguage?.code ?? lang}</span>
             </HeaderAction>
@@ -60,11 +59,7 @@ export const PreferenceMenus: React.FC = () => {
             }}
           >
             {LANGUAGES.map((language) => (
-              <DropdownMenuRadioItem
-                key={language.id}
-                value={language.id}
-                icon={<CountryFlag markup={LANGUAGE_FLAGS[language.country]} />}
-              >
+              <DropdownMenuRadioItem key={language.id} value={language.id}>
                 {language.name}
               </DropdownMenuRadioItem>
             ))}

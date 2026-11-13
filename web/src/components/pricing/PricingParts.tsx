@@ -51,6 +51,7 @@ import { SearchSelect } from '../common/SearchSelect';
 import { EmptyState } from '../common/EmptyState';
 import { Pager } from '../common/Pager';
 import { Tooltip } from '../common/Tooltip';
+import { Tag } from '../common/Tag';
 
 /** The words for one tier's condition, which every surface that names a tier shares. */
 export function describeTier(t: TFunc, tier: PriceTier): string {
@@ -71,11 +72,11 @@ export const TierBadges: React.FC<{ tiers: PriceTier[] | null | undefined }> = (
   return (
     <span className={styles['tier-badges']}>
       {tiers.map((tier, index) => (
-        <span key={index} className={styles['tier-badge']}>
+        <Tag key={index} size="small">
           {tier.service_tiers?.length ? <ThunderboltOutlined aria-hidden="true" /> : null}
           {hasTimeWindow(tier) && <ClockCircleOutlined aria-hidden="true" />}
           {describeTier(t, tier)}
-        </span>
+        </Tag>
       ))}
     </span>
   );
@@ -471,7 +472,7 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
   const removeButton = (draft: TierDraft) => (
     <Tooltip title={t('pricing.editor.tier_remove')}>
       <Button
-        className="row-action-btn"
+        variant="ghost" className="row-action-btn"
         size="sm"
         danger
         icon={<DeleteOutlined />}
@@ -514,7 +515,7 @@ export const TieredPricingEditor: React.FC<TieredPricingEditorProps> = ({ drafts
             <h3>{t('pricing.editor.lane_title')}</h3>
             <Tooltip title={t('pricing.editor.lane_remove')}>
               <Button
-                className="row-action-btn"
+                variant="ghost" className="row-action-btn"
                 size="sm"
                 danger
                 icon={<DeleteOutlined />}

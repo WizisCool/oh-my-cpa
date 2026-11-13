@@ -39,6 +39,8 @@ export interface CredentialViewProps {
   groups: CredentialGroup[];
   pluginLogos?: PluginOAuthLogos;
   selectedKeys: ReadonlySet<string>;
+  /** Whether a choice is under way: the checkboxes are drawn, and a plain click picks. */
+  isSelecting: boolean;
   nowMS: number;
   actions: CredentialActions;
   /** Puts a dragged credential beside another; absent while the order is not the operator's own. */
@@ -66,14 +68,14 @@ const recordKey = (record: OAuthWorkspaceRecord) => record.key;
  * and the next begins reads at a glance, while every surface keeps the one grid and the columns
  * still run straight down the page.
  */
-export function CredentialList({ groups, pluginLogos, selectedKeys, nowMS, actions, onReorder, pageSelection }: CredentialViewProps) {
+export function CredentialList({ groups, pluginLogos, selectedKeys, isSelecting, nowMS, actions, onReorder, pageSelection }: CredentialViewProps) {
   const t = useT();
   return (
-    <div className={styles.list}>
+    <div className={styles.list} data-selecting={isSelecting || undefined}>
       {/* One header for every provider: the columns are named once, above the first surface, and
           the page's selection sits in the checkbox column it selects. */}
       <div className={clsx(styles.line, styles['table-head'])}>
-        <span className={styles.lead}>{pageSelection}</span>
+        <span className={clsx(styles.lead, 'select-reveal')} data-hidden={isSelecting ? undefined : ''}>{pageSelection}</span>
         <span className={styles['head-who']}>{t('omc.fleet_col_account')}</span>
         <span className={styles['head-state']}>{t('omc.fleet_col_state')}</span>
         <span className={styles['head-quota']}>{t('omc.fleet_col_quota')}</span>
@@ -87,6 +89,7 @@ export function CredentialList({ groups, pluginLogos, selectedKeys, nowMS, actio
             group={group}
             pluginLogos={pluginLogos}
             selectedKeys={selectedKeys}
+            isSelecting={isSelecting}
             nowMS={nowMS}
             actions={actions}
             onReorder={onReorder}
@@ -97,7 +100,7 @@ export function CredentialList({ groups, pluginLogos, selectedKeys, nowMS, actio
   );
 }
 
-function ListGroup({ group, pluginLogos, selectedKeys, nowMS, actions, onReorder }: Omit<CredentialViewProps, 'groups'> & { group: CredentialGroup }) {
+function ListGroup({ group, pluginLogos, selectedKeys, isSelecting, nowMS, actions, onReorder }: Omit<CredentialViewProps, 'groups'> & { group: CredentialGroup }) {
   const filterMotion = useFilterItemMotion();
   const byKey = React.useMemo(() => new Map(group.visibleRecords.map((record) => [record.key, record])), [group.visibleRecords]);
   const write = (key: string, targetKey: string, side: DropSide) => {
@@ -121,14 +124,14 @@ function ListGroup({ group, pluginLogos, selectedKeys, nowMS, actions, onReorder
     <m.section {...filterMotion} className={styles.group} data-testid="oauth-credential-section" data-provider={group.provider}>
       <RowReorder items={rowKeys} isEnabled={Boolean(onReorder)} onMove={reorder.move} onStep={step}>
         <div className={styles.rows}>
-          <GroupHead group={group} pluginLogos={pluginLogos} selectedKeys={selectedKeys} actions={actions} isBand />
+          <GroupHead group={group} pluginLogos={pluginLogos} selectedKeys={selectedKeys} isSelecting={isSelecting} actions={actions} isBand />
           <FilterTransition itemKeys={rowKeys}>
             {reorder.ordered.map((record) => (
               <CredentialRow
                 key={record.key}
                 record={record}
                 isSelected={selectedKeys.has(record.key)}
-                hasSelection={selectedKeys.size > 0}
+                isSelecting={isSelecting}
                 hasHandle={Boolean(onReorder)}
                 nowMS={nowMS}
                 actions={actions}
@@ -146,10 +149,11 @@ function ListGroup({ group, pluginLogos, selectedKeys, nowMS, actions, onReorder
  * A provider's title over its credentials: the selection of all of them, its mark on a tile, name and
  * count. It heads the provider's own surface, so the mark is drawn once per provider, not per row.
  */
-export function GroupHead({ group, pluginLogos, selectedKeys, actions, isBand = false, className }: {
+export function GroupHead({ group, pluginLogos, selectedKeys, isSelecting, actions, isBand = false, className }: {
   group: CredentialGroup;
   pluginLogos?: PluginOAuthLogos;
   selectedKeys: ReadonlySet<string>;
+  isSelecting: boolean;
   actions: CredentialActions;
   /** Whether the head is a band inside the list's table, on the rows' checkbox column. */
   isBand?: boolean;
@@ -160,7 +164,7 @@ export function GroupHead({ group, pluginLogos, selectedKeys, actions, isBand = 
   const selectedCount = selectable.filter((record) => selectedKeys.has(record.key)).length;
   return (
     <header className={clsx(styles['group-head'], isBand && styles.band, className)}>
-      <span className={styles.lead}>
+      <span className={clsx(styles.lead, 'select-reveal')} data-hidden={isSelecting ? undefined : ''}>
         <Checkbox
           checked={selectable.length > 0 && selectedCount === selectable.length}
           indeterminate={selectedCount > 0 && selectedCount < selectable.length}
@@ -195,11 +199,11 @@ export function isRecordBodyClick(event: React.MouseEvent<HTMLElement>): boolean
   return !target.closest('button, a, input, label, [role="button"], [role="checkbox"], [role="switch"], [data-control-hit], [data-slot="dropdown-menu-content"], [data-slot="popover-content"]');
 }
 
-function CredentialRow({ record, isSelected, hasSelection, hasHandle, nowMS, actions, pluginLogos }: {
+function CredentialRow({ record, isSelected, isSelecting, hasHandle, nowMS, actions, pluginLogos }: {
   record: OAuthWorkspaceRecord;
   isSelected: boolean;
-  /** Whether any credential is chosen, which makes a plain click on a row pick it. */
-  hasSelection: boolean;
+  /** Whether a choice is under way, which draws the checkbox and makes a plain click pick. */
+  isSelecting: boolean;
   hasHandle: boolean;
   nowMS: number;
   actions: CredentialActions;
@@ -247,20 +251,23 @@ function CredentialRow({ record, isSelected, hasSelection, hasHandle, nowMS, act
         onMouseDown={(event) => { if (event.shiftKey) event.preventDefault(); }}
         onClick={(event) => {
           if (isRenaming || !isRecordBodyClick(event)) return;
-          const intent = rowClickIntent(event, hasSelection);
+          const intent = rowClickIntent(event, isSelecting);
           if (intent === 'open') actions.onOpen(record, 'overview');
           else if (record.canSelectForFileBatch && !facts.isBusy) actions.onPick(record, intent === 'range');
         }}
       >
-        <div className={styles.lead}>
+        {/* Mounted while hidden, so the checkbox column can open and close around it. */}
+        <div className={clsx(styles.lead, 'select-reveal')} data-hidden={isSelecting ? undefined : ''}>
           <SelectBox record={record} isSelected={isSelected} isBusy={facts.isBusy} actions={actions} />
         </div>
         <div className={styles.who}>
           <CredentialName record={record} facts={facts} isRenaming={isRenaming} onRename={() => setIsRenaming(true)} onRenamed={() => setIsRenaming(false)} actions={actions} />
-          <CredentialTraits record={record} facts={facts} actions={actions} />
+          {!isPhone && <CredentialTraits record={record} facts={facts} actions={actions} />}
         </div>
+        {/* A phone says what the credential is and how it is doing on one line under its name. */}
         <div className={styles.state}>
-          <CredentialState record={record} facts={facts} actions={actions} nowMS={nowMS} />
+          {isPhone && <CredentialTraits record={record} facts={facts} actions={actions} />}
+          <CredentialState record={record} facts={facts} actions={actions} nowMS={nowMS} isQuiet={isPhone} />
         </div>
         <div className={styles.quota} data-quota-missing={!hasLines && metrics.length === 0 ? 'true' : undefined}>
           {quota}
@@ -268,11 +275,13 @@ function CredentialRow({ record, isSelected, hasSelection, hasHandle, nowMS, act
         <div className={styles.toggle}>
           <CredentialSwitch record={record} facts={facts} actions={actions} className={styles['toggle-hit']} />
         </div>
+        {/* A phone keeps the grip, the menu and the switch beside the name; configure and refresh
+            move into the menu. */}
         <div className={styles.controls}>
           {hasHandle && isPhone && <ReorderHandle {...reorder.handle} name={maskedCredentialLabel(record)} variant="inline" />}
-          <EditCredentialButton record={record} facts={facts} actions={actions} />
-          <RefreshQuotaButton record={record} facts={facts} actions={actions} />
-          <CredentialMenu record={record} facts={facts} actions={actions} onRename={() => setIsRenaming(true)} />
+          {!isPhone && <EditCredentialButton record={record} facts={facts} actions={actions} />}
+          {!isPhone && <RefreshQuotaButton record={record} facts={facts} actions={actions} />}
+          <CredentialMenu record={record} facts={facts} actions={actions} onRename={() => setIsRenaming(true)} hasRefresh={isPhone} />
         </div>
       </div>
     </m.div>

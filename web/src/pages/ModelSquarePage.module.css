@@ -1,6 +1,6 @@
 .page { min-width: 0; }
 
-.search { flex: 1 1 280px; max-width: 420px; min-width: 0; }
+.search { flex: 1 1 200px; max-width: 420px; min-width: 0; }
 .result-count { margin-left: auto; color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .result-count:empty { display: none; }
 .clear-filters { padding: 0; }
@@ -33,10 +33,10 @@
 .model-row {
   border: 0;
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-content: space-between; row-gap: 6px; min-width: 0;
-  padding: 6px 4px 10px 12px; box-shadow: var(--shadow-edge); border-radius: var(--radius-lg); background: var(--surface);
+  padding: 6px 4px 10px 12px; box-shadow: var(--shadow-edge); border-radius: var(--radius-lg); background: var(--bg);
   transition: background-color var(--motion-fast) ease-out, box-shadow var(--motion-fast) ease-out;
 }
-.model-row:hover { background: var(--hover); box-shadow: var(--shadow-raised); }
+.model-row:hover { background: var(--hover-inset); box-shadow: var(--shadow-raised); }
 .model-name { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
 .model-caption { margin-top: -2px; }
 .model-meta { grid-column: 1 / -1; grid-row: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 12px; min-width: 0; padding-right: 8px; }
@@ -118,10 +118,12 @@
   box-shadow: var(--shadow-edge); border-radius: var(--radius-md); color: var(--fg); font-size: var(--text-sm);
   transition: color var(--motion-fast) ease-out, box-shadow var(--motion-fast) ease-out;
 }
-.reference-link:hover { color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--edge-drop); }
+.reference-link:hover { color: var(--fg); box-shadow: var(--shadow-raised); }
 .scope-note { font-size: var(--text-xs); color: var(--muted); line-height: 1.7; margin: 24px 0 0; }
 
 @media (max-width: 640px) {
+  /* The maker chips already count what shows; the phone keeps the line to the search and its clear. */
+  .result-count:not(:empty) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .chip { min-height: 36px; padding: 6px 12px; }
   /* Makers scroll inside their own strip so a long roster costs one line, and the page itself never moves sideways. */
   .maker-strip { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; }

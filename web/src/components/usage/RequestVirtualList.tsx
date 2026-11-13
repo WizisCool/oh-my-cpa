@@ -34,7 +34,8 @@ export interface RequestVirtualListProps<T> {
   group?: RequestGroupConfig<T>;
   className?: string;
   onScroll?: React.UIEventHandler<HTMLDivElement>;
-  renderItem: (item: T, index: number) => React.ReactNode;
+  /** `position` is the row's place in the list as drawn: within its group when grouped. */
+  renderItem: (item: T, position: number) => React.ReactNode;
 }
 
 interface ThumbGeometry {
@@ -421,9 +422,9 @@ function RequestVirtualListInner<T>(
       content = segments.map((seg) => (
         <div key={seg.groupKey} className="request-group-section">
           <div className="request-group-header">{group.title(seg.groupKey, seg.items)}</div>
-          {seg.entries.map(({ item, index }) => (
+          {seg.entries.map(({ item }, position) => (
             <div key={getItemKey(item)} className="request-list-item">
-              {renderItem(item, index)}
+              {renderItem(item, position)}
             </div>
           ))}
         </div>
@@ -459,7 +460,7 @@ function RequestVirtualListInner<T>(
             {group.title(seg.groupKey, seg.items)}
           </div>
           <div className="request-group-body" style={{ height: slice?.bodyHeight ?? 0 }}>
-            {mountedEntries.map(({ item, index }, offset) => {
+            {mountedEntries.map(({ item }, offset) => {
               const key = getItemKey(item);
               const localIndex = slice.startIndex + offset;
               const rowTop = slice.offsets[localIndex] ?? 0;
@@ -470,7 +471,7 @@ function RequestVirtualListInner<T>(
                   className="request-list-item request-list-item-virtual"
                   style={{ transform: `translateY(${rowTop}px)` }}
                 >
-                  {renderItem(item, index)}
+                  {renderItem(item, localIndex)}
                 </div>
               );
             })}

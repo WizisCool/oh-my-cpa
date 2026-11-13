@@ -893,11 +893,19 @@
 /* The action keeps the title's line wherever both fit; the rows above decide that per card and
    per language, so only the product header is forced to stack here. */
 @media (max-width: 640px) {
-  /* Once its text is hidden, the action needs a finger-sized target of its own. */
+  /* Once its text is hidden, the action is a square tool of the control height. Its hidden label
+     keeps it out of the shared icon-only touch rule, so it widens its own hit area. */
   .check-updates-action {
-    min-width: 40px;
-    min-height: 40px;
+    position: relative;
+    min-width: 32px;
     padding-inline: 0;
+  }
+  @media (pointer: coarse) {
+    .check-updates-action::before {
+      content: '';
+      position: absolute;
+      inset: -4px;
+    }
   }
 
   /* A title must stay readable in every registered language while the action stays on its line.

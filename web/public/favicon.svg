@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="2 2 60 60" width="60" height="60">
 <title>Oh My CPA</title>
 <style>
-  .omc-ink { fill: #1c1c1e; } .omc-accent { fill: #005d8f; }
-  @media (prefers-color-scheme: dark) { .omc-ink { fill: #f4f4f6; } .omc-accent { fill: #00a2fb; } }
+  .omc-ink { fill: #1e1e20; } .omc-accent { fill: #1c6ba3; }
+  @media (prefers-color-scheme: dark) { .omc-ink { fill: #e3e3e4; } .omc-accent { fill: #00a2fb; } }
 </style>
   <path id="mark-ring" class="omc-ink" d="M 13 2 H 51 A 11 11 0 0 1 62 13 V 30 H 47 V 19 A 2 2 0 0 0 45 17 H 19 A 2 2 0 0 0 17 19 V 45 A 2 2 0 0 0 19 47 H 26 V 62 H 13 A 11 11 0 0 1 2 51 V 13 A 11 11 0 0 1 13 2 Z"/> <path id="mark-reading" class="omc-accent" d="M 47 36 H 62 V 51 A 11 11 0 0 1 51 62 H 32 V 47 H 45 A 2 2 0 0 0 47 45 Z"/>
 </svg>

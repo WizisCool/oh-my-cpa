@@ -5,8 +5,8 @@ import {
   COLUMN_MAP,
   LIST_GRID_CHROME,
   USAGE_EVENTS_COLUMNS_PREFERENCE,
-  buildGridTemplateColumns,
   computeGridMinWidth,
+  buildGridTemplateColumns,
   foldRequestColumns,
   parseUsageEventsColumns,
   type RequestColumnId,
@@ -78,8 +78,8 @@ export function useRequestColumnLayout(isSelecting: boolean) {
     () => new Set(foldedKey ? (foldedKey.split(' ') as RequestColumnId[]) : []),
     [foldedKey],
   );
-  // The selection track exists only while a choice is under way; at rest its width goes to the data.
-  const chrome = React.useMemo(() => ({ ...LIST_GRID_CHROME, hasSelection: isSelecting }), [isSelecting]);
+  // The selection track opens only while a choice is under way; at rest its width goes to the data.
+  const chrome = React.useMemo(() => ({ ...LIST_GRID_CHROME, isSelectionClosed: !isSelecting }), [isSelecting]);
   const gridTemplate = React.useMemo(
     () => buildGridTemplateColumns(colWidths, chrome, folded),
     [colWidths, chrome, folded],

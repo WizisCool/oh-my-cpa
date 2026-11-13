@@ -45,7 +45,7 @@
   container-name: reqstream;
   --req-grid-columns: 20px 96px 88px minmax(140px, 1.6fr) minmax(130px, 1.3fr) 84px 76px 78px 132px 64px 64px 124px 76px 14px;
   --req-grid-gap: 16px;
-  --req-pad-inline: 12px;
+  --req-pad-inline: 20px;
   --req-min-width: 1418px;
   flex: 1;
   min-height: 310px;
@@ -142,9 +142,32 @@
 .request-stream[data-folded-columns~='mode'] :is(.req-th-mode, .req-col-mode) {
   display: none;
 }
-.request-selection-bar {
-  padding-inline: var(--req-pad-inline);
-  flex-shrink: 0;
+/* Two seams open with a space of their own, inside the column's track. The caller key starts where
+   the right-aligned cache rate ends, and a short alias there reads as part of the figure. The
+   model follows the provider, and two names one gap apart run together. Only the row of columns
+   has these seams. */
+@container reqstream (min-width: 921px) {
+  .req-col-model,
+  .req-th-model,
+  .req-col-key,
+  .req-th-key {
+    padding-inline-start: 16px;
+  }
+}
+/* The selection docks over the list's foot, so the rows never move when the first one is ticked;
+   while it stands the list scrolls far enough for its last row to clear it. */
+.request-selection-dock {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  translate: -50% 0;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+.request-stream.is-selecting .request-list {
+  padding-bottom: 72px;
 }
 /* The row layout is chosen by the *list's* width, not by the device's.
 
@@ -171,7 +194,6 @@
   font-size: var(--text-sm);
   padding: 10px 18px;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
 }
 .request-group-title strong {
   overflow: hidden;

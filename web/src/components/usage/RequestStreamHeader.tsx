@@ -49,8 +49,7 @@ export const RequestStreamHeader = React.memo(function RequestStreamHeader({
   return (
 
           <div className="request-table-header">
-            {isSelecting && (
-            <label className="req-th req-select req-th-select">
+            <label className="req-th req-select req-th-select select-reveal" data-hidden={isSelecting ? undefined : ''}>
               <input
                 ref={selectAllRef}
                 type="checkbox"
@@ -63,7 +62,6 @@ export const RequestStreamHeader = React.memo(function RequestStreamHeader({
                 onChange={() => onToggleAll(selectionState !== 'all')}
               />
             </label>
-            )}
             {REQUEST_COLUMNS.map((col) => (
               <div
                 key={col.id}

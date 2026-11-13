@@ -58,8 +58,10 @@
 }
 
 /* A verdict or a met rule lands with a small overshoot; the spring is the console's own token. */
-@keyframes pop-in {
-  from { opacity: 0; transform: scale(0.6); }
+/* An outcome arriving on its own - a finished step, a result - settles in without an overshoot:
+   the spring is kept for what the hand moved. */
+@keyframes settle-in {
+  from { opacity: 0; transform: scale(0.88); }
 }
 
 .setup {
@@ -185,7 +187,7 @@
   border-radius: 50%;
   color: var(--tone);
   background: color-mix(in srgb, var(--tone) 15%, transparent);
-  animation: pop-in var(--motion-spring) var(--ease-spring);
+  animation: settle-in var(--motion-base) var(--ease-out);
 }
 
 .status[data-tone='idle'] .status-icon { color: var(--fg-2); background: color-mix(in srgb, var(--fg) 7%, transparent); }
@@ -354,7 +356,7 @@
   color: var(--bg);
   background: var(--success);
   border-color: var(--success);
-  animation: pop-in var(--motion-spring) var(--ease-spring);
+  animation: settle-in var(--motion-base) var(--ease-out);
 }
 .rule[data-broken] { color: var(--danger); }
 .rule[data-broken] .rule-mark { color: var(--danger); border-color: var(--danger); }
@@ -578,11 +580,10 @@
   border-radius: var(--radius-lg);
   cursor: pointer;
   overflow-wrap: anywhere;
-  transition:
-    box-shadow var(--motion-fast) var(--ease-standard),
-    background-color var(--motion-fast) var(--ease-standard),
-    transform var(--motion-fast) var(--ease-standard);
+  transition: var(--select-transition);
 }
+
+.choice:active { transform: scale(var(--press-scale)); }
 
 /* The tiles arrive one after another as the picker unfolds. */
 .choices[data-open] .choice {
@@ -591,9 +592,8 @@
 }
 
 .choice:hover {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), var(--edge-drop);
-  background: color-mix(in srgb, var(--accent) 4%, var(--bg));
-  transform: translateY(-1px);
+  box-shadow: var(--shadow-raised);
+  background: var(--hover-inset);
 }
 
 .choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -627,7 +627,7 @@
 }
 
 .step[data-state='muted'] { opacity: 0.6; }
-.step[data-state='active'] { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent), var(--edge-drop); }
+.step[data-state='active'] { box-shadow: var(--shadow-selected); background: var(--select-surface); }
 
 .step-index {
   display: inline-flex;
@@ -732,7 +732,7 @@
 .restore-step[data-state='done'] .restore-step-index {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  animation: pop-in var(--motion-spring) var(--ease-spring);
+  animation: settle-in var(--motion-base) var(--ease-out);
 }
 
 .restore-step-label {
@@ -800,7 +800,7 @@
   color: var(--success);
   border-radius: 50%;
   background: color-mix(in srgb, var(--success) 15%, transparent);
-  animation: pop-in var(--motion-spring) var(--ease-spring);
+  animation: settle-in var(--motion-base) var(--ease-out);
 }
 
 .preview-title {
@@ -870,7 +870,7 @@
   .form-card,
   .preview { padding: 16px; }
   .status-actions { padding-inline-start: 0; }
-  .status-actions > :global([data-slot='button'][data-variant='primary']) { flex: 1 1 auto; min-height: 40px; }
+  .status-actions > :global([data-slot='button'][data-variant='primary']) { flex: 1 1 auto; }
   .row-fold { padding-inline: 16px; }
   .location { padding-inline-start: 10px; }
   /* Two providers per row on a phone: one per row turned the picker into a long column that

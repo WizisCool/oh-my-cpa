@@ -790,10 +790,15 @@ export interface BuiltInPalette {
 /**
  * The built-in palettes, three per mode.
  *
- * OMC Dark and OMC Light pair high-contrast graphite/paper primary action buttons with a low-glare
- * mineral slate-iris accent matching the zinc-graphite neutral undertone (OKLCH ~280°), retiring
- * Ant Design's electric sky-blue. Pewter, Fog, Forest and Sandstone each hold composed, contrast-safe
- * primary surfaces tailored to their own substrate.
+ * OMC Dark and OMC Light are neutral graphite and neutral paper (OKLCH chroma under 0.006), which is
+ * what sets them apart from Pewter's blue slate and Fog's blue mist. The two modes treat contrast
+ * differently. A dark page dilates the eye and a bright stroke blooms into the dark around it, so the
+ * dark foreground stops near 14:1, inside the -90 perceptual contrast ceiling for dark text. A light
+ * page keeps conventional reading contrast (foreground near 15.5:1), but its ground is off-white
+ * (L 0.977) rather than white, so the shadows have something to fall on and the near-white raised
+ * layer - menus, a segment's thumb, a selected row - stands out from it. Every step clears its floor
+ * (`CONTRAST_FLOORS`). Pewter, Fog, Forest and Sandstone each hold composed, contrast-safe primary
+ * surfaces tailored to their own substrate.
  */
 export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
   {
@@ -802,14 +807,14 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
     nameKey: 'theme.omc_dark',
     descriptionKey: 'theme.omc_dark_desc',
     core: {
-      bg: '#121214',
-      surface: '#1c1c1f',
-      elevated: '#222226',
-      fg: '#f4f4f6',
-      fg2: '#a1a1aa',
-      muted: '#71717a',
-      meta: '#52525b',
-      border: '#2c2c30',
+      bg: '#131314',
+      surface: '#1b1b1c',
+      elevated: '#212123',
+      fg: '#e3e3e4',
+      fg2: '#a7a7ab',
+      muted: '#7b7b7f',
+      meta: '#56565a',
+      border: '#2b2b2d',
       accent: '#00a2fb',
     },
   },
@@ -819,18 +824,18 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
     nameKey: 'theme.omc_light',
     descriptionKey: 'theme.omc_light_desc',
     core: {
-      bg: '#ffffff',
-      surface: '#f1f1f3',
-      elevated: '#ffffff',
-      fg: '#1c1c1e',
-      fg2: '#505055',
-      muted: '#787880',
-      meta: '#98989f',
-      border: '#dcdce1',
-      accent: '#005d8f',
+      bg: '#f7f7f8',
+      surface: '#f0f0f2',
+      elevated: '#fefefe',
+      fg: '#1e1e20',
+      fg2: '#525255',
+      muted: '#78787c',
+      meta: '#9b9b9e',
+      border: '#dcdcde',
+      accent: '#1c6ba3',
     },
     overrides: {
-      primary: { fill: '#005d8f', hover: '#004a73', active: '#023b5d', ink: '#ffffff' },
+      primary: { fill: '#1c6ba3', hover: '#175e90', active: '#13517d', ink: '#ffffff' },
     },
   },
   {

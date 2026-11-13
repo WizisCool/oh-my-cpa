@@ -15,6 +15,10 @@ interface RenameButtonProps {
   'data-testid'?: string;
 }
 
+/**
+ * The way into renaming, placed right after the name it renames. It holds its width while hidden,
+ * so revealing it on hover moves nothing.
+ */
 export function RenameButton({ label, disabled, onClick, 'data-testid': testId }: RenameButtonProps) {
   const t = useT();
   return (
@@ -42,6 +46,12 @@ interface InlineNameEditorProps {
   'data-testid'?: string;
 }
 
+/**
+ * The name, editable in place. The field takes the name's own type and starts where its text
+ * started, and its box overhangs the line instead of growing it, so entering and leaving editing
+ * shifts nothing around it. The whole name is selected on entry, Enter or leaving the field saves,
+ * and Escape restores the name.
+ */
 export function InlineNameEditor({ initial, label, placeholder, onCommit, onCancel, 'data-testid': testId }: InlineNameEditorProps) {
   const [draft, setDraft] = React.useState(initial);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -65,6 +75,8 @@ export function InlineNameEditor({ initial, label, placeholder, onCommit, onCanc
     <Input
       size="sm"
       autoFocus
+      onFocus={(event) => event.currentTarget.select()}
+      data-saving={isSaving || undefined}
       className={styles.input}
       value={draft}
       placeholder={placeholder}

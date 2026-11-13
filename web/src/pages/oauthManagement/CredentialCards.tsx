@@ -36,7 +36,7 @@ import styles from './CredentialCards.module.css';
  * the list's two tracks; and a foot with the state on the left and the tools on the right. A card
  * opens the credential's details.
  */
-export function CredentialCards({ groups, pluginLogos, selectedKeys, nowMS, actions, pageSelection }: CredentialViewProps) {
+export function CredentialCards({ groups, pluginLogos, selectedKeys, isSelecting, nowMS, actions, pageSelection }: CredentialViewProps) {
   const t = useT();
   // Each card carries its provider's name: with the sections gone, the mark is the only sign of it.
   const entries = React.useMemo(
@@ -45,8 +45,9 @@ export function CredentialCards({ groups, pluginLogos, selectedKeys, nowMS, acti
   );
   const keys = React.useMemo(() => entries.map(({ record }) => record.key), [entries]);
   return (
-    <div className={styles.cards}>
+    <div className={styles.cards} data-selecting={isSelecting || undefined}>
       {pageSelection && (
+        // Held in place out of a choice, so starting or ending one never moves the cards.
         <div className={styles['page-select']}>
           {pageSelection}
           <span aria-hidden="true">{t('omc.fleet_select_page')}</span>
@@ -60,7 +61,7 @@ export function CredentialCards({ groups, pluginLogos, selectedKeys, nowMS, acti
             record={record}
             providerName={providerName}
             isSelected={selectedKeys.has(record.key)}
-            hasSelection={selectedKeys.size > 0}
+            isSelecting={isSelecting}
             nowMS={nowMS}
             actions={actions}
             pluginLogos={pluginLogos}
@@ -72,12 +73,12 @@ export function CredentialCards({ groups, pluginLogos, selectedKeys, nowMS, acti
   );
 }
 
-function CredentialCard({ record, providerName, isSelected, hasSelection, nowMS, actions, pluginLogos }: {
+function CredentialCard({ record, providerName, isSelected, isSelecting, nowMS, actions, pluginLogos }: {
   record: OAuthWorkspaceRecord;
   providerName: string;
   isSelected: boolean;
-  /** Whether any credential is chosen, which makes a click on a card pick it. */
-  hasSelection: boolean;
+  /** Whether a choice is under way, which draws the checkbox and makes a click on a card pick it. */
+  isSelecting: boolean;
   nowMS: number;
   actions: CredentialActions;
   pluginLogos?: PluginOAuthLogos;
@@ -100,7 +101,7 @@ function CredentialCard({ record, providerName, isSelected, hasSelection, nowMS,
       onMouseDown={(event) => { if (event.shiftKey) event.preventDefault(); }}
       onClick={(event) => {
         if (isRenaming || !isRecordBodyClick(event)) return;
-        const intent = rowClickIntent(event, hasSelection);
+        const intent = rowClickIntent(event, isSelecting);
         if (intent === 'open') actions.onOpen(record, 'overview');
         else if (record.canSelectForFileBatch && !facts.isBusy) actions.onPick(record, intent === 'range');
       }}
@@ -112,7 +113,7 @@ function CredentialCard({ record, providerName, isSelected, hasSelection, nowMS,
       data-quota-focus-anchor={record.quota ? record.authIndex : undefined}
     >
       <header className={styles.head}>
-        <span className={styles.select}>
+        <span className={clsx(styles.select, 'select-reveal')} data-hidden={isSelecting ? undefined : ''}>
           <SelectBox record={record} isSelected={isSelected} isBusy={facts.isBusy} actions={actions} />
         </span>
         <span className={styles.mark} role="img" aria-label={providerName} data-tip={providerName}>

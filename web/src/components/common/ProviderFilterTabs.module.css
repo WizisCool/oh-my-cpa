@@ -26,11 +26,11 @@
   height: 18px;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   color: var(--meta);
-  padding: 0 5px;
+  padding: 0 6px;
   border-radius: var(--radius-sm);
   background: var(--surface);
   transition:

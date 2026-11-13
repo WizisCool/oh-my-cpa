@@ -674,14 +674,14 @@ export function Combobox<
             }}
             className={cn(
               'group/combobox inline-flex w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-md border-0 bg-field text-base text-foreground shadow-well outline-none transition-[background-color,box-shadow,color] select-none',
-              'hover:not-data-[popup-open]:bg-field-hover hover:not-data-[popup-open]:shadow-field-hover focus-visible:shadow-field-focus data-[popup-open]:shadow-field-focus',
+              'hover:not-data-[popup-open]:bg-field-hover hover:not-data-[popup-open]:shadow-field-hover focus-visible:not-data-[popup-open]:shadow-focus data-[popup-open]:shadow-field-focus',
               disabled && 'pointer-events-none cursor-not-allowed opacity-50',
               status === 'error' && 'shadow-field-invalid focus-visible:shadow-field-invalid-focus',
               status === 'warning' && 'shadow-[inset_0_0_0_1px_var(--warn)]',
-              !isMultiple && resolvedSize === 'sm' && 'h-7 pl-2.5 pr-2 text-md [@media(pointer:coarse)]:min-h-9',
-              !isMultiple && resolvedSize === 'default' && 'h-8 pl-3 pr-2.5 text-base [@media(pointer:coarse)]:min-h-10',
+              !isMultiple && resolvedSize === 'sm' && 'h-7 pl-2.5 pr-2 text-md',
+              !isMultiple && resolvedSize === 'default' && 'h-8 pl-3 pr-2.5 text-base',
               !isMultiple && resolvedSize === 'lg' && 'h-10 pl-3.5 pr-3 text-base',
-              isMultiple && 'min-h-8 py-1 pl-2 pr-2.5 [@media(pointer:coarse)]:min-h-10',
+              isMultiple && 'min-h-8 py-1 pl-2 pr-2.5',
               className,
             )}
           >

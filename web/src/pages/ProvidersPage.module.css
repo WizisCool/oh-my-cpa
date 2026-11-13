@@ -13,8 +13,10 @@
   margin-bottom: 0;
 }
 
+/* Grows into the slack and gives it back when "Clear filters" arrives, so the row never wraps. */
 .provider-search {
-  width: 260px;
+  flex: 1 1 120px;
+  max-width: 320px;
 }
 
 .provider-family-filter {

@@ -49,6 +49,14 @@ prose only - timestamps, counts, captions. Anything the reader presses or must n
 link, an icon button, a field's clear or reveal glyph, or a row's open arrow, starts at the hint
 step and brightens under the pointer.
 
+Contrast is read differently in the two modes. A dark page dilates the eye, and a bright stroke
+blooms into the dark around it, so dark text has a ceiling as well as a floor: the default dark
+foreground stops near 14:1, inside the -90 limit the perceptual contrast model sets for dark text.
+A light page keeps conventional reading contrast (near 15.5:1), but on an off-white ground rather
+than white, so shadows have something to fall on and the near-white raised layer - a menu, a
+segment's thumb, a selected row - stands out from the page. The default palettes are neutral; a
+tinted look belongs to the alternative palettes.
+
 Keep chrome muted. Semantic status colors convey actual health/state; categorical
 chart colors identify series and must remain distinguishable in both modes. Do not
 encode success, failure or selection in color alone. An unavailable reading is not
@@ -82,8 +90,10 @@ wide as the outer radius the two curves no longer read together, and each shape 
 step. A ring drawn around a shape, such as a drop target, adds its offset to the shape's step with
 `calc()`.
 
-Only dots are round: status pips, radios, spinners, avatars and step numbers are circles. Nothing
-else is a pill - not a switch, a badge, a progress bar or a scroll thumb.
+Only dots are round: status pips, radios, spinners, avatars and step numbers are circles, and a
+switch is a dot travelling in its slot, so its knob is a circle and its track a pill (`9999px` is
+the stylesheet's spelling of full, `rounded-full` Tailwind's). Nothing else is a pill - not a
+badge, a tag, a progress bar or a scroll thumb.
 
 ## Edges and elevation
 
@@ -108,11 +118,31 @@ Sandstone, Pewter and an operator's own palette the same visible edge. The steps
 restrained: an edge must read as more than a single line, yet a resting card must not look
 lifted off the page. Retune the steps or the drop parts, never one surface's own shadow.
 
-A state colours the ring and keeps the drop: `0 0 0 1px <state colour>, var(--edge-drop)` for a
-selected, focused, invalid or warning surface; a focused field trades its well for its accent
-stroke. A shape whose rows stack into one card wraps them in a single element that carries the
+Elevation is a ladder, and every surface stands on one rung of it. The page panel and the cards
+on it rest at `--shadow-edge`; a card the reader can press rises to `--shadow-raised` under the
+pointer (with the `--hover-inset` fill) and never moves; a group inside a card is a flat wash
+(`--surface` or an ink wash) holding white raised items, never a second edge stacked on the first;
+menus, popovers, tooltips and toasts float at `--shadow-float`; dialogs and sheets at
+`--shadow-overlay`. A card inside a card that also casts a drop reads as a pile, not a hierarchy.
+
+A chosen thing is picked up and lit, never outlined. An outline flattens a shadowed surface into
+a drawing of one, and a bright ring reads the same in ink as in the accent. A selected filter
+tile, theme card, icon tile or answer option takes `--shadow-selected` (the lift ring at half
+again its share, over `--select-drop`) and the `--select-surface` fill: on a dark palette the face
+steps one tone toward the light, on a light one the drop gains a firmer contact line. It stays one
+rung above its neighbours, so a strip of cards keeps lying on the page; a float-height selection
+made the whole strip look airborne. The navigation marks the current page the same way, as a
+small tile of the panel's material lifted off the canvas. An open or focused field keeps its well
+and takes `--shadow-field-focus`, the select ring inside with a soft neutral halo. The accent ring (`--shadow-focus`) is kept for keyboard focus alone, where it has to
+be found at a glance. A semantic state colours the ring in its own tone and keeps the drop:
+`0 0 0 1px var(--danger), var(--edge-drop)` for an invalid surface, the warning tone for a
+warning. A shape whose rows stack into one card wraps them in a single element that carries the
 shadow, since a drop drawn per row bleeds across the seams. Where a container clips its content
 (the request list slides inside a clipping slot), the ring is drawn inside the clip instead.
+
+A long stream of records (the request list) separates its rows by tone instead of rules: the zebra
+bands described under composition and shared controls. Hundreds of ruled rows read as a ledger of
+hairlines. A short table of entities keeps its soft row rules.
 
 Strokes remain where a line is the thing being drawn: dividers between rows and columns, the
 dashed outline of an empty slot or drop target, a state-coloured button, the edge of a circular
@@ -150,10 +180,45 @@ choice. A name resolved from the provider catalog is likewise provisional until 
 succeeds: a surface may show the withheld rows, but anything durable — an export above
 all — has to say the name is unconfirmed instead of saving it.
 
+## Buttons
+
+A button's variant says how much the action weighs, never which page drew it. There are six
+weights; a page does not restyle one into another with a class.
+
+| Variant | Use it for | Never for |
+| --- | --- | --- |
+| `primary` | The one action that finishes the page's, dialog's or drawer's task: Save, Create, Sign in, Add provider. At most one per region. | A toggled state, a current page, a second action beside the first |
+| `secondary` (default) | Every other labelled action, and the standing tools of a page header or toolbar (`ToolButton`) | Actions repeated on every row |
+| `ghost` | Actions that live inside content: a row's actions (`.row-actions` with `row-action-btn` for a glyph), a card head's action, the shell header (`HeaderAction`), menu rows | The page's main action |
+| `active` | The on state of a tool that toggles (`aria-pressed`) or a disclosure that is open: a filter panel, line wrap, an expanded restore | Anything that is not a toggle |
+| `link` | Navigation or a text-like action inside prose: "Request events ›", "Show all", "Clear filters". A trailing chevron points where it goes. | An action that changes data |
+| `dashed` | An empty slot that adds an entry to a list | Any other action |
+
+`filled` is a field-shaped trigger (the time-range button) that sits among selects and must look
+like one. `danger` turns any weight into its destructive form; a destructive row action stays in
+the hint ink until the pointer reaches it. Sizes follow the place, not the importance: `default`
+(32px) for page and dialog actions, `sm` (28px) inside rows, card heads and dense toolbars, `lg`
+only on the sign-in form. An icon-only action is a `ToolButton`, which carries the name the glyph
+cannot.
+
 ## Composition and shared controls
 
 Use the shared page, panel, toolbar, field, empty-state, drawer, dialog and
-confirmation primitives before creating another page-local version. A dialog
+confirmation primitives before creating another page-local version.
+
+An on/off setting is a [`Switch`](../web/src/components/common/Switch.tsx): on fills the track with
+the healthy green, and the side the knob sits on states the value without the colour. A lone
+switch stays beside its setting's name at every width; a phone does not drop it under the
+description.
+
+The language picker is a globe and the language's own name (its endonym), never a flag: a flag
+names a country, and the console's languages are not countries. Flags are kept for currencies,
+where the issuer is the fact.
+
+A [`Tag`](../web/src/components/common/Tag.tsx) has one geometry everywhere: 22px high (18px
+small), `--radius-sm`, weight 500, a tint of its tone with a rim of the same tone drawn inside.
+Anything else shaped like a chip - a count, a prefix, a badge on a row - takes the small tag's
+height, radius and rim rather than its own. A dialog
 (`AppModal`) holds one task that ends where the reader started; on a phone it is a
 bottom sheet. A drawer shows or edits one record beside the page; on a desktop its
 leading edge drags to resize it and a click restores the opening width. The width is a
@@ -179,6 +244,30 @@ Put the primary action where the task finishes. Destructive actions need an expl
 confirmation that names the affected resource. Preserve edits during background
 refreshes; distinguish Apply/Save from Cancel and from viewing current server state.
 A disabled or pending action should not move surrounding controls.
+
+Nothing a state brings in moves what is already on screen. A reset or clear-filters control
+arrives at the end of its row, and the search beside it has a small flex basis so it gives the
+room back instead of wrapping the row. A selection docks as the floating
+[`SelectionBar`](../web/src/components/common/SelectionBar.tsx) over the foot of the list it acts
+on; on a phone it is one line, with the actions as glyphs. A list carries no checkboxes until a
+choice starts, from the toolbar's select tool or a row menu's Select; while it lasts a plain click
+picks, and clearing the selection ends it. The checkbox column opens from no width on
+`--select-reveal` while the columns after it glide over, and its checkboxes stay mounted and grow
+in with it (`.select-reveal`), so starting or ending a choice never jumps the rows. A long, wide
+list tells its rows apart by bands on every other row, never by rules. Bands run edge to edge and
+are tone alone, with no edge or shadow. The first row is always the opposite of the column names:
+on a dark ground the bands are a breath of ink from the second row; on a light ground the rows
+alternate between a soft white and a breath of ink from the first, and neither is the page's own
+ground, so the list reads as one material. The bands never change under the pointer: a row says
+it opens through its own way in (the chevron brightens and leans toward the drawer), and while
+choosing, through its checkbox's edge. The open record is a full-width face tinted with the
+accent.
+
+A record's name renames in place ([`InlineName`](../web/src/components/common/InlineName.tsx)).
+The rename glyph is the last thing on the name's line and shows while the row is hovered or the
+glyph has focus; it keeps its width while hidden. The field takes the name's own place and type,
+selects the whole name, saves on Enter or on leaving, and restores it on Escape. Where nothing can
+hover, the row's menu carries the rename.
 
 The shell header's Refresh all re-reads every open view. A page adds its own
 [`RefreshButton`](../web/src/components/common/RefreshButton.tsx) only for work that re-read
@@ -314,6 +403,19 @@ registry with the rest one deliberate, interruptible click away. A list long eno
 would cost more than a frame is drawn in its new shape at once, so a large catalogue answers with
 the row it was searched for rather than with motion.
 Library overlays (drawers, dialogs, menus) keep the CSS motion tokens in `index.css`.
+So does an arrival with no state to interrupt: a page frame, a list's first paint and the docked
+selection bar settle in once on mount through one keyframe each, switched off under reduced motion.
+
+A spring belongs to the hand: a dragged card landing, a check mark the reader just set, a
+gallery leaning under the pointer. Its overshoot is a nudge felt rather than watched. Anything
+that arrives on its own - a finished step, an outcome, a status - settles in on `--ease-out`
+without an overshoot. A card under the pointer rises in shadow and never travels.
+A route settles in rather than swapping: the page frame fades in over a 4px rise
+(`route-enter`), a list or table arriving inside a page that is already standing only fades, and
+a loading placeholder waits 120ms before it shows, so a fast answer never flashes a skeleton. A card the
+reader chooses presses in by `--press-scale` (0.99) under the pointer and settles into its
+selected state on `--select-transition` (`--motion-base`, `--ease-out`): felt, not watched, with
+no spring.
 
 Honor reduced motion and visibility changes. Reduced motion is one console setting (OMC
 Settings, defaulting to the system's), published as `data-reduced-motion` on the root; a
@@ -328,6 +430,11 @@ credible layer; browser timing is useful only where the browser engine is the su
 Design for content first, including a 390px-wide phone, dynamic viewport height and
 safe-area insets. Avoid page-level horizontal overflow.
 
+A control keeps one height on every pointer: 32px, 28px at `sm`. A coarse pointer gets its larger
+hit area from an inset `::before`, never from a taller control, so a select, a segmented control, a
+field and a switch on one row stay aligned on a phone. Only items inside an open menu or sheet
+grow for a finger.
+
 The console has two breakpoints and they mean different things (`useIsNarrowViewport`,
 `useIsPhoneViewport`). At 900px the shell changes shape: the sidebar becomes a sheet and the
 header names the page. At 640px the device is a phone, and a list stops being a table. Between
@@ -335,6 +442,9 @@ them a page has no sidebar but still draws its desktop content, so a rule that f
 shell's shape - a toolbar that must stack, a bar placed beside the sidebar - uses 900px, and only
 a rule about the content itself uses 640px. Check that band at 768px. A wide table there scrolls
 inside its own card; a frame that clips its content must not sit on the element that scrolls.
+
+A segmented filter of four or more segments becomes two rows of two on a phone, so every segment
+keeps its label on one line at one height instead of wrapping to a different number of lines.
 
 A strip that scrolls sideways with its scrollbar hidden - filter segments, maker chips, section
 tabs - takes the shared `scroll-fade-x` class, which fades the edge that has more behind it. A
@@ -350,8 +460,9 @@ field that holds state the reader cannot otherwise change, such as revealing a s
 tab order; one that repeats what the keyboard already does in the field, such as clearing it,
 may stay out of it. Never nest one interactive role in another: a tile that toggles a checkbox
 is that checkbox's `<label>`, not a `role="button"` around it. When a submission fails because
-of what was typed, the field carries `aria-invalid` as well as the notice above the form. On coarse pointers,
-keep editable text large enough to avoid browser focus zoom. A phone layout must retain
+of what was typed, the field carries `aria-invalid` as well as the notice above the form. A field keeps the
+console's reading size on a phone; iOS's zoom into a focused small field is stopped by
+`maximum-scale=1`, which the console adds on iOS alone, where pinch zoom survives it. A phone layout must retain
 the same information and capabilities as the desktop layout.
 
 A field a hand types into with an input method composes before it commits: pinyin, kana or an

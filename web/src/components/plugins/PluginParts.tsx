@@ -8,6 +8,7 @@ import type { StorePluginOrigin } from './pluginStoreLogic';
 import { safeExternalURL } from '../../utils/externalUrl';
 import styles from './Plugins.module.css';
 import { Tooltip } from '../common/Tooltip';
+import { Tag } from '../common/Tag';
 import { StatusLabel } from '../common/StatusLabel';
 import type { PluginItem } from '../../types/plugin';
 
@@ -88,18 +89,18 @@ export function PluginOriginBadge({ origin }: { origin: StorePluginOrigin }) {
   switch (origin) {
     case 'omc':
       return (
-        <span className={`${styles.badge} ${styles['badge-accent']}`} data-plugin-origin={origin}>
-          <BrandArtwork shape="mark" height={11} />{t('plugin.badge_omc')}
-        </span>
+        <Tag size="small" tone="accent" icon={<BrandArtwork shape="mark" height={11} />} data-plugin-origin={origin}>
+          {t('plugin.badge_omc')}
+        </Tag>
       );
     case 'omc-community':
-      return <span className={styles.badge} data-plugin-origin={origin}><PuzzleOutlined />{t('plugin.badge_omc_community')}</span>;
+      return <Tag size="small" icon={<PuzzleOutlined />} data-plugin-origin={origin}>{t('plugin.badge_omc_community')}</Tag>;
     case 'official':
-      return <span className={`${styles.badge} ${styles['badge-success']}`} data-plugin-origin={origin}><SafetyCertificateOutlined />{t('plugin.badge_official')}</span>;
+      return <Tag size="small" tone="success" icon={<SafetyCertificateOutlined />} data-plugin-origin={origin}>{t('plugin.badge_official')}</Tag>;
     case 'official-source':
-      return <span className={styles.badge} data-plugin-origin={origin}><InfoCircleOutlined />{t('plugin.badge_official_source')}</span>;
+      return <Tag size="small" icon={<InfoCircleOutlined />} data-plugin-origin={origin}>{t('plugin.badge_official_source')}</Tag>;
     default:
-      return <span className={`${styles.badge} ${styles['badge-warn']}`} data-plugin-origin={origin}><WarningOutlined />{t('plugin.badge_third_party')}</span>;
+      return <Tag size="small" tone="warn" icon={<WarningOutlined />} data-plugin-origin={origin}>{t('plugin.badge_third_party')}</Tag>;
   }
 }
 

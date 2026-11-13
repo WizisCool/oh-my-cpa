@@ -29,6 +29,8 @@ import { EmptyState } from '../common/EmptyState';
 import { Toolbar } from '../common/Toolbar';
 import { RefreshButton } from '../common/RefreshButton';
 import { Tooltip } from '../common/Tooltip';
+import { Tag } from '../common/Tag';
+import clsx from 'clsx';
 import { SectionHeading } from '../common/SectionHeading';
 import { BrandArtwork } from '../common/BrandArtwork';
 import { Count } from '../common/Count';
@@ -433,14 +435,14 @@ const StoreCard = React.memo(function StoreCard({ entry, isFeatured = false, isE
       <span className={styles.badges}>
         <PluginOriginBadge origin={origin} />
         {isUpdate ? (
-          <span className={`${styles.badge} ${styles['badge-accent']}`}>{t('plugin.badge_update')}</span>
+          <Tag size="small" tone="accent">{t('plugin.badge_update')}</Tag>
         ) : entry.installed ? (
-          <span className={styles.badge}>{isFromOtherSource ? t('plugin.badge_installed_elsewhere') : t('plugin.badge_installed')}</span>
+          <Tag size="small">{isFromOtherSource ? t('plugin.badge_installed_elsewhere') : t('plugin.badge_installed')}</Tag>
         ) : null}
         {entry.auth_required && (
-          <span className={`${styles.badge} ${entry.auth_configured ? '' : styles['badge-warn']}`}>
-            <LockOutlined />{entry.auth_configured ? t('plugin.badge_auth_configured') : t('plugin.badge_auth_missing')}
-          </span>
+          <Tag size="small" tone={entry.auth_configured ? 'neutral' : 'warn'} icon={<LockOutlined />}>
+            {entry.auth_configured ? t('plugin.badge_auth_configured') : t('plugin.badge_auth_missing')}
+          </Tag>
         )}
       </span>
 
@@ -460,7 +462,7 @@ const StoreCard = React.memo(function StoreCard({ entry, isFeatured = false, isE
       {tags.length > 0 && (
         <div className={styles.tags}>
           {tags.map((tag) => (
-            <button key={tag} type="button" className={`${styles.tag} ${styles['tag-button']}`} onClick={() => onSelectTag(tag)} aria-label={t('plugin.tag_filter_apply', { tag })}>
+            <button key={tag} type="button" className={clsx('tag is-small', styles['tag-button'])} onClick={() => onSelectTag(tag)} aria-label={t('plugin.tag_filter_apply', { tag })}>
               {tag}
             </button>
           ))}

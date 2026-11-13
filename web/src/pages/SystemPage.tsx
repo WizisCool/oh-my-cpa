@@ -648,7 +648,7 @@ export const SystemPage: React.FC = () => {
                   sheds its label rather than pushing it onto a row of its own: a title has to
                   stay readable in every language, and the accessible name keeps the meaning. */}
               <Button
-                variant="link"
+                variant="ghost"
                 size="sm"
                 className={styles['check-updates-action']}
                 icon={<CloudDownloadOutlined />}
