@@ -201,6 +201,7 @@ export default {
   'omc.quota_family_code_review': 'Code review',
   'omc.quota_remaining_prefix': 'Left',
   'omc.quota_reading_name': '{period} {family}',
+  'omc.quota_allowance_name': '{name} ({allowance})',
   'omc.section_select': 'Select every {provider} credential on this page',
   'omc.fleet_providers': 'Providers',
   'omc.fleet_all_accounts': 'All accounts',
