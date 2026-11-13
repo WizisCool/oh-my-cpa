@@ -61,13 +61,17 @@ const recordKey = (record: OAuthWorkspaceRecord) => record.key;
  * and further limits two to a line under them, or alone as one long bar across both. The
  * switch, refresh and menu close the row. A row opens the credential's details, and rows of one
  * provider can be dragged into the operator's own order.
+ *
+ * Each provider is a surface of its own under the shared column names, so where one provider ends
+ * and the next begins reads at a glance, while every surface keeps the one grid and the columns
+ * still run straight down the page.
  */
 export function CredentialList({ groups, pluginLogos, selectedKeys, nowMS, actions, onReorder, pageSelection }: CredentialViewProps) {
   const t = useT();
   return (
     <div className={styles.list}>
-      {/* One header for every provider: the columns are named once, and the page's selection sits
-          in the checkbox column it selects. */}
+      {/* One header for every provider: the columns are named once, above the first surface, and
+          the page's selection sits in the checkbox column it selects. */}
       <div className={clsx(styles.line, styles['table-head'])}>
         <span className={styles.lead}>{pageSelection}</span>
         <span className={styles['head-who']}>{t('omc.fleet_col_account')}</span>
@@ -138,7 +142,10 @@ function ListGroup({ group, pluginLogos, selectedKeys, nowMS, actions, onReorder
   );
 }
 
-/** A provider's title over its credentials: the selection of all of them, its mark, name and count. */
+/**
+ * A provider's title over its credentials: the selection of all of them, its mark on a tile, name and
+ * count. It heads the provider's own surface, so the mark is drawn once per provider, not per row.
+ */
 export function GroupHead({ group, pluginLogos, selectedKeys, actions, isBand = false, className }: {
   group: CredentialGroup;
   pluginLogos?: PluginOAuthLogos;
@@ -163,7 +170,9 @@ export function GroupHead({ group, pluginLogos, selectedKeys, actions, isBand = 
         />
       </span>
       <span className={styles['group-identity']}>
-        <CredentialMark credential={{ provider: group.provider }} pluginLogos={pluginLogos} size={16} />
+        <span className={styles['group-mark']} aria-hidden="true">
+          <CredentialMark credential={{ provider: group.provider }} pluginLogos={pluginLogos} size={16} />
+        </span>
         <h2 className={styles['group-title']}>{group.title}</h2>
         <span className={styles['group-count']}>{group.visibleRecords.length}</span>
       </span>
