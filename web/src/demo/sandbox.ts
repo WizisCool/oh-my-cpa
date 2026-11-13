@@ -3140,9 +3140,18 @@ export async function interceptDemoRequest(
     const base = await ensureBaseline<QuotaOverviewResponse>('quota', '/management/quota', fetchBaseline);
     const matched = (base?.quotas ?? []).filter((q) => indexes.includes(q.auth_index)).map((q) => ({ ...q, observed_at_ms: now }));
     saveState(state);
-    return body?.auth_indexes
-      ? jsonResponse({ status: 'ok', quotas: matched })
-      : jsonResponse({ status: 'ok', quota: matched[0] });
+    if (!body?.auth_indexes) return jsonResponse({ status: 'ok', quota: matched[0] });
+    // As the server does: the event stream only for a caller that asks for it.
+    const accept = new Headers(options?.headers).get('Accept') ?? '';
+    if (!accept.includes('text/event-stream')) return jsonResponse({ status: 'ok', quotas: matched, total: matched.length });
+    const frames = [
+      ...matched.map((item) => `event: quota\ndata: ${JSON.stringify(item)}\n\n`),
+      `event: done\ndata: ${JSON.stringify({ status: 'ok', total: matched.length })}\n\n`,
+    ];
+    return new Response(frames.join(''), {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'X-OMCPA-Demo': 'active', 'X-OMCPA-Demo-Sandbox': 'browser' },
+    });
   }
 
   if (pathname === '/management/quota/clear-cooldown' && method === 'POST') {

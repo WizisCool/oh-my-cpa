@@ -89,14 +89,15 @@ func TestMetaQuotaFacadeAuditsBeforeDownloadAndProjectsSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A caller that does not ask for the event stream keeps the single JSON answer.
 	var batch struct {
 		Total  int                     `json:"total"`
 		Quotas []quota.NormalizedQuota `json:"quotas"`
 	}
 	err = json.NewDecoder(response.Body).Decode(&batch)
 	response.Body.Close()
-	if err != nil || response.StatusCode != http.StatusOK || batch.Total != 1 || len(batch.Quotas) != 1 {
-		t.Fatalf("duplicate batch refresh: status=%d total=%d quotas=%d err=%v", response.StatusCode, batch.Total, len(batch.Quotas), err)
+	if err != nil || response.StatusCode != http.StatusOK || batch.Total != 1 || len(batch.Quotas) != 1 || !strings.HasPrefix(response.Header.Get("Content-Type"), "application/json") {
+		t.Fatalf("duplicate batch refresh: status=%d type=%q total=%d quotas=%d err=%v", response.StatusCode, response.Header.Get("Content-Type"), batch.Total, len(batch.Quotas), err)
 	}
 	response, err = client.Post(baseURL+"/omc/api/v1/management/quota/refresh", "application/json", bytes.NewBufferString(`{"auth_indexes":[" ",""]}`))
 	if err != nil {

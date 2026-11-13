@@ -9,6 +9,7 @@ import type { CustomIcon } from '../types/customIcons';
 import type { InstalledFont } from '../types/fonts';
 import type { SafeProjectedStateSnapshot, StateEnvelope } from './stateLive';
 import { getAppConfig } from '../types/config';
+import { readSSE } from '../agent/sse';
 import { isDemoMode } from '../types/demoMode';
 import {
   DiscoveredResource,
@@ -1477,11 +1478,23 @@ export const api = {
     });
   },
 
-  async batchRefreshCredentialQuotas(authIndexes: string[]): Promise<{ status: string; quotas: QuotaItem[] }> {
-    return request<{ status: string; quotas: QuotaItem[] }>('/management/quota/refresh', {
+  /**
+   * Refreshes up to ten credentials, handing each reading to `onQuota` the moment the server has
+   * it rather than when the slowest one is done. A stream that ends before the server's closing
+   * frame was cut, and rejects after every reading it did carry has been handed over.
+   */
+  async batchRefreshCredentialQuotas(authIndexes: string[], onQuota: (quota: QuotaItem) => void): Promise<void> {
+    const response = await requestResponse('/management/quota/refresh', {
       method: 'POST',
+      headers: { Accept: 'text/event-stream' },
       body: JSON.stringify({ auth_indexes: authIndexes }),
     });
+    if (!response.body) throw new ApiError('Quota refresh returned no stream', response.status);
+    for await (const frame of readSSE(response.body)) {
+      if (frame.event === 'quota') onQuota(JSON.parse(frame.data) as QuotaItem);
+      else if (frame.event === 'done') return;
+    }
+    throw new ApiError('Quota refresh stream ended early', 0);
   },
 
   async clearCredentialCooldown(authIndex: string): Promise<{ status: string; auth_index: string }> {

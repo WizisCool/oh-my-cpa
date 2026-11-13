@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -138,6 +139,49 @@ func newClaudeRateLimitHandler(t *testing.T, fixture *claudeRateLimitFixture) *H
 
 var claudeRateLimitCredentials = []string{"claude-1", "claude-2", "claude-3", "claude-4"}
 
+// readQuotaRefreshStream reads a batch refresh's event stream: one `quota` frame per reading, then
+// `done` with the count. A stream without `done` fails the test, since the console treats it as cut.
+func readQuotaRefreshStream(t *testing.T, body io.Reader) ([]quota.NormalizedQuota, int) {
+	t.Helper()
+	var quotas []quota.NormalizedQuota
+	total := -1
+	for _, frame := range strings.Split(strings.TrimSpace(readAll(t, body)), "\n\n") {
+		event, data, _ := strings.Cut(frame, "\n")
+		data = strings.TrimPrefix(data, "data: ")
+		switch event {
+		case "event: quota":
+			var reading quota.NormalizedQuota
+			if err := json.Unmarshal([]byte(data), &reading); err != nil {
+				t.Fatalf("quota frame %q: %v", data, err)
+			}
+			quotas = append(quotas, reading)
+		case "event: done":
+			var done struct {
+				Total int `json:"total"`
+			}
+			if err := json.Unmarshal([]byte(data), &done); err != nil {
+				t.Fatalf("done frame %q: %v", data, err)
+			}
+			total = done.Total
+		default:
+			t.Fatalf("unexpected frame %q", frame)
+		}
+	}
+	if total < 0 {
+		t.Fatal("batch refresh stream ended without its done frame")
+	}
+	return quotas, total
+}
+
+func readAll(t *testing.T, body io.Reader) string {
+	t.Helper()
+	raw, err := io.ReadAll(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
 func TestQuotaAutoRefreshPacesClaudeAfterRateLimits(t *testing.T) {
 	ctx := context.Background()
 	fixture := &claudeRateLimitFixture{claudeRequests: map[string]int{}, codexReads: map[string]int{}, isRateLimited: true, retryAfterSecond: 180}
@@ -242,21 +286,22 @@ func TestQuotaBatchRefreshHonorsClaudeRateLimit(t *testing.T) {
 		saveAutoRefreshSnapshot(t, handler, authIndex, "claude", nowMS-time.Hour.Milliseconds(), nowMS+time.Hour.Milliseconds())
 	}
 
+	// The console asks for the event stream; this batch is read through it.
 	refresh := func() []quota.NormalizedQuota {
 		t.Helper()
 		body := `{"auth_indexes":["claude-1","claude-2","claude-3","claude-4","codex-1","codex-2"]}`
 		recorder := httptest.NewRecorder()
-		handler.refreshCredentialQuota(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/management/quota/refresh", bytes.NewBufferString(body)))
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("batch refresh status = %d: %s", recorder.Code, recorder.Body.String())
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/management/quota/refresh", bytes.NewBufferString(body))
+		request.Header.Set("Accept", "text/event-stream")
+		handler.refreshCredentialQuota(recorder, request)
+		if recorder.Code != http.StatusOK || !strings.HasPrefix(recorder.Header().Get("Content-Type"), "text/event-stream") {
+			t.Fatalf("batch refresh status = %d type = %q: %s", recorder.Code, recorder.Header().Get("Content-Type"), recorder.Body.String())
 		}
-		var response struct {
-			Quotas []quota.NormalizedQuota `json:"quotas"`
+		quotas, total := readQuotaRefreshStream(t, recorder.Body)
+		if total != len(quotas) {
+			t.Fatalf("done total = %d, streamed %d readings", total, len(quotas))
 		}
-		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
-			t.Fatal(err)
-		}
-		return response.Quotas
+		return quotas
 	}
 
 	for attempt := range 2 {
