@@ -75,6 +75,9 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 	if response, payload = doJSON(t, client, http.MethodPut, base+"/"+repository.PreferencePluginOrder, `{"installed":["omc-qoder-oauth","omc-zcode-oauth"]}`); response.StatusCode != http.StatusOK {
 		t.Fatalf("plugin order status = %d body %s", response.StatusCode, payload)
 	}
+	if response, payload = doJSON(t, client, http.MethodPut, base+"/"+repository.PreferenceWarmupTaskOrder, `{"claude":["t_2","t_1"]}`); response.StatusCode != http.StatusOK {
+		t.Fatalf("warmup task order status = %d body %s", response.StatusCode, payload)
+	}
 
 	// The playground keeps one document: the latest session, with the target named by the key's
 	// usage fingerprint rather than the key text.
@@ -109,6 +112,7 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 		!strings.Contains(string(payload), `"usage_events_columns":{"time":120,"provider":220,"tps":90}`) ||
 		!strings.Contains(string(payload), `"oauth_management_view_v1":{"density":"compact","pageSize":24}`) ||
 		!strings.Contains(string(payload), `"omc_plugin_order":{"installed":["omc-qoder-oauth","omc-zcode-oauth"]}`) ||
+		!strings.Contains(string(payload), `"omc_warmup_task_order":{"claude":["t_2","t_1"]}`) ||
 		!strings.Contains(string(payload), `"playground_session":{"client_key_fingerprint":"hmac:playground","model":"gpt-5","turns":[]}`) ||
 		!strings.Contains(string(payload), `"agent_target":{"client_key_fingerprint":"hmac:agent","model":"gpt-5","reasoning_effort":"high"}`) ||
 		!strings.Contains(string(payload), `"omc_reduced_motion":"system"`) ||

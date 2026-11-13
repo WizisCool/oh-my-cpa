@@ -15,6 +15,7 @@
     "omc_credential_order",
     "omc_oauth_section_order",
     "omc_plugin_order",
+    "omc_warmup_task_order",
     "routing_card_order",
     "omc_timezone",
     "omc_token_style",

@@ -218,6 +218,21 @@ test('every built-in and custom palette keeps segmented thumbs and selected rows
       }),
     },
     {
+      name: 'custom-dark-bright-elevated',
+      mode: 'dark' as const,
+      palette: derivePalette('dark', {
+        bg: '#121214',
+        surface: '#1c1c1f',
+        elevated: '#707070',
+        fg: '#ffffff',
+        fg2: '#e2e2e6',
+        muted: '#a1a1aa',
+        meta: '#82828c',
+        border: '#2c2c30',
+        accent: '#58a6ff',
+      }),
+    },
+    {
       name: 'custom-light-flat-elevated',
       mode: 'light' as const,
       palette: derivePalette('light', {
@@ -238,10 +253,11 @@ test('every built-in and custom palette keeps segmented thumbs and selected rows
     const maxWellL = Math.max(...wells.map(oklchLightness));
     const thumbL = oklchLightness(palette.thumbBg);
     const minStep = mode === 'dark' ? 0.07 : 0.025;
-    assert.ok(thumbL - maxWellL >= minStep, `${name} thumbBg (${palette.thumbBg}) too close to field well`);
+    assert.ok(Math.abs(thumbL - maxWellL) >= minStep, `${name} thumbBg (${palette.thumbBg}) too close to field well`);
     assert.ok(contrastRatio(palette.fg, palette.thumbBg) >= 4.5, `${name} fg contrast on thumbBg < 4.5`);
     const selectedDelta = Math.abs(oklchLightness(palette.selected) - oklchLightness(palette.elevated));
     assert.ok(selectedDelta >= 0.045, `${name} selected (${palette.selected}) too close to elevated (${palette.elevated})`);
+    assert.ok(contrastRatio(palette.fg, palette.selected) >= 4.5, `${name} fg contrast on selected < 4.5`);
   }
 });
 

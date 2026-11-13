@@ -202,7 +202,8 @@ function standOffAbove(color: string, floorLightness: number, step: number): str
 
 /**
  * Computes `--thumb-bg` so a `Segmented` or `ToggleGroup` thumb stands off its `bg-field` well
- * (`5%` of `--fg` over the container surface) on every substrate (`bg`, `surface`, `elevated`).
+ * (`5%` of `--fg` over the container surface) on every substrate (`bg`, `surface`, `elevated`),
+ * while preserving WCAG AA normal-text contrast (`>= 4.5:1`) for `--fg` on the thumb.
  */
 function deriveThumbBg(mode: ThemeMode, core: ThemeCore): string {
   const wells = [core.bg, core.surface, core.elevated].map((ground) => mixSrgb(ground, core.fg, 0.05));
@@ -211,15 +212,39 @@ function deriveThumbBg(mode: ThemeMode, core: ThemeCore): string {
     const minLightL = Math.min(1, maxWellL + 0.03);
     return oklchLightness(core.elevated) >= minLightL ? core.elevated : withLightness(core.elevated, minLightL);
   }
-  const targetL = Math.min(1, maxWellL + 0.08);
-  const candidate = withLightness(core.elevated, targetL);
   const textFloor = CONTRAST_FLOORS.text ?? 4.5;
-  if (contrastRatio(core.fg, candidate) >= textFloor) return candidate;
-  for (let l = targetL - LADDER_STEP; l > maxWellL; l -= LADDER_STEP) {
+  const targetL = Math.min(1, maxWellL + 0.08);
+  for (let l = targetL; l >= maxWellL + 0.03; l -= LADDER_STEP) {
     const stepped = withLightness(core.elevated, l);
     if (contrastRatio(core.fg, stepped) >= textFloor) return stepped;
   }
-  return candidate;
+  // If an unusually light dark-mode elevated surface leaves no lighter step that clears 4.5:1,
+  // step below maxWellL to preserve both separation from the well and text contrast.
+  const downTargetL = Math.max(0, maxWellL - 0.08);
+  let best = { color: core.elevated, ratio: contrastRatio(core.fg, core.elevated) };
+  for (let l = downTargetL; l >= 0; l -= LADDER_STEP) {
+    const stepped = withLightness(core.elevated, l);
+    const ratio = contrastRatio(core.fg, stepped);
+    if (ratio >= textFloor) return stepped;
+    if (ratio > best.ratio) best = { color: stepped, ratio };
+  }
+  return best.color;
+}
+
+function deriveDarkSelected(rawSelected: string, core: ThemeCore, maxSurfaceL: number): string {
+  const textFloor = CONTRAST_FLOORS.text ?? 4.5;
+  const minStep = 0.055;
+  const raised = standOffAbove(rawSelected, maxSurfaceL, minStep);
+  if (contrastRatio(core.fg, raised) >= textFloor) return raised;
+  for (let l = Math.min(1, maxSurfaceL + minStep); l >= maxSurfaceL + 0.045; l -= LADDER_STEP) {
+    const stepped = withLightness(rawSelected, l);
+    if (contrastRatio(core.fg, stepped) >= textFloor) return stepped;
+  }
+  for (let l = Math.max(0, maxSurfaceL - minStep); l >= 0; l -= LADDER_STEP) {
+    const stepped = withLightness(rawSelected, l);
+    if (contrastRatio(core.fg, stepped) >= textFloor) return stepped;
+  }
+  return contrastRatio(core.fg, rawSelected) >= textFloor ? rawSelected : raised;
 }
 
 /**
@@ -693,7 +718,7 @@ export function derivePalette(
   const elevatedL = oklchLightness(core.elevated);
   const maxSurfaceL = Math.max(oklchLightness(core.bg), oklchLightness(core.surface), elevatedL);
   const selected = mode === 'dark'
-    ? standOffAbove(rawSelected, maxSurfaceL, 0.055)
+    ? deriveDarkSelected(rawSelected, core, maxSurfaceL)
     : Math.abs(oklchLightness(rawSelected) - elevatedL) >= 0.045
       ? rawSelected
       : withLightness(rawSelected, Math.max(0, elevatedL - 0.055));
