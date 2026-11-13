@@ -150,7 +150,7 @@ func TestModelQuotaForecastRequiresAttributableIntervals(t *testing.T) {
 		{"unclassified traffic", cycle(modelPoint(6, 10), modelPoint(8, 50, hydrogen, modelSample("private-alias", 1, 100)))},
 		{"mixed service tiers", cycle(modelPoint(6, 10), modelPoint(8, 50, mixedTier))},
 		{"too few requests", cycle(modelPoint(6, 10), modelPoint(8, 50, modelSample("gemini-4-hydrogen", 4, 400)))},
-		{"too little quota", cycle(modelPoint(6, 10), modelPoint(8, 14, hydrogen))},
+		{"too little quota", cycle(modelPoint(6, 10), modelPoint(8, 11, hydrogen))},
 		{"external-only use", cycle(modelPoint(6, 10), modelPoint(8, 50))},
 	}
 	for _, tc := range cases {
@@ -173,13 +173,13 @@ func TestModelQuotaForecastResetsWorkloadAndCycleEvidence(t *testing.T) {
 	sample := modelSample("gpt-6.1-sol", 5, 1000)
 	cached := sample
 	cached.CachedTokens = 800
-	stored := cycle(modelPoint(6, 0), modelPoint(7, 10, sample), modelPoint(8, 12, cached))
+	stored := cycle(modelPoint(6, 0), modelPoint(7, 10, sample), modelPoint(8, 11, cached))
 	if forecasts, _ := BuildModelForecasts(capacityWindow(12), nil, 9*hourMS, []CycleCalibration{stored}); len(forecasts) != 0 {
 		t.Fatalf("changed cache mix reused old sample: %+v", forecasts)
 	}
 	larger := sample
 	larger.Tokens, larger.PromptTokens = 10000, 10000
-	stored.Points[2] = modelPoint(8, 12, larger)
+	stored.Points[2] = modelPoint(8, 11, larger)
 	if forecasts, _ := BuildModelForecasts(capacityWindow(12), nil, 9*hourMS, []CycleCalibration{stored}); len(forecasts) != 0 {
 		t.Fatalf("changed request size reused old sample: %+v", forecasts)
 	}
@@ -276,5 +276,24 @@ func TestNextCalibrationCycleRejectsOlderPlanReading(t *testing.T) {
 	withReset := cycle(modelPoint(6, 0), modelPoint(7, 20, modelSample("gpt-6.1-sol", 10, 1000)), reset)
 	if got, reason := BuildModelForecasts(capacityWindow(0), nil, 9*hourMS, []CycleCalibration{withReset}); len(got) != 0 || reason != CapacityReasonResetMidCycle {
 		t.Fatalf("mid-cycle reset with usage gap = %+v, %q", got, reason)
+	}
+}
+
+func TestModelQuotaForecastMinQuotaAndWorkloadTolerance(t *testing.T) {
+	p := modelSample("gpt-6.1-sol", 5, 5000)
+	p.PricedRequests = 5
+	p.CostNanos = 1_000_000_000
+	shortCycle := cycle(modelPoint(6, 0), modelPoint(8, 2, p))
+	forecasts, reason := BuildModelForecasts(capacityWindow(2), nil, 9*hourMS, []CycleCalibration{shortCycle})
+	if reason != "" || len(forecasts) != 1 || forecasts[0].RemainingRequests != 245 || forecasts[0].RemainingCostNanos == nil || *forecasts[0].RemainingCostNanos != 49_000_000_000 {
+		t.Fatalf("5h 2%% forecast = %+v, %q", forecasts, reason)
+	}
+
+	first := ModelCalibrationUsage{Model: "gpt-6.1-sol", Requests: 3, Tokens: 10300, PromptTokens: 10000, CachedTokens: 6000, OutputTokens: 300}
+	second := ModelCalibrationUsage{Model: "gpt-6.1-sol", Requests: 3, Tokens: 20500, PromptTokens: 20000, CachedTokens: 16000, OutputTokens: 1200}
+	stored := cycle(modelPoint(6, 0), modelPoint(7, 3, first), modelPoint(8, 6, second))
+	forecasts, reason = BuildModelForecasts(capacityWindow(6), nil, 9*hourMS, []CycleCalibration{stored})
+	if reason != "" || len(forecasts) != 1 || forecasts[0].SampleRequests != 6 || forecasts[0].SampleUsedPercent != 6 {
+		t.Fatalf("moderate workload shift dropped sample = %+v, %q", forecasts, reason)
 	}
 }

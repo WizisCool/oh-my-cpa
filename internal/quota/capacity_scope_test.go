@@ -51,3 +51,18 @@ func TestSelectWindowUsageKeepsMatchedTrafficAndNamesUnknownScope(t *testing.T) 
 		t.Fatal("partial group name was guessed")
 	}
 }
+
+func TestSelectWindowUsageRecognizesFableAndReasoningFamilies(t *testing.T) {
+	fable := QuotaWindow{ID: "seven_day_fable", Scope: "model", Model: "fable"}
+	groups := []ModelWindowUsage{
+		{Model: "anthropic/claude-fable-5-1", Usage: WindowUsage{Requests: 4, Tokens: 400}},
+		{Model: "o4-mini", Usage: WindowUsage{Requests: 2, Tokens: 200}},
+	}
+	actual, reason := SelectWindowUsage(fable, groups)
+	if reason != "" || actual.Requests != 4 || actual.Tokens != 400 || actual.UnmatchedRequests != 0 {
+		t.Fatalf("fable usage = %+v, reason = %q", actual, reason)
+	}
+	if capacityModelFamily("o3-pro") == "" || capacityModelFamily("claude-mythos-5") == "" {
+		t.Fatalf("expected known family for o3-pro and claude-mythos-5")
+	}
+}

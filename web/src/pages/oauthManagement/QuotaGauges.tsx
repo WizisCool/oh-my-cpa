@@ -3,6 +3,8 @@ import { quotaWindowFullName } from '../quota/quotaWindowSelection';
 import { Meter } from '../../components/common/Meter';
 import { useT } from '../../i18n';
 import type { QuotaMetric } from '../../types/quota';
+import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
+import { compactQuotaForecast } from '../quota/quotaCapacity';
 import { QuotaCapacityButton, type QuotaCapacityOwner } from '../quota/QuotaCapacityButton';
 import { formatQuotaMetric, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown } from '../quota/quotaFormat';
 import { QUOTA_LOW_PERCENT, quotaRemainingStroke } from '../quota/quotaThresholds';
@@ -61,6 +63,7 @@ function QuotaReading({ cell, siblings, name, provider, isMuted, nowMS, owner }:
   owner?: QuotaCapacityOwner;
 }) {
   const t = useT();
+  const { style: tokenStyle } = useTokenDisplayStyle();
   const { window } = cell;
   const remaining = quotaRemainingPercent(window);
   // Use the unrounded upstream reading: a displayed 100% alone does not prove zero usage.
@@ -72,8 +75,10 @@ function QuotaReading({ cell, siblings, name, provider, isMuted, nowMS, owner }:
     && window.used_percent === 0
     && (window.remaining_percent ?? 100) === 100;
   const reset = isUnusedFullCodexWindow ? t('quota.duration_hours', { n: 5 }) : quotaResetCountdown(window, nowMS, t);
-  const hasDetails = Boolean(window.model_forecasts?.length || window.usage || window.forecast_unavailable);
-  const detailsLabel = owner && hasDetails ? t('quota.capacity_open_details') : window.description;
+  const forecastLabel = owner ? compactQuotaForecast(window, tokenStyle, t) : null;
+  const hasForecast = Boolean(forecastLabel);
+  const hasDialogEvidence = Boolean(owner && (hasForecast || window.usage || window.forecast_unavailable));
+  const detailsLabel = forecastLabel ?? window.description;
   return (
     <div
       className={clsx(
@@ -93,11 +98,16 @@ function QuotaReading({ cell, siblings, name, provider, isMuted, nowMS, owner }:
           <b style={remaining != null && remaining < QUOTA_LOW_PERCENT ? { color: quotaRemainingStroke(remaining) } : undefined}>{quotaRemainingText(window)}</b>
         </span>
         <Meter className={styles.bar} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : quotaWindowFullName(window)} />
-        {detailsLabel && (owner && hasDetails ? (
+        {hasDialogEvidence && owner ? (
           <span className={styles.estimate}>
-            <QuotaCapacityButton owner={owner} window={window} windows={siblings}>{detailsLabel}</QuotaCapacityButton>
+            <QuotaCapacityButton owner={owner} window={window} windows={siblings} hasTrigger={hasForecast}>
+              {forecastLabel}
+            </QuotaCapacityButton>
+            {!hasForecast && window.description}
           </span>
-        ) : <span className={styles.estimate}>{detailsLabel}</span>)}
+        ) : detailsLabel ? (
+          <span className={styles.estimate}>{detailsLabel}</span>
+        ) : null}
         {reset && <span className={styles.reset}>{reset}</span>}
       </div>
     </div>

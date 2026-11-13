@@ -1,6 +1,8 @@
 import { Meter } from '../../components/common/Meter';
 import { useT } from '../../i18n';
 import type { QuotaWindow } from '../../types/quota';
+import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
+import { compactQuotaForecast } from './quotaCapacity';
 import { QuotaCapacityButton, type QuotaCapacityOwner } from './QuotaCapacityButton';
 import { quotaRemainingPercent, quotaResetCountdown, quotaResetText } from './quotaFormat';
 import { quotaWindowFullName } from './quotaWindowSelection';
@@ -53,12 +55,14 @@ function QuotaWindowCard({ window, siblings, name, nowMS, owner }: {
   owner?: QuotaWindowCardsProps['owner'];
 }) {
   const t = useT();
+  const { style: tokenStyle } = useTokenDisplayStyle();
   const remaining = quotaRemainingPercent(window);
   const stroke = quotaRemainingStroke(remaining);
   const reset = quotaResetCountdown(window, nowMS, t);
   const resetTitle = window.reset_accuracy && window.reset_accuracy !== 'exact' ? t('quota.reset_estimated_hint') : quotaResetText(window, nowMS, t);
-  // Consumption details stay available while a model sample is still accumulating.
-  const hasDetails = Boolean(owner && (window.model_forecasts?.length || window.usage || window.forecast_unavailable));
+  const forecastLabel = owner ? compactQuotaForecast(window, tokenStyle, t) : null;
+  // Consumption details stay available on the card while a model sample is still accumulating.
+  const hasDetails = Boolean(owner && (forecastLabel || window.usage || window.forecast_unavailable));
   const content = (
     <>
       <span className={styles.head}>
@@ -72,7 +76,7 @@ function QuotaWindowCard({ window, siblings, name, nowMS, owner }: {
       {window.description && <span className={styles.description} data-tip={window.description} data-tip-overflow="">{window.description}</span>}
       <span className={styles.foot}>
         <span className={styles.estimate}>
-          {hasDetails && t('quota.capacity_open_details')}
+          {forecastLabel}
         </span>
         {reset && <span className={styles.reset} data-tip={resetTitle}>{reset === t('quota.recovered') ? reset : t('quota.capacity_resets', { when: reset })}</span>}
       </span>

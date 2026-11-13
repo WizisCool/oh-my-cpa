@@ -913,7 +913,7 @@ func TestQuotaCapacityLateUsageSurvivesFlatReadingsAndRetention(t *testing.T) {
 				insert("current", "gpt-6.1-sol", 5, start+2*hour+1000)
 			}
 			insert("late", "gpt-6.1-terra", 5, start+hour+2000)
-			used := 13.0
+			used := 11.0
 			if scenario.isFlat {
 				used = 10
 			}

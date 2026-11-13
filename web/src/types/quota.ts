@@ -45,6 +45,7 @@ export interface QuotaModelForecast {
   model: string;
   service_tier?: string;
   sample_requests: number;
+  sample_priced_requests?: number;
   sample_tokens: number;
   sample_used_percent: number;
   cache_rate?: number;
@@ -52,6 +53,7 @@ export interface QuotaModelForecast {
   observed_at_ms: number;
   remaining_requests: number;
   remaining_tokens: number;
+  remaining_cost_nanos?: number;
   /** Meter rounding only; not a confidence bound on future workloads. */
   rounding_error_percent: number;
 }

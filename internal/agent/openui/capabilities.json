@@ -4100,6 +4100,9 @@
                           "sample_requests": {
                             "type": "integer"
                           },
+                          "sample_priced_requests": {
+                            "type": "integer"
+                          },
                           "sample_tokens": {
                             "type": "integer"
                           },
@@ -4123,6 +4126,12 @@
                           },
                           "remaining_tokens": {
                             "type": "integer"
+                          },
+                          "remaining_cost_nanos": {
+                            "type": [
+                              "null",
+                              "integer"
+                            ]
                           },
                           "rounding_error_percent": {
                             "type": "number"
@@ -4435,6 +4444,9 @@
                     "sample_requests": {
                       "type": "integer"
                     },
+                    "sample_priced_requests": {
+                      "type": "integer"
+                    },
                     "sample_tokens": {
                       "type": "integer"
                     },
@@ -4458,6 +4470,12 @@
                     },
                     "remaining_tokens": {
                       "type": "integer"
+                    },
+                    "remaining_cost_nanos": {
+                      "type": [
+                        "null",
+                        "integer"
+                      ]
                     },
                     "rounding_error_percent": {
                       "type": "number"

@@ -30,11 +30,13 @@ export interface QuotaCapacityButtonProps {
   windows?: readonly QuotaWindow[];
   /** Replaces the inline text style, for a trigger that is a whole surface. */
   className?: string;
+  /** False keeps an already-open dialog mounted without rendering a visible trigger. */
+  hasTrigger?: boolean;
   children: React.ReactNode;
 }
 
 /** Opens recorded consumption and model-conditioned forecast details. */
-export function QuotaCapacityButton({ owner, window, windows, className, children }: QuotaCapacityButtonProps) {
+export function QuotaCapacityButton({ owner, window, windows, className, hasTrigger = true, children }: QuotaCapacityButtonProps) {
   const scope = React.useContext(QuotaCapacityScopeContext);
   const isBlocked = Boolean(scope?.isBlocked);
   const [isOpen, setIsOpen] = React.useState(false);
@@ -46,20 +48,22 @@ export function QuotaCapacityButton({ owner, window, windows, className, childre
 
   return (
     <>
-      <button
-        type="button"
-        className={className ?? styles['capacity-trigger']}
-        aria-haspopup="dialog"
-        // A row or reading around the estimate may answer clicks of its own.
-        onClick={(event) => {
-          event.stopPropagation();
-          if (isBlocked) return;
-          setHasOpened(true);
-          setIsOpen(true);
-        }}
-      >
-        {children}
-      </button>
+      {hasTrigger && (
+        <button
+          type="button"
+          className={className ?? styles['capacity-trigger']}
+          aria-haspopup="dialog"
+          // A row or reading around the estimate may answer clicks of its own.
+          onClick={(event) => {
+            event.stopPropagation();
+            if (isBlocked) return;
+            setHasOpened(true);
+            setIsOpen(true);
+          }}
+        >
+          {children}
+        </button>
+      )}
       {hasOpened && (
         <QuotaCapacityDialog
           open={isOpen && !isBlocked}
