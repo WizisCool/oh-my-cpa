@@ -31,7 +31,7 @@
   width: 100%;
 }
 
-.request-list-item-virtual {
+.request-list-item {
   position: absolute;
   top: 0;
   left: 0;
@@ -46,11 +46,6 @@
   position: sticky;
   top: 0;
   z-index: 2;
-}
-
-.request-list.is-native-scroll .request-list-item:not(.request-list-item-virtual) {
-  content-visibility: auto;
-  contain-intrinsic-block-size: auto 96px;
 }
 
 .request-scroll-track {

@@ -390,6 +390,14 @@ once inside an element-scoped view transition ([`useChartMorph`](../../web/src/c
 that cross-fades the chart on the compositor, and the chart library's own tween stays off. Where
 scoped transitions are missing or motion is reduced, the new data simply lands.
 
+The request list is the other exception. Its rows are virtualized and placed by transforms the list
+owns, so a record arriving at the live edge is carried in by the list itself
+([`RequestVirtualList`](../../web/src/components/usage/RequestVirtualList.tsx)): the drawn rows glide
+from where they stood on an additive Web Animations transform, the arrival fades in, and both run on
+`MOTION_ARRIVAL` under the console's reduced-motion policy. Each record keeps its band as it moves, so
+an arrival above the records on screen turns no tone over; only a record landing mid-list turns over
+the ones below it, which keeps the stripes alternating.
+
 A list that a search or a status filter narrows animates through the same layer
 ([`motion/filter.tsx`](../../web/src/motion/filter.tsx)): what remains glides to the place the shorter
 list gives it, and what starts to match fades in where it now belongs, as one move. A row the filter

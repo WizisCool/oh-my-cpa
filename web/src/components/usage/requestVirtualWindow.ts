@@ -236,3 +236,84 @@ export function computeGroupedVirtualWindow<T>({
     rangeKey: keyParts.join(','),
   };
 }
+
+/** How one drawn row enters the arrival glide. */
+export interface ArrivalMove {
+  readonly key: React.Key;
+  /** The row's offset from its new place when the glide starts: the place it was drawn before. */
+  readonly from: number;
+  /** A record the list did not hold before, which fades in as it glides. */
+  readonly isArrival: boolean;
+}
+
+/**
+ * Plans the glide that carries newly arrived records into the drawn rows.
+ *
+ * A row drawn both times starts from where it stood. An arrival has no place of its own to start
+ * from, so it travels with the row beneath it (with the row above it when it lands at the end), and
+ * the stack reads as one move. `null` means the change is not an arrival to animate: nothing drawn
+ * before is still drawn (another page or view), nothing new is drawn (a record left the list, or
+ * rows only moved off screen), or a row would travel more than `maxTravel` - a backlog released at
+ * once lands as it is rather than streaking past.
+ */
+export function planArrivalGlide({
+  previousKeys,
+  previousTops,
+  drawnTops,
+  maxTravel,
+}: {
+  previousKeys: ReadonlySet<React.Key>;
+  /** Rows drawn last time and where. */
+  previousTops: ReadonlyMap<React.Key, number>;
+  /** Rows drawn now and where, in drawing order. */
+  drawnTops: ReadonlyMap<React.Key, number>;
+  maxTravel: number;
+}): ArrivalMove[] | null {
+  const drawn = [...drawnTops];
+  const froms: (number | null)[] = drawn.map(([key, top]) => {
+    if (previousKeys.has(key)) {
+      const previousTop = previousTops.get(key);
+      return previousTop === undefined ? 0 : previousTop - top;
+    }
+    return null;
+  });
+  const isArrival = froms.map((from) => from === null);
+  if (!isArrival.includes(true) || !drawn.some(([key]) => previousTops.has(key))) return null;
+
+  let below: number | null = null;
+  for (let index = froms.length - 1; index >= 0; index -= 1) {
+    if (froms[index] === null) froms[index] = below;
+    else below = froms[index];
+  }
+  let above = 0;
+  const moves = drawn.map(([key], index): ArrivalMove => {
+    const from = froms[index] ?? above;
+    above = from;
+    return { key, from, isArrival: isArrival[index] };
+  });
+  return moves.some((move) => Math.abs(move.from) > maxTravel) ? null : moves;
+}
+
+export type BandTone = 'odd' | 'even';
+
+/**
+ * Gives each record the band it keeps for as long as it stays in the list.
+ *
+ * The tones alternate down the list from the first record that already had one, so an arrival above
+ * it takes the tone opposite its neighbour and no record already drawn changes; only a record landing
+ * mid-list turns the ones below it over. A list that keeps nothing starts afresh on `odd`.
+ */
+export function assignBandTones(
+  keys: readonly React.Key[],
+  previous: ReadonlyMap<React.Key, BandTone>,
+): Map<React.Key, BandTone> {
+  const anchor = keys.findIndex((key) => previous.has(key));
+  const anchorTone = anchor < 0 ? 'odd' : previous.get(keys[anchor])!;
+  const from = Math.max(0, anchor);
+  const tones = new Map<React.Key, BandTone>();
+  keys.forEach((key, index) => {
+    const isSame = (index - from) % 2 === 0;
+    tones.set(key, isSame === (anchorTone === 'odd') ? 'odd' : 'even');
+  });
+  return tones;
+}

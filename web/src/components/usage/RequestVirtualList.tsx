@@ -2,6 +2,8 @@ import React from 'react';
 import clsx from 'clsx';
 
 import { sharedResizeObserverHub } from '../../performance/resizeObserverHub';
+import { MOTION_ARRIVAL } from '../../theme/themeConfig';
+import { isMotionReduced } from '../../utils/motionPreference';
 import {
   DEFAULT_REQUEST_GROUP_HEADER_HEIGHT,
   DEFAULT_REQUEST_ROW_HEIGHT,
@@ -9,6 +11,9 @@ import {
   buildGroupSegments,
   computeGroupedVirtualWindow,
   computeVirtualWindow,
+  assignBandTones,
+  planArrivalGlide,
+  type BandTone,
 } from './requestVirtualWindow';
 import './RequestVirtualList.css';
 
@@ -29,13 +34,10 @@ export interface RequestGroupConfig<T> {
 export interface RequestVirtualListProps<T> {
   items: readonly T[];
   getItemKey: (item: T) => React.Key;
-  virtual: boolean;
   overscanPx?: number;
   group?: RequestGroupConfig<T>;
-  className?: string;
   onScroll?: React.UIEventHandler<HTMLDivElement>;
-  /** `position` is the row's place in the list as drawn: within its group when grouped. */
-  renderItem: (item: T, position: number) => React.ReactNode;
+  renderItem: (item: T) => React.ReactNode;
 }
 
 interface ThumbGeometry {
@@ -67,10 +69,8 @@ function RequestVirtualListInner<T>(
   {
     items,
     getItemKey,
-    virtual,
     overscanPx = REQUEST_VIRTUAL_OVERSCAN_PX,
     group,
-    className,
     onScroll,
     renderItem,
   }: RequestVirtualListProps<T>,
@@ -106,6 +106,21 @@ function RequestVirtualListInner<T>(
     [items, group],
   );
 
+  // A record's band is its own and travels with it (RequestList.css), so an arrival at the top
+  // turns no tone on the page over and no row is drawn again for it.
+  const bandTonesRef = React.useRef<ReadonlyMap<React.Key, BandTone>>(new Map());
+  const bandTones = React.useMemo(() => {
+    const keyLists = group
+      ? segments.map((segment) => segment.entries.map(({ item }) => getItemKey(item)))
+      : [items.map(getItemKey)];
+    const tones = new Map<React.Key, BandTone>();
+    for (const keys of keyLists) {
+      for (const [key, tone] of assignBandTones(keys, bandTonesRef.current)) tones.set(key, tone);
+    }
+    bandTonesRef.current = tones;
+    return tones;
+  }, [getItemKey, group, items, segments]);
+
   const getRowHeightByIndex = React.useCallback(
     (index: number) => {
       const key = getItemKey(items[index]);
@@ -126,7 +141,7 @@ function RequestVirtualListInner<T>(
 
   const computeSignature = React.useCallback(
     (scrollTop: number, viewportHeight: number): string => {
-      if (!virtual || items.length === 0) return 'all';
+      if (items.length === 0) return 'all';
       if (group) {
         return computeGroupedVirtualWindow({
           segments,
@@ -147,17 +162,16 @@ function RequestVirtualListInner<T>(
       });
       return `${win.startIndex}:${win.endIndex}`;
     },
-    [getHeaderHeight, getItemKey, getRowHeightByIndex, getRowHeightByKey, group, items.length, overscanPx, segments, virtual],
+    [getHeaderHeight, getItemKey, getRowHeightByIndex, getRowHeightByKey, group, items.length, overscanPx, segments],
   );
 
   const syncWindowIfChanged = React.useCallback(() => {
-    if (!virtual) return;
     const nextSig = computeSignature(scrollTopRef.current, viewportHeightRef.current);
     if (nextSig !== renderedSignatureRef.current) {
       renderedSignatureRef.current = nextSig;
       setRenderTick((tick) => tick + 1);
     }
-  }, [computeSignature, virtual]);
+  }, [computeSignature]);
 
   React.useImperativeHandle(
     ref,
@@ -179,7 +193,7 @@ function RequestVirtualListInner<T>(
   // measures taller or shorter than its estimate, compensate scrollTop in lockstep
   // with the committed row offsets so upward scrolling never shifts visible rows.
   React.useLayoutEffect(() => {
-    if (!virtual || typeof ResizeObserver === 'undefined') return undefined;
+    if (typeof ResizeObserver === 'undefined') return undefined;
     const observer = new ResizeObserver((entries) => {
       let hasChange = false;
       let anchorDelta = 0;
@@ -239,7 +253,7 @@ function RequestVirtualListInner<T>(
       observer.disconnect();
       itemObserverRef.current = null;
     };
-  }, [virtual]);
+  }, []);
 
   // Observe the scroll viewport once via the shared hub; only re-render when the
   // stride-quantized item window or stacked layout mode actually changes.
@@ -413,30 +427,17 @@ function RequestVirtualListInner<T>(
     [onScroll, syncWindowIfChanged],
   );
 
+  const itemClassName = (key: React.Key) =>
+    clsx('request-list-item', bandTones.get(key) === 'odd' ? 'is-odd' : 'is-even');
+
   let content: React.ReactNode;
   let totalScrollHeight = 0;
   let nextRenderedSignature = 'all';
+  // Where each drawn row sits, in drawing order, for the arrival glide; the grouped stream has
+  // headers that reflow around its rows, so its records land without one.
+  let drawnTops: Map<React.Key, number> | null = null;
 
-  if (!virtual) {
-    if (group) {
-      content = segments.map((seg) => (
-        <div key={seg.groupKey} className="request-group-section">
-          <div className="request-group-header">{group.title(seg.groupKey, seg.items)}</div>
-          {seg.entries.map(({ item }, position) => (
-            <div key={getItemKey(item)} className="request-list-item">
-              {renderItem(item, position)}
-            </div>
-          ))}
-        </div>
-      ));
-    } else {
-      content = items.map((item, index) => (
-        <div key={getItemKey(item)} className="request-list-item">
-          {renderItem(item, index)}
-        </div>
-      ));
-    }
-  } else if (group) {
+  if (group) {
     const groupedWin = computeGroupedVirtualWindow({
       segments,
       getItemKey,
@@ -462,16 +463,15 @@ function RequestVirtualListInner<T>(
           <div className="request-group-body" style={{ height: slice?.bodyHeight ?? 0 }}>
             {mountedEntries.map(({ item }, offset) => {
               const key = getItemKey(item);
-              const localIndex = slice.startIndex + offset;
-              const rowTop = slice.offsets[localIndex] ?? 0;
+              const rowTop = slice.offsets[slice.startIndex + offset] ?? 0;
               return (
                 <div
                   key={key}
                   ref={getRowRef(key)}
-                  className="request-list-item request-list-item-virtual"
+                  className={itemClassName(key)}
                   style={{ transform: `translateY(${rowTop}px)` }}
                 >
-                  {renderItem(item, localIndex)}
+                  {renderItem(item)}
                 </div>
               );
             })}
@@ -489,21 +489,23 @@ function RequestVirtualListInner<T>(
     });
     nextRenderedSignature = `${win.startIndex}:${win.endIndex}`;
     totalScrollHeight = win.totalHeight;
+    const tops = new Map<React.Key, number>();
+    drawnTops = tops;
     const mounted = win.endIndex >= win.startIndex ? items.slice(win.startIndex, win.endIndex + 1) : [];
     content = (
       <div className="request-list-spacer" style={{ height: win.totalHeight }}>
         {mounted.map((item, offset) => {
-          const index = win.startIndex + offset;
           const key = getItemKey(item);
-          const rowTop = win.offsets[index] ?? 0;
+          const rowTop = win.offsets[win.startIndex + offset] ?? 0;
+          tops.set(key, rowTop);
           return (
             <div
               key={key}
               ref={getRowRef(key)}
-              className="request-list-item request-list-item-virtual"
+              className={itemClassName(key)}
               style={{ transform: `translateY(${rowTop}px)` }}
             >
-              {renderItem(item, index)}
+              {renderItem(item)}
             </div>
           );
         })}
@@ -523,13 +525,63 @@ function RequestVirtualListInner<T>(
       }
     }
     drawThumbRef.current?.();
-  }, [items.length, nextRenderedSignature, totalScrollHeight, virtual]);
+  }, [items.length, nextRenderedSignature, totalScrollHeight]);
+
+  // A record that lands while the reader follows the live edge is carried in rather than cut in:
+  // the rows already drawn glide from where they stood to the place the arrival pushed them to,
+  // and the arrival fades in at the head of that move. The glide is a transform added on top of
+  // each row's own placement, so it runs on the compositor, never re-renders a row, and a second
+  // arrival mid-glide composes with the first instead of restarting it.
+  const drawnRef = React.useRef<{ items: readonly T[]; tops: ReadonlyMap<React.Key, number> | null } | null>(null);
+  React.useLayoutEffect(() => {
+    const previous = drawnRef.current;
+    if (previous?.tops && drawnTops && previous.items !== items) {
+      const previousKeys = new Set(previous.items.map(getItemKey));
+      // An arrival is first drawn at an estimated height. Measuring it here, before the frame is
+      // painted, and drawing again at once puts the rows it pushes where they really go, rather
+      // than a frame later and mid-glide; the corrected draw is planned against the same previous one.
+      let isRemeasured = false;
+      for (const key of drawnTops.keys()) {
+        if (previousKeys.has(key)) continue;
+        const height = rowElementsRef.current.get(key)?.offsetHeight ?? 0;
+        if (height > 0 && Math.abs(height - getRowHeightByKey(key)) >= 1) {
+          rowHeightsRef.current.set(key, height);
+          isRemeasured = true;
+        }
+      }
+      if (isRemeasured) {
+        setRenderTick((tick) => tick + 1);
+        return;
+      }
+      const viewport = viewportRef.current;
+      // Rows are mounted only an overscan past the viewport, so a longer glide would start with the
+      // bottom of the viewport empty.
+      const maxTravel = Math.min(viewport?.clientHeight ?? 0, overscanPx);
+      const moves = viewport && !isMotionReduced()
+        ? planArrivalGlide({ previousKeys, previousTops: previous.tops, drawnTops, maxTravel })
+        : null;
+      for (const move of moves ?? []) {
+        const element = rowElementsRef.current.get(move.key);
+        if (typeof element?.animate !== 'function') continue;
+        if (move.from !== 0) {
+          element.animate(
+            [{ transform: `translateY(${move.from}px)` }, { transform: 'translateY(0)' }],
+            { duration: MOTION_ARRIVAL.duration, easing: MOTION_ARRIVAL.easing, composite: 'add' },
+          );
+        }
+        if (move.isArrival) {
+          element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: MOTION_ARRIVAL.duration, easing: MOTION_ARRIVAL.easing });
+        }
+      }
+    }
+    drawnRef.current = { items, tops: drawnTops };
+  });
 
   return (
     <div ref={rootRef} className="request-virtual-root">
       <div
         ref={viewportRef}
-        className={clsx('request-list', className)}
+        className="request-list"
         onScroll={handleViewportScroll}
       >
         {content}

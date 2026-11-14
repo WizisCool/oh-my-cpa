@@ -542,10 +542,9 @@ export const UsageEventsPage: React.FC = () => {
   }, [credentials, grouping, multipleAuthSources, providerName, t, unknownCredentialLabel, unknownProviderLabel]);
 
   const renderRequestRow = React.useCallback(
-    (event: UsageEvent, position: number) => (
+    (event: UsageEvent) => (
       <RequestRow
         event={event}
-        isOddRow={position % 2 === 0}
         credentials={credentials}
         providerIcons={providerIcons}
         configuredProviders={configuredProviders}
@@ -753,12 +752,10 @@ export const UsageEventsPage: React.FC = () => {
                 <RequestVirtualList<UsageEvent>
                   ref={listRef}
                   key={`${viewScope}:${grouping}`}
-                  virtual
                   overscanPx={isNativeScroll ? 640 : 432}
                   items={events}
                   getItemKey={getEventKey}
                   group={group}
-                  className={clsx(isNativeScroll && 'is-native-scroll')}
                   onScroll={handleScroll}
                   renderItem={renderRequestRow}
                 />
