@@ -229,12 +229,16 @@ export function buildSourceLinkMap() {
   for (const page of DOCS_PAGES) {
     const outEn = page.slug === 'index' ? '/en/' : `/en/${page.slug}/`;
     const outZh = page.slug === 'index' ? '/zh/' : `/zh/${page.slug}/`;
-    map.set(path.posix.normalize(page.enSource), { en: outEn, zh: outZh });
-    map.set(path.posix.normalize(page.zhSource), { en: outEn, zh: outZh });
+    if (page.enSource === page.zhSource) {
+      map.set(path.posix.normalize(page.enSource), { en: outEn, zh: outZh });
+    } else {
+      map.set(path.posix.normalize(page.enSource), { en: outEn, zh: outEn });
+      map.set(path.posix.normalize(page.zhSource), { en: outZh, zh: outZh });
+    }
   }
-  map.set('README.md', { en: '/en/', zh: '/zh/' });
+  map.set('README.md', { en: '/en/', zh: '/en/' });
   map.set('README.zh-CN.md', { en: '/zh/', zh: '/zh/' });
-  map.set('docs/README.md', { en: '/en/', zh: '/zh/' });
+  map.set('docs/README.md', { en: '/en/', zh: '/en/' });
   map.set('docs/zh/README.md', { en: '/zh/', zh: '/zh/' });
   return map;
 }

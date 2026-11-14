@@ -25,23 +25,25 @@ Docker 方案要求系统已安装 Docker Engine 及 Compose 插件。下列命�
 
 使用 `compose.full.yml` 一次性部署 CPA、OMC 与更新器。
 
-1. 创建目录并下载 `compose.full.yml` 与 CPA 初始配置：
+1. 创建新目录并下载 `compose.full.yml` 与 CPA 初始配置（请勿在已部署目录直接覆写；已有部署请按[升级](#升级)操作）：
 
    ```bash
-   mkdir -p oh-my-cpa && cd oh-my-cpa
-   curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.full.yml -o compose.yml
-   curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/cpa.config.example.yaml -o config.yaml
+   (
+     [ ! -e compose.yml ] && [ ! -e config.yaml ] && [ ! -e .env ] &&
+     [ ! -e oh-my-cpa/compose.yml ] && [ ! -e oh-my-cpa/config.yaml ] && [ ! -e oh-my-cpa/.env ] &&
+     mkdir -p oh-my-cpa && cd oh-my-cpa &&
+     curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.full.yml -o compose.yml &&
+     curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/cpa.config.example.yaml -o config.yaml
+   ) && cd oh-my-cpa
    ```
 
    首次启动前必须先创建 `config.yaml`：若宿主机缺少要挂载的文件，Docker 会将其创建为空目录。示例配置已启用 OMC 所需的远程管理与用量统计功能，且不含任何客户端密钥。
 
-2. 在 `.env` 中生成两个密钥。`CPA_MANAGEMENT_KEY` 既是 CPA 的管理密钥也是控制台登录密码；`OMCPA_MASTER_KEY` 用于加密 OMC 数据库中的敏感数据：
+2. 在新部署的 `.env` 中生成两个密钥（若 `.env` 已存在则拒绝覆盖，以免替换现有 `OMCPA_MASTER_KEY` 导致已加密数据无法解密；已有部署请跳转[升级](#升级)）。`CPA_MANAGEMENT_KEY` 既是 CPA 的管理密钥也是控制台登录密码；`OMCPA_MASTER_KEY` 用于加密 OMC 数据库中的敏感数据：
 
    ```bash
-   cat > .env <<EOF
-   CPA_MANAGEMENT_KEY=$(openssl rand -hex 24)
-   OMCPA_MASTER_KEY=$(openssl rand -hex 32)
-   EOF
+   [ ! -e .env ] &&
+   printf 'CPA_MANAGEMENT_KEY=%s\nOMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > .env &&
    chmod 600 .env
    ```
 
@@ -66,20 +68,22 @@ Docker 方案要求系统已安装 Docker Engine 及 Compose 插件。下列命�
 
 使用 `compose.omc.yml` 在已有 CPA（位于宿主机、另一个 Docker Compose 项目或另一台服务器）旁运行 OMC 与更新器。该方式不会修改或重启现有的 CPA、配置、密钥及其他管理面板。
 
-1. 创建目录并下载 `compose.omc.yml`：
+1. 创建新目录并下载 `compose.omc.yml`（已有部署请见[升级](#升级)）：
 
    ```bash
-   mkdir -p oh-my-cpa && cd oh-my-cpa
-   curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.omc.yml -o compose.yml
+   (
+     [ ! -e compose.yml ] && [ ! -e .env ] &&
+     [ ! -e oh-my-cpa/compose.yml ] && [ ! -e oh-my-cpa/.env ] &&
+     mkdir -p oh-my-cpa && cd oh-my-cpa &&
+     curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.omc.yml -o compose.yml
+   ) && cd oh-my-cpa
    ```
 
-2. 创建 `.env`，写入新生成的 `OMCPA_MASTER_KEY`、CPA 可达地址及现有 CPA 的明文管理密钥（登录界面输入的原始密钥，而非 `config.yaml` 里的 bcrypt 哈希）。建议用单引号包裹 `OMCPA_CPA_MANAGEMENT_KEY`，避免 Docker Compose 将密钥里的 `$` 当作环境变量展开（若密钥本身含单引号 `'`，写为 `\'`）：
+2. 创建 `.env`（若 `.env` 已存在则跳过，避免覆盖既有 `OMCPA_MASTER_KEY`），写入新生成的 `OMCPA_MASTER_KEY`、CPA 可达地址及现有 CPA 的明文管理密钥（登录界面输入的原始密钥，而非 `config.yaml` 里的 bcrypt 哈希）。建议用单引号包裹 `OMCPA_CPA_MANAGEMENT_KEY`，避免 Docker Compose 将密钥里的 `$` 当作环境变量展开（若密钥本身含单引号 `'`，写为 `\'`）：
 
    ```bash
-   printf 'OMCPA_CPA_BASE_URL=http://host.docker.internal:8317\nOMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" > .env
-   cat >> .env <<'EOF'
-   OMCPA_CPA_MANAGEMENT_KEY='<CPA 明文管理密钥>'
-   EOF
+   [ ! -e .env ] &&
+   printf "OMCPA_CPA_BASE_URL=http://host.docker.internal:8317\nOMCPA_MASTER_KEY=%s\nOMCPA_CPA_MANAGEMENT_KEY='<CPA 明文管理密钥>'\n" "$(openssl rand -hex 32)" > .env &&
    chmod 600 .env
    ```
 

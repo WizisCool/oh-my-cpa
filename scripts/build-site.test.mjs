@@ -46,6 +46,11 @@ test('syncDocsSite generates complete EN/ZH MDX output with rewritten links and 
 
   const zhInstall = fs.readFileSync(path.join(result.contentDir, 'getting-started', 'install.zh.mdx'), 'utf8');
   assert.ok(!zhInstall.includes('```caddyfile'), 'unsupported caddyfile language must be normalized for Shiki');
+  assert.ok(zhInstall.includes('](/en/getting-started/install-for-agents/)'), 'explicit English-source links inside ZH docs must preserve EN locale');
+
+  const zhOps = fs.readFileSync(path.join(result.contentDir, 'operations', 'configuration.zh.mdx'), 'utf8');
+  assert.ok(zhOps.includes('](/en/operations/configuration/)'), 'explicit English-original links inside ZH docs must resolve to EN page');
+  assert.ok(zhOps.includes('](/zh/operations/sqlite-backup-restore/)'), 'same-language links inside ZH docs must stay in ZH locale');
 });
 
 test('stageApiReference emits self-contained assets and hashed Scalar bundle', async () => {

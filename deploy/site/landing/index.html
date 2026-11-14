@@ -579,12 +579,12 @@
           <a class="nav-link" href="https://github.com/WizisCool/oh-my-cpa" target="_blank" rel="noreferrer noopener">GitHub</a>
         </nav>
 
-        <button type="button" class="icon-btn" id="lang-toggle" aria-label="Switch language">
+        <button type="button" class="icon-btn" id="lang-toggle">
           <span data-i18n-lang="en">中文</span>
           <span data-i18n-lang="zh">EN</span>
         </button>
 
-        <button type="button" class="icon-btn" id="theme-toggle" aria-label="Toggle color theme">
+        <button type="button" class="icon-btn" id="theme-toggle">
           <span class="theme-label-light">
             <span data-i18n-lang="en">Dark</span>
             <span data-i18n-lang="zh">深色</span>
@@ -643,12 +643,15 @@
             </span>
           </div>
           <div class="install-code-row">
-            <pre><code id="quickstart-snippet">[ ! -e oh-my-cpa/.env ] &amp;&amp; [ ! -e oh-my-cpa/config.yaml ] &amp;&amp; [ ! -e oh-my-cpa/compose.yml ] &amp;&amp;
-mkdir -p oh-my-cpa &amp;&amp; cd oh-my-cpa &amp;&amp;
-curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.full.yml -o compose.yml &amp;&amp;
-curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/cpa.config.example.yaml -o config.yaml &amp;&amp;
-printf 'CPA_MANAGEMENT_KEY=%s\nOMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" &gt; .env &amp;&amp;
-chmod 600 .env &amp;&amp; docker compose up -d</code></pre>
+            <pre><code id="quickstart-snippet">(
+  [ ! -e .env ] &amp;&amp; [ ! -e config.yaml ] &amp;&amp; [ ! -e compose.yml ] &amp;&amp;
+  [ ! -e oh-my-cpa/.env ] &amp;&amp; [ ! -e oh-my-cpa/config.yaml ] &amp;&amp; [ ! -e oh-my-cpa/compose.yml ] &amp;&amp;
+  mkdir -p oh-my-cpa &amp;&amp; cd oh-my-cpa &amp;&amp;
+  curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.full.yml -o compose.yml &amp;&amp;
+  curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/cpa.config.example.yaml -o config.yaml &amp;&amp;
+  printf 'CPA_MANAGEMENT_KEY=%s\nOMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" &gt; .env &amp;&amp;
+  chmod 600 .env &amp;&amp; docker compose up -d
+)</code></pre>
             <span class="copy-wrap">
               <button
                 type="button"
@@ -656,7 +659,6 @@ chmod 600 .env &amp;&amp; docker compose up -d</code></pre>
                 id="copy-quickstart"
                 command="--copy"
                 commandfor="quickstart-snippet"
-                aria-label="Copy quick start command"
               >
                 <span data-i18n-lang="en">Copy</span>
                 <span data-i18n-lang="zh">复制</span>
@@ -745,13 +747,17 @@ chmod 600 .env &amp;&amp; docker compose up -d</code></pre>
           });
         }
 
-        function setLang(lang) {
+        function applyLocale(lang) {
           root.dataset.lang = lang;
           root.lang = lang === 'zh' ? 'zh-CN' : 'en';
+          syncDocsLinks(lang);
+        }
+
+        function persistLocale(lang) {
+          applyLocale(lang);
           try {
             localStorage.setItem('omc-docs-locale', lang);
           } catch (e) {}
-          syncDocsLinks(lang);
         }
 
         syncDocsLinks(root.dataset.lang === 'zh' ? 'zh' : 'en');
@@ -759,7 +765,7 @@ chmod 600 .env &amp;&amp; docker compose up -d</code></pre>
         var langToggle = document.getElementById('lang-toggle');
         if (langToggle) {
           langToggle.addEventListener('click', function () {
-            setLang(root.dataset.lang === 'zh' ? 'en' : 'zh');
+            persistLocale(root.dataset.lang === 'zh' ? 'en' : 'zh');
           });
         }
 
@@ -792,8 +798,11 @@ chmod 600 .env &amp;&amp; docker compose up -d</code></pre>
           if (event.key === 'omc-site-theme' && themeMeta) {
             themeMeta.setAttribute('content', event.newValue === 'light' || event.newValue === 'dark' ? event.newValue : 'light dark');
           }
-          if (event.key === 'omc-docs-locale' && (event.newValue === 'zh' || event.newValue === 'en')) {
-            setLang(event.newValue);
+          if (event.key === 'omc-docs-locale') {
+            var nextLang = event.newValue === 'zh' || event.newValue === 'en'
+              ? event.newValue
+              : ((navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en');
+            applyLocale(nextLang);
           }
         });
 
