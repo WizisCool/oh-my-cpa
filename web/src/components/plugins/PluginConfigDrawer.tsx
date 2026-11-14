@@ -190,10 +190,13 @@ export function PluginConfigDrawer({ plugin, listing, isPluginSystemEnabled, isD
   };
 
   const metadata = plugin ? selectInstalledPluginMetadata(plugin, listing, lang) : undefined;
-  const name = metadata?.name ?? '';
   // What CPA recorded when it installed the plugin fills in what the plugin and its listing leave out;
   // the head states it once rather than a section of its own repeating the head.
   const installRecord = React.useMemo(() => (saved ? readPluginInstallRecord(saved) : undefined), [saved]);
+  // The selector falls back to the plugin id; a recorded name takes precedence over that fallback.
+  const name = metadata?.name && metadata.name !== plugin?.id
+    ? metadata.name
+    : installRecord?.name || metadata?.name || '';
   const version = formatPluginVersion(plugin?.metadata?.version || listing?.installed_version || installRecord?.version);
   const author = metadata?.author || installRecord?.author;
   const description = metadata?.description || installRecord?.description;

@@ -392,10 +392,10 @@ it('installs an Oh My CPA plugin in one step, asks a curated one for its id, and
 
 it('states the install record once, in the settings drawer head', async () => {
   const t = makeT('en');
-  const server = installOmcApi({ plugins: [{ ...installed, metadata: { name: 'Runtime name' } }] });
+  const server = installOmcApi({ plugins: [{ ...installed, metadata: undefined }] });
   server.on('GET', '/management/plugin-store', () => ({ ...store, plugins: [] }));
   server.on('GET', `/management/plugins/${installed.id}/config`, () => ({
-    config: { enabled: true, store: { name: 'Runtime name', version: '0.2.5', author: 'Recorded author', license: 'MIT', description: 'Recorded description', repository: 'owner/stable-plugin' } },
+    config: { enabled: true, store: { name: 'Recorded name', version: '0.2.5', author: 'Recorded author', license: 'MIT', description: 'Recorded description', repository: 'owner/stable-plugin' } },
   }));
   renderWithOmc(<ThemeProvider><PluginsPage /></ThemeProvider>, { route: `/plugins?plugin=${installed.id}` });
   const drawer = await screen.findByRole('dialog');
@@ -405,6 +405,8 @@ it('states the install record once, in the settings drawer head', async () => {
     return element!;
   });
   // What the plugin leaves out comes from CPA's record, in the head and nowhere else.
+  expect(head.textContent).toContain('Recorded name');
+  expect(drawer.textContent).toContain(t('plugin.config_title', { name: 'Recorded name' }));
   expect(head.textContent).toContain('v0.2.5');
   expect(head.textContent).toContain('Recorded author');
   expect(head.textContent).toContain('Recorded description');
@@ -417,10 +419,13 @@ it('opens an installed plugin\'s settings from the store without leaving it', as
   const t = makeT('en');
   const server = installOmcApi({ plugins: [installed] });
   server.on('GET', '/management/plugin-store', () => ({ ...store, plugins: [{ ...entry, installed: true, install_source_status: 'matched' }] }));
-  server.on('GET', `/management/plugins/${installed.id}/config`, () => ({ config: { enabled: true } }));
+  server.on('GET', `/management/plugins/${installed.id}/config`, () => ({ config: { enabled: true, store: { name: 'Recorded name' } } }));
   const { container } = renderWithOmc(<ThemeProvider><PluginsPage /></ThemeProvider>, { route: '/plugins/store' });
   fireEvent.click(await screen.findByRole('button', { name: t('plugin.manage') }));
-  expect(await screen.findByRole('dialog')).toBeTruthy();
+  const drawer = await screen.findByRole('dialog');
+  await waitFor(() => expect(drawer.textContent).toContain(t('plugin.config_no_fields')));
+  expect(drawer.textContent).toContain('Runtime name');
+  expect(drawer.textContent).not.toContain('Recorded name');
   expect(container.querySelector('[data-plugin-panel="store"]')).not.toBeNull();
   // The modal drawer hides the page from assistive technology; the page underneath is still the store.
   expect(screen.getByRole('heading', { level: 1, name: t('nav.plugin_store'), hidden: true })).toBeTruthy();
