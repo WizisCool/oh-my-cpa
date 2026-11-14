@@ -314,7 +314,9 @@ its resting edge under the pointer and lifts only while it is in the hand. A
 featured section may draw its cards larger, never with a different anatomy.
 
 The card is a summary, and its drawer is the next layer: the drawer's head states the record's
-identity once, and the sections below it hold only what the card does not.
+identity once, and the sections below it hold only what the card does not. Managing a record
+opens its drawer where the reader stands, whichever grid the card is in, rather than sending the
+reader to another page to open it there.
 
 ## Information expression
 

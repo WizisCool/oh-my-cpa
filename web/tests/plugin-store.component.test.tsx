@@ -412,3 +412,16 @@ it('states the install record once, in the settings drawer head', async () => {
   expect(within(drawer).getAllByText('Recorded description')).toHaveLength(1);
   expect(within(drawer).queryByText(t('plugin.config_no_fields'))).not.toBeNull();
 });
+
+it('opens an installed plugin\'s settings from the store without leaving it', async () => {
+  const t = makeT('en');
+  const server = installOmcApi({ plugins: [installed] });
+  server.on('GET', '/management/plugin-store', () => ({ ...store, plugins: [{ ...entry, installed: true, install_source_status: 'matched' }] }));
+  server.on('GET', `/management/plugins/${installed.id}/config`, () => ({ config: { enabled: true } }));
+  const { container } = renderWithOmc(<ThemeProvider><PluginsPage /></ThemeProvider>, { route: '/plugins/store' });
+  fireEvent.click(await screen.findByRole('button', { name: t('plugin.manage') }));
+  expect(await screen.findByRole('dialog')).toBeTruthy();
+  expect(container.querySelector('[data-plugin-panel="store"]')).not.toBeNull();
+  // The modal drawer hides the page from assistive technology; the page underneath is still the store.
+  expect(screen.getByRole('heading', { level: 1, name: t('nav.plugin_store'), hidden: true })).toBeTruthy();
+});

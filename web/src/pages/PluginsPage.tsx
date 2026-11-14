@@ -157,7 +157,13 @@ export const PluginsPage: React.FC = () => {
     return storeRefreshRef.current;
   };
 
-  const manage = (pluginId: string) => navigate(`${TAB_PATHS.installed}?plugin=${encodeURIComponent(pluginId)}`);
+  // The store opens an installed plugin's settings where the operator stands; only a plugin the list
+  // has not read yet goes through the installed tab's `?plugin=` address, which opens it once it has.
+  const manage = (pluginId: string) => {
+    const match = plugins.find((plugin) => plugin.id === pluginId);
+    if (match) setConfiguring(match);
+    else navigate(`${TAB_PATHS.installed}?plugin=${encodeURIComponent(pluginId)}`);
+  };
 
   // The head names the destination, not the surface: the store is its own entry in the
   // navigation (`/plugins/store`), so it reads as the store here while the installed list
