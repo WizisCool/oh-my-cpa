@@ -107,13 +107,18 @@ func Run(ctx context.Context, arguments []string, version string, stdout, stderr
 		if err := flags.Parse(arguments[1:]); err != nil {
 			return 2
 		}
+		timing, err := loadTimingFromEnv()
+		if err != nil {
+			fmt.Fprintf(stderr, "Install failed: %v\n", err)
+			return 1
+		}
 		engine, ok := connect(ctx, stderr)
 		if !ok {
 			return 1
 		}
-		err := Install(ctx, InstallOptions{
+		err = Install(ctx, InstallOptions{
 			Engine:       engine,
-			Timing:       DefaultTiming(),
+			Timing:       timing,
 			SelfID:       selfContainerID(ctx, engine),
 			OMCContainer: *consoleName,
 			CPAContainer: *gatewayName,
@@ -137,8 +142,28 @@ func Run(ctx context.Context, arguments []string, version string, stdout, stderr
 
 func listenAddr() string { return envOr(ENV_LISTEN_ADDR, DEFAULT_LISTEN_ADDR) }
 
+func loadTimingFromEnv() (Timing, error) {
+	timing := DefaultTiming()
+	raw := strings.TrimSpace(os.Getenv(ENV_HEALTH_TIMEOUT))
+	if raw == "" {
+		return timing, nil
+	}
+	parsed, err := time.ParseDuration(raw)
+	if err != nil || parsed <= 0 {
+		return Timing{}, fmt.Errorf("%s must be a positive duration: %q", ENV_HEALTH_TIMEOUT, raw)
+	}
+	timing.HealthTimeout = parsed
+	timing.WaitThroughUnhealthy = true
+	return timing, nil
+}
+
 func serve(ctx context.Context, version string, stderr io.Writer) int {
 	logger := slog.New(slog.NewJSONHandler(stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	timing, err := loadTimingFromEnv()
+	if err != nil {
+		logger.Error("invalid updater configuration", "error", err)
+		return 1
+	}
 	engine, ok := connect(ctx, stderr)
 	if !ok {
 		return 1
@@ -146,6 +171,7 @@ func serve(ctx context.Context, version string, stderr io.Writer) int {
 	service := NewService(Options{
 		Engine:       engine,
 		Logger:       logger,
+		Timing:       timing,
 		PublicKey:    envOr(ENV_PUBLIC_KEY, releasePublicKey),
 		SelfID:       selfContainerID(ctx, engine),
 		OMCContainer: os.Getenv(ENV_OMC_CONTAINER),

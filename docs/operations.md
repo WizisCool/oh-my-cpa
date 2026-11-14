@@ -251,6 +251,7 @@ own environment, and an installation needs none of them:
 | `OMCPA_UPDATER_CPA_CONTAINER` | found from `OMCPA_CPA_BASE_URL` | The gateway container, when it cannot be found that way |
 | `OMCPA_UPDATER_SELF_CONTAINER` | found from hostname or a unique updater | This updater's own container name or ID. Handover sets it to the successor's stable name because shared network namespaces inherit the owner's hostname |
 | `OMCPA_UPDATER_LINK_NETWORK` | empty | Set by `updater install`: the network the updater keeps the console attached to. Empty when both are services of one Compose file |
+| `OMCPA_UPDATER_HEALTH_TIMEOUT` | `5m` | How long the updater waits for a replacement container to become healthy; setting it explicitly also waits past an image's `start-period` during slow migrations |
 | `OMCPA_UPDATER_PUBLIC_KEY` | built in | Base64 Ed25519 public key that replaces the built-in release key, for a fork that signs its own releases |
 
 Security boundary:
@@ -288,7 +289,9 @@ through another dependent, or if the target itself uses a shared or host namespa
 has dependents. Configure shared helpers to reference the actual namespace owner
 directly, or recreate this topology on the Docker host.
 
-An existing `<name>-omc-previous` backup also blocks another update before mutation.
+An existing `<name>-omc-previous` backup blocks another update before mutation unless
+it is already stopped, the target container is healthy, and cleaning it up requires
+no updater self-handover, in which case the updater removes that stale backup first.
 When a self-handover cannot start its successor, the running predecessor restores the
 previous owner and retries from that live namespace. If that restore also fails, recover
 the updater from the Docker host rather than restarting it in the dead namespace. In the

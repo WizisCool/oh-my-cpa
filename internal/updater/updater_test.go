@@ -1559,3 +1559,514 @@ func TestInstallLeavesAPinnedConsoleAlone(t *testing.T) {
 		t.Errorf("the operator is told why nothing was upgraded:\n%s", output.String())
 	}
 }
+
+func TestRollbackStopsAndRemovesReplacementBeforeRestoringPrevious(t *testing.T) {
+	t.Run("stops running unhealthy replacement before remove rename and start", func(t *testing.T) {
+		stack := newDeployment(t, OMC_REPOSITORY+":latest")
+		previous := stack.daemon.named("oh-my-cpa")
+		manifest, signature := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
+
+		engine := stack.service.options.Engine
+		transport := engine.httpClient.Transport
+		var mu sync.Mutex
+		var actions []string
+		var replacementID string
+		engine.httpClient.Transport = updaterTransport(func(request *http.Request) (*http.Response, error) {
+			response, err := transport.RoundTrip(request)
+			if err != nil {
+				return nil, err
+			}
+			path := strings.TrimPrefix(request.URL.Path, "/v"+MAX_API_VERSION)
+			if request.Method == http.MethodPost && path == "/containers/create" {
+				raw, _ := io.ReadAll(response.Body)
+				_ = response.Body.Close()
+				var created struct {
+					ID string `json:"Id"`
+				}
+				_ = json.Unmarshal(raw, &created)
+				mu.Lock()
+				replacementID = created.ID
+				mu.Unlock()
+				stack.daemon.mu.Lock()
+				if replacement := stack.daemon.find(created.ID); replacement != nil {
+					replacement.Health = "unhealthy"
+				}
+				stack.daemon.mu.Unlock()
+				response.Body = io.NopCloser(bytes.NewReader(raw))
+				return response, nil
+			}
+			mu.Lock()
+			repID := replacementID
+			mu.Unlock()
+			switch {
+			case repID != "" && request.Method == http.MethodPost && path == "/containers/"+repID+"/stop":
+				mu.Lock()
+				actions = append(actions, "stop-replacement")
+				mu.Unlock()
+			case repID != "" && request.Method == http.MethodDelete && path == "/containers/"+repID:
+				stack.daemon.mu.Lock()
+				stillRunning := stack.daemon.find(repID) != nil && stack.daemon.find(repID).IsRunning
+				stack.daemon.mu.Unlock()
+				if stillRunning {
+					t.Errorf("replacement %s was still running when DELETE ran", repID)
+				}
+				mu.Lock()
+				actions = append(actions, "remove-replacement")
+				mu.Unlock()
+			case request.Method == http.MethodPost && path == "/containers/"+previous.ID+"/rename" && request.URL.Query().Get("name") == "oh-my-cpa":
+				mu.Lock()
+				actions = append(actions, "rename-previous")
+				mu.Unlock()
+			case repID != "" && request.Method == http.MethodPost && path == "/containers/"+previous.ID+"/start":
+				mu.Lock()
+				actions = append(actions, "start-previous")
+				mu.Unlock()
+			}
+			return response, nil
+		})
+
+		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		job := awaitJob(t, stack.service)
+		if job.Stage != StageRolledBack {
+			t.Fatalf("job = %+v, want rolled_back", job)
+		}
+		mu.Lock()
+		gotActions := slices.Clone(actions)
+		mu.Unlock()
+		wantActions := []string{"stop-replacement", "remove-replacement", "rename-previous", "start-previous"}
+		if !slices.Equal(gotActions, wantActions) {
+			t.Fatalf("rollback sequence = %v, want %v", gotActions, wantActions)
+		}
+		restored := stack.daemon.named("oh-my-cpa")
+		if restored == nil || restored.ID != previous.ID || !restored.IsRunning {
+			t.Fatalf("restored container = %+v", restored)
+		}
+	})
+
+	t.Run("retries transient removal conflict before restoring", func(t *testing.T) {
+		stack := newDeployment(t, OMC_REPOSITORY+":latest")
+		previous := stack.daemon.named("oh-my-cpa")
+		manifest, signature := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
+
+		engine := stack.service.options.Engine
+		transport := engine.httpClient.Transport
+		var deleteAttempts atomic.Int32
+		engine.httpClient.Transport = updaterTransport(func(request *http.Request) (*http.Response, error) {
+			path := strings.TrimPrefix(request.URL.Path, "/v"+MAX_API_VERSION)
+			if request.Method == http.MethodDelete && strings.HasPrefix(path, "/containers/") {
+				if deleteAttempts.Add(1) == 1 {
+					return &http.Response{
+						StatusCode: http.StatusConflict,
+						Header:     make(http.Header),
+						Body:       io.NopCloser(strings.NewReader(`{"message":"removal of container is already in progress"}`)),
+						Request:    request,
+					}, nil
+				}
+			}
+			response, err := transport.RoundTrip(request)
+			if err != nil {
+				return nil, err
+			}
+			if request.Method == http.MethodPost && path == "/containers/create" {
+				raw, _ := io.ReadAll(response.Body)
+				_ = response.Body.Close()
+				var created struct {
+					ID string `json:"Id"`
+				}
+				_ = json.Unmarshal(raw, &created)
+				stack.daemon.mu.Lock()
+				if replacement := stack.daemon.find(created.ID); replacement != nil {
+					replacement.Health = "unhealthy"
+				}
+				stack.daemon.mu.Unlock()
+				response.Body = io.NopCloser(bytes.NewReader(raw))
+			}
+			return response, nil
+		})
+
+		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		job := awaitJob(t, stack.service)
+		if job.Stage != StageRolledBack || deleteAttempts.Load() < 2 {
+			t.Fatalf("job = %+v, deleteAttempts = %d", job, deleteAttempts.Load())
+		}
+		if restored := stack.daemon.named("oh-my-cpa"); restored == nil || restored.ID != previous.ID || !restored.IsRunning {
+			t.Fatalf("restored container = %+v", restored)
+		}
+	})
+
+	t.Run("reports permanent removal failure without colliding rename or start", func(t *testing.T) {
+		stack := newDeployment(t, OMC_REPOSITORY+":latest")
+		previous := stack.daemon.named("oh-my-cpa")
+		manifest, signature := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
+
+		engine := stack.service.options.Engine
+		transport := engine.httpClient.Transport
+		var restoreRenameAttempted, restoreStartAttempted atomic.Bool
+		engine.httpClient.Transport = updaterTransport(func(request *http.Request) (*http.Response, error) {
+			path := strings.TrimPrefix(request.URL.Path, "/v"+MAX_API_VERSION)
+			if request.Method == http.MethodDelete && strings.HasPrefix(path, "/containers/") {
+				return &http.Response{
+					StatusCode: http.StatusInternalServerError,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(`{"message":"device or resource busy"}`)),
+					Request:    request,
+				}, nil
+			}
+			if request.Method == http.MethodPost && path == "/containers/"+previous.ID+"/rename" && request.URL.Query().Get("name") == "oh-my-cpa" {
+				restoreRenameAttempted.Store(true)
+			}
+			if request.Method == http.MethodPost && path == "/containers/"+previous.ID+"/start" {
+				restoreStartAttempted.Store(true)
+			}
+			response, err := transport.RoundTrip(request)
+			if err != nil {
+				return nil, err
+			}
+			if request.Method == http.MethodPost && path == "/containers/create" {
+				raw, _ := io.ReadAll(response.Body)
+				_ = response.Body.Close()
+				var created struct {
+					ID string `json:"Id"`
+				}
+				_ = json.Unmarshal(raw, &created)
+				stack.daemon.mu.Lock()
+				if replacement := stack.daemon.find(created.ID); replacement != nil {
+					replacement.Health = "unhealthy"
+				}
+				stack.daemon.mu.Unlock()
+				response.Body = io.NopCloser(bytes.NewReader(raw))
+			}
+			return response, nil
+		})
+
+		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		job := awaitJob(t, stack.service)
+		if job.Stage != StageFailed || !strings.Contains(job.Error, "device or resource busy") {
+			t.Fatalf("job = %+v, want failed with removal cause", job)
+		}
+		if restoreRenameAttempted.Load() || restoreStartAttempted.Load() {
+			t.Fatalf("rollback must not collide on rename/start when replacement removal failed")
+		}
+	})
+
+	t.Run("retries transient port allocation delay on restored start", func(t *testing.T) {
+		stack := newDeployment(t, OMC_REPOSITORY+":latest")
+		previous := stack.daemon.named("oh-my-cpa")
+		manifest, signature := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
+
+		engine := stack.service.options.Engine
+		transport := engine.httpClient.Transport
+		var restoreStarts atomic.Int32
+		engine.httpClient.Transport = updaterTransport(func(request *http.Request) (*http.Response, error) {
+			path := strings.TrimPrefix(request.URL.Path, "/v"+MAX_API_VERSION)
+			if request.Method == http.MethodPost && path == "/containers/"+previous.ID+"/start" {
+				if restoreStarts.Add(1) == 1 {
+					return &http.Response{
+						StatusCode: http.StatusInternalServerError,
+						Header:     make(http.Header),
+						Body:       io.NopCloser(strings.NewReader(`{"message":"Bind for :::8318 failed: port is already allocated"}`)),
+						Request:    request,
+					}, nil
+				}
+			}
+			response, err := transport.RoundTrip(request)
+			if err != nil {
+				return nil, err
+			}
+			if request.Method == http.MethodPost && path == "/containers/create" {
+				raw, _ := io.ReadAll(response.Body)
+				_ = response.Body.Close()
+				var created struct {
+					ID string `json:"Id"`
+				}
+				_ = json.Unmarshal(raw, &created)
+				stack.daemon.mu.Lock()
+				if replacement := stack.daemon.find(created.ID); replacement != nil {
+					replacement.Health = "unhealthy"
+				}
+				stack.daemon.mu.Unlock()
+				response.Body = io.NopCloser(bytes.NewReader(raw))
+			}
+			return response, nil
+		})
+
+		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		job := awaitJob(t, stack.service)
+		if job.Stage != StageRolledBack || restoreStarts.Load() != 2 {
+			t.Fatalf("job = %+v, restoreStarts = %d", job, restoreStarts.Load())
+		}
+	})
+
+	t.Run("recovers replacement whose create response was lost", func(t *testing.T) {
+		stack := newDeployment(t, OMC_REPOSITORY+":latest")
+		previous := stack.daemon.named("oh-my-cpa")
+		manifest, signature := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
+
+		engine := stack.service.options.Engine
+		transport := engine.httpClient.Transport
+		var droppedCreateResponse atomic.Bool
+		engine.httpClient.Transport = updaterTransport(func(request *http.Request) (*http.Response, error) {
+			response, err := transport.RoundTrip(request)
+			if err != nil {
+				return nil, err
+			}
+			path := strings.TrimPrefix(request.URL.Path, "/v"+MAX_API_VERSION)
+			if request.Method == http.MethodPost && path == "/containers/create" && droppedCreateResponse.CompareAndSwap(false, true) {
+				_, _ = io.Copy(io.Discard, response.Body)
+				_ = response.Body.Close()
+				return nil, errors.New("unexpected EOF reading create response")
+			}
+			return response, nil
+		})
+
+		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		job := awaitJob(t, stack.service)
+		if job.Stage != StageRolledBack || !strings.Contains(job.Error, "unexpected EOF reading create response") {
+			t.Fatalf("job = %+v, want rolled_back from lost create response", job)
+		}
+		restored := stack.daemon.named("oh-my-cpa")
+		if restored == nil || restored.ID != previous.ID || !restored.IsRunning {
+			t.Fatalf("restored = %+v, want previous %+v running", restored, previous)
+		}
+		if stack.daemon.named("oh-my-cpa"+PREVIOUS_SUFFIX) != nil {
+			t.Fatal("previous suffix must be restored to original name")
+		}
+		stack.daemon.mu.Lock()
+		containerCount := len(stack.daemon.containers)
+		stack.daemon.mu.Unlock()
+		if containerCount != 2 {
+			t.Fatalf("lost-response replacement must be removed, leaving console and updater; got %d containers", containerCount)
+		}
+	})
+}
+
+func TestReconcileStopsRunningUnhealthyReplacementBeforeRestoring(t *testing.T) {
+	daemon, engine := newFakeDaemon(t)
+	daemon.addImage("app:latest", "sha256:app", "v1.0.0")
+	previous := daemon.addContainer(containerSpec{name: "gateway" + PREVIOUS_SUFFIX, image: "app:latest"})
+	previous.IsRunning = false
+	daemon.addImage("app:latest", "sha256:new", "v2.0.0")
+	replacement := daemon.addContainer(containerSpec{name: "gateway", image: "app:latest"})
+	replacement.Health = "unhealthy"
+
+	transport := engine.httpClient.Transport
+	var actions []string
+	engine.httpClient.Transport = updaterTransport(func(request *http.Request) (*http.Response, error) {
+		path := strings.TrimPrefix(request.URL.Path, "/v"+MAX_API_VERSION)
+		switch {
+		case request.Method == http.MethodPost && path == "/containers/"+replacement.ID+"/stop":
+			actions = append(actions, "stop")
+		case request.Method == http.MethodDelete && path == "/containers/"+replacement.ID:
+			actions = append(actions, "delete")
+		case request.Method == http.MethodPost && path == "/containers/"+previous.ID+"/rename":
+			actions = append(actions, "rename")
+		case request.Method == http.MethodPost && path == "/containers/"+previous.ID+"/start":
+			actions = append(actions, "start")
+		}
+		return transport.RoundTrip(request)
+	})
+
+	if err := NewService(Options{Engine: engine, Timing: testTiming()}).Reconcile(context.Background()); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	want := []string{"stop", "delete", "rename", "start"}
+	if !slices.Equal(actions, want) {
+		t.Fatalf("reconcile sequence = %v, want %v", actions, want)
+	}
+	if restored := daemon.named("gateway"); restored == nil || restored.ID != previous.ID || !restored.IsRunning {
+		t.Fatalf("restored = %+v", restored)
+	}
+}
+
+func TestStartCleansUpStalePreviousWhenTargetIsHealthy(t *testing.T) {
+	t.Run("removes stale stopped backup when running target is healthy", func(t *testing.T) {
+		stack := newDeployment(t, OMC_REPOSITORY+":latest")
+		stack.daemon.mu.Lock()
+		console := stack.daemon.find("oh-my-cpa")
+		console.Health = "healthy"
+		stale := stack.daemon.addContainer(containerSpec{name: "oh-my-cpa" + PREVIOUS_SUFFIX, image: OMC_REPOSITORY + ":latest"})
+		stale.IsRunning = false
+		stack.daemon.mu.Unlock()
+
+		manifest, signature := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
+		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		job := awaitJob(t, stack.service)
+		if job.Stage != StageDone || job.ToVersion != "v1.1.0" {
+			t.Fatalf("job = %+v", job)
+		}
+		if stack.daemon.find(stale.ID) != nil || stack.daemon.named("oh-my-cpa"+PREVIOUS_SUFFIX) != nil {
+			t.Fatal("stale backup container should have been removed")
+		}
+	})
+
+	t.Run("refuses update when target is not healthy", func(t *testing.T) {
+		stack := newDeployment(t, OMC_REPOSITORY+":latest")
+		stack.daemon.mu.Lock()
+		console := stack.daemon.find("oh-my-cpa")
+		console.Health = "unhealthy"
+		stale := stack.daemon.addContainer(containerSpec{name: "oh-my-cpa" + PREVIOUS_SUFFIX, image: OMC_REPOSITORY + ":latest"})
+		stale.IsRunning = false
+		stack.daemon.mu.Unlock()
+
+		manifest, signature := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
+		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		job := awaitJob(t, stack.service)
+		if job.Stage != StageFailed || !strings.Contains(job.Error, "interrupted replacement") {
+			t.Fatalf("job = %+v", job)
+		}
+		if stack.daemon.find(stale.ID) == nil {
+			t.Fatal("rollback backup must be preserved when current target is unhealthy")
+		}
+	})
+
+	t.Run("refuses update when recovery requires updater self-handover", func(t *testing.T) {
+		stack := newDeployment(t, OMC_REPOSITORY+":latest")
+		stack.daemon.mu.Lock()
+		stack.daemon.addImage(DEFAULT_CPA_REPOSITORY+":latest", "sha256:gateway-old", "8.0.1")
+		stack.daemon.publish(DEFAULT_CPA_REPOSITORY+":latest", "sha256:gateway-new", "8.0.2")
+		gateway := stack.daemon.addContainer(containerSpec{name: "cli-proxy-api", image: DEFAULT_CPA_REPOSITORY + ":latest"})
+		gateway.Health = "healthy"
+		stale := stack.daemon.addContainer(containerSpec{name: "cli-proxy-api" + PREVIOUS_SUFFIX, image: DEFAULT_CPA_REPOSITORY + ":latest"})
+		stale.IsRunning = false
+		updater := stack.daemon.find(SIDECAR_NAME)
+		updater.HostConfig["NetworkMode"] = "container:" + stale.ID
+		stack.daemon.mu.Unlock()
+		stack.service.options.CPAContainer = "cli-proxy-api"
+
+		if _, err := stack.service.Start(context.Background(), ProductCPA, nil, "", ""); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		job := awaitJob(t, stack.service)
+		if job.Stage != StageFailed || !strings.Contains(job.Error, "interrupted replacement") {
+			t.Fatalf("job = %+v, want failed requiring updater restart", job)
+		}
+		if stack.daemon.named(SIDECAR_NAME).ID != updater.ID || stack.daemon.named(SIDECAR_NAME+PREVIOUS_SUFFIX) != nil {
+			t.Fatal("update must not trigger updater handover during preflight recovery")
+		}
+		if stack.daemon.pulls != 0 {
+			t.Fatalf("refused update must not pull images; pulls = %d", stack.daemon.pulls)
+		}
+	})
+
+	t.Run("stops job if target degrades and reconcile restores backup", func(t *testing.T) {
+		stack := newDeployment(t, OMC_REPOSITORY+":latest")
+		stack.daemon.mu.Lock()
+		console := stack.daemon.find("oh-my-cpa")
+		console.Health = "healthy"
+		stale := stack.daemon.addContainer(containerSpec{name: "oh-my-cpa" + PREVIOUS_SUFFIX, image: OMC_REPOSITORY + ":latest"})
+		stale.IsRunning = false
+		stack.daemon.mu.Unlock()
+
+		engine := stack.service.options.Engine
+		transport := engine.httpClient.Transport
+		var flipped atomic.Bool
+		engine.httpClient.Transport = updaterTransport(func(request *http.Request) (*http.Response, error) {
+			path := strings.TrimPrefix(request.URL.Path, "/v"+MAX_API_VERSION)
+			// Flip the target unhealthy right when reconcilePrevious inspects the previous
+			// backup (after Start and preflight already saw it healthy).
+			if request.Method == http.MethodGet && path == "/containers/"+stale.ID+"/json" && flipped.CompareAndSwap(false, true) {
+				stack.daemon.mu.Lock()
+				console.Health = "unhealthy"
+				stack.daemon.mu.Unlock()
+			}
+			return transport.RoundTrip(request)
+		})
+
+		manifest, signature := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
+		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		job := awaitJob(t, stack.service)
+		if job.Stage != StageFailed || !strings.Contains(job.Error, "restored during recovery") {
+			t.Fatalf("job = %+v, want failed requiring fresh admission", job)
+		}
+		restored := stack.daemon.named("oh-my-cpa")
+		if restored == nil || restored.ID != stale.ID || !restored.IsRunning {
+			t.Fatalf("restored = %+v, want stale %+v running", restored, stale)
+		}
+		if stack.daemon.pulls != 0 {
+			t.Fatalf("aborted job must not pull images; pulls = %d", stack.daemon.pulls)
+		}
+	})
+}
+
+func TestAwaitStartedAndHealthTimeoutConfig(t *testing.T) {
+	t.Run("loadTimingFromEnv", func(t *testing.T) {
+		t.Setenv(ENV_HEALTH_TIMEOUT, "")
+		timing, err := loadTimingFromEnv()
+		if err != nil || timing.HealthTimeout != 5*time.Minute || timing.WaitThroughUnhealthy {
+			t.Fatalf("default timing = %+v, err = %v", timing, err)
+		}
+
+		t.Setenv(ENV_HEALTH_TIMEOUT, "10m")
+		timing, err = loadTimingFromEnv()
+		if err != nil || timing.HealthTimeout != 10*time.Minute || !timing.WaitThroughUnhealthy {
+			t.Fatalf("configured timing = %+v, err = %v", timing, err)
+		}
+
+		for _, invalid := range []string{"0s", "-5s", "bogus"} {
+			t.Setenv(ENV_HEALTH_TIMEOUT, invalid)
+			if _, err := loadTimingFromEnv(); err == nil {
+				t.Fatalf("expected error for %q", invalid)
+			}
+		}
+	})
+
+	t.Run("waits through unhealthy until healthy when configured", func(t *testing.T) {
+		daemon, engine := newFakeDaemon(t)
+		daemon.addImage("app:latest", "sha256:app", "v1.0.0")
+		container := daemon.addContainer(containerSpec{name: "oh-my-cpa", image: "app:latest"})
+		container.Health = "starting"
+
+		var checks atomic.Int32
+		go func() {
+			for range 20 {
+				time.Sleep(5 * time.Millisecond)
+				daemon.mu.Lock()
+				switch step := checks.Add(1); {
+				case step < 4:
+					container.Health = "unhealthy"
+				default:
+					container.Health = "healthy"
+				}
+				daemon.mu.Unlock()
+			}
+		}()
+
+		timing := testTiming()
+		timing.HealthTimeout = 2 * time.Second
+		timing.WaitThroughUnhealthy = true
+		if err := awaitStarted(context.Background(), engine, timing, container.ID); err != nil {
+			t.Fatalf("expected awaitStarted to wait through unhealthy during migration: %v", err)
+		}
+	})
+
+	t.Run("fails after HealthTimeout when staying unhealthy", func(t *testing.T) {
+		daemon, engine := newFakeDaemon(t)
+		daemon.addImage("app:latest", "sha256:app", "v1.0.0")
+		container := daemon.addContainer(containerSpec{name: "oh-my-cpa", image: "app:latest"})
+		container.Health = "unhealthy"
+
+		timing := testTiming()
+		timing.HealthTimeout = 30 * time.Millisecond
+		timing.WaitThroughUnhealthy = true
+		err := awaitStarted(context.Background(), engine, timing, container.ID)
+		if err == nil || !strings.Contains(err.Error(), "unhealthy") {
+			t.Fatalf("err = %v, want unhealthy failure", err)
+		}
+	})
+}

@@ -18,6 +18,10 @@ const PREVIOUS_SUFFIX = "-omc-previous"
 type Timing struct {
 	PollInterval  time.Duration
 	HealthTimeout time.Duration
+	// WaitThroughUnhealthy keeps waiting up to HealthTimeout after the daemon marks a
+	// running replacement unhealthy, so an explicit operator timeout outlasts an image's
+	// built-in start-period during long database migrations.
+	WaitThroughUnhealthy bool
 	// StableWindow is how long a container without a health check must stay running,
 	// without the daemon restarting it, to count as started.
 	StableWindow time.Duration
@@ -26,7 +30,7 @@ type Timing struct {
 
 // DefaultTiming is the production timing.
 func DefaultTiming() Timing {
-	return Timing{PollInterval: time.Second, HealthTimeout: 3 * time.Minute, StableWindow: 10 * time.Second, StopGrace: 30 * time.Second}
+	return Timing{PollInterval: time.Second, HealthTimeout: 5 * time.Minute, StableWindow: 10 * time.Second, StopGrace: 30 * time.Second}
 }
 
 // creationPlan is everything needed to create the replacement of a container.
@@ -245,23 +249,32 @@ func replaceContainerPlanned(ctx context.Context, engine *Engine, timing Timing,
 	if err := engine.StopContainer(ctx, previous.ID, timing.StopGrace); err != nil {
 		return fmt.Errorf("stop %s: %w", containerName, err)
 	}
+	var createdID string
 	restore := func(cause error) error {
 		// The caller's context may be what failed; restoring service must not share
-		// its fate.
-		restoreCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+		// its fate, and StopGrace must fit inside the restore budget.
+		restoreTimeout := max(time.Minute, timing.StopGrace+time.Minute)
+		restoreCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), restoreTimeout)
 		defer cancel()
-		_ = engine.RemoveContainer(restoreCtx, containerName)
-		renameErr := engine.RenameContainer(restoreCtx, previous.ID, containerName)
+		target := createdID
+		if target == "" {
+			target = containerName
+		}
+		if removeErr := stopAndRemoveContainer(restoreCtx, engine, timing, target); removeErr != nil {
+			return fmt.Errorf("%w; restoring the previous container also failed: %w", cause, removeErr)
+		}
+		if renameErr := engine.RenameContainer(restoreCtx, previous.ID, containerName); renameErr != nil {
+			return fmt.Errorf("%w; restoring the previous container also failed: %w", cause, renameErr)
+		}
 		if ownerID, isJoined := strings.CutPrefix(stringField(previous.HostConfig, "NetworkMode"), "container:"); isJoined {
 			owner, ownerErr := engine.InspectContainer(restoreCtx, ownerID)
 			if ownerErr != nil || !owner.State.Running {
 				// A removed or stopped namespace owner cannot accept the old container.
-				return fmt.Errorf("the previous container cannot restart without its network namespace owner: %w", errors.Join(cause, renameErr, ownerErr))
+				return fmt.Errorf("the previous container cannot restart without its network namespace owner: %w", errors.Join(cause, ownerErr))
 			}
 		}
-		startErr := engine.StartContainer(restoreCtx, previous.ID)
-		if renameErr != nil || startErr != nil {
-			return fmt.Errorf("%w; restoring the previous container also failed: %w", cause, errors.Join(renameErr, startErr))
+		if startErr := startRestoredContainer(restoreCtx, engine, timing, previous.ID); startErr != nil {
+			return fmt.Errorf("%w; restoring the previous container also failed: %w", cause, startErr)
 		}
 		return fmt.Errorf("%w: %w", errRolledBack, cause)
 	}
@@ -271,7 +284,7 @@ func replaceContainerPlanned(ctx context.Context, engine *Engine, timing Timing,
 	}
 
 	onStage(StageStarting)
-	createdID, err := engine.CreateContainer(ctx, containerName, plan.payload)
+	createdID, err = engine.CreateContainer(ctx, containerName, plan.payload)
 	if err != nil {
 		return restore(fmt.Errorf("create the replacement: %w", err))
 	}
@@ -296,11 +309,86 @@ func replaceContainerPlanned(ctx context.Context, engine *Engine, timing Timing,
 	return nil
 }
 
+// stopAndRemoveContainer stops a container if running or restarting so Docker tears
+// down its network sandbox and releases published ports before removal, then removes
+// it and confirms the entry is gone.
+func stopAndRemoveContainer(ctx context.Context, engine *Engine, timing Timing, nameOrID string) error {
+	container, err := engine.InspectContainer(ctx, nameOrID)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var stopErr error
+	if container.State.Running || container.State.Restarting {
+		stopErr = engine.StopContainer(ctx, container.ID, timing.StopGrace)
+		if errors.Is(stopErr, ErrNotFound) {
+			return nil
+		}
+	}
+	removeErr := engine.RemoveContainer(ctx, container.ID)
+	if removeErr == nil {
+		return nil
+	}
+	poll := timing.PollInterval
+	retryBudget := 5 * time.Second
+	switch {
+	case poll <= 0:
+		poll = 50 * time.Millisecond
+	case poll < 50*time.Millisecond:
+		retryBudget = max(20*poll, 20*time.Millisecond)
+	case poll > 250*time.Millisecond:
+		poll = 250 * time.Millisecond
+	}
+	waitDeadline := time.Now().Add(retryBudget)
+	for time.Now().Before(waitDeadline) {
+		if _, inspectErr := engine.InspectContainer(ctx, container.ID); errors.Is(inspectErr, ErrNotFound) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return errors.Join(stopErr, removeErr, ctx.Err())
+		case <-time.After(poll):
+		}
+		retryErr := engine.RemoveContainer(ctx, container.ID)
+		if retryErr == nil {
+			return nil
+		}
+		removeErr = retryErr
+	}
+	if _, inspectErr := engine.InspectContainer(ctx, container.ID); errors.Is(inspectErr, ErrNotFound) {
+		return nil
+	}
+	return errors.Join(stopErr, removeErr)
+}
+
+func startRestoredContainer(ctx context.Context, engine *Engine, timing Timing, containerID string) error {
+	retryDelay := 500 * time.Millisecond
+	if timing.PollInterval > 0 && timing.PollInterval < retryDelay {
+		retryDelay = max(timing.PollInterval, 10*time.Millisecond)
+	}
+	var startErr error
+	for attempt := range 3 {
+		startErr = engine.StartContainer(ctx, containerID)
+		if startErr == nil || !strings.Contains(strings.ToLower(startErr.Error()), "port is already allocated") || attempt == 2 {
+			return startErr
+		}
+		select {
+		case <-ctx.Done():
+			return errors.Join(startErr, ctx.Err())
+		case <-time.After(retryDelay):
+		}
+	}
+	return startErr
+}
+
 // awaitStarted waits until a container is healthy, or, when its image defines no
 // health check, until it has stayed up for the stable window.
 func awaitStarted(ctx context.Context, engine *Engine, timing Timing, containerID string) error {
 	deadline := time.Now().Add(timing.HealthTimeout)
 	var runningSince time.Time
+	lastHealthStatus := ""
 	for {
 		container, err := engine.InspectContainer(ctx, containerID)
 		if err != nil {
@@ -310,11 +398,14 @@ func awaitStarted(ctx context.Context, engine *Engine, timing Timing, containerI
 		case !container.State.Running || container.RestartCount > 0:
 			return errors.New("the replacement exited after starting")
 		case container.State.Health != nil:
+			lastHealthStatus = container.State.Health.Status
 			switch container.State.Health.Status {
 			case "healthy":
 				return nil
 			case "unhealthy":
-				return errors.New("the replacement reported itself unhealthy")
+				if !timing.WaitThroughUnhealthy {
+					return errors.New("the replacement reported itself unhealthy")
+				}
 			}
 		default:
 			if runningSince.IsZero() {
@@ -325,6 +416,9 @@ func awaitStarted(ctx context.Context, engine *Engine, timing Timing, containerI
 			}
 		}
 		if time.Now().After(deadline) {
+			if lastHealthStatus == "unhealthy" {
+				return errors.New("the replacement reported itself unhealthy")
+			}
 			return errors.New("the replacement did not become healthy in time")
 		}
 		select {

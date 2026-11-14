@@ -498,9 +498,36 @@ func (s *Service) run(
 		s.setStage(StageFailed, func(job *Job) { job.Error = message })
 	}
 	engine := s.options.Engine
-	if _, err := engine.InspectContainer(ctx, container.ContainerName()+PREVIOUS_SUFFIX); err == nil {
-		fail(errors.New("an interrupted replacement still needs recovery; restart the updater before updating this product"))
-		return
+	if previous, err := engine.InspectContainer(ctx, container.ContainerName()+PREVIOUS_SUFFIX); err == nil {
+		canCleanPrevious := !previous.State.Running && !s.isSelf(previous.ID) && container.State.Health != nil && container.State.Health.Status == "healthy"
+		if canCleanPrevious {
+			_, prevSelfJoined, joinErr := s.joinedContainers(ctx, previous.ID)
+			if joinErr != nil {
+				fail(fmt.Errorf("discover network namespace dependents: %w", joinErr))
+				return
+			}
+			if prevSelfJoined {
+				canCleanPrevious = false
+			}
+		}
+		if canCleanPrevious {
+			if reconcileErr := s.reconcilePrevious(ctx, previous.ID, container.ContainerName()); reconcileErr != nil {
+				fail(fmt.Errorf("clean up the previous replacement: %w", reconcileErr))
+				return
+			}
+			current, inspectErr := engine.InspectContainer(ctx, container.ContainerName())
+			if inspectErr != nil {
+				fail(fmt.Errorf("inspect the reconciled target: %w", inspectErr))
+				return
+			}
+			if current.ID != container.ID || !current.State.Running {
+				fail(errors.New("the interrupted replacement was restored during recovery; retry the update against the restored container"))
+				return
+			}
+		} else {
+			fail(errors.New("an interrupted replacement still needs recovery; restart the updater before updating this product"))
+			return
+		}
 	} else if !errors.Is(err, ErrNotFound) {
 		fail(fmt.Errorf("inspect the previous replacement: %w", err))
 		return
@@ -1030,15 +1057,15 @@ func (s *Service) reconcilePrevious(ctx context.Context, previousID, name string
 			}
 			joined = append(joined, more...)
 			selfJoined = selfJoined || moreSelf
-		}
-		if err := engine.RemoveContainer(ctx, name); err != nil {
-			return err
+			if err := stopAndRemoveContainer(ctx, engine, s.options.Timing, replacement.ID); err != nil {
+				return err
+			}
 		}
 		if err := engine.RenameContainer(ctx, previousID, name); err != nil {
 			return err
 		}
 		if !s.isSelf(previousID) {
-			if err := engine.StartContainer(ctx, previousID); err != nil {
+			if err := startRestoredContainer(ctx, engine, s.options.Timing, previousID); err != nil {
 				return err
 			}
 		}
