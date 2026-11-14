@@ -89,6 +89,14 @@ export const MOTION_ROUTE_ENTER: MotionToken = { duration: 300, easing: 'cubic-b
 /** A routing-map row leaving the minute: shorter than its arrival and accelerating away. */
 export const MOTION_ROUTE_EXIT: MotionToken = { duration: 200, easing: 'cubic-bezier(0.4, 0, 1, 1)' };
 
+/**
+ * A record arriving in the live request list: the rows already drawn glide down to make room while
+ * the record fades in at the head of the move. It settles on the entrance curve (`--ease-out`), the
+ * move mostly over in its first third, so the reader sees the record land rather than watching the
+ * list travel, and the next arrival never queues behind a glide still running.
+ */
+export const MOTION_ARRIVAL: MotionToken = { duration: 320, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' };
+
 /** A live label repeats this glyph-only sweep; unlike a transition, its period lasts with the work. */
 export const MOTION_LIVE_TEXT: MotionToken = { duration: 900, easing: 'linear' };
 

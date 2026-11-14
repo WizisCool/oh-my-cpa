@@ -47,6 +47,8 @@ import {
   buildGroupSegments,
   computeGroupedVirtualWindow,
   computeVirtualWindow,
+  assignBandTones,
+  planArrivalGlide,
 } from '../../src/components/usage/requestVirtualWindow.ts';
 import { EVENT_PRESETS } from '../../src/types/usageEventQuery.ts';
 import { test } from 'vitest';
@@ -630,4 +632,54 @@ test('buildGroupSegments and computeGroupedVirtualWindow slice overlapping group
   assert.ok(grouped.slices[0].endIndex >= 4 && grouped.slices[0].endIndex < 14);
   // Second group starts at 40 + 15 * 80 = 1240px, outside viewport + overscan (400px).
   assert.equal(grouped.slices[1].endIndex, -1);
+});
+
+test('planArrivalGlide carries the drawn rows down with the records that landed above them', () => {
+  const previousTops = new Map([[3, 0], [2, 72], [1, 144]]);
+  const glide = planArrivalGlide({
+    previousKeys: new Set([3, 2, 1]),
+    previousTops,
+    drawnTops: new Map([[5, 0], [4, 72], [3, 144], [2, 216], [1, 288]]),
+    maxTravel: 640,
+  });
+  assert.deepEqual(glide, [
+    { key: 5, from: -144, isArrival: true },
+    { key: 4, from: -144, isArrival: true },
+    { key: 3, from: -144, isArrival: false },
+    { key: 2, from: -144, isArrival: false },
+    { key: 1, from: -144, isArrival: false },
+  ]);
+
+  // A record that lands mid-list pushes only what is below it, and fades in where it belongs.
+  const between = planArrivalGlide({
+    previousKeys: new Set([3, 2, 1]),
+    previousTops,
+    drawnTops: new Map([[3, 0], [9, 72], [2, 144], [1, 216]]),
+    maxTravel: 640,
+  });
+  assert.deepEqual(between?.map((move) => move.from), [0, -72, -72, -72]);
+});
+
+test('planArrivalGlide draws a replaced, unchanged or backlogged list in place', () => {
+  const previousTops = new Map([[3, 0], [2, 72], [1, 144]]);
+  const plan = (drawnTops: Map<number, number>, maxTravel = 640) =>
+    planArrivalGlide({ previousKeys: new Set([3, 2, 1]), previousTops, drawnTops, maxTravel });
+  assert.equal(plan(new Map([[9, 0], [8, 72]])), null, 'another page keeps nothing');
+  assert.equal(plan(new Map([[2, 0], [1, 72]])), null, 'a record that left is not an arrival');
+  assert.equal(plan(new Map([[3, 0], [2, 72], [1, 144]])), null, 'a re-read with nothing new');
+  assert.equal(plan(new Map([[5, 0], [4, 72], [3, 144]]), 100), null, 'a backlog travels too far');
+});
+
+test('assignBandTones keeps every record its band as records arrive above it', () => {
+  const first = assignBandTones([3, 2, 1], new Map());
+  assert.deepEqual([...first.values()], ['odd', 'even', 'odd']);
+
+  const arrived = assignBandTones([4, 3, 2, 1], first);
+  assert.deepEqual([...arrived], [[4, 'even'], [3, 'odd'], [2, 'even'], [1, 'odd']]);
+
+  // A record landing mid-list keeps the stripes alternating by turning over only what is below it.
+  const between = assignBandTones([4, 3, 9, 2, 1], arrived);
+  assert.deepEqual([...between.values()], ['even', 'odd', 'even', 'odd', 'even']);
+
+  assert.deepEqual([...assignBandTones([8, 7], arrived).values()], ['odd', 'even'], 'another page starts afresh');
 });

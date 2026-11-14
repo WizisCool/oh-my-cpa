@@ -175,7 +175,6 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
             <div ref={scroll.scrollAreaRef} className="request-table-scroll-area">
               <RequestVirtualList
                 ref={scroll.listRef}
-                virtual
                 overscanPx={144}
                 items={displayed}
                 getItemKey={(item) => item.id}
@@ -358,7 +357,7 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
     list.scrollTop = 300;
     fireEvent.scroll(list);
 
-    const rows = container.querySelectorAll<HTMLElement>('.request-list-item-virtual');
+    const rows = container.querySelectorAll<HTMLElement>('.request-list-item');
     const aboveRow = rows[0]!;
     vi.spyOn(aboveRow, 'getBoundingClientRect').mockReturnValue({
       top: -10, bottom: 90, left: 0, right: 800, width: 800, height: 100, x: 0, y: -10, toJSON: () => ({}),
@@ -416,23 +415,25 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
     expect(screen.getAllByTestId('virtual-req-row')[0].textContent).toBe('row-42');
   });
 
-  it('numbers rows by their place within the group, so interleaved groups still alternate', () => {
+  it('bands records within each group, so interleaved groups still alternate from their header', () => {
     const items = [
       { id: 'a1', group: 'A' },
       { id: 'b1', group: 'B' },
       { id: 'a2', group: 'A' },
       { id: 'a3', group: 'A' },
     ];
-    renderWithOmc(
+    const { container } = renderWithOmc(
       <RequestVirtualList
-        virtual={false}
         items={items}
         getItemKey={(item) => item.id}
         group={{ key: (item) => item.group, title: (key) => key }}
-        renderItem={(item, position) => <div data-testid="grouped-row">{`${item.id}:${position}`}</div>}
+        renderItem={(item) => <div data-testid="grouped-row">{item.id}</div>}
       />,
     );
-    expect(screen.getAllByTestId('grouped-row').map((row) => row.textContent)).toEqual(['a1:0', 'a2:1', 'a3:2', 'b1:0']);
+    expect(screen.getAllByTestId('grouped-row').map((row) => row.textContent)).toEqual(['a1', 'a2', 'a3', 'b1']);
+    const bandsByGroup = [...container.querySelectorAll('.request-group-body')].map((body) =>
+      [...body.querySelectorAll('.request-list-item')].map((row) => (row.classList.contains('is-odd') ? 'odd' : 'even')));
+    expect(bandsByGroup).toEqual([['odd', 'even', 'odd'], ['odd']]);
   });
 
   it('refetches live SSE signals in place without blinking Updating in the footer, while still showing Updating on page changes', async () => {

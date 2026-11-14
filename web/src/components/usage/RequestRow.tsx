@@ -66,9 +66,6 @@ export interface RequestRowProps {
   isSelected?: boolean;
   /** Whether the row is picked. */
   isChecked?: boolean;
-  /** The row's place counted from one: every other row carries a band, and which of the two does
-      depends on the mode (RequestList.css). */
-  isOddRow?: boolean;
   /** Whether a choice is under way: the row shows its checkbox, and a plain click picks it. */
   isSelecting?: boolean;
   /** A pick of the row; `isRange` is a Shift click, which runs from the last row picked. */
@@ -89,7 +86,6 @@ export const RequestRow = React.memo<RequestRowProps>(
     onOpen,
     isSelected = false,
     isChecked = false,
-    isOddRow = false,
     isSelecting = false,
     onToggleSelect,
   }) => {
@@ -203,7 +199,7 @@ export const RequestRow = React.memo<RequestRowProps>(
       <div
         role="button"
         tabIndex={0}
-        className={`request-row${isSelected ? ' is-selected' : ''}${isChecked ? ' is-checked' : ''}${isOddRow ? ' is-odd' : ' is-even'}`}
+        className={`request-row${isSelected ? ' is-selected' : ''}${isChecked ? ' is-checked' : ''}`}
         // Shift extends a choice, so it must not also start a text selection across the rows.
         onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }}
         onClick={(e) => {
