@@ -465,7 +465,7 @@ CPAMC reads the gateway credential from browser storage, where the console mirro
 before the page loads. Sign-out, a refused session check and the next sign-in withdraw it.
 Configuration-affecting
 calls through the Plugin Host are audited, serialized and backed up. See
-[Architecture](architecture.md#trusted-plugin-pages) for fixed-origin and header boundaries.
+[Architecture](dev/architecture.md#trusted-plugin-pages) for fixed-origin and header boundaries.
 
 ## Demo mode
 

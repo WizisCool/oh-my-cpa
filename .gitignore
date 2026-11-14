@@ -20,6 +20,14 @@ internal/web/dist/*
 !internal/web/dist/
 !internal/web/dist/.gitkeep
 
+# Fumadocs static docs build and generated source artifacts
+deploy/site/docs/.next/
+deploy/site/docs/.source/
+deploy/site/docs/content/docs/
+deploy/site/docs/public/images/
+deploy/site/docs/out/
+deploy/site/docs/next-env.d.ts
+
 # TypeScript build info
 *.tsbuildinfo
 

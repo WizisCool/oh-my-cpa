@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * check-feedback keeps every notification, failure, overlay and shared primitive on the console's
- * architecture boundaries (docs/design.md, Feedback and loading; Composition and shared controls):
+ * architecture boundaries (docs/dev/design.md, Feedback and loading; Composition and shared controls):
  *
  * - retired packages (`antd`, `@ant-design/*`, `@rc-component/*`, `rc-*`, `dayjs`, `echarts`) are
  *   refused everywhere;
@@ -12,7 +12,7 @@
  * - modal dialogs go through `AppModal` (plus the Agent full-screen canvas lightbox);
  * - tooltips go through `Tooltip`, `DelegatedTooltipLayer`, or the dedicated chart/list/heatmap layers;
  * - no middle dot (`\u00b7`) separates information in web source, styles or catalogs
- *   (docs/design.md, Information expression). Facts take a layout (`MetaLine`, label/value rows,
+ *   (docs/dev/design.md, Information expression). Facts take a layout (`MetaLine`, label/value rows,
  *   a tooltip card), a sentence or parentheses. Escaped spellings count too. A line that parses
  *   data an upstream stored joined on the dot says why with `separator-ok:`.
  */
@@ -146,7 +146,7 @@ export function runCheck({ projectRoot = DEFAULT_ROOT, output = console, files }
     }
   }
   if (failures.length > 0) {
-    output.error('Feedback surfaces or UI primitive boundaries bypassed (docs/design.md):');
+    output.error('Feedback surfaces or UI primitive boundaries bypassed (docs/dev/design.md):');
     for (const failure of failures) {
       output.error(`  ${failure.file}:${failure.line} [${failure.rule}] ${failure.message}`);
     }

@@ -8,7 +8,7 @@
 # this repository.
 language: en-US
 tone_instructions: >-
-  Read AGENTS.md for the guide map and docs/architecture.md for security boundaries. Report
+  Read AGENTS.md for the guide map and docs/dev/architecture.md for security boundaries. Report
   defects this change introduces, its security-boundary impact, and the
   documentation it makes stale; suggest the smallest correct fix.
 reviews:
@@ -72,7 +72,7 @@ reviews:
           prose did not. Describe the adopted state rather than alternatives
           that were considered and rejected during the session. Do not invent
           line numbers and do not reference files that no longer exist.
-          Technical prose stays in English, except README.zh-CN.md and
+          Technical prose stays in English, except README.zh-CN.md, docs/zh/**, and
           localized UI copy.
   pre_merge_checks:
     # A coverage percentage is not a meaningful target for a codebase whose
@@ -161,7 +161,7 @@ reviews:
         typed client in `web/src/api/client.ts`; a page calling `fetch` directly is
         a defect. Colors come from the resolved palette in
         `web/src/theme/palette.ts` and the shared CSS tokens; use
-        `docs/design.md` for composition and interaction intent rather than
+        `docs/dev/design.md` for composition and interaction intent rather than
         duplicating token values. Static structure is flat; overlays use the
         shared elevation tokens. Status colors convey actual state. CSS-module classes are kebab-case and read
         as `styles['kebab-case']`. The SPA must stay embeddable in the single Go
@@ -187,8 +187,8 @@ reviews:
         the implementation rather than against the intent of the change, and
         prefer a symbol or file reference over an absolute line number. Flag
         broken references and duplicated catalogs that should link to their
-        executable source. Put design intent in `docs/design.md`. Technical
-        prose is English; `README.zh-CN.md` and localized UI copy are the
+        executable source. Put design intent in `docs/dev/design.md`. Technical
+        prose is English; `README.zh-CN.md`, `docs/zh/**`, and localized UI copy are the
         intended exceptions.
     - path: 'migrations/**'
       instructions: >-
@@ -207,14 +207,14 @@ reviews:
         credible owner and net cost. Prefer a case or replacement to another file or
         layer; internal refactors need no new tests by default. Flag a new self-test
         for tooling that does not ship, a skip switch, a retry or a longer wait
-        (see docs/testing.md).
+        (see docs/dev/testing.md).
     - path: '.github/workflows/**'
       instructions: >-
         Every `uses:` is pinned to a commit SHA and every checkout sets
         `persist-credentials: false` (`pnpm verify:workflow:lint`). The required
         `static`, `browser` and `probes` checks are aggregates: `static` must
         wait on `changes` and require `changes`, `static-repo`, and every
-        selected static lane (`static-go`, `static-frontend`, `docker-check`)
+        selected static lane (`static-go`, `static-frontend`, `docs-site`, `docker-check`)
         to succeed (and unselected lanes to be skipped); `browser` must wait on
         `changes` and require `changes` plus `browser-acceptance` (when selected)
         to succeed; `probes` and `verify` require both `static` and `browser`
@@ -237,8 +237,8 @@ knowledge_base:
     filePatterns:
       - '**/AGENTS.md'
       - 'CONTEXT.md'
-      - 'docs/architecture.md'
-      - 'docs/design.md'
+      - 'docs/dev/architecture.md'
+      - 'docs/dev/design.md'
 code_generation:
   unit_tests:
     path_instructions:

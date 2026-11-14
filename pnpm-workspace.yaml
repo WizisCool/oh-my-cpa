@@ -1,5 +1,6 @@
 packages:
   - 'web'
+  - 'deploy/site/docs'
 allowBuilds:
   # OpenUI's install hook only sends installation telemetry; the console builds offline.
   '@openuidev/lang-core': false
@@ -21,4 +22,4 @@ overrides:
   undici@^8.0.0: 8.12.3
   # @ag-ui/core@0.0.53 still asks for zod ^3.22.4 and no patched 3.x exists, so
   # its instance is lifted onto the patched 4.x line rather than left vulnerable.
-  zod: 4.6.6
+  zod: 4.6.7

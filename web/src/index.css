@@ -850,7 +850,7 @@ h1, h2, h3, h4 { font-family: inherit; }
 .terminal-page-stack > * { min-width: 0; }
 .terminal-page-stack > .omc-notice { margin: 0; }
 
-/* Feedback surfaces (docs/design.md, Feedback and loading). A toast reports an action and leaves; a
+/* Feedback surfaces (docs/dev/design.md, Feedback and loading). A toast reports an action and leaves; a
    notice describes a region while it is on screen. Both read at the console's body size so a
    failure is never smaller than the data it interrupts. */
 /* A toast is a floating panel like a menu: the elevated fill on the float shadow above, whose ring

@@ -79,7 +79,7 @@ export function getAppConfig(): AppConfig {
 }
 
 export function resolveApiDocsUrl(basePath: string): string {
-  // When mounted under `/demo`, resolve `/api-docs/` on the same origin so both
+  // When mounted under `/demo`, resolve `/api-reference/` on the same origin so both
   // `omc.junze.dev/demo/` and local `deploy/site` previews open their own API reference.
-  return basePath === '/demo' ? '/api-docs/' : 'https://omc.junze.dev/api-docs/';
+  return basePath === '/demo' ? '/api-reference/' : 'https://omc.junze.dev/api-reference/';
 }

@@ -2,8 +2,8 @@
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "oh-my-cpa-site",
   "main": "worker.mjs",
-  // Public site for `omc.junze.dev` serving `/` (landing), `/api-docs/` (Scalar),
-  // and `/demo/` (interactive console demo mounted under `/demo`).
+  // Public site for `omc.junze.dev` serving `/` (landing), `/docs/` (Fumadocs),
+  // `/api-reference/` (Scalar), and `/demo/` (interactive console demo mounted under `/demo`).
   // Keep `workers_dev` off so account-derived hostnames do not publish operator identity.
   "workers_dev": false,
   "routes": [{ "pattern": "omc.junze.dev", "custom_domain": true }],

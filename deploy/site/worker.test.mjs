@@ -43,7 +43,7 @@ describe('public site worker (/demo subpath mount)', () => {
         fetch: (request) => {
           const path = new URL(request.url).pathname;
           fetchedPaths.push(path);
-          if (path === '/demo/' || path === '/' || path === '/api-docs/') {
+          if (path === '/demo/' || path === '/' || path === '/api-reference/' || path === '/docs/' || path === '/docs/zh/') {
             return new Response(`<html>${path}</html>`, { status: 200 });
           }
           return new Response('Not Found', { status: 404 });
@@ -62,8 +62,18 @@ describe('public site worker (/demo subpath mount)', () => {
     assert.deepEqual(fetchedPaths, ['/demo/assets/nonexistent.js']);
 
     fetchedPaths.length = 0;
-    const docsRoute = await worker.fetch(makeRequest('/api-docs/'), env);
+    const apiRefRoute = await worker.fetch(makeRequest('/api-reference/'), env);
+    assert.equal(apiRefRoute.status, 200);
+    assert.equal(await apiRefRoute.text(), '<html>/api-reference/</html>');
+
+    fetchedPaths.length = 0;
+    const docsRoute = await worker.fetch(makeRequest('/docs/'), env);
     assert.equal(docsRoute.status, 200);
-    assert.equal(await docsRoute.text(), '<html>/api-docs/</html>');
+    assert.equal(await docsRoute.text(), '<html>/docs/</html>');
+
+    fetchedPaths.length = 0;
+    const zhDocsRoute = await worker.fetch(makeRequest('/docs/zh/'), env);
+    assert.equal(zhDocsRoute.status, 200);
+    assert.equal(await zhDocsRoute.text(), '<html>/docs/zh/</html>');
   });
 });

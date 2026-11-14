@@ -3,33 +3,128 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      (function () {
+        try {
+          var storedTheme = localStorage.getItem('omc-site-theme');
+          if (storedTheme === 'light' || storedTheme === 'dark') {
+            var meta = document.querySelector('meta[name="color-scheme"]');
+            if (meta) meta.setAttribute('content', storedTheme);
+          }
+          var savedLang = localStorage.getItem('omc-docs-locale');
+          var lang = savedLang === 'zh' || savedLang === 'en'
+            ? savedLang
+            : ((navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en');
+          document.documentElement.dataset.lang = lang;
+          document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+        } catch (e) {}
+      })();
+    </script>
     <title>Oh My CPA</title>
     <meta
       name="description"
-      content="Self-hosted control plane and usage observability console for CLIProxyAPI (CPA)."
+      content="Self-hosted control plane, OAuth management, routing, OpenRouter-backed pricing, quota warmup, and Agent/MCP observability console for CLIProxyAPI v8+."
     />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <style>
       :root {
+        --bg-light: #f6f6f7;
+        --bg-dark: #141416;
+        --surface-light: #ffffff;
+        --surface-dark: #1b1b1f;
+        --well-light: #efeff2;
+        --well-dark: #121214;
+        --fg-light: #1e1e20;
+        --fg-dark: #e3e3e4;
+        --muted-light: #5a5a63;
+        --muted-dark: #a0a0ab;
+        --accent-light: #1c6ba3;
+        --accent-dark: #00a2fb;
+        --accent-fg-light: #ffffff;
+        --accent-fg-dark: #0b1116;
+        --ring-light: rgba(30, 30, 32, 0.11);
+        --ring-dark: rgba(227, 227, 228, 0.13);
+        --hover-light: rgba(30, 30, 32, 0.05);
+        --hover-dark: rgba(227, 227, 228, 0.08);
+        --shadow-light: 0 18px 46px -28px rgba(15, 23, 42, 0.25);
+        --shadow-dark: 0 24px 54px -26px rgba(0, 0, 0, 0.65);
+
         color-scheme: light dark;
-        --bg: #f6f6f7;
-        --surface: #ffffff;
-        --fg: #1e1e20;
-        --muted: #5a5a63;
-        --accent: #1c6ba3;
-        --accent-fg: #ffffff;
-        --ring: rgba(30, 30, 32, 0.1);
+        --bg: light-dark(var(--bg-light), var(--bg-dark));
+        --surface: light-dark(var(--surface-light), var(--surface-dark));
+        --well: light-dark(var(--well-light), var(--well-dark));
+        --fg: light-dark(var(--fg-light), var(--fg-dark));
+        --muted: light-dark(var(--muted-light), var(--muted-dark));
+        --accent: light-dark(var(--accent-light), var(--accent-dark));
+        --accent-fg: light-dark(var(--accent-fg-light), var(--accent-fg-dark));
+        --ring: light-dark(var(--ring-light), var(--ring-dark));
+        --hover: light-dark(var(--hover-light), var(--hover-dark));
+        --shadow: light-dark(var(--shadow-light), var(--shadow-dark));
+        accent-color: var(--accent);
       }
 
-      @media (prefers-color-scheme: dark) {
+      :root:has(> head > meta[name="color-scheme"][content="dark"]) {
+        color-scheme: dark;
+      }
+
+      :root:has(> head > meta[name="color-scheme"][content="light"]) {
+        color-scheme: light;
+      }
+
+      @supports not (color: light-dark(white, black)) {
         :root {
-          --bg: #141416;
-          --surface: #1b1b1f;
-          --fg: #e3e3e4;
-          --muted: #a0a0ab;
-          --accent: #00a2fb;
-          --accent-fg: #0b1116;
-          --ring: rgba(227, 227, 228, 0.12);
+          --bg: var(--bg-light);
+          --surface: var(--surface-light);
+          --well: var(--well-light);
+          --fg: var(--fg-light);
+          --muted: var(--muted-light);
+          --accent: var(--accent-light);
+          --accent-fg: var(--accent-fg-light);
+          --ring: var(--ring-light);
+          --hover: var(--hover-light);
+          --shadow: var(--shadow-light);
+        }
+
+        @media (prefers-color-scheme: dark) {
+          :root {
+            --bg: var(--bg-dark);
+            --surface: var(--surface-dark);
+            --well: var(--well-dark);
+            --fg: var(--fg-dark);
+            --muted: var(--muted-dark);
+            --accent: var(--accent-dark);
+            --accent-fg: var(--accent-fg-dark);
+            --ring: var(--ring-dark);
+            --hover: var(--hover-dark);
+            --shadow: var(--shadow-dark);
+          }
+        }
+
+        :root:has(> head > meta[name="color-scheme"][content="light"]) {
+          --bg: var(--bg-light);
+          --surface: var(--surface-light);
+          --well: var(--well-light);
+          --fg: var(--fg-light);
+          --muted: var(--muted-light);
+          --accent: var(--accent-light);
+          --accent-fg: var(--accent-fg-light);
+          --ring: var(--ring-light);
+          --hover: var(--hover-light);
+          --shadow: var(--shadow-light);
+        }
+
+        :root:has(> head > meta[name="color-scheme"][content="dark"]) {
+          --bg: var(--bg-dark);
+          --surface: var(--surface-dark);
+          --well: var(--well-dark);
+          --fg: var(--fg-dark);
+          --muted: var(--muted-dark);
+          --accent: var(--accent-dark);
+          --accent-fg: var(--accent-fg-dark);
+          --ring: var(--ring-dark);
+          --hover: var(--hover-dark);
+          --shadow: var(--shadow-dark);
         }
       }
 
@@ -40,95 +135,728 @@
       body {
         margin: 0;
         min-height: 100dvh;
-        display: grid;
-        place-items: center;
-        padding: 24px;
         background: var(--bg);
         color: var(--fg);
-        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        line-height: 1.5;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+        line-height: 1.55;
+        display: flex;
+        flex-direction: column;
       }
 
-      main {
-        width: min(560px, 100%);
-        padding: 32px;
-        border-radius: 16px;
-        background: var(--surface);
-        box-shadow: 0 0 0 1px var(--ring), 0 16px 40px -24px rgba(0, 0, 0, 0.35);
+      .skip-link {
+        position: absolute;
+        inset-block-start: -48px;
+        inset-inline-start: 16px;
+        padding: 8px 14px;
+        border-radius: 8px;
+        background: var(--accent);
+        color: var(--accent-fg);
+        font-size: 0.875rem;
+        font-weight: 500;
+        text-decoration: none;
+        z-index: 20;
+      }
+
+      .skip-link:focus {
+        inset-block-start: 16px;
+      }
+
+      a:focus-visible,
+      button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .site-header {
+        width: min(980px, 100%);
+        margin: 0 auto;
+        padding: 20px 24px 0;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px 20px;
       }
 
       .brand {
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 12px;
-        margin-bottom: 16px;
+        gap: 10px;
+        color: var(--fg);
+        text-decoration: none;
+        font-weight: 650;
+        font-size: 1rem;
+        letter-spacing: -0.015em;
       }
 
-      .brand img {
-        width: 32px;
-        height: 32px;
+      .wordmark {
+        display: block;
+        height: 24px;
+        width: auto;
+      }
+
+      .wordmark-dark {
+        display: none;
+      }
+
+      :root:has(> head > meta[name="color-scheme"][content="dark"]) .wordmark-light {
+        display: none;
+      }
+
+      :root:has(> head > meta[name="color-scheme"][content="dark"]) .wordmark-dark {
+        display: block;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:has(> head > meta[name="color-scheme"][content="light dark"]) .wordmark-light {
+          display: none;
+        }
+        :root:has(> head > meta[name="color-scheme"][content="light dark"]) .wordmark-dark {
+          display: block;
+        }
+      }
+
+      .header-controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .top-nav {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .nav-link,
+      .icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-block-size: 32px;
+        min-inline-size: 32px;
+        padding: 0 10px;
+        border-radius: 8px;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 0.875rem;
+        font-weight: 500;
+        font-family: inherit;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background-color 140ms ease, color 140ms ease;
+      }
+
+      .nav-link:hover,
+      .icon-btn:hover {
+        background: var(--hover);
+        color: var(--fg);
+      }
+
+      .icon-btn {
+        box-shadow: 0 0 0 1px var(--ring);
+        color: var(--fg);
+        padding: 0 10px;
+      }
+
+      main {
+        width: min(980px, 100%);
+        margin: auto;
+        padding: 28px 24px 48px;
+        display: grid;
+        gap: 20px;
+      }
+
+      .hero {
+        padding: 32px;
+        border-radius: 16px;
+        background: var(--surface);
+        box-shadow: 0 0 0 1px var(--ring), var(--shadow);
+        display: grid;
+        gap: 20px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        width: fit-content;
+        padding: 4px 10px;
+        border-radius: 6px;
+        background: var(--well);
+        box-shadow: inset 0 0 0 1px var(--ring);
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: var(--muted);
+      }
+
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
       }
 
       h1 {
         margin: 0;
-        font-size: 1.5rem;
-        font-weight: 600;
-        letter-spacing: -0.02em;
+        font-size: clamp(1.65rem, 3.2vw, 2.25rem);
+        line-height: 1.2;
+        font-weight: 650;
+        letter-spacing: -0.025em;
+        max-width: 24ch;
       }
 
-      p {
-        margin: 0 0 24px;
+      .lead {
+        margin: 0;
         color: var(--muted);
-        font-size: 0.95rem;
+        font-size: 1rem;
+        max-width: 64ch;
       }
 
       .actions {
         display: flex;
         flex-wrap: wrap;
-        gap: 12px;
+        gap: 10px;
       }
 
-      a.button {
+      .button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        height: 38px;
+        gap: 8px;
+        min-block-size: 38px;
         padding: 0 16px;
         border-radius: 8px;
         font-size: 0.9rem;
         font-weight: 500;
         text-decoration: none;
-        box-shadow: 0 0 0 1px var(--ring);
         color: var(--fg);
-        background: transparent;
+        background: var(--surface);
+        box-shadow: 0 0 0 1px var(--ring);
+        transition: background-color 140ms ease, opacity 140ms ease;
       }
 
-      a.button.primary {
+      .button:hover {
+        background: var(--well);
+      }
+
+      .button.primary {
         background: var(--accent);
         color: var(--accent-fg);
         box-shadow: none;
       }
 
-      a.button:hover {
-        opacity: 0.9;
+      .button.primary:hover {
+        opacity: 0.92;
+        background: var(--accent);
+      }
+
+      .install-box {
+        border-radius: 12px;
+        background: var(--well);
+        box-shadow: inset 0 0 0 1px var(--ring);
+        padding: 12px 14px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .install-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--muted);
+      }
+
+      .install-code-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      pre {
+        margin: 0;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.8rem;
+        line-height: 1.55;
+        color: var(--fg);
+      }
+
+      .copy-wrap {
+        position: relative;
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .copy-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-inline-size: 32px;
+        min-block-size: 32px;
+        padding: 0 10px;
+        border-radius: 8px;
+        border: 0;
+        background: var(--surface);
+        color: var(--fg);
+        box-shadow: 0 0 0 1px var(--ring);
+        font-size: 0.78rem;
+        font-weight: 500;
+        font-family: inherit;
+        cursor: pointer;
+      }
+
+      .copy-btn:hover {
+        background: var(--hover);
+      }
+
+      .copy-status {
+        font-size: 0.78rem;
+        color: var(--accent);
+        min-width: 1px;
+        opacity: 0;
+        transition: opacity 140ms ease;
+      }
+
+      .copy-btn[data-copied] + .copy-status,
+      .copy-btn[data-failed] + .copy-status {
+        opacity: 1;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+      }
+
+      .card {
+        padding: 20px;
+        border-radius: 14px;
+        background: var(--surface);
+        box-shadow: 0 0 0 1px var(--ring);
+        display: grid;
+        gap: 6px;
+        align-content: start;
+      }
+
+      .card h2 {
+        margin: 0;
+        font-size: 0.98rem;
+        font-weight: 600;
+      }
+
+      .card p {
+        margin: 0;
+        font-size: 0.86rem;
+        color: var(--muted);
+      }
+
+      .card a {
+        margin-top: 6px;
+        width: fit-content;
+        font-size: 0.84rem;
+        font-weight: 500;
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .card a:hover {
+        text-decoration: underline;
+      }
+
+      footer {
+        width: min(980px, 100%);
+        margin: 0 auto;
+        padding: 0 24px 28px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 0.82rem;
+        color: var(--muted);
+      }
+
+      footer p {
+        margin: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+      }
+
+      footer a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      footer a:hover {
+        color: var(--fg);
+        text-decoration: underline;
+      }
+
+      /* Toggle bilingual copy cleanly via data-lang on <html> */
+      [data-i18n-lang] {
+        display: none;
+      }
+
+      html:not([data-lang="zh"]) [data-i18n-lang="en"],
+      html[data-lang="zh"] [data-i18n-lang="zh"] {
+        display: revert;
+      }
+
+      /* Toggle light/dark icon label via color-scheme */
+      .theme-label-dark {
+        display: none;
+      }
+
+      :root:has(> head > meta[name="color-scheme"][content="dark"]) .theme-label-light {
+        display: none;
+      }
+
+      :root:has(> head > meta[name="color-scheme"][content="dark"]) .theme-label-dark {
+        display: inline;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:has(> head > meta[name="color-scheme"][content="light dark"]) .theme-label-light {
+          display: none;
+        }
+        :root:has(> head > meta[name="color-scheme"][content="light dark"]) .theme-label-dark {
+          display: inline;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .hero {
+          padding: 22px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+        }
       }
     </style>
   </head>
   <body>
-    <main>
-      <div class="brand">
-        <img src="./favicon.svg" alt="" width="32" height="32" />
-        <h1>Oh My CPA</h1>
+    <a href="#main-content" class="skip-link">
+      <span data-i18n-lang="en">Skip to content</span>
+      <span data-i18n-lang="zh">跳至正文</span>
+    </a>
+
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Oh My CPA">
+        <img src="./favicon.svg" alt="" width="24" height="24" />
+        <img src="./wordmark-light.svg" alt="Oh My CPA" class="wordmark wordmark-light" height="24" />
+        <img src="./wordmark-dark.svg" alt="Oh My CPA" class="wordmark wordmark-dark" height="24" />
+      </a>
+
+      <div class="header-controls">
+        <nav class="top-nav" aria-label="Primary">
+          <a class="nav-link" data-docs-link href="./docs/en/">
+            <span data-i18n-lang="en">Docs</span>
+            <span data-i18n-lang="zh">文档</span>
+          </a>
+          <a class="nav-link" href="./api-reference/">
+            <span data-i18n-lang="en">API Reference</span>
+            <span data-i18n-lang="zh">API 参考</span>
+          </a>
+          <a class="nav-link" href="./demo/">
+            <span data-i18n-lang="en">Live Demo</span>
+            <span data-i18n-lang="zh">在线演示</span>
+          </a>
+          <a class="nav-link" href="https://github.com/WizisCool/oh-my-cpa" target="_blank" rel="noreferrer noopener">GitHub</a>
+        </nav>
+
+        <button type="button" class="icon-btn" id="lang-toggle">
+          <span data-i18n-lang="en">中文</span>
+          <span data-i18n-lang="zh">EN</span>
+        </button>
+
+        <button type="button" class="icon-btn" id="theme-toggle">
+          <span class="theme-label-light">
+            <span data-i18n-lang="en">Dark</span>
+            <span data-i18n-lang="zh">深色</span>
+          </span>
+          <span class="theme-label-dark">
+            <span data-i18n-lang="en">Light</span>
+            <span data-i18n-lang="zh">浅色</span>
+          </span>
+        </button>
       </div>
-      <p>
-        Self-hosted control plane, OAuth management, routing, pricing, and usage observability for CLIProxyAPI v8+.
-      </p>
-      <nav class="actions" aria-label="Oh My CPA resources">
-        <a class="button primary" href="./api-docs/">API Documentation</a>
-        <a class="button" href="./api-docs/swagger.json">Swagger 2.0 JSON</a>
-        <a class="button" href="./demo/">Live Demo</a>
-        <a class="button" href="https://github.com/WizisCool/oh-my-cpa">GitHub</a>
-      </nav>
+    </header>
+
+    <main id="main-content" tabindex="-1">
+      <section class="hero">
+        <div class="eyebrow">
+          <span class="dot" aria-hidden="true"></span>
+          <span data-i18n-lang="en">Control Plane &amp; Observability for CLIProxyAPI v8+</span>
+          <span data-i18n-lang="zh">CLIProxyAPI v8+ 控制平面与可观测控制台</span>
+        </div>
+
+        <h1>
+          <span data-i18n-lang="en">Centralize APIs, OAuth &amp; routing. Observe quota and cost.</span>
+          <span data-i18n-lang="zh">集中管理 API、OAuth 与路由，实时观测用量、配额与成本。</span>
+        </h1>
+
+        <p class="lead">
+          <span data-i18n-lang="en">
+            Oh My CPA ships as a single non-root container or native executable with an embedded React console, SQLite WAL storage with encrypted sensitive fields and backups, OpenRouter-backed pricing, quota window warmup, and Agent/MCP tooling.
+          </span>
+          <span data-i18n-lang="zh">
+            Oh My CPA 以单二进制或非 root 只读容器交付，内置 React 控制台、SQLite WAL 存储（敏感字段与备份采用加密保护）、OpenRouter 自动定价、配额窗口预热与 Agent / MCP 工具。
+          </span>
+        </p>
+
+        <div class="actions">
+          <a class="button primary" data-docs-link href="./docs/en/">
+            <span data-i18n-lang="en">Read Documentation</span>
+            <span data-i18n-lang="zh">阅读在线文档</span>
+          </a>
+          <a class="button" href="./demo/">
+            <span data-i18n-lang="en">Try Live Demo</span>
+            <span data-i18n-lang="zh">体验 Live Demo</span>
+          </a>
+          <a class="button" href="./api-reference/">
+            <span data-i18n-lang="en">API Reference</span>
+            <span data-i18n-lang="zh">API 接口参考</span>
+          </a>
+          <a class="button" href="./api-reference/swagger.json">Swagger 2.0 JSON</a>
+        </div>
+
+        <div class="install-box">
+          <div class="install-head">
+            <span>
+              <span data-i18n-lang="en">Quick Start (Docker Compose: CPA + OMC + Updater)</span>
+              <span data-i18n-lang="zh">快速部署（Docker Compose：CPA + OMC + 自动更新器）</span>
+            </span>
+          </div>
+          <div class="install-code-row">
+            <pre><code id="quickstart-snippet">(
+  [ ! -e .env ] &amp;&amp; [ ! -e config.yaml ] &amp;&amp; [ ! -e compose.yml ] &amp;&amp;
+  [ ! -e oh-my-cpa/.env ] &amp;&amp; [ ! -e oh-my-cpa/config.yaml ] &amp;&amp; [ ! -e oh-my-cpa/compose.yml ] &amp;&amp;
+  mkdir -p oh-my-cpa &amp;&amp; cd oh-my-cpa &amp;&amp;
+  curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.full.yml -o compose.yml &amp;&amp;
+  curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/cpa.config.example.yaml -o config.yaml &amp;&amp;
+  printf 'CPA_MANAGEMENT_KEY=%s\nOMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" &gt; .env &amp;&amp;
+  chmod 600 .env &amp;&amp; docker compose up -d
+)</code></pre>
+            <span class="copy-wrap">
+              <button
+                type="button"
+                class="copy-btn"
+                id="copy-quickstart"
+                command="--copy"
+                commandfor="quickstart-snippet"
+              >
+                <span data-i18n-lang="en">Copy</span>
+                <span data-i18n-lang="zh">复制</span>
+              </button>
+              <span class="copy-status" role="status"></span>
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid" aria-label="Resources">
+        <article class="card">
+          <h2>
+            <span data-i18n-lang="en">Installation &amp; Upgrades</span>
+            <span data-i18n-lang="zh">安装与升级</span>
+          </h2>
+          <p>
+            <span data-i18n-lang="en">Fresh Compose stack, standalone attachment beside existing CPA, native binaries, reverse proxies, and agent runbook.</span>
+            <span data-i18n-lang="zh">支持全新部署、独立接入已有 CPA、多平台原生可执行文件、HTTPS 反代与编码 Agent 自动安装。</span>
+          </p>
+          <a data-docs-install-link href="./docs/en/getting-started/install/">
+            <span data-i18n-lang="en">Installation Guide</span>
+            <span data-i18n-lang="zh">查看安装指南</span>
+          </a>
+        </article>
+
+        <article class="card">
+          <h2>
+            <span data-i18n-lang="en">Operations &amp; Backups</span>
+            <span data-i18n-lang="zh">配置与备份恢复</span>
+          </h2>
+          <p>
+            <span data-i18n-lang="en">Full environment reference, Ed25519-signed container updates, encrypted .omcbackup exports, and cloud disaster recovery.</span>
+            <span data-i18n-lang="zh">完整环境变量、Ed25519 签名容器更新、.omcbackup 加密备份与云端容灾恢复。</span>
+          </p>
+          <a data-docs-ops-link href="./docs/en/operations/configuration/">
+            <span data-i18n-lang="en">Operations Guide</span>
+            <span data-i18n-lang="zh">查看运维文档</span>
+          </a>
+        </article>
+
+        <article class="card">
+          <h2>
+            <span data-i18n-lang="en">Agent &amp; MCP APIs</span>
+            <span data-i18n-lang="zh">Agent 与 MCP 接口</span>
+          </h2>
+          <p>
+            <span data-i18n-lang="en">Connect external clients via Streamable HTTP or stdio with human-in-the-loop approvals, plus interactive Swagger 2.0 docs.</span>
+            <span data-i18n-lang="zh">通过 Streamable HTTP 或 stdio 接入能力注册表与人工审批链路，以及交互式 API 文档。</span>
+          </p>
+          <a href="./api-reference/">
+            <span data-i18n-lang="en">Explore API Reference</span>
+            <span data-i18n-lang="zh">浏览 API 文档</span>
+          </a>
+        </article>
+      </section>
     </main>
+
+    <footer>
+      <p>
+        <span>Oh My CPA</span>
+        <span>MIT License</span>
+      </p>
+      <p class="footer-links">
+        <a href="https://github.com/WizisCool/oh-my-cpa" target="_blank" rel="noreferrer noopener">WizisCool/oh-my-cpa</a>
+        <a href="https://github.com/router-for-me/CLIProxyAPI" target="_blank" rel="noreferrer noopener">CLIProxyAPI v8+</a>
+      </p>
+    </footer>
+
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var themeMeta = document.querySelector('meta[name="color-scheme"]');
+        var darkMq = window.matchMedia('(prefers-color-scheme: dark)');
+
+        function syncDocsLinks(lang) {
+          var prefix = lang === 'zh' ? './docs/zh/' : './docs/en/';
+          document.querySelectorAll('[data-docs-link]').forEach(function (el) {
+            el.setAttribute('href', prefix);
+          });
+          document.querySelectorAll('[data-docs-install-link]').forEach(function (el) {
+            el.setAttribute('href', prefix + 'getting-started/install/');
+          });
+          document.querySelectorAll('[data-docs-ops-link]').forEach(function (el) {
+            el.setAttribute('href', prefix + 'operations/configuration/');
+          });
+        }
+
+        function applyLocale(lang) {
+          root.dataset.lang = lang;
+          root.lang = lang === 'zh' ? 'zh-CN' : 'en';
+          syncDocsLinks(lang);
+        }
+
+        function persistLocale(lang) {
+          applyLocale(lang);
+          try {
+            localStorage.setItem('omc-docs-locale', lang);
+          } catch (e) {}
+        }
+
+        syncDocsLinks(root.dataset.lang === 'zh' ? 'zh' : 'en');
+
+        var langToggle = document.getElementById('lang-toggle');
+        if (langToggle) {
+          langToggle.addEventListener('click', function () {
+            persistLocale(root.dataset.lang === 'zh' ? 'en' : 'zh');
+          });
+        }
+
+        function currentEffectiveTheme() {
+          var content = themeMeta ? themeMeta.getAttribute('content') : 'light dark';
+          if (content === 'light' || content === 'dark') return content;
+          return darkMq.matches ? 'dark' : 'light';
+        }
+
+        var themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+          themeToggle.addEventListener('click', function () {
+            var target = currentEffectiveTheme() === 'dark' ? 'light' : 'dark';
+            var systemTheme = darkMq.matches ? 'dark' : 'light';
+            try {
+              if (target === systemTheme) {
+                localStorage.removeItem('omc-site-theme');
+                if (themeMeta) themeMeta.setAttribute('content', 'light dark');
+              } else {
+                localStorage.setItem('omc-site-theme', target);
+                if (themeMeta) themeMeta.setAttribute('content', target);
+              }
+            } catch (e) {
+              if (themeMeta) themeMeta.setAttribute('content', target);
+            }
+          });
+        }
+
+        window.addEventListener('storage', function (event) {
+          if (event.key === 'omc-site-theme' && themeMeta) {
+            themeMeta.setAttribute('content', event.newValue === 'light' || event.newValue === 'dark' ? event.newValue : 'light dark');
+          }
+          if (event.key === 'omc-docs-locale') {
+            var nextLang = event.newValue === 'zh' || event.newValue === 'en'
+              ? event.newValue
+              : ((navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en');
+            applyLocale(nextLang);
+          }
+        });
+
+        var timer;
+        var lastMessage = '';
+        function reportCopy(button, ok) {
+          var tip = button.nextElementSibling;
+          if (!tip) return;
+          clearTimeout(timer);
+          button.removeAttribute('data-copied');
+          button.removeAttribute('data-failed');
+          var isZh = root.dataset.lang === 'zh';
+          var message = ok ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制失败' : 'Copy failed');
+          if (message === lastMessage) message += '\u00A0';
+          lastMessage = message;
+          tip.textContent = '';
+          void button.offsetWidth;
+          button.setAttribute(ok ? 'data-copied' : 'data-failed', '');
+          requestAnimationFrame(function () {
+            tip.textContent = message;
+          });
+          timer = setTimeout(function () {
+            button.removeAttribute('data-copied');
+            button.removeAttribute('data-failed');
+            tip.textContent = '';
+          }, 2000);
+        }
+
+        async function copySnippet(button, target) {
+          var text = target ? target.innerText.trim() : '';
+          if (!text) return;
+          try {
+            await navigator.clipboard.writeText(text);
+            reportCopy(button, true);
+          } catch (e) {
+            reportCopy(button, false);
+          }
+        }
+
+        if ('CommandEvent' in window) {
+          document.addEventListener('command', function (event) {
+            if (event.command === '--copy' && event.source) {
+              copySnippet(event.source, event.target);
+            }
+          }, true);
+        } else {
+          document.addEventListener('click', function (event) {
+            var button = event.target && event.target.closest ? event.target.closest('button[command="--copy"]') : null;
+            if (!button) return;
+            var target = document.getElementById(button.getAttribute('commandfor'));
+            if (target) copySnippet(button, target);
+          });
+        }
+      })();
+    </script>
   </body>
 </html>

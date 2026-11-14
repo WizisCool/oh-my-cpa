@@ -1,0 +1,30 @@
+{
+  "name": "oh-my-cpa-docs",
+  "private": true,
+  "version": "0.4.2",
+  "type": "module",
+  "scripts": {
+    "dev": "node ../../../scripts/sync-docs-site.mjs && fumadocs-mdx && next dev",
+    "build": "node ../../../scripts/sync-docs-site.mjs && fumadocs-mdx && next build",
+    "type-check": "node ../../../scripts/sync-docs-site.mjs && fumadocs-mdx && next typegen && tsc --noEmit"
+  },
+  "dependencies": {
+    "@fumadocs/language": "0.2.19",
+    "fumadocs-core": "16.19.0",
+    "fumadocs-mdx": "15.6.1",
+    "fumadocs-ui": "16.19.0",
+    "lucide-react": "^1.70.0",
+    "next": "16.4.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.5",
+    "@types/mdx": "^2.0.13",
+    "@types/node": "^22.13.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.3"
+  }
+}

@@ -41,7 +41,7 @@ and shipped-artifact checks strict.
 
 - **Go golden files**: Regenerate only the owning package with `UPDATE_GOLDEN=1 go test ./<package>`.
 - **OpenAPI / Swagger 2.0 spec**: Regenerate `docs/openapi/swagger.json` with `pnpm openapi:generate` whenever `/api` routes, annotations, or DTOs change. `pnpm check:openapi` (in `verify:static:repository`), `TestOpenAPIRouteCoverage`, and `TestOpenAPISpecFreshness` (`internal/api/openapi_test.go`) enforce 100% route parity and freshness.
-- **Cloudflare demo dataset**: Generated on demand (and in CI / Workers Builds) from real Go handlers over the deterministic demo fixture rather than committed to Git. Run `pnpm check:demo` to verify route coverage and privacy, and `TestExportDemoDataset` (`internal/api/demo_export_test.go`) to validate in-memory export invariants and dashboard health parity.
+- **Cloudflare demo & public site**: Generated on demand (and in CI / Workers Builds) from real Go handlers over the deterministic demo fixture rather than committed to Git. Run `pnpm check:demo` to verify route coverage and privacy, `TestExportDemoDataset` (`internal/api/demo_export_test.go`) to validate in-memory export invariants and dashboard health parity, and `pnpm build:site` to sync and build `/docs/`, `/api-reference/`, `/demo/`, and the landing root into `tmp/site/dist/`.
 
 ## Browser acceptance diagnostics
 
@@ -55,7 +55,7 @@ The GitHub Actions workflows (`.github/workflows/ci.yml`, `.github/workflows/rel
 `.github/workflows/maintenance.yml`, and `.github/workflows/readme-screenshots.yml`)
 are the executable source of truth:
 
-- **Pull requests**: Repository hygiene (`static-repo`: workflow lint, toolchain pin, doc links, worktree/history secret scans) runs on every change; `changes` selects `static-go`, `static-frontend`, `docker-check`, and `browser` smoke (`pnpm verify:browser:smoke`) only when relevant paths change.
+- **Pull requests**: Repository hygiene (`static-repo`: workflow lint, toolchain pin, doc links, worktree/history secret scans) runs on every change; `changes` selects `static-go`, `static-frontend`, `docs-site` (for public docs, landing page, or Fumadocs edits), `docker-check`, and `browser` smoke (`pnpm verify:browser:smoke`) only when relevant paths change.
 - **Main, merge queue, nightly, manual, or `full-ci` label**: Full static and unit suites plus full built-artifact browser acceptance (`pnpm verify:browser`), Cloudflare demo staging dry-run, and `docker-check` when container inputs change.
 - **Weekly/manual maintenance**: Go race detector, bounded fuzzing, dependency advisories, and host-native runtime checks.
 - **README screenshots**: Refreshed automatically in CI (`.github/workflows/readme-screenshots.yml`) on a daily schedule or manual dispatch, enabling squash auto-merge on the rolling pull request without local generation.

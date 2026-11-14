@@ -53,7 +53,7 @@ rather than "操作失败".
 A label has one line. When a sentence does not fit in a control, the answer is a shorter sentence,
 not a wider control: the mobile console renders the same catalog. A tooltip may hold the longer
 explanation, and that is where a caveat belongs. A tooltip never repeats the control's own label or
-explains how to press it ("点击以筛选"); see `docs/design.md`, Tooltips.
+explains how to press it ("点击以筛选"); see `docs/dev/design.md`, Tooltips.
 
 ## Subtitles, hints, and secondary copy (Captions)
 

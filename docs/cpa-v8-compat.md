@@ -123,7 +123,7 @@ provider write gate, configuration revision checks and encrypted pre-write backu
 
 The trusted Plugin Host is a separate native-response boundary; its fixed origins,
 credential separation, audit and write-backup requirements are in
-[Architecture](architecture.md#trusted-plugin-pages). It is not permission to add
+[Architecture](dev/architecture.md#trusted-plugin-pages). It is not permission to add
 native responses to the ordinary facade or an arbitrary HTTP proxy.
 
 ## Credential recovery evidence

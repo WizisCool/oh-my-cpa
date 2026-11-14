@@ -7,7 +7,7 @@
 ## Validation
 
 <!-- List checks actually run and their results, plus any unverified risk.
-Choose checks from docs/testing.md. For a bug fix, name the regression and show
+Choose checks from docs/dev/testing.md. For a bug fix, name the regression and show
 that it fails without the fix. Explain any test claim removed or moved. -->
 
 ## Documentation

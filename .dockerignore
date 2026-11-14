@@ -19,6 +19,9 @@
 !deploy/
 !deploy/base-path.sh
 !deploy/healthcheck.sh
+!deploy/site/
+!deploy/site/docs/
+!deploy/site/docs/package.json
 **/node_modules
 **/dist
 **/*.tsbuildinfo

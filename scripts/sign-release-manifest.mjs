@@ -6,7 +6,7 @@
 //   node scripts/sign-release-manifest.mjs <output directory>
 //     reads RELEASE_TAG, RELEASE_IMAGE, RELEASE_DIGEST and RELEASE_SIGNING_KEY
 //   node scripts/sign-release-manifest.mjs --generate-key <private key file>
-//     one-time setup: see docs/releasing.md
+//     one-time setup: see docs/dev/releasing.md
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
