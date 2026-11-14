@@ -395,23 +395,24 @@ func (h *Handler) readProviderItemsCore(ctx context.Context, client *management.
 					}
 				}
 				if len(recoveredFamilies) > 0 || didRecoverOpenAI {
-					h.stateCoord.UpdateBaseline(func(state *projectedConfigState, _ bool) {
+					h.stateCoord.UpdateBaseline(func(state *projectedConfigState, _ []statecoord.DomainKey) {
 						for fam, entries := range recoveredFamilies {
 							if len(state.PendingFamilyToggles[fam]) == 0 {
 								state.ConfigFamilies[fam] = cloneConfigAPIKeys(entries)
 							}
-							delete(state.FailedProviderFamilies, fam)
 							if recoveredRuntimeOnly[fam] {
 								state.RuntimeOnlyFam[fam] = true
+								state.FailedProviderFamilies[fam] = true
 							} else {
 								delete(state.RuntimeOnlyFam, fam)
+								delete(state.FailedProviderFamilies, fam)
 							}
 						}
 						if didRecoverOpenAI {
 							if len(state.PendingOpenAIToggles) == 0 {
 								state.OpenAICompat = cloneOpenAICompatEntries(recoveredOpenAI)
 							}
-							state.OpenAISliceFailed = false
+							state.OpenAISliceFailed = recoveredOpenAIRuntime
 							state.OpenAIRuntime = recoveredOpenAIRuntime
 						}
 						state.ProviderSliceFailed = state.OpenAISliceFailed || len(state.FailedProviderFamilies) > 0

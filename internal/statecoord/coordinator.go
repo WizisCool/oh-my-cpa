@@ -25,6 +25,9 @@ const (
 	// DefaultLoadTimeout bounds upstream cold-load and recovery fetches.
 	DefaultLoadTimeout = 10 * time.Second
 
+	// DefaultRefreshInterval bounds external configuration drift while keeping reads in memory.
+	DefaultRefreshInterval = 5 * time.Second
+
 	// DefaultFlushTimeout bounds one serialized write-behind flush pass.
 	DefaultFlushTimeout = 15 * time.Second
 )
@@ -80,15 +83,23 @@ type Options[S any] struct {
 	// OnDomainOutcome is invoked asynchronously per pending audit entry once a domain's
 	// write-behind flush either succeeds (flushErr == nil) or fails (flushErr != nil).
 	OnDomainOutcome func(record PendingAuditRecord, flushErr error, snapshot S)
-	// AfterFlush runs after a batch of domains flushes cleanly to upstream.
-	AfterFlush func(domains []DomainKey)
+	// BeforeFlush validates the batch baseline before any domain can write.
+	BeforeFlush func(ctx context.Context, snapshot *S, domains []DomainKey) error
+	// AfterFlush refreshes the baseline after accepted writes, preserving newer pending intents.
+	AfterFlush func(ctx context.Context, domains []DomainKey)
+	// HasChanged checks the upstream baseline without rebuilding an unchanged projection.
+	HasChanged func(ctx context.Context, snapshot S) (bool, error)
+	// AfterRefresh invalidates dependent caches before subscribers observe the refreshed state.
+	AfterRefresh  func()
+	RefreshScopes []string
 
-	DebounceWindow time.Duration
-	MaxBatchWait   time.Duration
-	LoadTimeout    time.Duration
-	FlushTimeout   time.Duration
-	Broker         *Broker
-	Logger         *slog.Logger
+	DebounceWindow  time.Duration
+	MaxBatchWait    time.Duration
+	LoadTimeout     time.Duration
+	FlushTimeout    time.Duration
+	RefreshInterval time.Duration
+	Broker          *Broker
+	Logger          *slog.Logger
 }
 
 type prefixRegistration[S any] struct {
@@ -151,11 +162,13 @@ type Coordinator[S any] struct {
 
 	// wakeupCh has capacity 1: Mutate signals writeBehindLoop with a non-blocking send
 	// so writers never stall even if a debounce cycle or upstream flush is active.
-	wakeupCh  chan struct{}
-	stopCh    chan struct{}
-	startOnce sync.Once
-	stopOnce  sync.Once
-	loopWG    sync.WaitGroup
+	wakeupCh    chan struct{}
+	stopCh      chan struct{}
+	startOnce   sync.Once
+	stopOnce    sync.Once
+	loopWG      sync.WaitGroup
+	loopCtx     context.Context
+	cancelLoops context.CancelFunc
 }
 
 // New constructs a Coordinator with safe defaults and initializes its SSE broker if omitted.
@@ -171,6 +184,9 @@ func New[S any](opts Options[S]) *Coordinator[S] {
 	}
 	if opts.FlushTimeout <= 0 {
 		opts.FlushTimeout = DefaultFlushTimeout
+	}
+	if opts.RefreshInterval <= 0 {
+		opts.RefreshInterval = DefaultRefreshInterval
 	}
 	if opts.Broker == nil {
 		opts.Broker = NewBroker()
@@ -190,7 +206,10 @@ func New[S any](opts Options[S]) *Coordinator[S] {
 			return "upstream_sync_failed", "upstream configuration sync failed"
 		}
 	}
+	loopCtx, cancelLoops := context.WithCancel(context.Background())
 	return &Coordinator[S]{
+		loopCtx:       loopCtx,
+		cancelLoops:   cancelLoops,
 		opts:          opts,
 		dirtyGen:      make(map[DomainKey]uint64),
 		pendingAudits: make(map[DomainKey][]PendingAuditRecord),
@@ -256,11 +275,15 @@ func (c *Coordinator[S]) Bootstrap(ctx context.Context) error {
 	return nil
 }
 
-// Start launches the single background writeBehindLoop goroutine. Safe to call once.
+// Start launches serialized write-behind and optional upstream reconciliation workers.
 func (c *Coordinator[S]) Start() {
 	c.startOnce.Do(func() {
 		c.loopWG.Add(1)
 		go c.writeBehindLoop()
+		if c.opts.HasChanged != nil {
+			c.loopWG.Add(1)
+			go c.refreshLoop()
+		}
 	})
 }
 
@@ -582,6 +605,79 @@ func (c *Coordinator[S]) writeBehindLoop() {
 	}
 }
 
+// RefreshNow reconciles a clean projection under the same gate as configuration writes.
+// Mutations arriving during I/O stay pending; their batch validates the old baseline
+// before persisting instead of being overwritten by this background read.
+func (c *Coordinator[S]) RefreshNow(ctx context.Context) error {
+	refresh := func(ctx context.Context) error {
+		c.flushMu.Lock()
+		defer c.flushMu.Unlock()
+		c.mu.RLock()
+		if c.isClosed || len(c.dirtyGen) > 0 {
+			c.mu.RUnlock()
+			return nil
+		}
+		snapshot := c.opts.Clone(c.state)
+		isReady, epoch := c.isReady, c.invalidationEpoch
+		c.mu.RUnlock()
+		if isReady && c.opts.HasChanged != nil {
+			hasChanged, err := c.opts.HasChanged(ctx, snapshot)
+			if err != nil || !hasChanged {
+				return err
+			}
+		}
+		fresh, err := c.opts.Load(ctx)
+		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		c.publishMu.Lock()
+		defer c.publishMu.Unlock()
+		c.mu.Lock()
+		if c.isClosed || len(c.dirtyGen) > 0 || c.invalidationEpoch != epoch {
+			c.mu.Unlock()
+			return nil
+		}
+		c.state = c.opts.Clone(fresh)
+		c.isReady = true
+		c.pendingInvalidation = false
+		c.invalidationEpoch++
+		c.version++
+		version := c.version
+		c.mu.Unlock()
+		if c.opts.AfterRefresh != nil {
+			c.opts.AfterRefresh()
+		}
+		c.opts.Broker.Publish(Event{Type: EventStateSync, Version: version, Scopes: c.opts.RefreshScopes})
+		return nil
+	}
+	if c.opts.WithWriteGate != nil {
+		return c.opts.WithWriteGate(ctx, refresh)
+	}
+	return refresh(ctx)
+}
+
+func (c *Coordinator[S]) refreshLoop() {
+	defer c.loopWG.Done()
+	ticker := time.NewTicker(c.opts.RefreshInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-c.stopCh:
+			return
+		case <-ticker.C:
+			ctx, cancel := context.WithTimeout(c.loopCtx, c.opts.LoadTimeout)
+			// Source errors must never carry upstream configuration or credentials into logs.
+			if err := c.RefreshNow(ctx); err != nil && c.loopCtx.Err() == nil {
+				c.opts.Logger.Debug("state coordinator upstream refresh deferred")
+			}
+			cancel()
+		}
+	}
+}
+
 type pendingDomainFlush[S any] struct {
 	key    DomainKey
 	gen    uint64
@@ -648,6 +744,24 @@ func (c *Coordinator[S]) flushUngatedLocked(ctx context.Context) error {
 		return nil
 	}
 
+	if c.opts.BeforeFlush != nil {
+		domains := make([]DomainKey, 0, len(pending))
+		for _, item := range pending {
+			domains = append(domains, item.key)
+		}
+		if err := c.opts.BeforeFlush(ctx, &snapshot, domains); err != nil {
+			if c.opts.OnDomainOutcome != nil {
+				for _, item := range pending {
+					for _, record := range item.audits {
+						c.opts.OnDomainOutcome(record, err, snapshot)
+					}
+				}
+			}
+			c.reconcileFlushFailure(ctx, err, snapshot, pending)
+			return err
+		}
+	}
+
 	// Deterministic flush order prevents order-dependent test or YAML diff variance.
 	slices.SortFunc(pending, func(left, right pendingDomainFlush[S]) int {
 		if left.spec.Order != right.spec.Order {
@@ -673,6 +787,9 @@ func (c *Coordinator[S]) flushUngatedLocked(ctx context.Context) error {
 	}
 	var failedItems []failedDomainFlush
 	scopeSet := make(map[string]struct{})
+	for _, scope := range c.opts.RefreshScopes {
+		scopeSet[scope] = struct{}{}
+	}
 	var firstFlushErr error
 	for idx := range pending {
 		item := pending[idx]
@@ -720,7 +837,7 @@ func (c *Coordinator[S]) flushUngatedLocked(ctx context.Context) error {
 			}
 		}
 		if c.opts.AfterFlush != nil && len(flushedKeys) > 0 {
-			c.opts.AfterFlush(flushedKeys)
+			c.opts.AfterFlush(ctx, flushedKeys)
 		}
 		c.reconcileFlushFailure(ctx, firstFlushErr, snapshot, pending)
 		return firstFlushErr
@@ -769,7 +886,7 @@ func (c *Coordinator[S]) flushUngatedLocked(ctx context.Context) error {
 	}
 
 	if c.opts.AfterFlush != nil && len(flushedKeys) > 0 {
-		c.opts.AfterFlush(flushedKeys)
+		c.opts.AfterFlush(ctx, flushedKeys)
 	}
 
 	scopes := sortedScopeList(scopeSet)
@@ -797,6 +914,9 @@ func (c *Coordinator[S]) reconcileFlushFailure(ctx context.Context, flushErr err
 	)
 
 	scopeSet := make(map[string]struct{})
+	for _, scope := range c.opts.RefreshScopes {
+		scopeSet[scope] = struct{}{}
+	}
 	alreadyReported := make(map[DomainKey]int, len(attempted))
 	for _, item := range attempted {
 		alreadyReported[item.key] = len(item.audits)
@@ -834,6 +954,7 @@ func (c *Coordinator[S]) reconcileFlushFailure(ctx context.Context, flushErr err
 			lateAudits = append(lateAudits, records[skip:]...)
 		}
 	}
+	c.invalidationEpoch++
 	clear(c.dirtyGen)
 	clear(c.pendingAudits)
 	c.pendingInvalidation = false
@@ -866,6 +987,9 @@ func (c *Coordinator[S]) reconcileFlushFailure(ctx context.Context, flushErr err
 		safePayload = c.opts.ProjectSafe(c.state, newVersion)
 	}
 	c.mu.Unlock()
+	if reloadErr == nil && c.opts.AfterRefresh != nil {
+		c.opts.AfterRefresh()
+	}
 	c.opts.Broker.Publish(Event{
 		Type:    EventSyncError,
 		Version: newVersion,
@@ -877,16 +1001,20 @@ func (c *Coordinator[S]) reconcileFlushFailure(ctx context.Context, flushErr err
 	c.publishMu.Unlock()
 }
 
-// UpdateBaseline updates upstream-owned baseline metadata in place even when unrelated
-// domains have pending mutations, passing clean=true when dirtyGen is empty.
-func (c *Coordinator[S]) UpdateBaseline(updateFn func(state *S, isClean bool)) bool {
+// UpdateBaseline updates upstream-owned state while exposing dirty domains so callers
+// can preserve only unflushed optimistic intents when adopting a complete baseline.
+func (c *Coordinator[S]) UpdateBaseline(updateFn func(state *S, dirtyDomains []DomainKey)) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.isClosed || !c.isReady {
 		return false
 	}
 	candidate := c.opts.Clone(c.state)
-	updateFn(&candidate, len(c.dirtyGen) == 0)
+	dirtyDomains := make([]DomainKey, 0, len(c.dirtyGen))
+	for key := range c.dirtyGen {
+		dirtyDomains = append(dirtyDomains, key)
+	}
+	updateFn(&candidate, dirtyDomains)
 	c.state = candidate
 	return true
 }
@@ -985,6 +1113,7 @@ func (c *Coordinator[S]) Close(ctx context.Context) error {
 		c.mu.Unlock()
 
 		close(c.stopCh)
+		c.cancelLoops()
 		c.loopWG.Wait()
 
 		flushErr = c.FlushNow(ctx)

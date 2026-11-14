@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -576,4 +577,173 @@ func TestCoordinatorIndependentDomainFlushAndSnapshotSecretScrubbing(t *testing.
 	if len(reconciled.Data.Keys) != 2 {
 		t.Fatalf("expected valid 'keys' mutation to survive scalar failure, got %+v", reconciled.Data.Keys)
 	}
+}
+
+func TestCoordinatorRefreshOnlyPublishesChangedSuccessfulBaselines(t *testing.T) {
+	upstream := fakeConfigState{Secret: "initial-secret"}
+	var loads, refreshed int
+	var checkErr, loadErr error
+	coord := New(Options[fakeConfigState]{
+		Load: func(context.Context) (fakeConfigState, error) {
+			loads++
+			return cloneFakeConfigState(upstream), loadErr
+		},
+		Clone: cloneFakeConfigState,
+		HasChanged: func(_ context.Context, snapshot fakeConfigState) (bool, error) {
+			return snapshot.Secret != upstream.Secret, checkErr
+		},
+		AfterRefresh:  func() { refreshed++ },
+		RefreshScopes: []string{"management-config", "management-providers"},
+	})
+	if err := coord.Bootstrap(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = coord.Close(context.Background()) }()
+	events, unsubscribe, err := coord.Broker().Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unsubscribe()
+
+	if err := coord.RefreshNow(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if loads != 1 || refreshed != 0 || coord.Version() != 1 {
+		t.Fatalf("unchanged state caused a reload or notification: loads=%d refreshed=%d version=%d", loads, refreshed, coord.Version())
+	}
+	upstream.Secret = "external-secret-never-broadcast"
+	upstream.Debug = true
+	checkErr = errors.New("CPA unavailable")
+	if err := coord.RefreshNow(t.Context()); !errors.Is(err, checkErr) {
+		t.Fatalf("check error=%v", err)
+	}
+	checkErr = nil
+	loadErr = errors.New("configuration read failed")
+	if err := coord.RefreshNow(t.Context()); !errors.Is(err, loadErr) {
+		t.Fatalf("load error=%v", err)
+	}
+	env, err := coord.Read(t.Context())
+	if err != nil || env.Data.Debug || env.Version != 1 {
+		t.Fatalf("failed refresh replaced the last good baseline: %+v %v", env, err)
+	}
+	select {
+	case event := <-events:
+		t.Fatalf("unchanged/failed refresh emitted event: %+v", event)
+	default:
+	}
+	loadErr = nil
+	if err := coord.RefreshNow(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	env, err = coord.Read(t.Context())
+	if err != nil || !env.Data.Debug || env.Data.Secret != upstream.Secret || env.Version != 2 {
+		t.Fatalf("refresh did not recover authoritative state: %+v %v", env, err)
+	}
+	event := <-events
+	if event.Type != EventStateSync || event.Version != 2 || event.Data != nil || !slices.Equal(event.Scopes, []string{"management-config", "management-providers"}) {
+		t.Fatalf("refresh event must invalidate scopes without secret-bearing state: %+v", event)
+	}
+	if err := coord.RefreshNow(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if loads != 3 || refreshed != 1 || coord.Version() != 2 {
+		t.Fatalf("same baseline was published repeatedly: loads=%d refreshed=%d version=%d", loads, refreshed, coord.Version())
+	}
+}
+
+func TestCoordinatorRefreshPreservesMutationArrivingDuringLoad(t *testing.T) {
+	loadStarted, releaseLoad := make(chan struct{}), make(chan struct{})
+	var loads int
+	coord := New(Options[fakeConfigState]{
+		Load: func(context.Context) (fakeConfigState, error) {
+			loads++
+			if loads > 1 {
+				close(loadStarted)
+				<-releaseLoad
+				return fakeConfigState{Debug: true}, nil
+			}
+			return fakeConfigState{Keys: []string{"initial-key"}}, nil
+		},
+		Clone:      cloneFakeConfigState,
+		HasChanged: func(context.Context, fakeConfigState) (bool, error) { return true, nil },
+	})
+	coord.RegisterDomain("keys", DomainSpec[fakeConfigState]{
+		Flush: func(context.Context, DomainKey, fakeConfigState) error { return nil },
+	})
+	if err := coord.Bootstrap(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = coord.Close(context.Background()) }()
+	refreshDone := make(chan error, 1)
+	go func() { refreshDone <- coord.RefreshNow(t.Context()) }()
+	<-loadStarted
+	_, err := coord.Mutate(t.Context(), "keys", func(state *fakeConfigState) error {
+		state.Keys = append(state.Keys, "pending-key")
+		return nil
+	})
+	close(releaseLoad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := <-refreshDone; err != nil {
+		t.Fatal(err)
+	}
+	env, err := coord.Read(t.Context())
+	if err != nil || !coord.IsDirty() || !slices.Equal(env.Data.Keys, []string{"initial-key", "pending-key"}) {
+		t.Fatalf("refresh discarded a newer mutation: %+v %v", env, err)
+	}
+	if env.Data.Debug {
+		t.Fatal("background reload replaced a dirty projection")
+	}
+}
+
+func TestCoordinatorRefreshLoopAndCancellation(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var upstreamMu sync.Mutex
+		upstream := fakeConfigState{}
+		isBlocking := false
+		started := make(chan struct{})
+		coord := New(Options[fakeConfigState]{
+			Load: func(context.Context) (fakeConfigState, error) {
+				upstreamMu.Lock()
+				defer upstreamMu.Unlock()
+				return upstream, nil
+			},
+			HasChanged: func(ctx context.Context, snapshot fakeConfigState) (bool, error) {
+				upstreamMu.Lock()
+				isBlocked, hasChanged := isBlocking, snapshot.Debug != upstream.Debug
+				upstreamMu.Unlock()
+				if isBlocked {
+					close(started)
+					<-ctx.Done()
+					return false, ctx.Err()
+				}
+				return hasChanged, nil
+			},
+		})
+		if err := coord.Bootstrap(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		coord.Start()
+		synctest.Wait()
+		upstreamMu.Lock()
+		upstream.Debug = true
+		upstreamMu.Unlock()
+		time.Sleep(DefaultRefreshInterval)
+		synctest.Wait()
+		env, err := coord.Read(t.Context())
+		if err != nil || !env.Data.Debug || env.Version != 2 {
+			t.Fatalf("background worker did not reconcile external change: %+v %v", env, err)
+		}
+		upstreamMu.Lock()
+		isBlocking = true
+		upstreamMu.Unlock()
+		time.Sleep(DefaultRefreshInterval)
+		synctest.Wait()
+		<-started
+		if err := coord.Close(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+	})
 }

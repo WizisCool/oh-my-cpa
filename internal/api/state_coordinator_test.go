@@ -4,12 +4,20 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/statecoord"
 )
 
 func TestStateCoordinatorHTTPProviderAndKeyWriteBehindCoalescing(t *testing.T) {
@@ -343,6 +351,239 @@ func TestStateCoordinatorAuthFileStatusWriteBehindCoalescing(t *testing.T) {
 	}
 }
 
+func TestStateCoordinatorBaselineRefreshReplacesConfigurationSlices(t *testing.T) {
+	upstream := &configFixtureCPA{}
+	var handler *Handler
+	_, _, _ = startDashboardTestServer(t, upstream.serve, func(h *Handler) { handler = h })
+	if err := handler.EnableStateCoordinator(context.Background(), StateCoordinatorOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { handler.CloseStateCoordinator(context.Background()) })
+
+	upstream.mu.Lock()
+	upstream.yamlData = strings.ReplaceAll(upstream.yamlData, "debug: false", "debug: true")
+	upstream.configData["observability"].(map[string]any)["logs"].(map[string]any)["debug"] = true
+	wantRevision := configyaml.ComputeRevision(upstream.yamlData)
+	upstream.mu.Unlock()
+
+	handler.refreshCoordinatorBaseline(context.Background())
+	env, err := handler.stateCoord.Read(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env.Data.Revision != wantRevision || !env.Data.Scalars.Debug {
+		t.Fatalf("revision and scalar snapshot diverged: revision=%s debug=%t", env.Data.Revision, env.Data.Scalars.Debug)
+	}
+}
+
+func TestStateCoordinatorExternalChangeRejectsPendingBatchBeforeAnyWrite(t *testing.T) {
+	upstream := &configFixtureCPA{}
+	var handler *Handler
+	_, _, _ = startDashboardTestServer(t, upstream.serve, func(h *Handler) { handler = h })
+	if err := handler.EnableStateCoordinator(context.Background(), StateCoordinatorOptions{
+		DebounceWindow: time.Hour,
+		MaxBatchWait:   time.Hour,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { handler.CloseStateCoordinator(context.Background()) })
+	frames, unsubscribe, err := handler.stateCoord.Broker().Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unsubscribe()
+	_, err = handler.stateCoord.MutateWithAudit(context.Background(), stateDomainScalars, &statecoord.PendingAuditRecord{
+		Action: "config.update", TargetType: "config", TargetID: "debug",
+	}, func(state *projectedConfigState) error {
+		state.Scalars.Debug = true
+		state.ScalarSeq++
+		state.PendingScalars["debug"] = pendingScalarEntry{Value: true, Seq: state.ScalarSeq}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = handler.stateCoord.MutateWithAudit(context.Background(), stateDomainClientKeys, &statecoord.PendingAuditRecord{
+		Action: "client_key.create", TargetType: "client_key", TargetID: "pending",
+	}, func(state *projectedConfigState) error {
+		state.ClientKeys = append(state.ClientKeys, "pending-secret-key")
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handler.agent.catalogMu.Lock()
+	handler.agent.catalog = &clientKeyCatalog{keys: map[string]string{"old-fingerprint": "old-test-key"}}
+	handler.agent.catalogMu.Unlock()
+	upstream.mu.Lock()
+	upstream.yamlData += "# changed outside OMC\n"
+	wantYAML := upstream.yamlData
+	upstream.mu.Unlock()
+	if err := handler.stateCoord.FlushNow(context.Background()); !errors.Is(err, management.ErrConfigChanged) {
+		t.Fatalf("flush error=%v, want config conflict", err)
+	}
+	writes, _ := upstream.recordedWrites()
+	if len(writes) != 0 {
+		t.Fatalf("stale pending batch wrote to CPA: %v", writes)
+	}
+	env, err := handler.stateCoord.Read(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env.Data.Scalars.Debug || env.Data.ViewYAML != wantYAML || handler.stateCoord.IsDirty() {
+		t.Fatalf("conflicting optimistic state was not reconciled: debug=%t dirty=%t", env.Data.Scalars.Debug, handler.stateCoord.IsDirty())
+	}
+	handler.agent.catalogMu.Lock()
+	hasStaleCatalog := handler.agent.catalog != nil
+	handler.agent.catalogMu.Unlock()
+	if hasStaleCatalog {
+		t.Fatal("authoritative conflict recovery retained the old client-key catalog")
+	}
+	audits, err := handler.repo.ListAuditEvents(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range []string{"config.update", "client_key.create"} {
+		if !slices.ContainsFunc(audits, func(event repository.AuditEvent) bool {
+			return event.Action == action && event.Result == "failure"
+		}) {
+			t.Fatalf("missing terminal failure audit for %s", action)
+		}
+	}
+
+	select {
+	case event := <-frames:
+		if event.Type != statecoord.EventSyncError || event.Code != "config_conflict" {
+			t.Fatalf("unexpected conflict event: %+v", event)
+		}
+	default:
+		t.Fatal("missing conflict notification")
+	}
+}
+
+func TestStateCoordinatorExternalRefreshUpdatesHTTPAndSSE(t *testing.T) {
+	upstream := &configFixtureCPA{}
+	var handler *Handler
+	client, baseURL, _ := startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/v8/management/config" || request.URL.Path == "/v8/management/config.yaml" {
+			upstream.serve(writer, request)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		if strings.HasPrefix(request.URL.Path, "/v8/management/config/api-keys/") {
+			_, _ = writer.Write([]byte(`[]`))
+			return
+		}
+		_, _ = writer.Write([]byte(`{}`))
+	}, func(h *Handler) { handler = h })
+	if err := handler.EnableStateCoordinator(context.Background(), StateCoordinatorOptions{RefreshInterval: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { handler.CloseStateCoordinator(context.Background()) })
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/omc/api/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Body.Close()
+	frames := readSSEFrames(stream)
+	<-frames // ready
+
+	initialVersion := handler.stateCoord.Version()
+	if err := handler.stateCoord.RefreshNow(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if handler.stateCoord.Version() != initialVersion {
+		t.Fatal("unchanged CPA configuration triggered a state notification")
+	}
+	upstream.mu.Lock()
+	upstream.yamlData = strings.ReplaceAll(upstream.yamlData, "debug: false", "debug: true")
+	upstream.configData["observability"].(map[string]any)["logs"].(map[string]any)["debug"] = true
+	upstream.configData["access"] = map[string]any{"api-keys": []any{"external-client-secret"}}
+	wantRevision := configyaml.ComputeRevision(upstream.yamlData)
+	upstream.mu.Unlock()
+
+	if err := handler.stateCoord.RefreshNow(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case frame := <-frames:
+		if frame.event != statecoord.EventStateSync || !strings.Contains(frame.data, "management-config") ||
+			!strings.Contains(frame.data, "management-identity-directory") || strings.Contains(frame.data, "secret") {
+			t.Fatalf("unexpected external-change notification: %+v", frame)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("external change was not delivered over SSE")
+	}
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config")
+	var config ManagementConfigResponseDTO
+	if err := json.Unmarshal(payload, &config); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK || !config.Scalars.Debug || config.Revision != wantRevision || response.Header.Get("ETag") != `"`+wantRevision+`"` {
+		t.Fatalf("HTTP view did not adopt the external config: status=%d payload=%s", response.StatusCode, payload)
+	}
+	_, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/state")
+	var envelope struct {
+		Data SafeProjectedStateDTO `json:"data"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Data.ClientKeysTotal != 1 || strings.Contains(string(payload), "external-client-secret") {
+		t.Fatalf("external caller keys were not safely reconciled: %s", payload)
+	}
+	version := handler.stateCoord.Version()
+	if err := handler.stateCoord.RefreshNow(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if handler.stateCoord.Version() != version {
+		t.Fatal("already synchronized external change was published again")
+	}
+}
+
+func TestStateCoordinatorBaselineRefreshRetainsNewerPendingIntents(t *testing.T) {
+	upstream := &configFixtureCPA{}
+	var handler *Handler
+	_, _, _ = startDashboardTestServer(t, upstream.serve, func(h *Handler) { handler = h })
+	if err := handler.EnableStateCoordinator(context.Background(), StateCoordinatorOptions{
+		DebounceWindow: time.Hour, MaxBatchWait: time.Hour, RefreshInterval: time.Hour,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { handler.CloseStateCoordinator(context.Background()) })
+	_, err := handler.stateCoord.Mutate(t.Context(), stateDomainScalars, func(state *projectedConfigState) error {
+		state.ScalarSeq++
+		state.PendingScalars["debug"] = pendingScalarEntry{Value: true, Seq: state.ScalarSeq}
+		state.Scalars.Debug = true
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream.mu.Lock()
+	upstream.yamlData += "# preceding write completed\n"
+	upstream.configData["routing"].(map[string]any)["retry"].(map[string]any)["request-retry"] = 7
+	wantRevision := configyaml.ComputeRevision(upstream.yamlData)
+	upstream.mu.Unlock()
+	handler.refreshCoordinatorBaseline(t.Context())
+	env, err := handler.stateCoord.Read(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handler.stateCoord.IsDirty() || !env.Data.Scalars.Debug || len(env.Data.PendingScalars) != 1 ||
+		env.Data.Scalars.RequestRetry != 7 || env.Data.Revision != wantRevision {
+		t.Fatalf("newer intent or clean baseline fields lost during refresh: %+v", env.Data.Scalars)
+	}
+}
+
 type testSSEFrame struct {
 	event string
 	data  string
@@ -370,4 +611,301 @@ func readSSEFrames(resp *http.Response) <-chan testSSEFrame {
 		}
 	}()
 	return frames
+}
+
+func TestStateCoordinatorRefreshRejectsMixedRevisionLoad(t *testing.T) {
+	upstream := &configFixtureCPA{}
+	var handler *Handler
+	var changeDuringLoad atomic.Bool
+	_, _, _ = startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/v8/management/config" && changeDuringLoad.CompareAndSwap(true, false) {
+			upstream.mu.Lock()
+			upstream.yamlData = strings.ReplaceAll(upstream.yamlData, "debug: false", "debug: true")
+			upstream.configData["observability"].(map[string]any)["logs"].(map[string]any)["debug"] = true
+			upstream.mu.Unlock()
+		}
+		upstream.serve(writer, request)
+	}, func(h *Handler) { handler = h })
+	if err := handler.EnableStateCoordinator(t.Context(), StateCoordinatorOptions{RefreshInterval: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { handler.CloseStateCoordinator(context.Background()) })
+	upstream.mu.Lock()
+	upstream.yamlData += "# externally changed before refresh\n"
+	upstream.mu.Unlock()
+	changeDuringLoad.Store(true)
+	if err := handler.stateCoord.RefreshNow(t.Context()); !errors.Is(err, management.ErrConfigChanged) {
+		t.Fatalf("mixed-version reload error=%v, want conflict", err)
+	}
+	env, err := handler.stateCoord.Read(t.Context())
+	if err != nil || env.Data.Scalars.Debug || env.Version != 1 {
+		t.Fatalf("mixed-version reload replaced the last good baseline: %+v %v", env.Data.Scalars, err)
+	}
+	if err := handler.stateCoord.RefreshNow(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	env, err = handler.stateCoord.Read(t.Context())
+	if err != nil || !env.Data.Scalars.Debug || env.Version != 2 {
+		t.Fatalf("stable retry did not adopt external configuration: %+v %v", env.Data.Scalars, err)
+	}
+}
+
+func TestStateCoordinatorRebaseProviderTogglesKeepsFreshProviderMetadata(t *testing.T) {
+	fresh := projectedConfigState{
+		Revision:     "new-baseline",
+		OpenAICompat: []management.OpenAICompatibility{{Name: "relay", BaseURL: "https://new.example.test"}},
+		ConfigFamilies: map[management.ConfigKeyFamily][]management.ConfigAPIKey{
+			management.ConfigFamilyCodex: {{AuthIndex: "auth-1", APIKey: "provider-test-key", BaseURL: "https://new.example.test", ExcludedModels: []string{"hidden-model"}}},
+		},
+	}
+	pending := cloneProjectedConfigState(fresh)
+	pending.OpenAICompat[0].BaseURL = "https://old.example.test"
+	pending.ConfigFamilies[management.ConfigFamilyCodex][0].AuthIndex = "auth-old"
+	pending.PendingOpenAIToggles = map[string]pendingProviderToggle{"name:relay": {Disabled: true, Seq: 1}}
+	pending.PendingFamilyToggles = map[management.ConfigKeyFamily]map[string]pendingProviderToggle{
+		management.ConfigFamilyCodex: {"auth:auth-old": {Disabled: true, Seq: 2}},
+	}
+	rebased := rebaseProjectedConfigState(fresh, pending, []statecoord.DomainKey{
+		stateDomainOpenAICompat, statecoord.DomainKey(stateDomainProviderFamilyPrefix + string(management.ConfigFamilyCodex)),
+	})
+	provider := rebased.ConfigFamilies[management.ConfigFamilyCodex][0]
+	if !rebased.OpenAICompat[0].Disabled || rebased.OpenAICompat[0].BaseURL != "https://new.example.test" ||
+		provider.BaseURL != "https://new.example.test" || !slices.Contains(provider.ExcludedModels, "*") || !slices.Contains(provider.ExcludedModels, "hidden-model") {
+		t.Fatalf("rebasing resurrected stale provider fields or lost a pending toggle: %+v %+v", rebased.OpenAICompat[0], provider)
+	}
+}
+
+func TestStateCoordinatorObservesDelayedRuntimeReload(t *testing.T) {
+	upstream := &configFixtureCPA{}
+	var handler *Handler
+	var runtimeGeneration atomic.Int32
+	runtimeGeneration.Store(1)
+	_, _, _ = startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/v8/management/config", "/v8/management/config.yaml":
+			upstream.serve(writer, request)
+		case "/v0/management/config":
+			_, _ = fmt.Fprintf(writer, `{"runtime-generation":%d}`, runtimeGeneration.Load())
+		case "/v0/management/codex-api-key":
+			_, _ = fmt.Fprintf(writer, `{"codex-api-key":[{"api-key":"delayed-runtime-key","auth-index":"idx-%d"}]}`, runtimeGeneration.Load())
+		default:
+			if strings.HasPrefix(request.URL.Path, "/v8/management/config/api-keys/") {
+				_, _ = writer.Write([]byte(`[]`))
+			} else {
+				_, _ = writer.Write([]byte(`{}`))
+			}
+		}
+	}, func(h *Handler) { handler = h })
+	if err := handler.EnableStateCoordinator(t.Context(), StateCoordinatorOptions{RefreshInterval: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { handler.CloseStateCoordinator(context.Background()) })
+	upstream.mu.Lock()
+	upstream.yamlData += "# saved before runtime hot reload\n"
+	upstream.mu.Unlock()
+	if err := handler.stateCoord.RefreshNow(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := handler.stateCoord.Read(t.Context())
+	if err != nil || saved.Data.ConfigFamilies[management.ConfigFamilyCodex][0].AuthIndex != "idx-1" {
+		t.Fatalf("unexpected pre-reload projection: %v", err)
+	}
+	runtimeGeneration.Store(2)
+	if err := handler.stateCoord.RefreshNow(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	applied, err := handler.stateCoord.Read(t.Context())
+	if err != nil || applied.Data.Revision != saved.Data.Revision ||
+		applied.Data.RuntimeRevision == saved.Data.RuntimeRevision || applied.Data.ConfigFamilies[management.ConfigFamilyCodex][0].AuthIndex != "idx-2" {
+		t.Fatalf("unchanged file revision hid a later runtime reload: %v", err)
+	}
+}
+
+func TestStateCoordinatorRecoversCommittedBaselineBeforeNextBatch(t *testing.T) {
+	for _, externalChange := range []bool{false, true} {
+		t.Run(fmt.Sprintf("external_change_%t", externalChange), func(t *testing.T) {
+			upstream := &configFixtureCPA{}
+			var handler *Handler
+			var writes atomic.Int32
+			var failReadOnce atomic.Bool
+			var externalGeneration atomic.Int32
+			_, _, _ = startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
+				if request.URL.Path == "/v8/management/config.yaml" && failReadOnce.CompareAndSwap(true, false) {
+					writer.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
+				if request.Method == http.MethodPatch && request.URL.Path == "/v8/management/config" {
+					count := writes.Add(1)
+					writer.Header().Set("ETag", fmt.Sprintf(`"saved-%d-external-0"`, count))
+					if count == 1 {
+						_, err := handler.stateCoord.Mutate(t.Context(), stateDomainScalars, func(state *projectedConfigState) error {
+							state.ScalarSeq++
+							state.PendingScalars["request_retry"] = pendingScalarEntry{Value: int64(11), Seq: state.ScalarSeq}
+							state.Scalars.RequestRetry = 11
+							return nil
+						})
+						if err != nil {
+							t.Error(err)
+						}
+						failReadOnce.Store(true)
+					}
+				}
+				if request.URL.Path == "/v8/management/config.yaml" {
+					writer.Header().Set("ETag", fmt.Sprintf(`"saved-%d-external-%d"`, writes.Load(), externalGeneration.Load()))
+				}
+				upstream.serve(writer, request)
+			}, func(h *Handler) { handler = h })
+			if err := handler.EnableStateCoordinator(t.Context(), StateCoordinatorOptions{
+				DebounceWindow: time.Hour, MaxBatchWait: time.Hour, RefreshInterval: time.Hour,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { handler.CloseStateCoordinator(context.Background()) })
+			_, err := handler.stateCoord.Mutate(t.Context(), stateDomainScalars, func(state *projectedConfigState) error {
+				state.ScalarSeq++
+				state.PendingScalars["debug"] = pendingScalarEntry{Value: true, Seq: state.ScalarSeq}
+				state.Scalars.Debug = true
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := handler.stateCoord.FlushNow(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			env, err := handler.stateCoord.Read(t.Context())
+			if err != nil || !env.Data.IsBaselineUnknown || !handler.stateCoord.IsDirty() {
+				t.Fatalf("failed readback did not preserve the next batch for recovery: %+v %v", env.Data.Scalars, err)
+			}
+			if externalChange {
+				externalGeneration.Store(1)
+				upstream.mu.Lock()
+				upstream.yamlData += "# external writer after committed batch\n"
+				upstream.mu.Unlock()
+				err := handler.stateCoord.FlushNow(t.Context())
+				if !errors.Is(err, management.ErrConfigChanged) || writes.Load() != 1 {
+					t.Fatalf("external edit was overwritten during baseline recovery: writes=%d error=%v", writes.Load(), err)
+				}
+				return
+			}
+			if err := handler.stateCoord.FlushNow(t.Context()); err != nil {
+				t.Fatalf("own accepted write was misclassified as external drift: %v", err)
+			}
+			_, bodies := upstream.recordedWrites()
+			if writes.Load() != 2 || len(bodies) != 2 || !strings.Contains(bodies[1], `"request-retry":11`) || handler.stateCoord.IsDirty() {
+				t.Fatalf("newer intent was not persisted after recovery: writes=%d bodies=%v", writes.Load(), bodies)
+			}
+		})
+	}
+}
+
+func TestStateCoordinatorRetriesRuntimeFallbackMetadata(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	fixture.state.mu.Lock()
+	fixture.state.groupsReadErrors = map[string]int{"codex": http.StatusServiceUnavailable}
+	fixture.state.mu.Unlock()
+	if err := fixture.handler.EnableStateCoordinator(t.Context(), StateCoordinatorOptions{RefreshInterval: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { fixture.handler.CloseStateCoordinator(context.Background()) })
+	initial, err := fixture.handler.stateCoord.Read(t.Context())
+	if err != nil || !initial.Data.RuntimeOnlyFam[management.ConfigFamilyCodex] || !initial.Data.FailedProviderFamilies[management.ConfigFamilyCodex] {
+		t.Fatalf("transient editable-read failure was not marked for retry: %v", err)
+	}
+	client, err := fixture.handler.capabilityClient(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = fixture.handler.readProviderItemsWithVersion(t.Context(), client)
+	stillDegraded, err := fixture.handler.stateCoord.Read(t.Context())
+	if err != nil || !stillDegraded.Data.FailedProviderFamilies[management.ConfigFamilyCodex] {
+		t.Fatalf("runtime fallback cleared the editable-read retry marker: %v", err)
+	}
+	fixture.state.mu.Lock()
+	delete(fixture.state.groupsReadErrors, "codex")
+	fixture.state.mu.Unlock()
+	if err := fixture.handler.stateCoord.RefreshNow(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := fixture.handler.stateCoord.Read(t.Context())
+	if err != nil || recovered.Data.RuntimeOnlyFam[management.ConfigFamilyCodex] || recovered.Data.FailedProviderFamilies[management.ConfigFamilyCodex] {
+		t.Fatalf("recovered editable endpoint left a runtime-only projection cached: %v", err)
+	}
+}
+
+func TestStateCoordinatorPendingFamilyToggleSurvivesRuntimeReindex(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	handler := fixture.handler
+	if err := handler.EnableStateCoordinator(t.Context(), StateCoordinatorOptions{
+		DebounceWindow: time.Hour, MaxBatchWait: time.Hour, RefreshInterval: time.Hour,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { handler.CloseStateCoordinator(context.Background()) })
+	domain := statecoord.DomainKey(stateDomainProviderFamilyPrefix + string(management.ConfigFamilyCodex))
+	mutate := func(disabled bool) error {
+		_, err := handler.stateCoord.Mutate(t.Context(), domain, func(state *projectedConfigState) error {
+			entry := &state.ConfigFamilies[management.ConfigFamilyCodex][0]
+			entry.ExcludedModels = management.SetExcludedAll(entry.ExcludedModels, disabled)
+			state.ProviderToggleSeq++
+			if state.PendingFamilyToggles == nil {
+				state.PendingFamilyToggles = make(map[management.ConfigKeyFamily]map[string]pendingProviderToggle)
+			}
+			if state.PendingFamilyToggles[management.ConfigFamilyCodex] == nil {
+				state.PendingFamilyToggles[management.ConfigFamilyCodex] = make(map[string]pendingProviderToggle)
+			}
+			selector := familyToggleSelector(0, entry.AuthIndex, entry.APIKey)
+			state.PendingFamilyToggles[management.ConfigFamilyCodex][selector] = pendingProviderToggle{Disabled: disabled, Seq: state.ProviderToggleSeq}
+			return nil
+		})
+		return err
+	}
+	if err := mutate(true); err != nil {
+		t.Fatal(err)
+	}
+	var once sync.Once
+	fixture.state.hooksMu.Lock()
+	fixture.state.beforeCodexRead = func() {
+		once.Do(func() {
+			if err := mutate(false); err != nil {
+				t.Error(err)
+			}
+			fixture.state.mu.Lock()
+			fixture.state.codexProviders[0]["auth-index"] = "regenerated-index"
+			fixture.state.mu.Unlock()
+		})
+	}
+	fixture.state.hooksMu.Unlock()
+	if err := handler.stateCoord.FlushNow(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	env, err := handler.stateCoord.Read(t.Context())
+	if err != nil || !handler.stateCoord.IsDirty() || env.Data.ConfigFamilies[management.ConfigFamilyCodex][0].AuthIndex != "regenerated-index" {
+		t.Fatalf("reload lost the new runtime identity or queued intent: %v", err)
+	}
+	if _, exists := env.Data.PendingFamilyToggles[management.ConfigFamilyCodex]["auth:regenerated-index"]; !exists {
+		t.Fatal("pending toggle did not follow the credential's regenerated auth index")
+	}
+	if err := handler.stateCoord.FlushNow(t.Context()); err != nil {
+		t.Fatalf("reindexed credential rejected the next batch: %v", err)
+	}
+	if handler.stateCoord.IsDirty() {
+		t.Fatal("pending toggle did not persist after runtime reindex")
+	}
+	response, payload := getJSON(t, fixture.client, fixture.baseURL+"/omc/api/v1/management/providers")
+	var providers ManagementProviderListResponseDTO
+	if err := json.Unmarshal(payload, &providers); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK || !slices.ContainsFunc(providers.Providers, func(item ProviderItemDTO) bool {
+		return item.Family == "codex" && item.AuthIndex == "regenerated-index" && !item.Disabled
+	}) {
+		t.Fatalf("persisted provider did not retain the newer enable intent: %d %s", response.StatusCode, payload)
+	}
+	fixture.state.mu.Lock()
+	isPersistedDisabled := strings.Contains(fmt.Sprint(fixture.state.codexProviders[0]["excluded-models"]), "*")
+	fixture.state.mu.Unlock()
+	if isPersistedDisabled {
+		t.Fatal("CPA still holds the older disabled state after the second batch")
+	}
 }

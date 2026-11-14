@@ -329,16 +329,7 @@ func (h *Handler) afterConfigWriteSideEffects() {
 // afterConfigWrite drops what a configuration write may have made stale.
 func (h *Handler) afterConfigWrite() {
 	h.afterConfigWriteSideEffects()
-	h.invalidateCoordinator(
-		"management-config",
-		"management-providers",
-		"management-providers-sanitized",
-		"management-auth-files",
-		"management-client-keys",
-		"management-routing",
-		"management-oauth-model-aliases",
-		"management-oauth-excluded-models",
-	)
+	h.invalidateCoordinator(stateConfigScopes...)
 }
 
 // @Summary Set a scalar CPA configuration setting

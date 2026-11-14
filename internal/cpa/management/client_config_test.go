@@ -539,3 +539,33 @@ func TestConfigWritesWithoutReportedTagsStayUnconditional(t *testing.T) {
 		t.Fatalf("If-Match headers = %q, want a tag first and none after an untagged answer", tags)
 	}
 }
+
+func TestRuntimeConfigRevisionCanonicalizesWithoutReturningSecrets(t *testing.T) {
+	gateway := &configGateway{}
+	body := `{"debug":false,"headers":{"x-key":"runtime-secret","x-number":9007199254740993}}`
+	gateway.answer = func(_, path string) (int, string) {
+		if path == "/v0/management/config" {
+			return http.StatusOK, body
+		}
+		return 0, ""
+	}
+	client := newConfigClient(t, gateway)
+	first, err := client.RuntimeConfigRevision(t.Context())
+	if err != nil || len(first) != 64 || strings.Contains(first, "runtime-secret") {
+		t.Fatalf("runtime configuration fingerprint=%q error=%v", first, err)
+	}
+	gateway.mu.Lock()
+	body = `{"headers":{"x-number":9007199254740993,"x-key":"runtime-secret"},"debug":false}`
+	gateway.mu.Unlock()
+	second, err := client.RuntimeConfigRevision(t.Context())
+	if err != nil || first != second {
+		t.Fatalf("formatting changed runtime fingerprint: %q %q %v", first, second, err)
+	}
+	gateway.mu.Lock()
+	body = `{"headers":{"x-number":9007199254740994,"x-key":"runtime-secret"},"debug":false}`
+	gateway.mu.Unlock()
+	third, err := client.RuntimeConfigRevision(t.Context())
+	if err != nil || second == third {
+		t.Fatalf("a changed runtime value was not observed: %q %q %v", second, third, err)
+	}
+}
