@@ -327,7 +327,8 @@ it('persists plugin moves across filters and remounts without changing gateway o
   await screen.findByRole('button', { name: label });
   fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Runtime' } });
   expect(rows()).toEqual([installed.id, 'last']);
-  fireEvent.keyDown(screen.getByRole('button', { name: label }), { key: 'ArrowUp' });
+  // The installed plugins are a grid of cards, so a sideways arrow steps a card as well.
+  fireEvent.keyDown(screen.getByRole('button', { name: label }), { key: 'ArrowLeft' });
   await waitFor(() => expect(server.preferenceWrites()).toEqual([{ key: 'omc_plugin_order', value: { installed: ['last', installed.id, 'hidden'] } }]));
   expect(rows()).toEqual(['last', installed.id]);
   fireEvent.change(screen.getByRole('textbox'), { target: { value: '' } });
@@ -387,4 +388,27 @@ it('installs an Oh My CPA plugin in one step, asks a curated one for its id, and
   renderWithOmc(<ThemeProvider><PluginStorePanel store={{ ...store, plugins: [entry] }} isLoading={false} isDemo={false} onRefresh={() => {}} isRefreshing={false} onManage={() => {}} onOpenSettings={() => {}} /></ThemeProvider>);
   fireEvent.click(await screen.findByRole('button', { name: (name) => name.replace(/\s/g, '') === t('plugin.omc_source_enable').replace(/\s/g, '') }));
   await waitFor(() => expect(server.preferenceWrites()).toEqual([{ key: 'omc_plugin_source_enabled', value: true }]));
+});
+
+it('states the install record once, in the settings drawer head', async () => {
+  const t = makeT('en');
+  const server = installOmcApi({ plugins: [{ ...installed, metadata: { name: 'Runtime name' } }] });
+  server.on('GET', '/management/plugin-store', () => ({ ...store, plugins: [] }));
+  server.on('GET', `/management/plugins/${installed.id}/config`, () => ({
+    config: { enabled: true, store: { name: 'Runtime name', version: '0.2.5', author: 'Recorded author', license: 'MIT', description: 'Recorded description', repository: 'owner/stable-plugin' } },
+  }));
+  renderWithOmc(<ThemeProvider><PluginsPage /></ThemeProvider>, { route: `/plugins?plugin=${installed.id}` });
+  const drawer = await screen.findByRole('dialog');
+  const head = await waitFor(() => {
+    const element = drawer.querySelector<HTMLElement>('[data-plugin-config-identity]');
+    expect(element?.textContent).toContain('MIT');
+    return element!;
+  });
+  // What the plugin leaves out comes from CPA's record, in the head and nowhere else.
+  expect(head.textContent).toContain('v0.2.5');
+  expect(head.textContent).toContain('Recorded author');
+  expect(head.textContent).toContain('Recorded description');
+  expect(head.querySelector('a[href="https://github.com/owner/stable-plugin"]')).not.toBeNull();
+  expect(within(drawer).getAllByText('Recorded description')).toHaveLength(1);
+  expect(within(drawer).queryByText(t('plugin.config_no_fields'))).not.toBeNull();
 });

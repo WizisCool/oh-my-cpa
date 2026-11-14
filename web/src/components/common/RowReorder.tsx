@@ -9,21 +9,25 @@ import {
   type DragEndEvent,
   type Modifier,
 } from '@dnd-kit/core';
-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableContext, rectSortingStrategy, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortableMotion } from '../../hooks/useSortableMotion';
 import { HolderOutlined } from '../icons';
 import { Tooltip } from './Tooltip';
 import { useT } from '../../i18n';
 import { applyKeyOrder, moveKey, type DropSide } from '../../types/displayOrder';
 
+/** A list runs one way; a grid of cards wraps, so a card travels both ways inside it. */
+export type ReorderLayout = 'list' | 'grid';
+
 interface ReorderState {
   isEnabled: boolean;
+  layout: ReorderLayout;
   /** A row is in hand: its place belongs to the drag until it is let go. */
   isHeld: boolean;
   onStep: (key: string, direction: -1 | 1) => void;
 }
 
-const ReorderContext = React.createContext<ReorderState>({ isEnabled: false, isHeld: false, onStep: () => undefined });
+const ReorderContext = React.createContext<ReorderState>({ isEnabled: false, layout: 'list', isHeld: false, onStep: () => undefined });
 
 /** The list runs one way and has two ends: a row travels up or down, and no further than the list. */
 const alongTheList: Modifier = ({ transform, draggingNodeRect, containerNodeRect }) => {
@@ -32,7 +36,18 @@ const alongTheList: Modifier = ({ transform, draggingNodeRect, containerNodeRect
   const bottom = containerNodeRect.bottom - draggingNodeRect.bottom;
   return { ...transform, x: 0, y: Math.min(Math.max(transform.y, top), bottom) };
 };
-const MODIFIERS = [alongTheList];
+/** A grid wraps its cards into rows, so a card travels both ways, and no further than the grid. */
+const withinTheGrid: Modifier = ({ transform, draggingNodeRect, containerNodeRect }) => {
+  if (!draggingNodeRect || !containerNodeRect) return transform;
+  const clamp = (value: number, low: number, high: number) => Math.min(Math.max(value, low), high);
+  return {
+    ...transform,
+    x: clamp(transform.x, containerNodeRect.left - draggingNodeRect.left, containerNodeRect.right - draggingNodeRect.right),
+    y: clamp(transform.y, containerNodeRect.top - draggingNodeRect.top, containerNodeRect.bottom - draggingNodeRect.bottom),
+  };
+};
+const MODIFIERS: Record<ReorderLayout, Modifier[]> = { list: [alongTheList], grid: [withinTheGrid] };
+const STRATEGIES = { list: verticalListSortingStrategy, grid: rectSortingStrategy } as const;
 
 export interface RowReorderProps {
   /** The rows' keys in the order they are drawn. */
@@ -43,6 +58,8 @@ export interface RowReorderProps {
   onMove: (key: string, target: string, side: DropSide) => void;
   /** A keyboard move from the focused handle, one place earlier or later; only past a drawn row. */
   onStep: (key: string, direction: -1 | 1) => void;
+  /** `grid` for wrapped cards: they move both ways, and every arrow key steps a card. */
+  layout?: ReorderLayout;
   children: React.ReactNode;
 }
 
@@ -52,7 +69,7 @@ export interface RowReorderProps {
  * a drag, so pointing at, clicking or selecting text in a row never rearranges anything. A focused
  * handle moves its row a place with the arrow keys.
  */
-export function RowReorder({ items, isEnabled, onMove, onStep, children }: RowReorderProps) {
+export function RowReorder({ items, isEnabled, onMove, onStep, layout = 'list', children }: RowReorderProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const ids = React.useMemo(() => [...items], [items]);
   // Held rows are moved by the pointer's own transforms; the list's animation has to keep out of
@@ -82,10 +99,10 @@ export function RowReorder({ items, isEnabled, onMove, onStep, children }: RowRe
     const index = ids.indexOf(key);
     if (index >= 0 && ids[index + direction] !== undefined) onStep(key, direction);
   }, [ids, onStep]);
-  const value = React.useMemo(() => ({ isEnabled, isHeld, onStep: step }), [isEnabled, isHeld, step]);
+  const value = React.useMemo(() => ({ isEnabled, layout, isHeld, onStep: step }), [isEnabled, layout, isHeld, step]);
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={MODIFIERS} onDragStart={handleStart} onDragEnd={handleEnd} onDragCancel={finish}>
-      <SortableContext items={ids} strategy={verticalListSortingStrategy} disabled={!isEnabled}>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={MODIFIERS[layout]} onDragStart={handleStart} onDragEnd={handleEnd} onDragCancel={finish}>
+      <SortableContext items={ids} strategy={STRATEGIES[layout]} disabled={!isEnabled}>
         <ReorderContext.Provider value={value}>{children}</ReorderContext.Provider>
       </SortableContext>
     </DndContext>
@@ -146,11 +163,11 @@ export interface ReorderRow {
 
 /** One row's part in the reorder: the row's props and its handle's. */
 export function useReorderRow(key: string): ReorderRow {
-  const { isEnabled, isHeld, onStep } = React.useContext(ReorderContext);
+  const { isEnabled, layout, isHeld, onStep } = React.useContext(ReorderContext);
   const motion = useSortableMotion();
   const { setNodeRef, setActivatorNodeRef, listeners, transform, transition, isDragging } = useSortable({ id: key, disabled: !isEnabled, ...motion });
   const style: React.CSSProperties | undefined = transform || transition
-    ? { transform: transform ? `translate3d(0, ${Math.round(transform.y)}px, 0)` : undefined, transition }
+    ? { transform: transform ? `translate3d(${layout === 'grid' ? Math.round(transform.x) : 0}px, ${Math.round(transform.y)}px, 0)` : undefined, transition }
     : undefined;
   return {
     row: {
@@ -161,6 +178,7 @@ export function useReorderRow(key: string): ReorderRow {
     },
     handle: {
       isEnabled,
+      layout,
       isDragging,
       activatorRef: setActivatorNodeRef,
       onPointerDown: listeners?.onPointerDown as React.PointerEventHandler | undefined,
@@ -172,6 +190,8 @@ export function useReorderRow(key: string): ReorderRow {
 
 export interface ReorderHandleProps {
   isEnabled: boolean;
+  /** A grid card steps with every arrow key; a list row with up and down. */
+  layout?: ReorderLayout;
   isDragging: boolean;
   activatorRef: (element: HTMLElement | null) => void;
   onPointerDown?: React.PointerEventHandler;
@@ -185,22 +205,26 @@ export interface ReorderHandleProps {
  * form, where no pointer can reveal it: a glyph at the end of the row's controls.
  */
 export function ReorderHandle({
-  isEnabled, isDragging, activatorRef, onPointerDown, onStep, name, variant = 'edge', className,
+  isEnabled, layout = 'list', isDragging, activatorRef, onPointerDown, onStep, name, variant = 'edge', className,
 }: ReorderHandleProps & { name: string; variant?: 'edge' | 'inline'; className?: string }) {
   const t = useT();
   if (!isEnabled) return null;
+  const steps: Record<string, -1 | 1> = layout === 'grid'
+    ? { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }
+    : { ArrowUp: -1, ArrowDown: 1 };
   const button = (
     <button
       type="button"
       ref={activatorRef}
       className={clsx('reorder-handle', `is-${variant}`, isDragging && 'is-active', className)}
       aria-label={`${t('common.reorder_handle')}: ${name}`}
-      aria-keyshortcuts="ArrowUp ArrowDown"
+      aria-keyshortcuts={Object.keys(steps).join(' ')}
       onPointerDown={onPointerDown}
       onKeyDown={(event) => {
-        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+        const direction = steps[event.key];
+        if (direction === undefined) return;
         event.preventDefault();
-        onStep(event.key === 'ArrowUp' ? -1 : 1);
+        onStep(direction);
       }}
       onClick={(event) => event.stopPropagation()}
       data-reorder-handle

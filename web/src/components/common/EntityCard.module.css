@@ -1,0 +1,131 @@
+/* EntityCard.module.css — the console's one card anatomy (docs/dev/design.md, Entity cards):
+   head, body, foot. The card rests at the page edge and is not pressable as a whole, so the
+   pointer brings no lift; a card in the hand takes the drag's own lift from index.css. */
+
+.entity-card {
+  --entity-mark: 44px;
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-xl);
+  background: var(--bg);
+  box-shadow: var(--shadow-edge);
+}
+
+.is-featured {
+  --entity-mark: 52px;
+  gap: 12px;
+  padding: 16px;
+}
+
+/* The grip runs down the card's leading edge, so it takes the card's own corners there. */
+.entity-card > :global(.reorder-handle.is-edge) {
+  border-radius: var(--radius-xl) 0 0 var(--radius-xl);
+}
+
+.head {
+  display: grid;
+  grid-template-columns: var(--entity-mark) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.mark {
+  display: inline-flex;
+  width: var(--entity-mark);
+  height: var(--entity-mark);
+}
+
+.mark > * {
+  width: 100%;
+  height: 100%;
+}
+
+.title {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name {
+  overflow: hidden;
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* One line: a long id or author is cut rather than folding the head taller than its neighbours. */
+.subline {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--meta);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subline > :global(.meta-line) {
+  display: inline;
+}
+
+.subline :global(.meta-line-item) + :global(.meta-line-item) {
+  margin-left: 12px;
+}
+
+.aside {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  align-self: start;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+/* The body sits on the card's own ground: a panel inside the card reads as a card in a card. It
+   takes the slack, so the feet of a row of cards line up whatever their descriptions run to. */
+.body {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.foot {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.foot-start,
+.foot-end {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.foot-end {
+  justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .entity-card {
+    --entity-mark: 40px;
+    padding: 12px;
+  }
+
+  .is-featured {
+    --entity-mark: 44px;
+  }
+}
