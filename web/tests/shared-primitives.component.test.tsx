@@ -1125,7 +1125,7 @@ describe('Select and Combobox inline action controls', () => {
   it('elevates Select clear button above the trigger touch pseudo-element and clears without opening', () => {
     const onChange = vi.fn();
     const onOpenChange = vi.fn();
-    render(
+    renderWithOmc(
       <Select
         aria-label="Choose option"
         value="alpha"
@@ -1146,7 +1146,7 @@ describe('Select and Combobox inline action controls', () => {
   it('elevates Combobox tag-remove and clear buttons above the trigger touch pseudo-element', () => {
     const onChange = vi.fn();
     const onOpenChange = vi.fn();
-    render(
+    renderWithOmc(
       <Combobox
         aria-label="Models"
         mode="multiple"

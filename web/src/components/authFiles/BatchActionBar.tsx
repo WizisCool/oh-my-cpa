@@ -72,11 +72,7 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
         className={styles.bar}
         label={t('af.selected_n', { n: selectedCount })}
         summary={t('af.selected_n', { n: selectedCount })}
-        note={hiddenCount > 0 ? (
-          <span data-tip={t('omc.hidden_selection', { n: hiddenCount })}>
-            {t('omc.hidden_selection', { n: hiddenCount })}
-          </span>
-        ) : undefined}
+        note={hiddenCount > 0 ? t('omc.hidden_selection', { n: hiddenCount }) : undefined}
         selection={(
           <DropdownMenu>
             <DropdownMenuTrigger
