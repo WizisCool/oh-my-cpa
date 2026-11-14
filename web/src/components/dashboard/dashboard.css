@@ -302,7 +302,7 @@
   .model-usage-total-label, .model-usage-total-unit { display: none; }
 }
 /* The card's one drawing: a bar the groups divide between them. It opens at the top of the body,
-   level with the trend's legend beside it, and the rows share the height left below it. */
+   level with the trend's legend beside it, and the rows stack under it. */
 .model-usage-bar {
   display: flex;
   gap: 2px;
@@ -325,13 +325,16 @@
    three figure columns sharing a right edge. The columns live on the list rather than on each row,
    so every row resolves the same tracks and the figures line up down the card. The list reaches
    past the body's edge by the rows' inset, so a row's wash has air around its text while the text
-   itself stays on the bar's edges. It is at most six rows - the read folds the rest into one. */
+   itself stays on the bar's edges. It is at most six rows - the read folds the rest into one.
+   Every row keeps one height and the list stacks from the top: two models read as two rows, not as
+   two slabs sharing the card's height, so the rhythm is the same at any count. */
 .model-usage-list {
   display: grid;
   flex: 1 1 auto;
   grid-template-columns: minmax(0, 1fr) repeat(3, max-content);
-  grid-auto-rows: minmax(34px, 1fr);
-  column-gap: 20px;
+  grid-auto-rows: 40px;
+  align-content: start;
+  gap: 2px 20px;
   margin: 0 -8px;
   padding: 0;
   list-style: none;
@@ -342,15 +345,16 @@
   grid-template-columns: subgrid;
   grid-column: 1 / -1;
   align-items: center;
-  min-height: 34px;
   padding-inline: 8px;
   border-radius: var(--radius-md);
   font-variant-numeric: tabular-nums;
 }
 .model-usage-row[data-hovered] { background: var(--hover-inset); }
-.model-usage-row[data-focused] { background: var(--selected-inset); }
-.model-usage-list[data-has-focus] .model-usage-row:not([data-focused]) { opacity: 0.42; }
-:root:not([data-reduced-motion='true']) .model-usage-row { transition: opacity var(--motion-base) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard); }
+/* The chosen group is picked up and lit like every selection, so it reads as the one row standing
+   forward rather than as a block of colour; the rest step back. */
+.model-usage-row[data-focused] { box-shadow: var(--shadow-selected); background: var(--select-surface); }
+.model-usage-list[data-has-focus] .model-usage-row:not([data-focused]) { opacity: 0.5; }
+:root:not([data-reduced-motion='true']) .model-usage-row { transition: var(--select-transition), opacity var(--motion-base) var(--ease-standard); }
 .model-usage-name {
   display: flex;
   align-items: center;
