@@ -2,7 +2,6 @@
 // scripted stories that replay the console. The page is complete without it: every story is
 // rendered in its finished state, and each block below only replays or enhances that markup.
 (function () {
-  document.documentElement.classList.add('is-ready');
   var THEME_KEY = 'omc-site-theme';
   var schemeMeta = document.querySelector('meta[name="color-scheme"]');
   var systemDark = window.matchMedia('(prefers-color-scheme: dark)');
@@ -168,6 +167,10 @@
 
   /** Calls `onChange(isVisible)` as an element enters and leaves the viewport. */
   function watch(element, onChange, threshold) {
+    if (typeof IntersectionObserver !== 'function') {
+      onChange(true);
+      return;
+    }
     var observer = new IntersectionObserver(
       function (entries) {
         entries.forEach(function (entry) {
@@ -181,6 +184,11 @@
 
   /** Marks an element `.is-in` the first time enough of it is on screen. */
   function revealOnce(element, threshold, then) {
+    if (typeof IntersectionObserver !== 'function') {
+      element.classList.add('is-in');
+      if (then) then();
+      return;
+    }
     var observer = new IntersectionObserver(
       function (entries) {
         var isVisible = entries.some(function (entry) {
@@ -827,4 +835,5 @@
     });
     if (tab) select(tab, false);
   });
+  document.documentElement.classList.add('is-ready');
 })();

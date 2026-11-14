@@ -73,7 +73,7 @@ main a[data-card].rounded-lg:active {
 }
 
 :is(header, main) button[class*='bg-fd-secondary']:focus-visible,
-main a[data-card].rounded-lg:focus-visible {
+main a[data-card]:focus-visible {
   outline: 2px solid var(--color-fd-ring);
   outline-offset: 2px;
 }

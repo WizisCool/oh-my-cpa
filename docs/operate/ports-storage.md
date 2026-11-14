@@ -39,7 +39,8 @@ When you change the host port (for example to `18317`), update:
 If port `8317` (CPA's gateway port in `compose.full.yml`) is occupied on the host, set
 `CPA_BIND` in `.env` (for example `CPA_BIND=127.0.0.1:18318`) and point your clients at
 that new host port (`http://127.0.0.1:18318`). OMC inside the same Compose project keeps
-talking to `http://cli-proxy-api:8317` over the Docker network.
+talking to `http://cpa:8317` over the Docker network. For the full stack, recreate the
+services with `docker compose -f compose.full.yml up -d`.
 
 ## Storage and permissions
 
