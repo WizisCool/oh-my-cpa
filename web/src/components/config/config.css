@@ -282,8 +282,16 @@
   padding: 20px;
   border-top: 1px solid var(--border-soft);
 }
+.settings-tls-body.is-open > .settings-tls-inner {
+  overflow: visible;
+  animation: tls-fold-clip var(--motion-base) step-end;
+}
+@keyframes tls-fold-clip {
+  from { overflow: hidden; }
+}
 :root[data-reduced-motion='true'] {
   .settings-tls-body { transition: none; }
+  .settings-tls-body.is-open > .settings-tls-inner { animation: none; }
 }
 .config-mono-textarea {
   width: 100%;
@@ -504,26 +512,31 @@
   width: 100%;
 }
 .payload-collapse {
-  background: transparent !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: visible;
 }
 .payload-collapse > [data-slot="accordion-item"] {
   background: var(--surface);
   border: 0;
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-edge);
-  overflow: hidden;
+  overflow: visible;
 }
 .payload-collapse > [data-slot="accordion-item"] [data-slot="accordion-trigger"] {
   padding: 14px 18px;
+  border-radius: inherit;
+}
+.payload-collapse > [data-slot="accordion-item"][data-open] [data-slot="accordion-trigger"] {
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
 }
 .payload-collapse > [data-slot="accordion-item"] > [data-slot="accordion-panel"] {
   background: var(--bg);
   border-top: 1px solid var(--border-soft);
+  border-end-start-radius: inherit;
+  border-end-end-radius: inherit;
 }
 .payload-collapse > [data-slot="accordion-item"] > [data-slot="accordion-panel"] > div {
   padding: 16px;

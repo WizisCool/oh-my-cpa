@@ -515,3 +515,30 @@ test('no retired Ant Design, rc-component, dayjs or ECharts packages or selector
   assert.deepEqual(legacySelectors, []);
 });
 
+test('foldable panels, Collapse variants, and payload builder do not clip edge shadows or focus rings', () => {
+  const indexCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'index.css'), 'utf8'));
+  const configCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/config/config.css'), 'utf8'));
+  const agentCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'pages/agent/AgentPage.module.css'), 'utf8'));
+  const accordionTsx = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/ui/accordion.tsx'), 'utf8'));
+  const payloadEditorTsx = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/config/PayloadRulesEditor.tsx'), 'utf8'));
+  const configRenderersTsx = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/config/configSectionRenderers.tsx'), 'utf8'));
+
+  assert.match(indexCss, /\.omc-fold-panel\[data-open\]:not\(\[data-starting-style\]\):not\(\[data-ending-style\]\)\s*\{[^}]*overflow:\s*visible\s*;/);
+  assert.match(agentCss, /\.fold\[data-open\]\s*>\s*\.fold-inner\s*\{[^}]*overflow:\s*visible\s*;/);
+  assert.match(configCss, /\.settings-tls-body\.is-open\s*>\s*\.settings-tls-inner\s*\{[^}]*overflow:\s*visible\s*;/);
+  assert.match(configCss, /\.payload-collapse\s*\{[^}]*overflow:\s*visible\s*;/);
+  assert.match(configCss, /\.payload-collapse\s*>\s*\[data-slot="accordion-item"\]\s*\{[^}]*overflow:\s*visible\s*;/);
+
+  // Collapse never applies overflow-hidden to the outer shadow-bearing accordion root or card items.
+  assert.equal(/\boverflow-hidden\b/.test(accordionTsx), false);
+  assert.match(accordionTsx, /isCards\s*&&\s*'rounded-xl bg-surface shadow-edge'/);
+  assert.match(payloadEditorTsx, /<Collapse[\s\S]*?\bvariant="cards"/);
+
+  // The payload-builder wrapper does not nest inside a clipping .settings-group shell.
+  const payloadBranch = configRenderersTsx.match(/grp\.variant === 'payload-builder'[\s\S]*?return\s*\([\s\S]*?\);\s*\}/)?.[0] ?? '';
+  assert.ok(payloadBranch.length > 0);
+  assert.match(payloadBranch, /className="payload-builder-group"/);
+  assert.equal(/settings-group(?!-head)/.test(payloadBranch), false);
+  assert.equal(/settings-group-body/.test(payloadBranch), false);
+});
+
