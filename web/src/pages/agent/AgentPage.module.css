@@ -295,6 +295,16 @@
   overflow: hidden;
 }
 
+/* Once open, nothing inside is clipped: approval cards and focus rings at the edge keep their shadow. */
+.fold[data-open] > .fold-inner {
+  overflow: visible;
+  animation: agent-fold-clip var(--motion-base) step-end;
+}
+
+@keyframes agent-fold-clip {
+  from { overflow: hidden; }
+}
+
 /* The rail runs through the centre of every step's mark; each mark clears a little of it, so the
    line reads as joining the steps rather than striking through them. */
 .chain-body {
@@ -514,6 +524,9 @@
 :global(:root[data-reduced-motion='true']) {
   .fold {
     transition: none;
+  }
+  .fold[data-open] > .fold-inner {
+    animation: none;
   }
 }
 
