@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useConfigDraft } from '../src/components/config/useConfigDraft';
 import { renderGroupPanel } from '../src/components/config/configSectionRenderers';
 import { ConfigDirtyBar } from '../src/components/config/ConfigDirtyBar';
+import { ConfigOutline } from '../src/components/config/ConfigOutline';
 import { CONFIG_GROUPS } from '../src/types/configSchema';
 import { I18nProvider, useT } from '../src/i18n';
 import { PayloadRulesEditor, type PayloadRulesEditorProps } from '../src/components/config/PayloadRulesEditor';
@@ -320,4 +321,19 @@ it('edits, reorders, validates, and rebases sensitive-patterns-replace rules', a
   } finally {
     patchSpy.mockRestore();
   }
+});
+
+describe('ConfigOutline', () => {
+  it('stays mounted for single-group sections so switching sections preserves the rail, and hides when empty', () => {
+    const { container, rerender } = renderWithOmc(
+      <ConfigOutline entries={[{ id: 'grp_streaming_transport', label: 'Streaming Transport', count: 4, isDirty: false }]} />,
+    );
+    expect(container.querySelector('.config-outline')).not.toBeNull();
+    expect(screen.getByRole('button', { name: /Streaming Transport/ })).toBeTruthy();
+
+    rerender(
+      <ConfigOutline entries={[]} />,
+    );
+    expect(container.querySelector('.config-outline')).toBeNull();
+  });
 });

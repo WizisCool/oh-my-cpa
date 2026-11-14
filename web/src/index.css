@@ -1783,7 +1783,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    with no positioned ancestor - a visually hidden label - would otherwise escape this clip and lengthen
    the document, which the shell's `overflow: hidden` stops the reader scrolling but not a script: a
    drag held at the window's edge would auto-scroll the whole console out of the window. */
-.app-content { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); }
+.app-content { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; overscroll-behavior: contain; background: var(--bg); }
+.app-content:has(> .workspace-route) { overflow: hidden; scrollbar-gutter: auto; }
 /* A phone has no room for a frame around the page: the panel becomes the screen. */
 @media (max-width: 900px) {
   .app-shell > .app-body { border: 0; height: 100%; margin: 0; border-radius: 0; box-shadow: none; }
@@ -2234,6 +2235,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 /* ── config page ─────────────────────────────────────────────────────────── */
 .config-page {
+  container: config-page / inline-size;
+  --config-toolbar-height: 63px;
   max-width: none !important;
   margin: 0 !important;
   /* With the toolbar's own 14px, the title lands on the 32px line every other page's does. */
@@ -2246,32 +2249,52 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   position: sticky;
   top: 0;
   z-index: 10;
+  width: 100%;
+  padding: 14px 0 0;
+  margin-bottom: 24px;
+  background: var(--bg);
+  box-sizing: border-box;
+}
+
+.config-toolbar-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  width: 100%;
-  padding: 14px 0 16px;
-  margin-bottom: 24px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+  border-bottom: var(--hairline) solid var(--border-soft);
   box-sizing: border-box;
 }
 
 .config-toolbar-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
+  flex: 0 0 auto;
+}
+
+.config-toolbar-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
 }
 
 /* The field count sits beside the sync status as its own quiet figure, not inside the status tag. */
 .config-field-count {
-  margin-inline-start: -6px;
   color: var(--muted);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.config-toolbar-divider {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--border);
 }
 
 .config-toolbar-left .terminal-title {
@@ -2485,7 +2508,15 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    opportunity to offer in exchange. The rule follows the shell's breakpoint, not the phone's: the
    sidebar leaves at 900px, and a tablet-width window met the defect with the desktop toolbar. */
 @media (max-width: 900px) {
+  .config-page {
+    padding: 16px 16px 40px;
+  }
   .config-toolbar {
+    position: static;
+    padding-top: 0;
+    margin-bottom: 16px;
+  }
+  .config-toolbar-inner {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
@@ -2548,7 +2579,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    only applies when the panel is rendered under search results, where the header
    names the search rather than the section. */
 .payload-builder-group {
-  scroll-margin-top: 96px;
+  scroll-margin-top: calc(var(--config-toolbar-height) + 20px);
 }
 
 .payload-builder-group .settings-group-head {
@@ -2908,7 +2939,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .app-header .demo-chip { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dashboard-tile [data-slot="panel-body"] { padding: 12px; }
   .toolbar.is-ruled { gap: 8px; margin-bottom: 12px; }
-  .config-toolbar-phone { position: static; padding: 0 0 12px; margin-bottom: 12px; gap: 8px; }
+  .config-page { padding: 12px 12px 24px; }
+  .config-toolbar-phone { display: flex; flex-direction: column; align-items: stretch; position: static; padding: 0 0 12px; margin-bottom: 12px; gap: 8px; border-bottom: var(--hairline) solid var(--border-soft); }
   .config-toolbar-phone .config-toolbar-left { flex-wrap: nowrap; gap: 8px; width: 100%; justify-content: space-between; }
   .config-toolbar-phone [data-slot="segmented"] { flex-shrink: 0; }
   .settings-group-head, .settings-group-body { padding: 12px; }
