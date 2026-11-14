@@ -88,6 +88,7 @@ const lastSegment = (path: string) => decodeURIComponent(path.split('/').pop() ?
 const findAuthFile = (state: OmcState, name: unknown) => state.authFiles.find(entry => entry.file.name === name);
 
 const BUILT_IN_ROUTES: Route[] = [
+  { method: 'GET', path: '/management/quota/codex-reset-policy', handler: () => json({ code: 'capability_missing' }, 501) },
   { method: 'GET', path: '/management/auth-files', handler: (_request, state) => ({ files: state.authFiles.map(entry => entry.file) }) },
   {
     method: 'GET', path: '/management/auth-files/safe-fields', handler: (request, state) => {

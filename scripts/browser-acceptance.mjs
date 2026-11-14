@@ -374,6 +374,24 @@ try {
   }
 
   await runRequestListAcceptance({ appURL, page, check });
+  await page.evaluate(() => localStorage.setItem('omc-lang', 'en'));
+  await page.goto(`${appURL}/oauth-management`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Details: fixture-auth.json', exact: true }).click();
+  const automaticReset = page.getByRole('region', { name: 'Automatic reset', exact: true });
+  const resetToggle = automaticReset.getByRole('switch');
+  await resetToggle.waitFor({ state: 'visible' });
+  await checkEventually('automatic reset defaults off and is available', async () =>
+    await resetToggle.isEnabled() && await resetToggle.getAttribute('aria-checked') === 'false');
+  await resetToggle.click();
+  await automaticReset.getByRole('button', { name: 'Save', exact: true }).click();
+  check('automatic reset waits for consent', !fakeCpa.requests.some(request => request.method === 'PUT' && request.path.endsWith('/codex-reset-policy')));
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+  await checkEventually('automatic reset consent persists through the facade', () =>
+    automaticReset.getByRole('button', { name: 'Save', exact: true }).isDisabled());
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Details: fixture-auth.json', exact: true }).click();
+  await checkEventually('automatic reset reloads account consent', async () =>
+    await resetToggle.isEnabled() && await resetToggle.getAttribute('aria-checked') === 'true');
   await runMcpAcceptance({ appURL, page, check });
   if (!smokeOnly) {
     await runAddProviderAcceptance({ appURL, page, check, checkEventually, fakeCpa });

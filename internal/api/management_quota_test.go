@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,6 +20,81 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
+
+func TestCodexResetPolicyFacade(t *testing.T) {
+	account := "codex-reset:" + strings.Repeat("a", 64)
+	var writes atomic.Int32
+	var status atomic.Int32
+	client, base, repo := startDashboardTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v8/management/routing/codex-reset-policy" || r.URL.Query().Get("auth_index") != "codex & main" {
+			t.Errorf("unexpected upstream call: %s %s", r.Method, r.URL)
+			w.WriteHeader(404)
+			return
+		}
+		if r.Method == http.MethodPut {
+			writes.Add(1)
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if len(body) != 3 || body["account_key"] != account || body["enabled"] != true || body["before_expiry_seconds"] != float64(900) {
+				t.Errorf("unexpected consent: %#v", body)
+			}
+		}
+		if code := int(status.Load()); code != 0 {
+			w.WriteHeader(code)
+			_, _ = w.Write([]byte(`{"error":"private-upstream-token"}`))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"account_key": account, "enabled": false, "before_expiry_seconds": 3600,
+			"result": "disabled", "pending": false, "last_reset_at": 1790000000,
+			"access_token": "private-upstream-token", "request_id": "private-journal-id",
+		})
+	})
+	endpoint := base + "/omc/api/v1/management/quota/codex-reset-policy?auth_index=codex%20%26%20main"
+	resp, body := getJSON(t, client, endpoint)
+	if resp.StatusCode != 200 || !bytes.Contains(body, []byte(account)) || bytes.Contains(body, []byte("private-")) {
+		t.Fatalf("unsafe or missing projection: %d %s", resp.StatusCode, body)
+	}
+	for _, payload := range []string{
+		`{"enabled":true,"before_expiry_seconds":900}`,
+		`{"account_key":"` + account + `","before_expiry_seconds":900}`,
+		`{"account_key":"` + account + `","enabled":true,"before_expiry_seconds":59}`,
+		`{"account_key":"` + account + `","enabled":true,"before_expiry_seconds":900,"pending":false}`,
+	} {
+		resp, body = doJSON(t, client, http.MethodPut, endpoint, payload)
+		if resp.StatusCode != 400 || writes.Load() != 0 {
+			t.Fatalf("invalid consent reached upstream: %d %s", resp.StatusCode, body)
+		}
+	}
+	resp, body = doJSON(t, client, http.MethodPut, endpoint,
+		`{"account_key":"`+account+`","enabled":true,"before_expiry_seconds":900}`)
+	if resp.StatusCode != 200 || writes.Load() != 1 {
+		t.Fatalf("consent not saved: %d %s", resp.StatusCode, body)
+	}
+	for _, code := range []int{404, 409, 503} {
+		status.Store(int32(code))
+		resp, body = getJSON(t, client, endpoint)
+		want := code
+		if code == 404 {
+			want = 501
+		}
+		if resp.StatusCode != want || bytes.Contains(body, []byte("private-upstream-token")) {
+			t.Fatalf("unsafe upstream error: %d %s (want %d)", resp.StatusCode, body, want)
+		}
+	}
+	resp, body = getJSON(t, client, strings.Split(endpoint, "?")[0])
+	if resp.StatusCode != 400 {
+		t.Fatalf("missing credential accepted: %d %s", resp.StatusCode, body)
+	}
+	if _, err := repo.SQL().Exec("DROP TABLE audit_events"); err != nil {
+		t.Fatal(err)
+	}
+	resp, body = doJSON(t, client, http.MethodPut, endpoint,
+		`{"account_key":"`+account+`","enabled":true,"before_expiry_seconds":900}`)
+	if resp.StatusCode != 500 || writes.Load() != 1 {
+		t.Fatalf("unaudited consent reached CPA: %d %s", resp.StatusCode, body)
+	}
+}
 
 func TestManagementQuotaEndpoints(t *testing.T) {
 	const managementKey = "management-secret"

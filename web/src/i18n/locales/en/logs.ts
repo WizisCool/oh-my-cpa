@@ -165,6 +165,7 @@ export default {
   'audit.action.quota.refresh': 'Refreshed quota',
   'audit.action.quota.clear_cooldown': 'Cleared a cooldown',
   'audit.action.quota.redeem_credit': 'Redeemed a credit',
+  'audit.action.quota.codex_reset_policy': 'Changed automatic reset consent',
   'audit.action.quota.reset': 'Reset quota',
   'audit.action.pricing.sync.start': 'Synced model prices',
   'audit.action.pricing.models.update': 'Updated model prices',
