@@ -178,8 +178,9 @@ type Container struct {
 	Config       map[string]any `json:"Config"`
 	HostConfig   map[string]any `json:"HostConfig"`
 	State        struct {
-		Running bool `json:"Running"`
-		Health  *struct {
+		Running    bool `json:"Running"`
+		Restarting bool `json:"Restarting"`
+		Health     *struct {
 			Status string `json:"Status"`
 		} `json:"Health"`
 	} `json:"State"`

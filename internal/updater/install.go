@@ -22,10 +22,11 @@ const LINK_NETWORK = "oh-my-cpa-updater"
 
 // Environment variables an updater container is configured with.
 const (
-	ENV_LISTEN_ADDR   = "OMCPA_UPDATER_LISTEN_ADDR"
-	ENV_SOCKET        = "OMCPA_UPDATER_SOCKET"
-	ENV_OMC_CONTAINER = "OMCPA_UPDATER_OMC_CONTAINER"
-	ENV_CPA_CONTAINER = "OMCPA_UPDATER_CPA_CONTAINER"
+	ENV_LISTEN_ADDR    = "OMCPA_UPDATER_LISTEN_ADDR"
+	ENV_SOCKET         = "OMCPA_UPDATER_SOCKET"
+	ENV_OMC_CONTAINER  = "OMCPA_UPDATER_OMC_CONTAINER"
+	ENV_CPA_CONTAINER  = "OMCPA_UPDATER_CPA_CONTAINER"
+	ENV_HEALTH_TIMEOUT = "OMCPA_UPDATER_HEALTH_TIMEOUT"
 	// ENV_SELF_CONTAINER names this updater's own container, for a deployment whose
 	// shared network namespace makes the hostname look like another container's.
 	ENV_SELF_CONTAINER = "OMCPA_UPDATER_SELF_CONTAINER"
@@ -114,6 +115,9 @@ func Install(ctx context.Context, options InstallOptions) error {
 	}
 	if options.CPAContainer != "" {
 		environment = append(environment, ENV_CPA_CONTAINER+"="+options.CPAContainer)
+	}
+	if timeout := envOr(ENV_HEALTH_TIMEOUT, ""); timeout != "" {
+		environment = append(environment, ENV_HEALTH_TIMEOUT+"="+timeout)
 	}
 	sidecarID, err := engine.CreateContainer(ctx, SIDECAR_NAME, map[string]any{
 		"Image": self.ImageReference(),

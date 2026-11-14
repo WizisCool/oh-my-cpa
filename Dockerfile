@@ -51,6 +51,6 @@ ENV OMCPA_DATA_DIR=/data
 USER 10001:10001
 VOLUME ["/data"]
 EXPOSE 8080
-HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=5s --start-period=180s --retries=3 \
     CMD sh /usr/local/bin/omc-healthcheck
 ENTRYPOINT ["/usr/local/bin/oh-my-cpa"]
