@@ -84,6 +84,16 @@ write-behind batch under the same serialized backup-and-write gate (callers requ
 synchronous persistence pass `X-OMC-Sync: 1`); structural saves and Agent writes flush
 pending batches first so revisions and readbacks never observe unpersisted drift.
 
+External file edits and writes through other management clients are reconciled by
+periodically checking CPA's persisted configuration and a fingerprint of its applied
+runtime configuration. A changed baseline replaces the full
+in-memory projection before connected consoles are notified; failed reads retain the
+last successful baseline and are retried. Pending batches validate their baseline
+before their first write, and a stale batch reports a conflict and reloads upstream
+state. The configuration revision identifies the persisted document, not completion
+of CPA's runtime hot reload. Applied-runtime changes are observed separately, so a
+later hot reload cannot remain hidden behind an unchanged file revision.
+
 The visual editor exposes shared Claude header settings through the
 [configuration schema](../web/src/types/configSchema.ts) and the existing change-set
 path. Native-client entrypoint labels extend CPA's built-in entries and still require

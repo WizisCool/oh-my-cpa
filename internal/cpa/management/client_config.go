@@ -198,18 +198,30 @@ func (c *Client) ConfigView(ctx context.Context) (map[string]any, ResponseMeta, 
 // document every v8 write is based on, with secrets included. Reading it never
 // migrates the stored file.
 func (c *Client) ConfigYAML(ctx context.Context) (string, error) {
+	yaml, _, err := c.ConfigYAMLWithMeta(ctx)
+	return yaml, err
+}
+
+// ConfigYAMLWithMeta includes CPA's stored-file ETag, which is distinct from
+// the revision of the normalized YAML view.
+func (c *Client) ConfigYAMLWithMeta(ctx context.Context) (string, ResponseMeta, error) {
 	if c == nil {
-		return "", errors.New("CPA client is not initialized")
+		return "", ResponseMeta{}, errors.New("CPA client is not initialized")
 	}
 	request, err := c.newRequest(ctx, http.MethodGet, "/config.yaml", nil, "")
 	if err != nil {
-		return "", err
+		return "", ResponseMeta{}, err
 	}
-	data, _, err := c.doBytes(request, CONFIG_YAML_LIMIT)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
+	data, meta, err := c.doBytes(request, CONFIG_YAML_LIMIT)
+	return string(data), meta, err
+}
+
+type configWriteObserverKey struct{}
+
+// WithConfigWriteObserver reports each accepted configuration write's stored-file
+// ETag. An empty tag means the gateway could not certify its saved version.
+func WithConfigWriteObserver(ctx context.Context, observe func(string)) context.Context {
+	return context.WithValue(ctx, configWriteObserverKey{}, observe)
 }
 
 // UpdateConfigYAML replaces the whole configuration with a v8 document. CPA
@@ -280,6 +292,9 @@ func (c *Client) writeConfigAt(ctx context.Context, method, endpoint string, dat
 		return err
 	}
 	*version = meta.Header.Get("ETag")
+	if observe, ok := ctx.Value(configWriteObserverKey{}).(func(string)); ok {
+		observe(*version)
+	}
 	return nil
 }
 

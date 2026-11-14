@@ -1,7 +1,11 @@
 package management
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 )
@@ -12,6 +16,7 @@ import (
 // request is sent, v0 ones included. Every one of them is a read, for one of
 // two reasons:
 //
+//   - Applied runtime configuration, fingerprinted to observe asynchronous hot reloads.
 //   - Runtime fields v8 does not offer. Only the v0 per-family credential lists
 //     (`/<family>-api-key`, `/openai-compatibility`) carry each upstream key's
 //     `auth-index`, the identifier usage attribution, quota and key disablement
@@ -50,4 +55,32 @@ func (c *Client) StoredConfigYAML(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+// RuntimeConfigRevision fingerprints CPA's applied configuration independently
+// from its persisted YAML. File saves can precede the asynchronous hot reload.
+// Only the digest escapes this method; the secret-bearing payload is not cached.
+func (c *Client) RuntimeConfigRevision(ctx context.Context) (string, error) {
+	if c == nil {
+		return "", errors.New("CPA client is not initialized")
+	}
+	data, err := c.doV0Bytes(ctx, http.MethodGet, "/config", CONFIG_YAML_LIMIT)
+	if err != nil {
+		if IsMissingCapability(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var value map[string]any
+	if err := decoder.Decode(&value); err != nil {
+		return "", errors.New("decode CPA runtime configuration")
+	}
+	canonical, err := json.Marshal(value)
+	if err != nil {
+		return "", errors.New("fingerprint CPA runtime configuration")
+	}
+	sum := sha256.Sum256(canonical)
+	return hex.EncodeToString(sum[:]), nil
 }

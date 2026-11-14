@@ -338,7 +338,7 @@ func (h *Handler) readProviderItemsCore(ctx context.Context, client *management.
 			openAIFailed  bool
 			hasAnyFailure bool
 		}
-		env, err := statecoord.ProjectTyped(ctx, h.stateCoord, func(state projectedConfigState, _ uint64) (projectedProviderInput, error) {
+		projectInput := func(state projectedConfigState, _ uint64) (projectedProviderInput, error) {
 			fams := make(map[management.ConfigKeyFamily][]management.ConfigAPIKey, len(state.ConfigFamilies))
 			for fam, list := range state.ConfigFamilies {
 				fams[fam] = cloneConfigAPIKeys(list)
@@ -350,7 +350,8 @@ func (h *Handler) readProviderItemsCore(ctx context.Context, client *management.
 				openAIFailed:  state.OpenAISliceFailed,
 				hasAnyFailure: state.ProviderSliceFailed,
 			}, nil
-		})
+		}
+		env, err := statecoord.ProjectTyped(ctx, h.stateCoord, projectInput)
 		if err == nil {
 			input := env.Data
 			stillAnyFailure := false
@@ -395,27 +396,30 @@ func (h *Handler) readProviderItemsCore(ctx context.Context, client *management.
 					}
 				}
 				if len(recoveredFamilies) > 0 || didRecoverOpenAI {
-					h.stateCoord.UpdateBaseline(func(state *projectedConfigState, _ bool) {
+					h.stateCoord.RefreshCleanBaseline(env.Version, func(state *projectedConfigState) {
 						for fam, entries := range recoveredFamilies {
-							if len(state.PendingFamilyToggles[fam]) == 0 {
-								state.ConfigFamilies[fam] = cloneConfigAPIKeys(entries)
-							}
-							delete(state.FailedProviderFamilies, fam)
+							state.ConfigFamilies[fam] = cloneConfigAPIKeys(entries)
 							if recoveredRuntimeOnly[fam] {
 								state.RuntimeOnlyFam[fam] = true
+								state.FailedProviderFamilies[fam] = true
 							} else {
 								delete(state.RuntimeOnlyFam, fam)
+								delete(state.FailedProviderFamilies, fam)
 							}
 						}
 						if didRecoverOpenAI {
-							if len(state.PendingOpenAIToggles) == 0 {
-								state.OpenAICompat = cloneOpenAICompatEntries(recoveredOpenAI)
-							}
-							state.OpenAISliceFailed = false
+							state.OpenAICompat = cloneOpenAICompatEntries(recoveredOpenAI)
+							state.OpenAISliceFailed = recoveredOpenAIRuntime
 							state.OpenAIRuntime = recoveredOpenAIRuntime
 						}
 						state.ProviderSliceFailed = state.OpenAISliceFailed || len(state.FailedProviderFamilies) > 0
 					})
+					// Return the accepted generation, never a discarded recovery result.
+					stillAnyFailure = true
+					if latest, err := statecoord.ProjectTyped(ctx, h.stateCoord, projectInput); err == nil {
+						env, input = latest, latest.Data
+						stillAnyFailure = input.hasAnyFailure
+					}
 				}
 			}
 			items := projectProviderItemsFromRaw(input.families, input.openAI, customNames, customWebsites, testModels)
