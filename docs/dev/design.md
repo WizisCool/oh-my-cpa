@@ -285,12 +285,38 @@ drag. On a wide screen it stays hidden along the row's leading edge until the po
 reaches that edge, so it takes no column. On a phone it sits inline with the row's
 controls. Rows sort live, without dimming, and travel only along the list. The drop
 keeps the order on screen until the stored preference arrives. A focused handle moves
-its row with the arrow keys. A display order is presentation only: routing priority and
-weight belong to the routing board. A new list takes
+its row with the arrow keys. A grid of [entity cards](#entity-cards) takes the same component
+with `layout="grid"`: a card travels anywhere inside the grid, never past its edges, and its
+focused handle steps it one place earlier or later with any arrow key. A display order is
+presentation only: routing priority and weight belong to the routing board. A new list takes
 [`useSortableList`](../../web/src/hooks/useSortableList.ts) rather than its own preference
 wiring: a grouped order document when its keys are stable, such as credential file names, or a
 rank document of its own when they carry a provider's positional id, which the server re-keys
 with the other provider overlays when a delete or move shifts later entries.
+
+## Entity cards
+
+A grid of records of one kind (installed plugins, the plugin store, any catalogue the operator
+browses) draws every record on one anatomy,
+[`EntityCard`](../../web/src/components/common/EntityCard.tsx), whatever state the record is in.
+An installed card and an available one differ in what their slots hold, never in where the slots
+are, so the grid scans across as well as down.
+
+| Part | Holds | Never |
+| --- | --- | --- |
+| Head | The mark tile, the name and one secondary line (`MetaLine`: version, author), cut to one line rather than folded. Its trailing corner holds at most one labelled action that moves the record forward (Install, Update); every other tool there is a glyph (`ToolButton`: settings, then the overflow menu) | A row of badges on the name line; a second labelled action, which squeezes the name |
+| Body | The description, clamped to a few lines (a tooltip completes it), then a quiet line of facts and a row of small tags for origin, capabilities and categories, on the card's own ground | An inset panel, wash or second edge: a card inside a card |
+| Foot | The record's state on the leading side (`StatusLabel`, or origin and state tags), and its switch, with a pending action on it such as an available update beside the switch, or its outbound links on the trailing side | A rule above it; spacing sets it apart |
+
+Places are fixed so the reader learns them once: the switch is always bottom right, the menu
+always top right, the state always bottom left. A card is not pressable as a whole, so it keeps
+its resting edge under the pointer and lifts only while it is in the hand. A
+featured section may draw its cards larger, never with a different anatomy.
+
+The card is a summary, and its drawer is the next layer: the drawer's head states the record's
+identity once, and the sections below it hold only what the card does not. Managing a record
+opens its drawer where the reader stands, whichever grid the card is in, rather than sending the
+reader to another page to open it there.
 
 ## Information expression
 
@@ -308,6 +334,12 @@ reads as one undifferentiated line. Pick the structure the content already has:
 | An action on a target, as an accessible name | `common.action_on`: `Move earlier: Playground` |
 | A title and its secondary line | Two elements with two inks, never one joined string |
 | Several active filters | Separate chips (`FilterDisclosure` takes a list) |
+
+A detail view says each fact once. A drawer or dialog does not repeat what its head already
+states: a provenance fact the head lacks (a licence, a recorded homepage) joins the head's
+`MetaLine`, and a section exists only for facts found nowhere else on it. A control's fallback is
+said once, by its placeholder or by the control's own default state, never again in a line under
+it.
 
 A field's description goes under the control through `Field`'s `extra`, not after the label.
 Catalog sentences follow the same rule: write the relation in words or parentheses instead of

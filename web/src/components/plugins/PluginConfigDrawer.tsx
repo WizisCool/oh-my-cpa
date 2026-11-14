@@ -33,7 +33,8 @@ import {
   type PluginFieldDraft,
   type PluginFieldError,
 } from './pluginConfigForm';
-import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta, PluginOriginBadge, PluginStateLabel } from './PluginParts';
+import { formatPluginVersion, PluginLinks, PluginLogo, PluginOriginBadge, PluginStateLabel } from './PluginParts';
+import { MetaLine } from '../common/MetaLine';
 import { collectPluginPages } from './pluginPages';
 import styles from './Plugins.module.css';
 import { useConfirmModal, useToast } from '../feedback';
@@ -189,12 +190,19 @@ export function PluginConfigDrawer({ plugin, listing, isPluginSystemEnabled, isD
   };
 
   const metadata = plugin ? selectInstalledPluginMetadata(plugin, listing, lang) : undefined;
-  const name = metadata?.name ?? '';
-  const version = formatPluginVersion(plugin?.metadata?.version || listing?.installed_version);
+  // What CPA recorded when it installed the plugin fills in what the plugin and its listing leave out;
+  // the head states it once rather than a section of its own repeating the head.
+  const installRecord = React.useMemo(() => (saved ? readPluginInstallRecord(saved) : undefined), [saved]);
+  // The selector falls back to the plugin id; a recorded name takes precedence over that fallback.
+  const name = metadata?.name && metadata.name !== plugin?.id
+    ? metadata.name
+    : installRecord?.name || metadata?.name || '';
+  const version = formatPluginVersion(plugin?.metadata?.version || listing?.installed_version || installRecord?.version);
+  const author = metadata?.author || installRecord?.author;
+  const description = metadata?.description || installRecord?.description;
   // Only the registry that supplied the installed copy can say whose code it is.
   const origin = installedPluginOrigin(listing);
   const pages = React.useMemo(() => (plugin ? collectPluginPages([plugin]) : []), [plugin]);
-  const installRecord = mode === 'form' ? readPluginInstallRecord(base) : undefined;
   const openPage = (route: string) => {
     if (isDirty) {
       toast.warning(t('plugin.config_save_before_leaving'));
@@ -246,26 +254,30 @@ export function PluginConfigDrawer({ plugin, listing, isPluginSystemEnabled, isD
                   {origin && <PluginOriginBadge origin={origin} />}
                 </span>
               </div>
-              <PluginMeta items={[<span key="id" className={styles['plugin-id']}>{plugin.id}</span>, version && <span key="v" className={styles['meta-strong']}>{version}</span>, metadata?.author]} />
-              {metadata?.description && <p className={styles.description}>{metadata.description}</p>}
+              <MetaLine tone="quiet" className={styles['card-facts']}>
+                <span className={styles['plugin-id']}>{plugin.id}</span>
+                {version && <span className={styles['meta-strong']}>{version}</span>}
+                {author ?? ''}
+                {installRecord?.license ?? ''}
+              </MetaLine>
+              {description && <p className={styles.description}>{description}</p>}
+              {pages.length > 0 && (
+                <span className={styles['page-links']} data-plugin-config-pages>
+                  {pages.map((page) => (
+                    <Button key={page.route} size="sm" variant="link" icon={<AppstoreOutlined />} onClick={() => openPage(page.route)}>
+                      {pages.length > 1 ? page.label : t('plugin.open_page', { name: page.label })}
+                    </Button>
+                  ))}
+                </span>
+              )}
             </div>
             <span className={styles['config-hero-links']}>
-              <PluginLinks repositoryURL={plugin.repository_url || listing?.repository_url} homepage={metadata?.homepage} />
+              <PluginLinks
+                repositoryURL={plugin.repository_url || listing?.repository_url || installRecord?.repository}
+                homepage={metadata?.homepage || installRecord?.homepage}
+              />
             </span>
           </header>
-
-          {pages.length > 0 && (
-            <div className={styles['config-pages']} data-plugin-config-pages>
-              <span className={styles['config-field-desc']}>{t('plugin.config_pages_hint')}</span>
-              <span className={styles['page-links']}>
-                {pages.map((page) => (
-                  <Button key={page.route} size="sm" variant="active" icon={<AppstoreOutlined />} onClick={() => openPage(page.route)}>
-                    {pages.length > 1 ? page.label : t('plugin.open_page', { name: page.label })}
-                  </Button>
-                ))}
-              </span>
-            </div>
-          )}
 
           <SectionHeading
             className={styles['config-mode-head']}
@@ -294,10 +306,7 @@ export function PluginConfigDrawer({ plugin, listing, isPluginSystemEnabled, isD
               <section className={styles['config-section']}>
                 <SectionHeading level="label" className={styles['config-section-title']} title={t('plugin.config_base')} />
                 <div className={styles['config-field']}>
-                  <div>
-                    <div className={styles['config-field-label']}>enabled</div>
-                    <div className={styles['config-field-desc']}>{t('plugin.config_enabled_hint')}</div>
-                  </div>
+                  <div className={styles['config-field-label']}>enabled</div>
                   <div className={styles['config-control']}>
                     <Switch
                       checked={draft.enabled}
@@ -344,23 +353,6 @@ export function PluginConfigDrawer({ plugin, listing, isPluginSystemEnabled, isD
                   />
                 ))}
               </section>
-
-              {installRecord && (
-                <section className={styles['config-section']} data-plugin-install-record>
-                  <SectionHeading level="label" className={styles['config-section-title']} title={t('plugin.config_install_record')} />
-                  <PluginMeta
-                    items={[
-                      installRecord.name,
-                      formatPluginVersion(installRecord.version),
-                      installRecord.author,
-                      installRecord.license,
-                    ]}
-                  />
-                  {installRecord.description && <p className={styles.description}>{installRecord.description}</p>}
-                  <PluginLinks repositoryURL={installRecord.repository} homepage={installRecord.homepage} />
-                  <p className={styles['config-field-desc']}>{t('plugin.config_install_record_hint')}</p>
-                </section>
-              )}
 
               {extraKeys.length > 0 && (
                 <section className={styles['config-section']}>
@@ -520,9 +512,7 @@ function ConfigFieldRow({ field, draft, error, isChanged, isReadOnly, onChange, 
             </Tooltip>
           )}
         </div>
-        {error
-          ? <span className={styles['field-error']}>{t(FIELD_ERROR_KEYS[error])}</span>
-          : !draft.isSet && <span className={styles['config-field-default']} data-plugin-config-default>{t('plugin.field_unset')}</span>}
+        {error && <span className={styles['field-error']}>{t(FIELD_ERROR_KEYS[error])}</span>}
       </div>
     </div>
   );
