@@ -327,7 +327,7 @@ func (h *Handler) deleteProvider(ctx context.Context, client *management.Client,
 	case openAICompatibilityFamily:
 		if err := gatedProviderListWrite(h, ctx,
 			func(ctx context.Context) ([]management.OpenAICompatibility, error) {
-				if snapErr := h.snapshotProvidersBeforeDelete(ctx, client, openAICompatibilityFamily); snapErr != nil {
+				if snapErr := h.snapshotProvidersBeforeDelete(ctx, client); snapErr != nil {
 					return nil, snapErr
 				}
 				return client.EditableOpenAICompatibility(ctx)

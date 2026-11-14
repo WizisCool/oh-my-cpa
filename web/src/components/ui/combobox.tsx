@@ -713,7 +713,7 @@ export function Combobox<
                               e.stopPropagation();
                               removeSelectedValue(val);
                             }}
-                            className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-xs text-muted-foreground hover:text-foreground"
+                            className="relative z-[1] inline-flex size-3.5 shrink-0 items-center justify-center rounded-xs text-muted-foreground hover:text-foreground"
                           >
                             <X className="size-2.5" />
                           </span>
@@ -747,7 +747,7 @@ export function Combobox<
                     e.stopPropagation();
                     clearAll();
                   }}
-                  className="inline-flex size-4 items-center justify-center rounded-xs text-muted-foreground transition-colors hover:bg-hover-inset hover:text-foreground"
+                  className="relative z-[1] inline-flex size-4 items-center justify-center rounded-xs text-muted-foreground transition-colors hover:bg-hover-inset hover:text-foreground"
                 >
                   <X className="size-3" />
                 </span>

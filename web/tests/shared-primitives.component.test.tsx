@@ -1120,3 +1120,58 @@ describe('DataTable row slots', () => {
     expect(rows[0].getAttribute('data-custom-row')).toBe('true');
   });
 });
+
+describe('Select and Combobox inline action controls', () => {
+  it('elevates Select clear button above the trigger touch pseudo-element and clears without opening', () => {
+    const onChange = vi.fn();
+    const onOpenChange = vi.fn();
+    renderWithOmc(
+      <Select
+        aria-label="Choose option"
+        value="alpha"
+        allowClear
+        onChange={onChange}
+        onOpenChange={onOpenChange}
+        options={[{ value: 'alpha', label: 'Alpha' }]}
+      />,
+    );
+    const clearBtn = screen.getByRole('button', { name: 'Clear' });
+    expect(clearBtn.className).toContain('relative');
+    expect(clearBtn.className).toContain('z-[1]');
+    fireEvent.click(clearBtn);
+    expect(onChange).toHaveBeenCalledWith(undefined);
+    expect(onOpenChange).not.toHaveBeenCalledWith(true);
+  });
+
+  it('elevates Combobox tag-remove and clear buttons above the trigger touch pseudo-element', () => {
+    const onChange = vi.fn();
+    const onOpenChange = vi.fn();
+    renderWithOmc(
+      <Combobox
+        aria-label="Models"
+        mode="multiple"
+        allowClear
+        value={['m1', 'm2']}
+        onChange={onChange}
+        onOpenChange={onOpenChange}
+        options={[
+          { value: 'm1', label: 'Model One' },
+          { value: 'm2', label: 'Model Two' },
+        ]}
+      />,
+    );
+    const removeOne = screen.getByRole('button', { name: 'Remove m1' });
+    const clearAll = screen.getByRole('button', { name: 'Clear' });
+    expect(removeOne.className).toContain('relative');
+    expect(removeOne.className).toContain('z-[1]');
+    expect(clearAll.className).toContain('relative');
+    expect(clearAll.className).toContain('z-[1]');
+
+    fireEvent.click(removeOne);
+    expect(onChange.mock.calls[0][0]).toEqual(['m2']);
+    expect(onOpenChange).not.toHaveBeenCalledWith(true);
+
+    fireEvent.click(clearAll);
+    expect(onChange.mock.calls[1][0]).toEqual([]);
+  });
+});

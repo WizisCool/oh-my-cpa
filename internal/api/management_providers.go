@@ -83,7 +83,8 @@ type ProviderItemDTO struct {
 
 	// runtimeKeys stays internal so non-reveal projections can recover disabled
 	// auth_indexes and record key masks without exposing plaintext keys in JSON.
-	runtimeKeys []providerRuntimeKey
+	runtimeKeys          []providerRuntimeKey
+	recoveredAuthIndexes map[string]bool
 }
 
 // providerConfigFamilySpec describes one of CPA's config API-key credential

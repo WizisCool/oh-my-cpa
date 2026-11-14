@@ -4,6 +4,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { DropdownCaret } from '@/components/ui/dropdown-caret';
 import {
   CheckCircleOutlined,
+  CheckSquareOutlined,
   StopOutlined,
   DeleteOutlined,
   CloseOutlined,
@@ -77,8 +78,15 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
             <DropdownMenuTrigger
               disabled={isMutating || !isSelectionReady}
               render={(
-                <Button size="sm" variant="ghost" className={styles['scope-menu']} disabled={isMutating || !isSelectionReady}>
-                  {t('pro.select_all')}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className={styles['scope-menu']}
+                  icon={<CheckSquareOutlined />}
+                  aria-label={t('pro.select_all')}
+                  data-tip={t('pro.select_all')}
+                  disabled={isMutating || !isSelectionReady}
+                >
                   <DropdownCaret />
                 </Button>
               )}

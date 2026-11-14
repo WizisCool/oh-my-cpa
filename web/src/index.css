@@ -2807,12 +2807,14 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   [data-slot="select-trigger"],
   [data-slot="combobox-trigger"] {
     position: relative;
+    isolation: isolate;
   }
   [data-slot="select-trigger"]::before,
   [data-slot="combobox-trigger"]::before {
     content: '';
     position: absolute;
     inset: -4px 0;
+    z-index: 0;
   }
 }
 

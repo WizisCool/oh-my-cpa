@@ -39,7 +39,7 @@ export function RequestSelectionBar({
         <>
           {!isEveryLoadedSelected && (
             <Button variant="link" size="sm" onClick={onSelectLoaded}>
-              {t('events.select_all')}
+              <span className="truncate">{isPhone ? t('pro.select_all') : t('events.select_all')}</span>
             </Button>
           )}
           {!isPhone && (

@@ -95,7 +95,7 @@ function SelectTrigger({
               e.stopPropagation();
               onClear();
             }}
-            className="inline-flex size-4 items-center justify-center rounded-xs text-muted-foreground transition-colors hover:bg-hover-inset hover:text-foreground"
+            className="relative z-[1] inline-flex size-4 items-center justify-center rounded-xs text-muted-foreground transition-colors hover:bg-hover-inset hover:text-foreground"
           >
             <X className="size-3" />
           </span>

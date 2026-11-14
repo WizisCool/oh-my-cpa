@@ -18,9 +18,11 @@ import { replayPlaygroundChat } from '../../src/demo/playgroundReplay.ts';
 import playgroundRecording from '../../src/demo/playgroundRecording.json' with { type: 'json' };
 import { resolveRecording } from '../../src/demo/recordingTemplate.ts';
 import {
+  buildSandboxIdentityArchive,
   countDemoSandboxChanges,
   interceptDemoRequest,
   resetDemoSandbox,
+  type DemoSandboxState,
 } from '../../src/demo/sandbox.ts';
 import { readDemoConversation, resetDemoConversation, writeDemoQuestion } from '../../src/demo/session.ts';
 import { applyEvent } from '../../src/pages/playground/state.ts';
@@ -452,4 +454,116 @@ test('demo sandbox isolates provider, api key, routing, and reset state', async 
   } finally {
     resetDemoSandbox();
   }
+});
+
+test('sandbox archive marks conflicting deleted baseline providers ambiguous without persisted snapshots', () => {
+  const emptyState: DemoSandboxState = {
+    version: 1,
+    revisionSeq: 1,
+    preferences: {},
+    apiKeys: { aliasesByFingerprint: {} },
+    providers: {
+      byId: {},
+      deletedIds: ['openai-compat-0', 'openai-compat-1'],
+      statusOverrides: {},
+      nameOverrides: {},
+    },
+    config: { backupYamlById: {} },
+    authFiles: {
+      created: [],
+      deletedNames: [],
+      statusOverrides: {},
+      displayNameOverrides: {},
+      safeFieldsOverrides: {},
+      recoveredNames: {},
+      siwcOverrides: {},
+    },
+    routing: { settingsOverrides: {}, memberOverrides: {} },
+    plugins: { enabledOverrides: {}, deletedIds: [], installed: [], configs: {} },
+    pricing: { modelOverrides: {}, channelModelOverrides: {}, dismissedCandidates: {}, channelOverrides: {} },
+    quota: { clearedCooldowns: {}, refreshedAt: {}, resetAt: {}, redeemedCredits: {}, warmupRunsAdded: [] },
+    customIcons: { created: [], updated: {}, deletedIds: [], dataUrls: {} },
+    fonts: { deletedIds: [] },
+    system: {},
+    auditTrail: [],
+    extraLogLines: [],
+  };
+
+  const provBase = {
+    total: 2,
+    providers: [
+      {
+        id: 'openai-compat-0',
+        family: 'openai-compatibility',
+        name: 'Relay',
+        upstream_name: 'relay',
+        protocol: 'OpenAI Chat Completions',
+        base_url: 'https://relay-alpha.example/v1',
+        auth_indexes: ['idx-shared'],
+        disabled: false,
+        key_configured: true,
+        api_key: 'sk-alpha-1111',
+        proxy_configured: false,
+      },
+      {
+        id: 'openai-compat-1',
+        family: 'openai-compatibility',
+        name: 'Relay',
+        upstream_name: 'relay',
+        protocol: 'OpenAI Chat Completions',
+        base_url: 'https://relay-beta.example/v1',
+        auth_indexes: ['idx-shared'],
+        disabled: false,
+        key_configured: true,
+        api_key: 'sk-beta-2222',
+        proxy_configured: false,
+      },
+    ],
+  };
+
+  const conflictArchive = buildSandboxIdentityArchive(undefined, provBase, undefined, emptyState, {});
+  assert.equal(conflictArchive.archivedProviders.length, 1);
+  assert.equal(conflictArchive.archivedProviders[0].provider_key, 'openai-compatible-relay');
+  assert.equal(conflictArchive.archivedProviders[0].is_ambiguous, true);
+  assert.equal(conflictArchive.archivedCredentials.length, 1);
+  assert.equal(conflictArchive.archivedCredentials[0].auth_index, 'idx-shared');
+  assert.equal(conflictArchive.archivedCredentials[0].is_ambiguous, true);
+
+  // Single renamed baseline provider matching baseDir immutable claim retains its sandbox name without false ambiguity.
+  const singleRenamedState: DemoSandboxState = {
+    ...emptyState,
+    providers: {
+      ...emptyState.providers,
+      deletedIds: ['openai-compat-0'],
+      nameOverrides: { 'openai-compat-0': 'Relay Custom' },
+    },
+  };
+  const baseDir = {
+    providers: [],
+    credentials: [],
+    plugins: [],
+    provider_icons: {},
+    archived_credentials: [],
+    archived_providers: [
+      {
+        provider_key: 'openai-compatible-relay',
+        kind: 'ai_provider' as const,
+        name: 'Relay',
+        upstream_name: 'relay',
+        family: 'openai-compatibility',
+        base_url: 'https://relay-alpha.example/v1',
+      },
+    ],
+    catalog_status: { providers_known: true, credentials_known: true, plugins_known: true },
+  };
+  const singleArchive = buildSandboxIdentityArchive(
+    baseDir,
+    { total: 1, providers: [provBase.providers[0]] },
+    undefined,
+    singleRenamedState,
+    {},
+  );
+  assert.equal(singleArchive.archivedProviders.length, 1);
+  assert.equal(singleArchive.archivedProviders[0].name, 'Relay Custom');
+  assert.ok(!singleArchive.archivedProviders[0].is_ambiguous);
 });

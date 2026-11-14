@@ -250,6 +250,10 @@ func (h *Handler) recoverDisabledProviderAuthIndexes(ctx context.Context, items 
 			}
 			if !already {
 				items[p.itemIdx].AuthIndexes = append(items[p.itemIdx].AuthIndexes, recoveredIdx)
+				if items[p.itemIdx].recoveredAuthIndexes == nil {
+					items[p.itemIdx].recoveredAuthIndexes = make(map[string]bool)
+				}
+				items[p.itemIdx].recoveredAuthIndexes[recoveredIdx] = true
 			}
 		}
 	}
@@ -348,6 +352,7 @@ func (h *Handler) observeProviderIdentities(ctx context.Context, items []Provide
 				Kind:           "apikey",
 				ProviderKey:    providerKey,
 				ProviderFamily: item.Family,
+				IsRecovered:    item.recoveredAuthIndexes[idx],
 				IsAmbiguous:    isAmb,
 			}
 			if !isAmb {
@@ -362,10 +367,15 @@ func (h *Handler) observeProviderIdentities(ctx context.Context, items []Provide
 		}
 	}
 
+	recoveredFlags := make([]bool, len(credEntries))
+	for i, c := range credEntries {
+		recoveredFlags[i] = c.IsRecovered
+	}
 	digest := archiveDigest(struct {
-		Creds []repository.ArchivedCredential
-		Provs []repository.ArchivedProvider
-	}{Creds: credEntries, Provs: provEntries})
+		Creds     []repository.ArchivedCredential
+		Recovered []bool
+		Provs     []repository.ArchivedProvider
+	}{Creds: credEntries, Recovered: recoveredFlags, Provs: provEntries})
 	if h.identityArchive.matchesProviders(digest) {
 		return nil
 	}
@@ -634,57 +644,17 @@ func (h *Handler) snapshotAuthFilesBeforeDelete(ctx context.Context, client *man
 	return nil
 }
 
-func (h *Handler) snapshotProvidersBeforeDelete(ctx context.Context, client *management.Client, requiredFamily string) error {
+func (h *Handler) snapshotProvidersBeforeDelete(ctx context.Context, client *management.Client) error {
 	if h == nil || h.repo == nil || h.cfg.IsDemoMode || client == nil {
 		return nil
 	}
 	items, known := h.readProviderItemsUpstreamWithStatus(ctx, client)
 	if !known {
-		hasRequired := false
-		for _, item := range items {
-			if strings.EqualFold(item.Family, requiredFamily) {
-				hasRequired = true
-				break
-			}
-		}
-		if !hasRequired {
-			// Verify whether the target family itself is readable (and legitimately empty)
-			// or whether it has entries that failed during the initial snapshot read.
-			targetCount := 0
-			if strings.EqualFold(requiredFamily, openAICompatibilityFamily) {
-				if entries, err := client.EditableOpenAICompatibility(ctx); err == nil {
-					targetCount = len(entries)
-				} else if runtime, runErr := client.OpenAICompatibility(ctx); runErr == nil {
-					targetCount = len(runtime.Entries)
-				} else {
-					return runErr
-				}
-			} else if spec, ok := lookupProviderConfigFamily(requiredFamily); ok {
-				if entries, err := client.EditableConfigAPIKeys(ctx, spec.Family); err == nil {
-					targetCount = len(entries)
-				} else if runtimeEntries, runErr := client.ConfigAPIKeys(ctx, spec.Family); runErr == nil {
-					targetCount = len(runtimeEntries)
-				} else {
-					return runErr
-				}
-			}
-			if targetCount > 0 {
-				return newProviderWriteErrorWithCode(
-					http.StatusInternalServerError,
-					"failed to archive provider metadata before deletion",
-					providerArchiveFailedCode,
-				)
-			}
-		}
-		// Even when the target family was present in items, another family failed during
-		// the snapshot read: refuse archiving an incomplete catalog as unambiguous.
-		if len(items) > 0 {
-			return newProviderWriteErrorWithCode(
-				http.StatusInternalServerError,
-				"failed to archive provider metadata before deletion",
-				providerArchiveFailedCode,
-			)
-		}
+		return newProviderWriteErrorWithCode(
+			http.StatusInternalServerError,
+			"failed to archive provider metadata before deletion",
+			providerArchiveFailedCode,
+		)
 	}
 	if len(items) == 0 {
 		return nil

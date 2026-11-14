@@ -301,6 +301,32 @@
   .request-group-title {
     padding: 6px 12px;
   }
+  .request-selection-dock .selection-bar,
+  .request-selection-dock .selection-bar-start {
+    flex-wrap: nowrap;
+  }
+  .request-selection-dock .selection-bar {
+    gap: 8px;
+    padding: 6px;
+    padding-inline-start: 14px;
+  }
+  .request-selection-dock .selection-bar-start {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 8px;
+  }
+  .request-selection-dock .selection-bar-count {
+    flex-shrink: 0;
+  }
+  .request-selection-dock .selection-bar-start [data-slot="button"][data-variant="link"] {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .request-selection-dock .selection-bar-actions {
+    flex: none;
+    gap: 4px;
+  }
 }
 /* ── touch: one scroller, nothing to bounce ─────────────────────────────────
    On a phone, or wherever a finger is the main pointer, the page is exactly the content area
