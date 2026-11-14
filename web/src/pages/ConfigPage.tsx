@@ -94,7 +94,8 @@ export const ConfigPage: React.FC = () => {
     handleDiscardChanges,
     payloadIssues,
     stringMapIssues,
-    firstStringMapErrorMessage,
+    patternRulesIssues,
+    firstFieldErrorMessage,
     hasYamlErrors,
     hasConfigErrors,
     saveConfig,
@@ -206,10 +207,13 @@ export const ConfigPage: React.FC = () => {
     for (const fieldId of Object.keys(stringMapIssues)) {
       changed.add(fieldId);
     }
+    for (const fieldId of Object.keys(patternRulesIssues)) {
+      changed.add(fieldId);
+    }
     return changed;
     // rawYaml is the draft's revision: the refs are rewritten before it changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDirty, rawYaml, docRef, serverDocRef, stringMapIssues]);
+  }, [isDirty, rawYaml, docRef, serverDocRef, stringMapIssues, patternRulesIssues]);
   const changedSectionIds = React.useMemo(
     () => new Set(ALL_CONFIG_FIELDS.filter((field) => changedFieldIds.has(field.id)).map((field) => field.sectionId)),
     [changedFieldIds],
@@ -577,7 +581,7 @@ export const ConfigPage: React.FC = () => {
         isSaving={saveMutation.isPending}
         yamlError={hasYamlErrors}
         payloadIssuesCount={payloadIssues.length}
-        validationError={firstStringMapErrorMessage}
+        validationError={firstFieldErrorMessage}
         showErrorFeedback={showErrorFeedback}
         onSave={saveConfig}
         onDiscard={handleDiscardChanges}

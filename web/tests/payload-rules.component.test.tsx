@@ -200,3 +200,124 @@ it('edits sensitive-word replacement rows with interior spaces, IME composition,
     patchSpy.mockRestore();
   }
 });
+
+it('edits, reorders, validates, and rebases sensitive-patterns-replace rules', async () => {
+  const patchSpy = vi.spyOn(api, 'patchConfig');
+  const saveRef: React.MutableRefObject<(() => Promise<unknown>) | null> = { current: null };
+  const client = createTestQueryClient();
+  client.setQueryData(['management-config'], { scalars: {}, revision: 'fixture-r1', safe_yaml: 'server:\n  port: 8317\n' });
+  const { container } = renderWithOmc(<ConfigProviderMapDraft saveRef={saveRef} />, { client, isStrict: true });
+  try {
+    await waitFor(() => expect(screen.getByTestId('provider-map-draft').textContent).toBe('server:\n  port: 8317\n'));
+
+    fireEvent.click(screen.getByTestId('pattern-rules-add-antigravitySensitivePatternsReplace'));
+    expect(screen.getByTestId('provider-map-draft').textContent).toBe('server:\n  port: 8317\n');
+
+    // Entering a replacement without a pattern marks errors and blocks saving without writing partial YAML.
+    const rep0 = screen.getByTestId('pattern-rule-replacement-antigravitySensitivePatternsReplace-0') as HTMLInputElement;
+    fireEvent.compositionStart(rep0);
+    typeComposing(rep0, 'First', true);
+    fireEvent.compositionEnd(rep0);
+    expect(screen.getByTestId('provider-map-errors').textContent).toBe('true');
+    expect(screen.getByTestId('provider-map-draft').textContent).toBe('server:\n  port: 8317\n');
+    await act(async () => {
+      await saveRef.current?.();
+    });
+    expect(patchSpy).not.toHaveBeenCalled();
+
+    // Unsupported Go RE2 lookaround also blocks saving.
+    const pat0 = screen.getByTestId('pattern-rule-pattern-antigravitySensitivePatternsReplace-0') as HTMLInputElement;
+    fireEvent.change(pat0, { target: { value: 'foo(?=bar)' } });
+    expect(screen.getByTestId('provider-map-errors').textContent).toBe('true');
+    expect(container.querySelector('.pattern-rules-error')?.textContent).toContain('foo(?=bar)');
+    await act(async () => {
+      await saveRef.current?.();
+    });
+    expect(patchSpy).not.toHaveBeenCalled();
+
+    // Valid Go RE2 with trailing space and empty deletion replacement commits cleanly.
+    fireEvent.change(pat0, { target: { value: '(?i)claude ' } });
+    fireEvent.change(rep0, { target: { value: '' } });
+    expect(screen.getByTestId('provider-map-errors').textContent).toBe('false');
+    expect(screen.getByTestId('provider-map-draft').textContent).toContain('pattern: "(?i)claude "');
+    expect(screen.getByTestId('provider-map-draft').textContent).toContain('replacement: ""');
+
+    // Adding a second rule and moving it up swaps the YAML sequence order.
+    fireEvent.click(screen.getByTestId('pattern-rules-add-antigravitySensitivePatternsReplace'));
+    fireEvent.change(screen.getByTestId('pattern-rule-pattern-antigravitySensitivePatternsReplace-1'), { target: { value: 'second' } });
+    fireEvent.change(screen.getByTestId('pattern-rule-replacement-antigravitySensitivePatternsReplace-1'), { target: { value: 'two' } });
+    fireEvent.click(screen.getByTestId('pattern-rule-up-antigravitySensitivePatternsReplace-1'));
+    const reorderedYaml = screen.getByTestId('provider-map-draft').textContent ?? '';
+    expect(reorderedYaml.indexOf('pattern: second')).toBeLessThan(reorderedYaml.indexOf('pattern: "(?i)claude "'));
+
+    // Discard clears draft state, then a concurrent baseline refresh preserves incomplete rows.
+    fireEvent.click(screen.getByTestId('provider-map-discard'));
+    await waitFor(() => expect(screen.queryByTestId('pattern-rule-pattern-antigravitySensitivePatternsReplace-0')).toBeNull());
+    expect(screen.getByTestId('provider-map-errors').textContent).toBe('false');
+
+    act(() => {
+      client.setQueryData(['management-config'], {
+        scalars: {},
+        revision: 'fixture-r2',
+        safe_yaml: 'server:\n  port: 8317\noauth:\n  providers:\n    antigravity:\n      sensitive-patterns-replace:\n        - pattern: a\n          replacement: one\n',
+      });
+    });
+    await waitFor(() => expect((screen.getByTestId('pattern-rule-pattern-antigravitySensitivePatternsReplace-0') as HTMLInputElement).value).toBe('a'));
+
+    fireEvent.click(screen.getByTestId('pattern-rules-add-antigravitySensitivePatternsReplace'));
+    fireEvent.change(screen.getByTestId('pattern-rule-replacement-antigravitySensitivePatternsReplace-1'), { target: { value: 'two' } });
+    expect(screen.getByTestId('provider-map-errors').textContent).toBe('true');
+
+    act(() => {
+      client.setQueryData(['management-config'], {
+        scalars: {},
+        revision: 'fixture-r3',
+        safe_yaml: 'server:\n  port: 8317\noauth:\n  providers:\n    antigravity:\n      sensitive-patterns-replace:\n        - pattern: a\n          replacement: one\n        - pattern: concurrent\n          replacement: kept\n',
+      });
+    });
+    await waitFor(() => expect((screen.getByTestId('pattern-rule-pattern-antigravitySensitivePatternsReplace-2') as HTMLInputElement).value).toBe(''));
+    expect((screen.getByTestId('pattern-rule-pattern-antigravitySensitivePatternsReplace-1') as HTMLInputElement).value).toBe('concurrent');
+
+    fireEvent.change(screen.getByTestId('pattern-rule-pattern-antigravitySensitivePatternsReplace-2'), { target: { value: 'b' } });
+    expect(screen.getByTestId('provider-map-errors').textContent).toBe('false');
+    const finalYaml = screen.getByTestId('provider-map-draft').textContent ?? '';
+    expect(finalYaml).toContain('pattern: a');
+    expect(finalYaml).toContain('pattern: concurrent');
+    expect(finalYaml).toContain('pattern: b');
+
+    // Starting IME composition on rule B keeps its target row even if a baseline refresh prepends rule C.
+    fireEvent.click(screen.getByTestId('provider-map-discard'));
+    await waitFor(() => expect(screen.queryByTestId('pattern-rule-pattern-antigravitySensitivePatternsReplace-2')).toBeNull());
+    act(() => {
+      client.setQueryData(['management-config'], {
+        scalars: {},
+        revision: 'fixture-r4',
+        safe_yaml: 'server:\n  port: 8317\noauth:\n  providers:\n    antigravity:\n      sensitive-patterns-replace:\n        - pattern: A\n          replacement: repA\n        - pattern: B\n          replacement: repB\n',
+      });
+    });
+    await waitFor(() => expect((screen.getByTestId('pattern-rule-replacement-antigravitySensitivePatternsReplace-1') as HTMLInputElement).value).toBe('repB'));
+
+    const repBInput = screen.getByTestId('pattern-rule-replacement-antigravitySensitivePatternsReplace-1') as HTMLInputElement;
+    fireEvent.compositionStart(repBInput);
+    typeComposing(repBInput, 'b-comp', true);
+
+    act(() => {
+      client.setQueryData(['management-config'], {
+        scalars: {},
+        revision: 'fixture-r5',
+        safe_yaml: 'server:\n  port: 8317\noauth:\n  providers:\n    antigravity:\n      sensitive-patterns-replace:\n        - pattern: C\n          replacement: repC\n        - pattern: A\n          replacement: repA\n        - pattern: B\n          replacement: repB\n',
+      });
+    });
+    await waitFor(() => expect((screen.getByTestId('pattern-rule-pattern-antigravitySensitivePatternsReplace-0') as HTMLInputElement).value).toBe('C'));
+    // repBInput moved to index 2 and stayed attached to rule B.
+    expect(repBInput.value).toBe('b-comp');
+    typeComposing(repBInput, 'repB-final', true);
+    fireEvent.compositionEnd(repBInput);
+
+    const afterCompositionYaml = screen.getByTestId('provider-map-draft').textContent ?? '';
+    expect(afterCompositionYaml).toContain('pattern: A\n          replacement: repA');
+    expect(afterCompositionYaml).toContain('pattern: B\n          replacement: repB-final');
+  } finally {
+    patchSpy.mockRestore();
+  }
+});

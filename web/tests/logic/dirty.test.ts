@@ -76,6 +76,28 @@ test('An emptied string-map equals absence, while an empty-string replacement en
   assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, ALL_CONFIG_FIELDS), true);
 });
 
+test('Pattern rules preserve order sensitivity, explicit empty replacements, and clean deletion on clear', () => {
+  const ruleA = { pattern: 'foo', replacement: '' };
+  const ruleB = { pattern: 'bar', replacement: 'baz' };
+  assert.equal(areValuesSemanticallyEqual([ruleA, ruleB], [ruleB, ruleA]), false);
+  assert.equal(areValuesSemanticallyEqual([ruleA], undefined), false);
+  assert.equal(areValuesSemanticallyEqual([ruleA], []), false);
+  assert.equal(areValuesSemanticallyEqual([ruleA, ruleB], [ruleA, ruleB]), true);
+
+  const originalYaml = 'server:\n    port: 8317\n';
+  const serverDoc = parseDocument(originalYaml);
+  const currentDoc = parseDocument(originalYaml);
+  const agPatterns = schemaField('antigravitySensitivePatternsReplace');
+
+  updateFieldWithBaseline(currentDoc, serverDoc, agPatterns, [ruleA, ruleB]);
+  assert.equal(currentDoc.hasIn(['oauth', 'providers', 'antigravity', 'sensitive-patterns-replace']), true);
+  assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, ALL_CONFIG_FIELDS), false);
+
+  updateFieldWithBaseline(currentDoc, serverDoc, agPatterns, []);
+  assert.equal(currentDoc.has('oauth'), false);
+  assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, ALL_CONFIG_FIELDS), true);
+});
+
 test('Clearing a list the server did not have returns the editor to the server bytes', () => {
   const originalYaml = 'server:\n    port: 8317\n';
   const serverDoc = parseDocument(originalYaml);
