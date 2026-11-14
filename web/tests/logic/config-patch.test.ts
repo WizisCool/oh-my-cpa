@@ -1300,7 +1300,7 @@ test('antigravityTosPauseWindow sits in grp_antigravity_behavior, preserves omit
   assert.equal(pauseField.type, 'string');
   assert.equal(pauseField.sectionId, 'providers');
   assert.deepEqual(pauseField.yamlPath, ['oauth', 'providers', 'antigravity', 'tos-pause-window']);
-  assert.equal(pauseField.placeholder, '6h');
+  assert.equal(pauseField.placeholder, '0');
 
   const antigravityGroup = CONFIG_GROUPS.find((group) => group.id === 'grp_antigravity_behavior');
   assert.ok(antigravityGroup);
@@ -1333,7 +1333,7 @@ test('antigravityTosPauseWindow sits in grp_antigravity_behavior, preserves omit
     providers:
         antigravity:
             antigravity-credits: true # retained sibling
-            tos-pause-window: 6h # default pool pause
+            tos-pause-window: 6h # explicit pool pause
 `;
   const configured = parseDocument(configuredYaml);
   assert.equal(getFieldSemanticValue(configured, pauseField), '6h');

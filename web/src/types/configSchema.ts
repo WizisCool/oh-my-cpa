@@ -1402,7 +1402,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_ag_tos_pause_window_desc',
     yamlPath: ['oauth', 'providers', 'antigravity', 'tos-pause-window'],
     type: 'string',
-    placeholder: '6h',
+    placeholder: '0',
     keywords: ['antigravity', 'tos', 'pause', 'window', 'violation', 'suspension', 'pool'],
   },
   {
