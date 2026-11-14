@@ -454,6 +454,8 @@ export default {
   'cfg.f_claude_show_codex_commentary': '显示 Codex 旁注',
   'cfg.f_claude_show_codex_commentary_desc': '将 Codex 公开进度旁注转换为可见的 Claude 文本',
   'cfg.f_claude_timezone': '时区',
+  'cfg.f_ag_tos_pause_window': 'TOS 保护暂停窗口',
+  'cfg.f_ag_tos_pause_window_desc': '触发 TOS_VIOLATION 封禁后整个 Antigravity 凭据池的保护性暂停时长',
   'cfg.f_ag_pool_enabled': '启用连接池',
   'cfg.f_ag_pool_idle_timeout': '空闲连接超时',
   'cfg.f_ag_pool_max_idle': '每主机最大空闲连接',

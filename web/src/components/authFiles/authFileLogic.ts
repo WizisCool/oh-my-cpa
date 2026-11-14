@@ -1,5 +1,6 @@
 import { credentialProviderFamily } from '../../types/credentialIdentity';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
+import { safeExternalURL } from '../../utils/externalUrl';
 
 export const HEALTHY_STATUS_MESSAGES = new Set([
   'ok',
@@ -12,6 +13,27 @@ export const HEALTHY_STATUS_MESSAGES = new Set([
 
 export function getAuthFileStatusMessage(file: ManagementAuthFile): string {
   return (file.status_message ?? '').trim();
+}
+
+export interface AuthFileTOSAppeal {
+  url: string;
+  label: string;
+}
+
+/**
+ * Resolves a safe external TOS appeal link and display label for a credential.
+ * Drops non-HTTP(S) schemes and falls back to the caller's localized label when
+ * upstream metadata omits a link label.
+ */
+export function deriveAuthFileTOSAppeal(
+  file: Pick<ManagementAuthFile, 'tos_appeal_url' | 'tos_appeal_url_text'> | null | undefined,
+  fallbackLabel: string,
+): AuthFileTOSAppeal | undefined {
+  if (!file) return undefined;
+  const url = safeExternalURL(file.tos_appeal_url);
+  if (!url) return undefined;
+  const label = (file.tos_appeal_url_text ?? '').trim() || fallbackLabel;
+  return { url, label };
 }
 
 /**

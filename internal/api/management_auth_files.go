@@ -56,6 +56,8 @@ type managementAuthFileResponse struct {
 	OAuthProvider     string                                `json:"oauth_provider,omitempty"`
 	Status            string                                `json:"status,omitempty"`
 	StatusMessage     string                                `json:"status_message,omitempty"`
+	TOSAppealURL      string                                `json:"tos_appeal_url,omitempty"`
+	TOSAppealURLText  string                                `json:"tos_appeal_url_text,omitempty"`
 	Disabled          bool                                  `json:"disabled"`
 	Unavailable       bool                                  `json:"unavailable"`
 	RuntimeOnly       bool                                  `json:"runtime_only"`

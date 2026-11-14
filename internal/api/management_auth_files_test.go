@@ -943,3 +943,72 @@ func TestManagementAuthFilesEndpointBoundsQuotaProjection(t *testing.T) {
 		t.Fatalf("bounded model quotas kept model-400 beyond the cap")
 	}
 }
+
+func TestManagementAuthFilesProjectsAndValidatesTOSAppealLinks(t *testing.T) {
+	longLabel := strings.Repeat("a", managementAuthFileFieldLimit+64)
+	longURL := "https://support.google.com/accounts/contact/suspended?" + strings.Repeat("x", managementAuthFileFieldLimit)
+	filesFixture := fmt.Sprintf(`{"files":[
+		{"name":"ag-valid.json","provider":"antigravity","disabled":true,"status":"disabled","status_message":"tos_violation","tos_appeal_url":"  HTTPS://support.google.com/accounts/contact/suspended?hl=en&case=123  ","tos_appeal_url_text":"  Submit an appeal  "},
+		{"name":"ag-secret-query.json","provider":"antigravity","disabled":true,"status_message":"tos_violation","tos_appeal_url":"https://support.google.com/accounts/contact/suspended?access_token=TOP_SECRET_TOKEN&access_tokens=PLURAL_SECRET_TOKEN&hl=en&ref=sk-0000000000#token=FRAG_SECRET","tos_appeal_url_text":"Submit an appeal"},
+		{"name":"ag-long-label.json","provider":"antigravity","disabled":true,"status_message":"tos_violation","tos_appeal_url":"http://appeal.example.test/review","tos_appeal_url_text":%q},
+		{"name":"ag-js.json","provider":"antigravity","disabled":true,"status_message":"tos_violation","tos_appeal_url":"javascript:alert(1)","tos_appeal_url_text":"Should drop"},
+		{"name":"ag-data.json","provider":"antigravity","disabled":true,"status_message":"tos_violation","tos_appeal_url":"data:text/html,hi","tos_appeal_url_text":"Should drop"},
+		{"name":"ag-relative.json","provider":"antigravity","disabled":true,"status_message":"tos_violation","tos_appeal_url":"/appeal","tos_appeal_url_text":"Should drop"},
+		{"name":"ag-userinfo.json","provider":"antigravity","disabled":true,"status_message":"tos_violation","tos_appeal_url":"https://user:secret@support.google.com/appeal","tos_appeal_url_text":"Should drop"},
+		{"name":"ag-long-url.json","provider":"antigravity","disabled":true,"status_message":"tos_violation","tos_appeal_url":%q,"tos_appeal_url_text":"Should drop"}
+	]}`, longLabel, longURL)
+
+	client, baseURL, _ := startAuthFilesTestServer(t, "management-secret-value", func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v8/management/credentials" {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(filesFixture))
+	})
+	response, raw := doJSON(t, client, http.MethodGet, baseURL+"/omc/api/v1/management/auth-files", "")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("list status = %d body = %s", response.StatusCode, raw)
+	}
+	var listed managementAuthFilesResponse
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	byName := make(map[string]managementAuthFileResponse, len(listed.Files))
+	for _, item := range listed.Files {
+		byName[item.Name] = item
+	}
+
+	valid := byName["ag-valid.json"]
+	if valid.TOSAppealURL != "https://support.google.com/accounts/contact/suspended?case=123&hl=en" {
+		t.Fatalf("valid appeal url = %q", valid.TOSAppealURL)
+	}
+	if valid.TOSAppealURLText != "Submit an appeal" {
+		t.Fatalf("valid appeal text = %q", valid.TOSAppealURLText)
+	}
+
+	stripped := byName["ag-secret-query.json"]
+	if stripped.TOSAppealURL != "https://support.google.com/accounts/contact/suspended?hl=en" {
+		t.Fatalf("secret query appeal url = %q", stripped.TOSAppealURL)
+	}
+	for _, secret := range []string{"TOP_SECRET_TOKEN", "PLURAL_SECRET_TOKEN", "sk-0000000000", "FRAG_SECRET"} {
+		if strings.Contains(string(raw), secret) {
+			t.Fatalf("appeal url leaked secret %q: %s", secret, raw)
+		}
+	}
+
+	bounded := byName["ag-long-label.json"]
+	if bounded.TOSAppealURL != "http://appeal.example.test/review" {
+		t.Fatalf("http appeal url = %q", bounded.TOSAppealURL)
+	}
+	if len([]rune(bounded.TOSAppealURLText)) != managementAuthFileFieldLimit {
+		t.Fatalf("appeal text rune len = %d, want %d", len([]rune(bounded.TOSAppealURLText)), managementAuthFileFieldLimit)
+	}
+
+	for _, name := range []string{"ag-js.json", "ag-data.json", "ag-relative.json", "ag-userinfo.json", "ag-long-url.json"} {
+		item := byName[name]
+		if item.TOSAppealURL != "" || item.TOSAppealURLText != "" {
+			t.Fatalf("%s should drop unsafe/oversized appeal fields, got url=%q text=%q", name, item.TOSAppealURL, item.TOSAppealURLText)
+		}
+	}
+}

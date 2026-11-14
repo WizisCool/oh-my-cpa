@@ -457,6 +457,8 @@ export default {
   "cfg.f_claude_show_codex_commentary": "Papar ulasan Codex",
   "cfg.f_claude_show_codex_commentary_desc": "Tukar ulasan kemajuan awam Codex kepada teks Claude yang boleh dilihat",
   "cfg.f_claude_timezone": "Zon Waktu",
+  "cfg.f_ag_tos_pause_window": "Tetingkap Jeda TOS",
+  "cfg.f_ag_tos_pause_window_desc": "Tempoh jeda perlindungan seluruh kumpulan selepas penggantungan TOS_VIOLATION Antigravity",
   "cfg.f_ag_pool_enabled": "Dayakan Kumpulan Sambungan",
   "cfg.f_ag_pool_idle_timeout": "Tamat Masa Sambungan Melahu",
   "cfg.f_ag_pool_max_idle": "Sambungan Melahu Maksimum setiap Hos",

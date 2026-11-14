@@ -1295,3 +1295,73 @@ test('shutdownTimeout sits in grp_service, preserves omitted defaults, writes po
   ]);
 });
 
+test('antigravityTosPauseWindow sits in grp_antigravity_behavior, preserves omitted defaults, writes durations or disable words, and rebases beside siblings', () => {
+  const pauseField = field('antigravityTosPauseWindow');
+  assert.equal(pauseField.type, 'string');
+  assert.equal(pauseField.sectionId, 'providers');
+  assert.deepEqual(pauseField.yamlPath, ['oauth', 'providers', 'antigravity', 'tos-pause-window']);
+  assert.equal(pauseField.placeholder, '6h');
+
+  const antigravityGroup = CONFIG_GROUPS.find((group) => group.id === 'grp_antigravity_behavior');
+  assert.ok(antigravityGroup);
+  assert.equal(antigravityGroup.sectionId, 'providers');
+  assert.ok(antigravityGroup.fieldIds.includes('antigravityTosPauseWindow'));
+
+  // Omitted default stays absent through empty confirmation and unrelated saves.
+  const server = parseDocument(SERVER_YAML);
+  const draft = server.clone();
+  assert.equal(getFieldSemanticValue(server, pauseField), undefined);
+  updateFieldWithBaseline(draft, server, pauseField, '');
+  assert.equal(draft.hasIn(['oauth']), false);
+  assert.equal(draft.toString(), server.toString());
+
+  // Writing duration or disable words ("30m", "off", "0") emits the canonical path.
+  for (const value of ['30m', 'off', '0']) {
+    const edited = server.clone();
+    updateFieldWithBaseline(edited, server, pauseField, value);
+    assert.deepEqual(computeConfigChanges(server, edited), [
+      { path: ['oauth'], value: { providers: { antigravity: { 'tos-pause-window': value } } } },
+    ]);
+    assert.equal(getFieldSemanticValue(parseDocument(edited.toString()), pauseField), value);
+    updateFieldWithBaseline(edited, server, pauseField, '');
+    assert.deepEqual(computeConfigChanges(server, edited), []);
+    assert.equal(edited.toString(), server.toString());
+  }
+
+  // Existing explicit value preserves comments on revert and supports clearing to absent.
+  const configuredYaml = `${SERVER_YAML}oauth:
+    providers:
+        antigravity:
+            antigravity-credits: true # retained sibling
+            tos-pause-window: 6h # default pool pause
+`;
+  const configured = parseDocument(configuredYaml);
+  assert.equal(getFieldSemanticValue(configured, pauseField), '6h');
+
+  const updatedDraft = configured.clone();
+  updateFieldWithBaseline(updatedDraft, configured, pauseField, '2h');
+  assert.deepEqual(computeConfigChanges(configured, updatedDraft), [
+    { path: ['oauth', 'providers', 'antigravity', 'tos-pause-window'], value: '2h' },
+  ]);
+  updateFieldWithBaseline(updatedDraft, configured, pauseField, '6h');
+  assert.equal(updatedDraft.toString(), configured.toString());
+
+  const clearedDraft = configured.clone();
+  updateFieldWithBaseline(clearedDraft, configured, pauseField, '');
+  assert.deepEqual(computeConfigChanges(configured, clearedDraft), [
+    { path: ['oauth', 'providers', 'antigravity', 'tos-pause-window'], remove: true },
+  ]);
+  assert.equal(clearedDraft.getIn(['oauth', 'providers', 'antigravity', 'antigravity-credits']), true);
+
+  // Rebase carries an edit onto a newer baseline with concurrent sibling changes.
+  const rebasedDraft = configured.clone();
+  updateFieldWithBaseline(rebasedDraft, configured, pauseField, 'disabled');
+  const newerYaml = configuredYaml.replace('antigravity-credits: true', 'antigravity-credits: false');
+  const rebased = parseDocument(rebaseDraft(configured, rebasedDraft, newerYaml) ?? '');
+  assert.equal(rebased.getIn(['oauth', 'providers', 'antigravity', 'antigravity-credits']), false);
+  assert.equal(getFieldSemanticValue(rebased, pauseField), 'disabled');
+  assert.deepEqual(computeConfigChanges(parseDocument(newerYaml), rebased), [
+    { path: ['oauth', 'providers', 'antigravity', 'tos-pause-window'], value: 'disabled' },
+  ]);
+});
+

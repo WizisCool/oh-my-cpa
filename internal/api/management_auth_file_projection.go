@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -43,6 +44,10 @@ func projectManagementAuthFile(file management.AuthFile) managementAuthFileRespo
 		Quota:         projectQuota(file.Quota),
 		ModelQuotas:   projectModelQuotas(file.ModelQuotas),
 	}
+	if appealURL := projectTOSAppealURL(file.TOSAppealURL); appealURL != "" {
+		result.TOSAppealURL = appealURL
+		result.TOSAppealURLText = boundedText(security.RedactText(file.TOSAppealURLText), managementAuthFileFieldLimit)
+	}
 	if recovery.RefreshError != nil {
 		result.RefreshError = &managementCredentialRefreshError{Code: recovery.RefreshError.Code, HTTPStatus: recovery.RefreshError.HTTPStatus}
 	}
@@ -60,6 +65,62 @@ func projectManagementAuthFile(file management.AuthFile) managementAuthFileRespo
 		})
 	}
 	return result
+}
+
+// projectTOSAppealURL keeps only an explicit http(s) appeal URL without embedded
+// authority credentials, fragments, or credential-bearing query parameters,
+// preserving benign query parameters that Google appeal forms use.
+func projectTOSAppealURL(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || len([]rune(trimmed)) > managementAuthFileFieldLimit {
+		return ""
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Hostname() == "" || parsed.User != nil {
+		return ""
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return ""
+	}
+	if security.RedactText(parsed.Path) != parsed.Path {
+		return ""
+	}
+	parsed.Fragment = ""
+	parsed.RawFragment = ""
+	if parsed.RawQuery != "" {
+		query, err := url.ParseQuery(parsed.RawQuery)
+		if err != nil {
+			return ""
+		}
+		for key, values := range query {
+			if isSensitiveAppealQueryKey(key) {
+				query.Del(key)
+				continue
+			}
+			for _, value := range values {
+				if security.RedactText(value) != value {
+					query.Del(key)
+					break
+				}
+			}
+		}
+		parsed.RawQuery = query.Encode()
+		parsed.ForceQuery = false
+	}
+	parsed.Scheme = scheme
+	return parsed.String()
+}
+
+// isSensitiveAppealQueryKey rejects credential query keys without the shared
+// usage-accounting "tokens" suffix exception in security.IsSensitiveKey.
+func isSensitiveAppealQueryKey(key string) bool {
+	if security.IsSensitiveKey(key) {
+		return true
+	}
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	normalized = strings.NewReplacer("_", "", "-", "", " ", "", ".", "").Replace(normalized)
+	return strings.Contains(normalized, "token")
 }
 
 // projectOAuthEntryIdentifier passes a credential's login entry only in the
