@@ -1,8 +1,9 @@
-import { isMap, isScalar, parseDocument, type Document, type YAMLMap } from 'yaml';
+import { isMap, isScalar, isSeq, parseDocument, type Document, type YAMLMap } from 'yaml';
 
 import type { ConfigChange } from '../../types/configManagement';
 import { ALL_CONFIG_FIELDS } from '../../types/configSchema';
 import { areValuesSemanticallyEqual, getFieldSemanticValue, getFieldYamlPath, updateFieldWithBaseline } from './configDirty';
+import { normalizeWirePatternRules, type PatternRuleWire } from './PatternRulesEditor';
 
 const VALUE_MAP_PATHS = ALL_CONFIG_FIELDS
   .filter((field) => field.type === 'string_map')
@@ -73,8 +74,22 @@ export function rebaseDraft(draftBase: Document | null, draft: Document, nextBas
   for (const { field } of stringMapEdits) {
     updateFieldWithBaseline(remainingDraft, draftBase, field, getFieldSemanticValue(draftBase, field));
   }
+  const patternRuleEdits = ALL_CONFIG_FIELDS
+    .filter((field) => field.type === 'pattern_rules'
+      && !migratedEdits.some((entry) => entry.field.id === field.id)
+      && !areValuesSemanticallyEqual(getFieldSemanticValue(draftBase, field), getFieldSemanticValue(draft, field)))
+    .map((field) => ({
+      field,
+      baseRules: normalizeWirePatternRules(getFieldSemanticValue(draftBase, field)),
+      draftRules: normalizeWirePatternRules(getFieldSemanticValue(draft, field)),
+    }));
+  for (const { field } of patternRuleEdits) {
+    updateFieldWithBaseline(remainingDraft, draftBase, field, getFieldSemanticValue(draftBase, field));
+  }
   const changes = computeConfigChanges(draftBase, remainingDraft);
-  if (changes.length === 0 && migratedEdits.length === 0 && stringMapEdits.length === 0) return nextBaseYaml;
+  if (changes.length === 0 && migratedEdits.length === 0 && stringMapEdits.length === 0 && patternRuleEdits.length === 0) {
+    return nextBaseYaml;
+  }
   const rebased = nextBase.clone();
   try {
     for (const change of changes) {
@@ -93,6 +108,15 @@ export function rebaseDraft(draftBase: Document | null, draft: Document, nextBas
       if (!isAbsentNode(currentNode) && !isMap(currentNode)) return null;
       const nextMap = toPlainRecord(getFieldSemanticValue(nextBase, field));
       const merged = rebaseValueMap(baseMap, draftMap, nextMap);
+      updateFieldWithBaseline(rebased, nextBase, field, merged);
+    }
+    for (const { field, baseRules, draftRules } of patternRuleEdits) {
+      const targetPath = getFieldYamlPath(rebased, field);
+      const currentNode = rebased.getIn(targetPath, true);
+      if (!isAbsentNode(currentNode) && !isSeq(currentNode)) return null;
+      const nextRules = normalizeWirePatternRules(getFieldSemanticValue(nextBase, field));
+      const merged = rebasePatternRulesList(baseRules, draftRules, nextRules);
+      if (merged === null) return null;
       updateFieldWithBaseline(rebased, nextBase, field, merged);
     }
   } catch {
@@ -202,6 +226,43 @@ function rebaseValueMap(
     }
   }
   return merged;
+}
+
+function arePatternRulesEqual(left: PatternRuleWire, right: PatternRuleWire): boolean {
+  return left.pattern === right.pattern && left.replacement === right.replacement;
+}
+
+function patternRuleListEquals(left: readonly PatternRuleWire[], right: readonly PatternRuleWire[]): boolean {
+  return left.length === right.length && left.every((rule, index) => arePatternRulesEqual(rule, right[index]));
+}
+
+function patternRuleListStartsWith(list: readonly PatternRuleWire[], prefix: readonly PatternRuleWire[]): boolean {
+  return list.length >= prefix.length && prefix.every((rule, index) => arePatternRulesEqual(rule, list[index]));
+}
+
+function patternRuleListEndsWith(list: readonly PatternRuleWire[], suffix: readonly PatternRuleWire[]): boolean {
+  const offset = list.length - suffix.length;
+  return offset >= 0 && suffix.every((rule, index) => arePatternRulesEqual(rule, list[offset + index]));
+}
+
+function rebasePatternRulesList(
+  baseRules: readonly PatternRuleWire[],
+  draftRules: readonly PatternRuleWire[],
+  nextRules: readonly PatternRuleWire[],
+): PatternRuleWire[] | null {
+  if (patternRuleListEquals(nextRules, baseRules)) {
+    return [...draftRules];
+  }
+  if (patternRuleListStartsWith(nextRules, baseRules)) {
+    return [...draftRules, ...nextRules.slice(baseRules.length)];
+  }
+  if (patternRuleListEndsWith(nextRules, baseRules)) {
+    return [...nextRules.slice(0, nextRules.length - baseRules.length), ...draftRules];
+  }
+  if (patternRuleListStartsWith(draftRules, baseRules)) {
+    return [...nextRules, ...draftRules.slice(baseRules.length)];
+  }
+  return null;
 }
 
 function isPlainMap(value: unknown): value is Record<string, unknown> {

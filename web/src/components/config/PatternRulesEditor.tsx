@@ -57,10 +57,79 @@ export function normalizeWirePatternRules(raw: unknown): PatternRuleWire[] {
   return rules;
 }
 
-function rowsFromWire(raw: unknown): PatternRuleRow[] {
-  const usedIds = new Set<string>();
-  return normalizeWirePatternRules(raw).map((rule, index) => ({
-    id: uniqueRowId(usedIds, `prule_wire_${index}`),
+export function reconcileWirePatternRows(
+  incoming: readonly PatternRuleWire[],
+  previousRows: readonly PatternRuleRow[],
+  allocateId: () => string,
+): PatternRuleRow[] {
+  const m = incoming.length;
+  const n = previousRows.length;
+  const usedPrevIndices = new Set<number>();
+  const matchedIds: Array<string | undefined> = Array(m).fill(undefined);
+
+  // Pass 1: LCS on exact (pattern, replacement) preserves order & duplicate identities across insertions/deletions.
+  if (m > 0 && n > 0) {
+    const dp: number[][] = Array.from({ length: m + 1 }, () => Array<number>(n + 1).fill(0));
+    for (let i = m - 1; i >= 0; i -= 1) {
+      for (let j = n - 1; j >= 0; j -= 1) {
+        if (
+          incoming[i].pattern === previousRows[j].pattern
+          && incoming[i].replacement === previousRows[j].replacement
+        ) {
+          dp[i][j] = 1 + dp[i + 1][j + 1];
+        } else {
+          dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+      }
+    }
+    let i = 0;
+    let j = 0;
+    while (i < m && j < n) {
+      if (
+        incoming[i].pattern === previousRows[j].pattern
+        && incoming[i].replacement === previousRows[j].replacement
+      ) {
+        matchedIds[i] = previousRows[j].id;
+        usedPrevIndices.add(j);
+        i += 1;
+        j += 1;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        i += 1;
+      } else {
+        j += 1;
+      }
+    }
+  }
+
+  // Pass 2: exact (pattern, replacement) match for reordered rules.
+  for (let i = 0; i < m; i += 1) {
+    if (matchedIds[i] !== undefined) continue;
+    const matchIndex = previousRows.findIndex(
+      (prev, prevIndex) =>
+        !usedPrevIndices.has(prevIndex)
+        && prev.pattern === incoming[i].pattern
+        && prev.replacement === incoming[i].replacement,
+    );
+    if (matchIndex !== -1) {
+      usedPrevIndices.add(matchIndex);
+      matchedIds[i] = previousRows[matchIndex].id;
+    }
+  }
+
+  // Pass 3: match by pattern alone when replacement updated concurrently.
+  for (let i = 0; i < m; i += 1) {
+    if (matchedIds[i] !== undefined) continue;
+    const matchIndex = previousRows.findIndex(
+      (prev, prevIndex) => !usedPrevIndices.has(prevIndex) && prev.pattern === incoming[i].pattern,
+    );
+    if (matchIndex !== -1) {
+      usedPrevIndices.add(matchIndex);
+      matchedIds[i] = previousRows[matchIndex].id;
+    }
+  }
+
+  return incoming.map((rule, i) => ({
+    id: matchedIds[i] ?? allocateId(),
     pattern: rule.pattern,
     replacement: rule.replacement,
   }));
@@ -394,8 +463,17 @@ export const PatternRulesEditor: React.FC<PatternRulesEditorProps> = ({
   const [localDraftState, setLocalDraftState] = React.useState<PatternRulesDraftState | null>(null);
   const activeDraftState = onDraftStateChange ? (draftState ?? null) : localDraftState;
 
-  const wireRows = React.useMemo(() => rowsFromWire(value), [value]);
   const normalizedValue = React.useMemo(() => normalizeWirePatternRules(value), [value]);
+  const prevWireRowsRef = React.useRef<PatternRuleRow[]>([]);
+  const wireRows = React.useMemo(() => {
+    const reconciled = reconcileWirePatternRows(
+      normalizedValue,
+      prevWireRowsRef.current,
+      () => `prule_wire_${nextRowId++}`,
+    );
+    prevWireRowsRef.current = reconciled;
+    return reconciled;
+  }, [normalizedValue]);
 
   const resolvedDraft = React.useMemo(
     () => (activeDraftState ? rebasePatternRulesDraft(activeDraftState, value) : null),

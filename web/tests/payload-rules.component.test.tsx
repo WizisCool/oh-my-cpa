@@ -284,6 +284,39 @@ it('edits, reorders, validates, and rebases sensitive-patterns-replace rules', a
     expect(finalYaml).toContain('pattern: a');
     expect(finalYaml).toContain('pattern: concurrent');
     expect(finalYaml).toContain('pattern: b');
+
+    // Starting IME composition on rule B keeps its target row even if a baseline refresh prepends rule C.
+    fireEvent.click(screen.getByTestId('provider-map-discard'));
+    await waitFor(() => expect(screen.queryByTestId('pattern-rule-pattern-antigravitySensitivePatternsReplace-2')).toBeNull());
+    act(() => {
+      client.setQueryData(['management-config'], {
+        scalars: {},
+        revision: 'fixture-r4',
+        safe_yaml: 'server:\n  port: 8317\noauth:\n  providers:\n    antigravity:\n      sensitive-patterns-replace:\n        - pattern: A\n          replacement: repA\n        - pattern: B\n          replacement: repB\n',
+      });
+    });
+    await waitFor(() => expect((screen.getByTestId('pattern-rule-replacement-antigravitySensitivePatternsReplace-1') as HTMLInputElement).value).toBe('repB'));
+
+    const repBInput = screen.getByTestId('pattern-rule-replacement-antigravitySensitivePatternsReplace-1') as HTMLInputElement;
+    fireEvent.compositionStart(repBInput);
+    typeComposing(repBInput, 'b-comp', true);
+
+    act(() => {
+      client.setQueryData(['management-config'], {
+        scalars: {},
+        revision: 'fixture-r5',
+        safe_yaml: 'server:\n  port: 8317\noauth:\n  providers:\n    antigravity:\n      sensitive-patterns-replace:\n        - pattern: C\n          replacement: repC\n        - pattern: A\n          replacement: repA\n        - pattern: B\n          replacement: repB\n',
+      });
+    });
+    await waitFor(() => expect((screen.getByTestId('pattern-rule-pattern-antigravitySensitivePatternsReplace-0') as HTMLInputElement).value).toBe('C'));
+    // repBInput moved to index 2 and stayed attached to rule B.
+    expect(repBInput.value).toBe('b-comp');
+    typeComposing(repBInput, 'repB-final', true);
+    fireEvent.compositionEnd(repBInput);
+
+    const afterCompositionYaml = screen.getByTestId('provider-map-draft').textContent ?? '';
+    expect(afterCompositionYaml).toContain('pattern: A\n          replacement: repA');
+    expect(afterCompositionYaml).toContain('pattern: B\n          replacement: repB-final');
   } finally {
     patchSpy.mockRestore();
   }

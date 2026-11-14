@@ -140,27 +140,27 @@ export function useConfigDraft() {
   }, []);
 
   const setPatternRulesIssue = React.useCallback((fieldId: string, issue: PatternRulesValidationIssue | null) => {
-    setPatternRulesIssues((prev) => {
-      if (issue === null) {
-        if (!Object.prototype.hasOwnProperty.call(prev, fieldId)) return prev;
-        const next = { ...prev };
-        delete next[fieldId];
-        patternRulesIssuesRef.current = next;
-        return next;
-      }
-      const existing = prev[fieldId];
-      if (
-        existing
-        && existing.kind === issue.kind
-        && ((existing.kind !== 'unsupported_re2' && existing.kind !== 'trailing_backslash')
-          || existing.pattern === (issue as { pattern: string }).pattern)
-      ) {
-        return prev;
-      }
-      const next = { ...prev, [fieldId]: issue };
+    const prev = patternRulesIssuesRef.current;
+    if (issue === null) {
+      if (!Object.prototype.hasOwnProperty.call(prev, fieldId)) return;
+      const next = { ...prev };
+      delete next[fieldId];
       patternRulesIssuesRef.current = next;
-      return next;
-    });
+      setPatternRulesIssues(next);
+      return;
+    }
+    const existing = prev[fieldId];
+    if (
+      existing
+      && existing.kind === issue.kind
+      && ((existing.kind !== 'unsupported_re2' && existing.kind !== 'trailing_backslash')
+        || existing.pattern === (issue as { pattern: string }).pattern)
+    ) {
+      return;
+    }
+    const next = { ...prev, [fieldId]: issue };
+    patternRulesIssuesRef.current = next;
+    setPatternRulesIssues(next);
   }, []);
 
   const viewModeRef = React.useRef(viewMode);

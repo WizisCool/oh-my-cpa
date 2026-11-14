@@ -12,6 +12,7 @@ import {
   findRe2PatternProblem,
   patternRulesRowsToWire,
   rebasePatternRulesDraft,
+  reconcileWirePatternRows,
   validatePatternRuleRows,
 } from '../../src/components/config/PatternRulesEditor.tsx';
 import { rebaseStringMapDraft, stringMapRowsToWire } from '../../src/components/config/StringMapEditor.tsx';
@@ -1042,6 +1043,69 @@ test('rebasing a sensitive-patterns-replace edit preserves concurrent sibling se
       value: [{ pattern: '(?i)claude', replacement: '' }],
     },
   ]);
+
+  // Concurrent refresh adding a rule while a valid local pattern_rules edit is pending preserves the added rule.
+  const existingBase = parseDocument(`${SERVER_YAML}oauth:
+    providers:
+        antigravity:
+            sensitive-patterns-replace:
+                - pattern: a
+                  replacement: one
+`);
+  const editedDraft = existingBase.clone();
+  updateFieldWithBaseline(editedDraft, existingBase, rulesField, [{ pattern: 'a', replacement: 'edited' }]);
+  const refreshedAdded = `${SERVER_YAML}oauth:
+    providers:
+        antigravity:
+            sensitive-patterns-replace:
+                - pattern: a
+                  replacement: one
+                - pattern: c
+                  replacement: added
+`;
+  const rebasedAdded = parseDocument(rebaseDraft(existingBase, editedDraft, refreshedAdded) ?? '');
+  assert.deepEqual(getFieldSemanticValue(rebasedAdded, rulesField), [
+    { pattern: 'a', replacement: 'edited' },
+    { pattern: 'c', replacement: 'added' },
+  ]);
+
+  // Overlapping edits to the same existing rule report a rebase conflict rather than silently dropping server changes.
+  const conflictingNext = `${SERVER_YAML}oauth:
+    providers:
+        antigravity:
+            sensitive-patterns-replace:
+                - pattern: a
+                  replacement: server-edited
+`;
+  assert.equal(rebaseDraft(existingBase, editedDraft, conflictingNext), null);
+});
+
+test('reconcileWirePatternRows preserves row IDs across prepended rules and duplicates', () => {
+  let serial = 1;
+  const alloc = () => `prule_wire_${serial++}`;
+  const initial = reconcileWirePatternRows(
+    [
+      { pattern: 'dup', replacement: 'first' },
+      { pattern: 'dup', replacement: 'first' },
+      { pattern: 'target', replacement: 'keep' },
+    ],
+    [],
+    alloc,
+  );
+  const shifted = reconcileWirePatternRows(
+    [
+      { pattern: 'prepended', replacement: '' },
+      { pattern: 'dup', replacement: 'first' },
+      { pattern: 'dup', replacement: 'first' },
+      { pattern: 'target', replacement: 'keep' },
+    ],
+    initial,
+    alloc,
+  );
+  assert.equal(shifted[1]?.id, initial[0]?.id);
+  assert.equal(shifted[2]?.id, initial[1]?.id);
+  assert.equal(shifted[3]?.id, initial[2]?.id);
+  assert.equal(new Set(shifted.map((row) => row.id)).size, 4);
 });
 
 test('patternRulesRowsToWire preserves significant whitespace in patterns and empty deletions', () => {
