@@ -32,6 +32,7 @@ jobs:
       frontend: ${{ steps.scope.outputs.frontend }}
       browser: ${{ steps.scope.outputs.browser }}
       docker: ${{ steps.scope.outputs.docker }}
+      docs: ${{ steps.scope.outputs.docs }}
       full: ${{ steps.scope.outputs.full }}
     steps:
       - name: Checkout
@@ -153,6 +154,44 @@ jobs:
           git diff --check
           test -z "$(git status --porcelain)"
 
+  docs-site:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+      - name: Set up JavaScript workspace
+        uses: ./.github/actions/setup-node
+      - name: Cache Fumadocs Next.js build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: deploy/site/docs/.next/cache
+          key: docs-next-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'deploy/site/docs/package.json', 'deploy/site/docs/next.config.mjs') }}
+          restore-keys: |
+            docs-next-${{ runner.os }}-${{ runner.arch }}-
+      - name: Type check, build, and test bilingual Fumadocs site
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          pnpm type-check:docs
+          pnpm build:docs
+          node --test scripts/build-site.test.mjs
+      - name: Stage public site (docs, landing, API reference) and validate Worker config
+        run: |
+          node scripts/generate-demo-data.mjs --if-missing
+          node scripts/build-site.mjs --from-built-docs --skip-demo
+          pnpm exec wrangler deploy --config deploy/site/wrangler.jsonc --dry-run
+      - name: Verify clean generated state
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+
   docker-check:
     needs: changes
     if: needs.changes.outputs.docker == 'true'
@@ -180,7 +219,7 @@ jobs:
         run: node scripts/docker-smoke.mjs oh-my-cpa:ci-test
 
   static:
-    needs: [changes, static-repo, static-go, static-frontend, docker-check]
+    needs: [changes, static-repo, static-go, static-frontend, docs-site, docker-check]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -193,6 +232,8 @@ jobs:
           GO_RESULT: ${{ needs.static-go.result }}
           NEED_WEB: ${{ needs.changes.outputs.frontend }}
           WEB_RESULT: ${{ needs.static-frontend.result }}
+          NEED_DOCS: ${{ needs.changes.outputs.docs }}
+          DOCS_RESULT: ${{ needs.docs-site.result }}
           NEED_DOCKER: ${{ needs.changes.outputs.docker }}
           DOCKER_RESULT: ${{ needs.docker-check.result }}
         run: |
@@ -200,6 +241,7 @@ jobs:
           test "$REPO" = success
           if [ "$NEED_GO" = true ]; then test "$GO_RESULT" = success; else test "$GO_RESULT" = skipped; fi
           if [ "$NEED_WEB" = true ]; then test "$WEB_RESULT" = success; else test "$WEB_RESULT" = skipped; fi
+          if [ "$NEED_DOCS" = true ]; then test "$DOCS_RESULT" = success; else test "$DOCS_RESULT" = skipped; fi
           if [ "$NEED_DOCKER" = true ]; then test "$DOCKER_RESULT" = success; else test "$DOCKER_RESULT" = skipped; fi
 
   browser-acceptance:
@@ -221,6 +263,14 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/tools-versions.json') }}
+      - name: Cache Fumadocs Next.js build
+        if: needs.changes.outputs.docs == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: deploy/site/docs/.next/cache
+          key: docs-next-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'deploy/site/docs/package.json', 'deploy/site/docs/next.config.mjs') }}
+          restore-keys: |
+            docs-next-${{ runner.os }}-${{ runner.arch }}-
       - name: Prepare Chromium, embedded SPA, and browser fixtures
         id: prepare
         run: |
@@ -265,9 +315,16 @@ jobs:
         run: |
           pnpm build:demo
           pnpm exec wrangler deploy --config deploy/cloudflare/wrangler.jsonc --dry-run
-      - name: Stage public site and API docs assets and validate Worker config
+      - name: Stage public site and validate Worker config
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          NEED_DOCS: ${{ needs.changes.outputs.docs }}
         run: |
-          pnpm build:site
+          if [ "$NEED_DOCS" = "true" ]; then
+            pnpm build:site
+          else
+            node scripts/build-site.mjs --skip-docs
+          fi
           pnpm exec wrangler deploy --config deploy/site/wrangler.jsonc --dry-run
       - name: Built-artifact browser acceptance
         env:

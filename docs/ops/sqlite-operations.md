@@ -419,7 +419,7 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
    - Encrypted with the active database cipher. Agent sessions and attached images remain until conversation reset; terminal pending operations expire after 7 days.
    - Before every CPA configuration write (including trusted plugin-page writes), OMC saves an encrypted copy of CPA's `config.yaml` in `cpa_config_backups` (retaining 20 v8 copies by default, configurable 5–100, plus up to 10 legacy pre-v8 copies). Writes fail closed if the backup cannot be recorded.
 4. **Space Reclamation & Compaction**:
-   - The **System Information** page offers two serialized maintenance actions that acquire the repository write gate ([Architecture](../architecture.md#state-and-request-lifetimes)):
+   - The **System Information** page offers two serialized maintenance actions that acquire the repository write gate ([Architecture](../dev/architecture.md#state-and-request-lifetimes)):
      - **WAL checkpoint** (`PRAGMA wal_checkpoint(TRUNCATE)`): folds committed WAL frames back into the main database file and truncates `-wal`.
      - **Rebuild** (`VACUUM`): compacts free pages (and upgrades older `auto_vacuum = NONE` databases to `INCREMENTAL`). Requires up to twice the database file size in free disk space.
    - When the console is offline, stop OMC first and run the same commands on the host:

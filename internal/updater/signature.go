@@ -16,7 +16,7 @@ import (
 
 // releasePublicKey is the base64 ed25519 public key release manifests are signed
 // for. Its private half exists only as the release workflow's signing secret
-// (docs/releasing.md). While the file is empty no manifest verifies, so no console
+// (docs/dev/releasing.md). While the file is empty no manifest verifies, so no console
 // update of OMC can be applied: an unsigned image is refused rather than installed on
 // trust.
 //

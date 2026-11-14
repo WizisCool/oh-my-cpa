@@ -33,7 +33,7 @@ MCP adapters ──────┘      validate / authorize / prepare / approve
 4. Return bounded, secret-free data with display labels alongside identifiers. Put
    reusable structured rows in results rather than packing measurements into prose.
 5. Add the capability title and description to the four locale catalogs. Test the
-   new risk or behavior in its owning layer, following [Testing](testing.md).
+   new risk or behavior in its owning layer, following [Testing](dev/testing.md).
 
 A prepared operation binds canonical arguments, principal, adapter, version and the
 revision used for its preview. Approval must not become permission to execute arbitrary

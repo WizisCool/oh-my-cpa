@@ -24,7 +24,7 @@ signed manifest used by the updater. A Git tag alone is not a published release.
   No public key, a wrong key or a bad signature means no automatic OMC update.
 
 The executable publication contract is in
-[release.yml](../.github/workflows/release.yml) and the release scripts it calls.
+[release.yml](../../.github/workflows/release.yml) and the release scripts it calls.
 [Testing](testing.md) owns CI topology and verification commands; this guide owns the
 maintainer procedure and recovery requirements.
 
@@ -60,10 +60,10 @@ signed automatic OMC updates.
 ## Prepare and publish
 
 1. Update root and web package versions together and add user-visible changes and
-   upgrade notes under [`docs/releases`](releases). Keep lockfile metadata consistent.
+   upgrade notes under [`docs/releases`](../releases/README.md). Keep lockfile metadata consistent.
    The installation guides use stable aliases, so they do not need a version bump.
    Refresh the bundled models.dev snapshot as described in
-   [Operations](operations.md#available-model-directory); release verification rejects
+   [Operations](../operations.md#available-model-directory); release verification rejects
    a snapshot more than 30 days older than the tagged commit.
 2. Run the checks required by [Testing](testing.md). Land the preparation on `main`
    and wait for that exact commit's main CI to be green. A release-preparation PR may
@@ -99,7 +99,7 @@ signed automatic OMC updates.
 ## Native packages
 
 The platform matrix and filenames are declared in
-[`native-release.mjs`](../scripts/native-release.mjs). It currently covers Darwin,
+[`native-release.mjs`](../../scripts/native-release.mjs). It currently covers Darwin,
 Windows, Linux and FreeBSD on amd64/arm64, with zip for Windows and tar.gz elsewhere.
 Each archive includes the executable, license, READMEs, installation/operations/SQLite
 guides and a native environment example. It contains no secrets or runtime data.
@@ -142,4 +142,4 @@ release or moving its tag. Latest-version policy must be checked again on retrie
 Update observation uses GitHub stable release metadata, not registry tags. It ignores
 drafts/prereleases and retains the last successful result after a failed fetch. Cached
 results and the attempt floor can delay a post-release observation; do not weaken the
-floor to force an immediate fresh result. See [Update checks](operations.md#update-checks).
+floor to force an immediate fresh result. See [Update checks](../operations.md#update-checks).

@@ -7,15 +7,15 @@ This guide explains design intent. Theme values and component APIs live in code.
 
 | Need | Read |
 | --- | --- |
-| Palette definition, derivation and open Theme SDK | [`palette.ts`](../web/src/theme/palette.ts), [`themeContract.ts`](../web/src/theme/themeContract.ts) |
-| Motion tokens and CSS variable projection | [`themeConfig.ts`](../web/src/theme/themeConfig.ts) |
-| Global CSS, Tailwind token bridge and initial render | [`index.css`](../web/src/index.css) |
-| Corner scale for UI primitives, canvas painters and exports | [`radius.ts`](../web/src/theme/radius.ts) |
-| Typeface selection and assets | [`web/src/theme`](../web/src/theme) |
-| Headless Base UI / shadcn primitives | [`web/src/components/ui`](../web/src/components/ui) |
-| Shared console primitives | [`web/src/components/common`](../web/src/components/common) |
-| Event and state feedback | [`web/src/components/feedback`](../web/src/components/feedback) |
-| Copy and translation | [i18n README](../web/src/i18n/README.md), [style](../web/src/i18n/STYLE.md), [glossary](../web/src/i18n/GLOSSARY.md) |
+| Palette definition, derivation and open Theme SDK | [`palette.ts`](../../web/src/theme/palette.ts), [`themeContract.ts`](../../web/src/theme/themeContract.ts) |
+| Motion tokens and CSS variable projection | [`themeConfig.ts`](../../web/src/theme/themeConfig.ts) |
+| Global CSS, Tailwind token bridge and initial render | [`index.css`](../../web/src/index.css) |
+| Corner scale for UI primitives, canvas painters and exports | [`radius.ts`](../../web/src/theme/radius.ts) |
+| Typeface selection and assets | [`web/src/theme`](../../web/src/theme) |
+| Headless Base UI / shadcn primitives | [`web/src/components/ui`](../../web/src/components/ui) |
+| Shared console primitives | [`web/src/components/common`](../../web/src/components/common) |
+| Event and state feedback | [`web/src/components/feedback`](../../web/src/components/feedback) |
+| Copy and translation | [i18n README](../../web/src/i18n/README.md), [style](../../web/src/i18n/STYLE.md), [glossary](../../web/src/i18n/GLOSSARY.md) |
 
 Change a token in its implementation, not in a second table of color values. Use
 resolved tokens/CSS variables in components; derive relationships once in the theme.
@@ -155,11 +155,11 @@ stylesheet's first-frame edge values to the default palettes' solved ones.
 Connection branding, credential-provider identity and model manufacturer identity answer
 separate questions. A connection renamed or assigned custom artwork must not relabel the
 protocol it uses or the maker of a model it serves. Use the semantic provider/credential
-entry points in [`LobeIcon.tsx`](../web/src/components/LobeIcon.tsx) and `ModelMark`, not
+entry points in [`LobeIcon.tsx`](../../web/src/components/LobeIcon.tsx) and `ModelMark`, not
 page-local combinations of preferences, plugin logos and catalog guesses.
 
-[`brandMark.ts`](../web/src/types/brandMark.ts) owns the shared identity and ordered artwork
-resolution; [`useProviderBranding`](../web/src/hooks/useProviderBranding.ts) resolves
+[`brandMark.ts`](../../web/src/types/brandMark.ts) owns the shared identity and ordered artwork
+resolution; [`useProviderBranding`](../../web/src/hooks/useProviderBranding.ts) resolves
 collection-level sources through shared queries and revalidates the sanitized provider
 catalog on mount. The DOM renderer and request-image painter consume the same artwork
 candidates. Plugin ownership remains authoritative even when its logo is
@@ -206,7 +206,7 @@ cannot.
 Use the shared page, panel, toolbar, field, empty-state, drawer, dialog and
 confirmation primitives before creating another page-local version.
 
-An on/off setting is a [`Switch`](../web/src/components/common/Switch.tsx): on fills the track with
+An on/off setting is a [`Switch`](../../web/src/components/common/Switch.tsx): on fills the track with
 the healthy green, and the side the knob sits on states the value without the colour. A lone
 switch stays beside its setting's name at every width; a phone does not drop it under the
 description.
@@ -215,7 +215,7 @@ The language picker is a globe and the language's own name (its endonym), never 
 names a country, and the console's languages are not countries. Flags are kept for currencies,
 where the issuer is the fact.
 
-A [`Tag`](../web/src/components/common/Tag.tsx) has one geometry everywhere: 22px high (18px
+A [`Tag`](../../web/src/components/common/Tag.tsx) has one geometry everywhere: 22px high (18px
 small), `--radius-sm`, weight 500, a tint of its tone with a rim of the same tone drawn inside.
 Anything else shaped like a chip - a count, a prefix, a badge on a row - takes the small tag's
 height, radius and rim rather than its own. A dialog
@@ -225,7 +225,7 @@ leading edge drags to resize it and a click restores the opening width. The widt
 server preference per `widthKey`, so panels that show the same kind of thing share one.
 Keep semantic HTML, labels,
 focus management and accessible names when adapting a library component. Number fields
-use [`NumberInput`](../web/src/components/common/NumberInput.tsx): once it holds the
+use [`NumberInput`](../../web/src/components/common/NumberInput.tsx): once it holds the
 caret, the wheel steps the field by its own step and bounds. A value never changes for a
 pointer that merely crosses the control, so a wheel scrolls the page it was meant for.
 
@@ -248,7 +248,7 @@ A disabled or pending action should not move surrounding controls.
 Nothing a state brings in moves what is already on screen. A reset or clear-filters control
 arrives at the end of its row, and the search beside it has a small flex basis so it gives the
 room back instead of wrapping the row. A selection docks as the floating
-[`SelectionBar`](../web/src/components/common/SelectionBar.tsx) over the foot of the list it acts
+[`SelectionBar`](../../web/src/components/common/SelectionBar.tsx) over the foot of the list it acts
 on; on a phone it is one line, with the actions as glyphs. A list carries no checkboxes until a
 choice starts, from the toolbar's select tool or a row menu's Select; while it lasts a plain click
 picks, and clearing the selection ends it. The checkbox column opens from no width on
@@ -263,14 +263,14 @@ it opens through its own way in (the chevron brightens and leans toward the draw
 choosing, through its checkbox's edge. The open record is a full-width face tinted with the
 accent.
 
-A record's name renames in place ([`InlineName`](../web/src/components/common/InlineName.tsx)).
+A record's name renames in place ([`InlineName`](../../web/src/components/common/InlineName.tsx)).
 The rename glyph is the last thing on the name's line and shows while the row is hovered or the
 glyph has focus; it keeps its width while hidden. The field takes the name's own place and type,
 selects the whole name, saves on Enter or on leaving, and restores it on Escape. Where nothing can
 hover, the row's menu carries the rename.
 
 The shell header's Refresh all re-reads every open view. A page adds its own
-[`RefreshButton`](../web/src/components/common/RefreshButton.tsx) only for work that re-read
+[`RefreshButton`](../../web/src/components/common/RefreshButton.tsx) only for work that re-read
 cannot do: pulling records from CPA, fetching quota, a model catalogue or exchange rates
 upstream, or reloading a log tail. A page that only refetches its own queries does not get one.
 
@@ -279,7 +279,7 @@ labelled-row representation, not a separately maintained mobile dataset. Preserv
 ordering, values, action reachability and empty/loading states in either presentation.
 
 A list the operator arranges by hand uses
-[`RowReorder`](../web/src/components/common/RowReorder.tsx); the dashboard grid and the
+[`RowReorder`](../../web/src/components/common/RowReorder.tsx); the dashboard grid and the
 routing board use the same drag library for their own layouts. Only a handle starts a
 drag. On a wide screen it stays hidden along the row's leading edge until the pointer
 reaches that edge, so it takes no column. On a phone it sits inline with the row's
@@ -287,7 +287,7 @@ controls. Rows sort live, without dimming, and travel only along the list. The d
 keeps the order on screen until the stored preference arrives. A focused handle moves
 its row with the arrow keys. A display order is presentation only: routing priority and
 weight belong to the routing board. A new list takes
-[`useSortableList`](../web/src/hooks/useSortableList.ts) rather than its own preference
+[`useSortableList`](../../web/src/hooks/useSortableList.ts) rather than its own preference
 wiring: a grouped order document when its keys are stable, such as credential file names, or a
 rank document of its own when they carry a provider's positional id, which the server re-keys
 with the other provider overlays when a delete or move shifts later entries.
@@ -300,10 +300,10 @@ reads as one undifferentiated line. Pick the structure the content already has:
 
 | Content | Use |
 | --- | --- |
-| Short facts side by side (size and line count, provider and priority, requests and failures) | [`MetaLine`](../web/src/components/common/MetaLine.tsx): space between facts, each wraps whole; a figure that matters takes `<b>`, a failure its tone |
-| A label with its value | [`FactList`](../web/src/components/common/FactList.tsx) in a panel, label/value rows in a tooltip |
+| Short facts side by side (size and line count, provider and priority, requests and failures) | [`MetaLine`](../../web/src/components/common/MetaLine.tsx): space between facts, each wraps whole; a figure that matters takes `<b>`, a failure its tone |
+| A label with its value | [`FactList`](../../web/src/components/common/FactList.tsx) in a panel, label/value rows in a tooltip |
 | A name and the thing it qualifies (an instant and its countdown, a channel, an id behind a name) | Parentheses through a catalog sentence: `09/30 01:05 (4h left)`, `Channel price (relay)` |
-| Clauses of one description | A sentence: `joinPhrases` in [`utils/format.ts`](../web/src/utils/format.ts) uses the locale's comma |
+| Clauses of one description | A sentence: `joinPhrases` in [`utils/format.ts`](../../web/src/utils/format.ts) uses the locale's comma |
 | A machine error | `formatErrorCode`: `invalid_grant (HTTP 400): max_tokens` |
 | An action on a target, as an accessible name | `common.action_on`: `Move earlier: Playground` |
 | A title and its secondary line | Two elements with two inks, never one joined string |
@@ -335,8 +335,8 @@ visible text, so an exact count beside a count already printed in full stays qui
 
 One phrase goes in `title` (or `data-tip`). More than one fact is a card: a heading, label/value
 rows and quiet notes, drawn by `TooltipReadout` in
-[`components/ui/tooltip.tsx`](../web/src/components/ui/tooltip.tsx). Every route takes the same
-card shape (`TipCard` in [`tipCard.ts`](../web/src/components/common/tipCard.ts)):
+[`components/ui/tooltip.tsx`](../../web/src/components/ui/tooltip.tsx). Every route takes the same
+card shape (`TipCard` in [`tipCard.ts`](../../web/src/components/common/tipCard.ts)):
 
 - `Tooltip card={...}` for a React trigger;
 - `{...tipCard(...)}` on any element for the document-level `data-tip` layer;
@@ -377,7 +377,7 @@ readouts settle. Do not animate every item on a large mount or duplicate scroll 
 The console's motion is brisk: it answers the hand at once and is finished before anyone
 waits for it, critically damped rather than bouncy.
 
-Elements React renders animate with Motion through [`web/src/motion`](../web/src/motion/index.tsx)
+Elements React renders animate with Motion through [`web/src/motion`](../../web/src/motion/index.tsx)
 only: its named springs, its reduced-motion policy and its `MotionScope`, which keeps the
 library in the consuming route's lazy chunk. Give `animate` a target whose identity is
 stable across renders; a fresh object reads as a new target and fights a running exit.
@@ -386,12 +386,12 @@ Motion measures `auto` in the state it is heading for, so padding folding alongs
 the motion short of its end and snap the rest.
 
 Charts are the exception. A chart's marks are hundreds of SVG nodes, so a new dataset is rendered
-once inside an element-scoped view transition ([`useChartMorph`](../web/src/charts/useChartMorph.ts))
+once inside an element-scoped view transition ([`useChartMorph`](../../web/src/charts/useChartMorph.ts))
 that cross-fades the chart on the compositor, and the chart library's own tween stays off. Where
 scoped transitions are missing or motion is reduced, the new data simply lands.
 
 A list that a search or a status filter narrows animates through the same layer
-([`motion/filter.tsx`](../web/src/motion/filter.tsx)): what remains glides to the place the shorter
+([`motion/filter.tsx`](../../web/src/motion/filter.tsx)): what remains glides to the place the shorter
 list gives it, and what starts to match fades in where it now belongs, as one move. A row the filter
 drops leaves at once - holding it for a fade before the rest close up reads as a pause, and the
 operator is already typing again by the end of it. Only a change that keeps something is drawn as a
@@ -451,7 +451,7 @@ tabs - takes the shared `scroll-fade-x` class, which fades the edge that has mor
 clipped label with no such cue reads as broken, not as more to see. Dialogs and drawers must keep
 the current action and focused field reachable when the keyboard appears. Opening a
 list must not raise the keyboard over it: a select the reader can type into uses
-[`SearchSelect`](../web/src/components/common/SearchSelect.tsx), which becomes a
+[`SearchSelect`](../../web/src/components/common/SearchSelect.tsx), which becomes a
 bottom sheet on narrow screens.
 
 Use visible labels, keyboard navigation, clear focus indicators and appropriate hit
@@ -474,7 +474,7 @@ redraws the field under the hand.
 
 Inspect light and dark modes, a narrow viewport, keyboard flow, loading/error/empty
 states and reduced motion where affected. Use [Testing](testing.md) to choose checks.
-If a pictured user-facing page changed, [`.github/workflows/readme-screenshots.yml`](../.github/workflows/readme-screenshots.yml)
+If a pictured user-facing page changed, [`.github/workflows/readme-screenshots.yml`](../../.github/workflows/readme-screenshots.yml)
 refreshes README screenshots on a daily schedule or manual dispatch (or you can run
 `pnpm build && pnpm readme:screenshots` locally when previewing changes before merge);
 screenshots are presentation assets, not a test of exact pixels. Do not duplicate this

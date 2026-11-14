@@ -5,7 +5,7 @@
  * scheduled runs, manual dispatches, and `full-ci` PRs run full verification.
  * Anything unrecognized widens to every lane so an unfamiliar path never skips a check.
  *
- * Prints `go=`, `frontend=`, `browser=`, `docker=`, and `full=` lines for `$GITHUB_OUTPUT`.
+ * Prints `go=`, `frontend=`, `browser=`, `docker=`, `docs=`, and `full=` lines for `$GITHUB_OUTPUT`.
  */
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
@@ -18,7 +18,11 @@ const GO_ONLY = /(?:\.go$|^go\.(?:mod|sum)$|^\.golangci\.yml$|^\.swaggo$|^(?:cmd
 const GO_CROSS_FRONTEND = /^(?:internal\/(?:api|demo|domain|web)\/|migrations\/|^\.swaggo$|go\.(?:mod|sum)$)/;
 const OPENAPI_SPEC = /^docs\/openapi\/swagger\.json$/;
 const GO_READS_WEB = /^(?:scripts\/acceptance\/contracts\/|web\/public\/|web\/index\.html$)/;
-const WEB = /^(?:web\/|vitest\.config\.[cm]?[jt]s$|deploy\/(?:cloudflare|site)\/|scripts\/acceptance\/|scripts\/(?:api-target|browser-acceptance|build-demo|build-site|compact-locales|dev-base-redirect|fake-cpa|generate-demo-data|install-chromium|check-bundle-budget|sync-web-dist|sync-lobe-icons|bundle-[^/]+|generate-lucide-icons|sync-lobe-icon-catalog|sync-brand)\.(?:mjs|ts|json)$)/;
+const WEB = /^(?:web\/|vitest\.config\.[cm]?[jt]s$|deploy\/cloudflare\/|scripts\/acceptance\/|scripts\/(?:api-target|browser-acceptance|build-demo|compact-locales|dev-base-redirect|fake-cpa|generate-demo-data|install-chromium|check-bundle-budget|sync-web-dist|sync-lobe-icons|bundle-[^/]+|generate-lucide-icons|sync-lobe-icon-catalog|sync-brand)\.(?:mjs|ts|json)$)/;
+const SITE_WORKER_OR_BUNDLER = /^(?:deploy\/site\/(?:worker(?:\.test)?\.mjs$|wrangler\.jsonc$)|scripts\/build-site\.mjs$)/;
+const SITE_DOCS_SCRIPTS = /^scripts\/(?:sync-docs-site\.mjs|build-site\.test\.mjs)$/;
+const SITE_STATIC_DOCS = /^deploy\/site\/(?:docs\/|landing\/|api-reference\/|_headers$)/;
+const DOCS_INPUTS = /^(?:README(?:\.zh-CN)?\.md|CONTEXT\.md|CONTRIBUTING\.md|docs\/(?:install(?:-for-agents)?|operations|pricing|agent-capabilities|cpa-v8-compat)\.md|docs\/ops\/sqlite-operations\.md|docs\/zh\/.*\.md|docs\/dev\/architecture\.md|docs\/images\/readme\/.*\.webp)$/;
 const DEPLOY_OR_WORKFLOW = /^(?:deploy\/[^/]+\.ya?ml$|deploy\/native\.env\.example$|\.env\.example$|\.github\/workflows\/.+\.ya?ml$)/;
 const SCRIPTS_OTHER = /^scripts\/.+/;
 // Always verified by the unconditional `static-repo` lane (workflow lint, docs links, secret scan).
@@ -29,10 +33,11 @@ export function scopeOf(files) {
   let frontend = false;
   let browser = false;
   let docker = false;
+  let docs = false;
 
   for (const file of files) {
     if (SHARED_INPUTS.test(file)) {
-      return { go: true, frontend: true, browser: true, docker: true };
+      return { go: true, frontend: true, browser: true, docker: true, docs: true };
     }
     let matched = false;
     if (DOCKER_INPUTS.test(file)) {
@@ -56,11 +61,29 @@ export function scopeOf(files) {
       browser = true;
       matched = true;
     }
+    if (SITE_WORKER_OR_BUNDLER.test(file)) {
+      frontend = true;
+      browser = true;
+      docs = true;
+      matched = true;
+    }
+    if (SITE_DOCS_SCRIPTS.test(file)) {
+      docs = true;
+      matched = true;
+    }
+    if (SITE_STATIC_DOCS.test(file)) {
+      docs = true;
+      matched = true;
+    }
+    if (DOCS_INPUTS.test(file)) {
+      docs = true;
+      matched = true;
+    }
     if (DEPLOY_OR_WORKFLOW.test(file)) {
       frontend = true;
       matched = true;
     }
-    if (SCRIPTS_OTHER.test(file)) {
+    if (SCRIPTS_OTHER.test(file) && !SITE_WORKER_OR_BUNDLER.test(file) && !SITE_DOCS_SCRIPTS.test(file)) {
       frontend = true;
       if (file === 'scripts/docker-smoke.mjs') docker = true;
       matched = true;
@@ -68,17 +91,18 @@ export function scopeOf(files) {
     if (OPENAPI_SPEC.test(file)) {
       go = true;
       frontend = true;
+      docs = true;
       matched = true;
     }
     if (!matched && REPO_HYGIENE.test(file)) {
       matched = true;
     }
     if (!matched) {
-      return { go: true, frontend: true, browser: true, docker: true };
+      return { go: true, frontend: true, browser: true, docker: true, docs: true };
     }
   }
 
-  return { go, frontend, browser, docker };
+  return { go, frontend, browser, docker, docs };
 }
 
 function changedFiles(base, execute = execFileSync) {
@@ -107,26 +131,26 @@ export function decideRunScope(env, execute = execFileSync) {
   const isFull = !isPullRequest || hasFullLabel;
 
   if (hasFullLabel || env.EVENT === 'schedule' || env.EVENT === 'workflow_dispatch') {
-    return { go: true, frontend: true, browser: true, docker: true, full: true, fileCount: null };
+    return { go: true, frontend: true, browser: true, docker: true, docs: true, full: true, fileCount: null };
   }
 
   const files = changedFiles(env.BASE, execute);
   if (!files) {
-    return { go: true, frontend: true, browser: true, docker: true, full: true, fileCount: null };
+    return { go: true, frontend: true, browser: true, docker: true, docs: true, full: true, fileCount: null };
   }
 
   const scope = scopeOf(files);
   if (isMainPush || isFull) {
-    return { go: true, frontend: true, browser: true, docker: scope.docker, full: true, fileCount: files.length };
+    return { go: true, frontend: true, browser: true, docker: scope.docker, docs: true, full: true, fileCount: files.length };
   }
   return { ...scope, full: false, fileCount: files.length };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const result = decideRunScope(process.env);
-  for (const key of ['go', 'frontend', 'browser', 'docker', 'full']) {
+  for (const key of ['go', 'frontend', 'browser', 'docker', 'docs', 'full']) {
     console.log(`${key}=${result[key]}`);
   }
   const origin = result.fileCount === null ? 'full run' : `${result.fileCount} changed files`;
-  console.error(`[ci-scope] ${origin}: go=${result.go} frontend=${result.frontend} browser=${result.browser} docker=${result.docker} full=${result.full}`);
+  console.error(`[ci-scope] ${origin}: go=${result.go} frontend=${result.frontend} browser=${result.browser} docker=${result.docker} docs=${result.docs} full=${result.full}`);
 }

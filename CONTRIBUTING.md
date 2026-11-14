@@ -28,9 +28,10 @@ The default development console is `http://127.0.0.1:5173/`.
 
 - [AGENTS.md](AGENTS.md): boundaries and a task-oriented guide map for all contributors.
 - [CONTEXT.md](CONTEXT.md): project vocabulary.
-- [Architecture](docs/architecture.md): ownership and trust boundaries.
-- [Design](docs/design.md): UI composition and interaction principles.
-- [Testing](docs/testing.md): test ownership, local checks and CI expectations.
+- [Architecture](docs/dev/architecture.md): ownership and trust boundaries.
+- [Design](docs/dev/design.md): UI composition and interaction principles.
+- [Testing](docs/dev/testing.md): test ownership, local checks and CI expectations.
+- [Docs index](docs/README.md): repository documentation layout and bilingual public docs sync.
 
 Executable declarations own field lists, defaults and design-token values. Update the
 one guide your change makes wrong; a feature does not require a new architecture
@@ -41,7 +42,7 @@ record, mirrored catalog or synchronized specification.
 Start with `pnpm test:fast` (`pnpm type-check && pnpm test:logic && go test -short ./...`).
 `pnpm test:frontend` runs all frontend logic and component suites, `pnpm verify` adds the
 production build and bundle check, and `pnpm verify:browser:smoke` exercises the embedded
-SPA and Go binary in a browser. Additional checks depend on the risk: see [Testing](docs/testing.md),
+SPA and Go binary in a browser. Additional checks depend on the risk: see [Testing](docs/dev/testing.md),
 including shipped-build and release verification. Do not substitute a dev-server
 pass for testing the embedded application.
 

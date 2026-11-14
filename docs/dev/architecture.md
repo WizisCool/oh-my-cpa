@@ -3,7 +3,7 @@
 OMC is the identity and management layer above CPA, not a second model gateway.
 CPA owns protocol translation, credential execution and request routing. OMC owns
 names, organization, management projections, usage history and operator workflows.
-See the [domain vocabulary](../CONTEXT.md) for terms.
+See [the domain vocabulary](../../CONTEXT.md) for terms.
 
 ## Runtime and code ownership
 
@@ -19,17 +19,17 @@ External MCP clients → MCP adapter → the same capability executor
 
 | Area | Entry point and responsibility |
 | --- | --- |
-| Composition | [`internal/app`](../internal/app): startup, services and background lifetimes |
-| HTTP boundary | [`internal/api`](../internal/api): authentication, DTOs, routes and audit admission |
-| Projected state & SSE | [`internal/statecoord`](../internal/statecoord): in-memory hot projection, 250ms write-behind coalescing and `/api/events` reconciliation |
-| Business operations | [`internal/operations`](../internal/operations): shared console/Agent behavior |
-| CPA integration | [`internal/cpa`](../internal/cpa): discovery, management and inference clients |
-| Persistence | [`internal/repository`](../internal/repository), [`migrations`](../migrations): transactions, retention and schema |
-| Usage and cost | [`internal/usage`](../internal/usage), [`internal/pricing`](../internal/pricing): ingestion, accounting and immutable quotes |
-| Credential observation | [`internal/quota`](../internal/quota), [`internal/warmup`](../internal/warmup): quota evidence and warmup task scheduling |
-| Automation | [`internal/agent`](../internal/agent), [`internal/capability`](../internal/capability), [`internal/mcpbridge`](../internal/mcpbridge) |
-| Updates | [`internal/release`](../internal/release) observes; [`internal/updater`](../internal/updater) installs |
-| Browser | [`web/src`](../web/src): route-owned pages, shared components, typed API and theme |
+| Composition | [`internal/app`](../../internal/app): startup, services and background lifetimes |
+| HTTP boundary | [`internal/api`](../../internal/api): authentication, DTOs, routes and audit admission |
+| Projected state & SSE | [`internal/statecoord`](../../internal/statecoord): in-memory hot projection, 250ms write-behind coalescing and `/api/events` reconciliation |
+| Business operations | [`internal/operations`](../../internal/operations): shared console/Agent behavior |
+| CPA integration | [`internal/cpa`](../../internal/cpa): discovery, management and inference clients |
+| Persistence | [`internal/repository`](../../internal/repository), [`migrations`](../../migrations): transactions, retention and schema |
+| Usage and cost | [`internal/usage`](../../internal/usage), [`internal/pricing`](../../internal/pricing): ingestion, accounting and immutable quotes |
+| Credential observation | [`internal/quota`](../../internal/quota), [`internal/warmup`](../../internal/warmup): quota evidence and warmup task scheduling |
+| Automation | [`internal/agent`](../../internal/agent), [`internal/capability`](../../internal/capability), [`internal/mcpbridge`](../../internal/mcpbridge) |
+| Updates | [`internal/release`](../../internal/release) observes; [`internal/updater`](../../internal/updater) installs |
+| Browser | [`web/src`](../../web/src): route-owned pages, shared components, typed API and theme |
 
 Discover individual endpoints from `internal/api/handler.go`, wire shapes from its
 DTOs, settings from `internal/config`, and schema from migrations. These are the
@@ -127,7 +127,7 @@ which browsers load as images rather than through an OMC outbound proxy.
 
 ### Agent and MCP
 
-The [capability executor](agent-capabilities.md) owns authorization, approval and audit
+The [capability executor](../agent-capabilities.md) owns authorization, approval and audit
 for both Agent and MCP. Tools opt in to that surface; they do not inherit the plugin
 host's authority. Secret input goes through private operator forms, never model-visible
 arguments. Read-only SQL uses schema classification and a read-only connection;
@@ -160,7 +160,7 @@ while preserving networks it already belonged to.
 
 A failed replacement health check restores the previous container and image tag.
 Namespace dependents require coordinated rebinding; recovery details and limits are
-in [Operations](operations.md#console-updates), publication in [Releasing](releasing.md).
+in [Operations](../operations.md#console-updates), publication in [Releasing](releasing.md).
 
 ## State and request lifetimes
 
@@ -168,7 +168,7 @@ One OMC replica owns each data directory. The normal SQLite pool serializes acce
 maintenance takes a write gate so ingestion waits instead of failing. Separate bounded
 read-only query and maintenance connections do not authorize a second application
 replica. Migrations run forward and back up the WAL-backed database consistently;
-audit events and price versions are append-only. See the [SQLite runbook](ops/sqlite-operations.md).
+audit events and price versions are append-only. See the [SQLite runbook](../ops/sqlite-operations.md).
 
 Discovery binds resources by stable, family-scoped evidence, not list positions or
 key masks. Missing or rotated credentials must not rewrite historical attribution.
@@ -180,12 +180,12 @@ structural writes drain pending domains before reading or replacing `config.yaml
 failed background flush attempts to reload CPA's authoritative state (marking the projection
 unready for lazy re-fetch if CPA is unreachable) and broadcasts a secret-scrubbed
 `sync_error` frame on `/api/events` while recording the deferred audit outcome.
-[CPA integration](cpa-v8-compat.md) explains adoption and legacy-layout handling.
+[CPA integration](../cpa-v8-compat.md) explains adoption and legacy-layout handling.
 
 Probe availability with AUTH, never with a pop. Persist and sanitize input before
 deriving facts; report ingestion gaps rather than inventing events. Request details and decoded inbox rows have retention;
 dashboard usage facts are permanent. Late arrivals must count once, and unpriced
-usage must remain distinguishable from zero. [Pricing](pricing.md) owns cost semantics.
+usage must remain distinguishable from zero. [Pricing](../pricing.md) owns cost semantics.
 
 Calendar presets are resolved on the deployment's clock and expressed as instants;
 the browser does not reinterpret them in its own zone. Tier billing clocks and quota
@@ -215,5 +215,5 @@ are not committed.
 
 The demo uses synthetic data and an explicit route boundary around the real console.
 It must not call a live gateway or expose production data. Its dataset is generated
-from the actual handlers. [Demo operations](ops/cloudflare-demo.md) owns deployment and
+from the actual handlers. [Demo operations](../ops/cloudflare-demo.md) owns deployment and
 replay details; [Testing](testing.md) owns verification layers and CI scheduling.

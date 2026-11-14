@@ -86,4 +86,4 @@ Business operations live in [`internal/operations/pricing.go`](../internal/opera
 versioned storage in [`internal/repository`](../internal/repository), and parsing,
 matching and quoting in [`internal/pricing`](../internal/pricing). Console and Agent
 use the same operations. Verify the changed accounting or matching claim in its owning
-suite; do not add a browser test to re-prove arithmetic. Follow [Testing](testing.md).
+suite; do not add a browser test to re-prove arithmetic. Follow [Testing](dev/testing.md).

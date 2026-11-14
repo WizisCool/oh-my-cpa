@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import type { TipCard } from './tipCard';
 import { hasOpenPopup, hoverIntentDelay, isControl, noteHintClosed, repeatsVisibleText } from './tooltipIntent';
 
-/** The card layout every multi-fact hint draws with; see docs/design.md, Tooltips. */
+/** The card layout every multi-fact hint draws with; see docs/dev/design.md, Tooltips. */
 export { TooltipReadout, type TooltipReadoutRow } from '@/components/ui/tooltip';
 
 export type TooltipPlacement =

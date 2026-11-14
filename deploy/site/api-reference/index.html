@@ -34,7 +34,7 @@
     <script>
       (function () {
         var pathname = location.pathname;
-        // Keep relative assets and ./swagger.json anchored inside /api-docs/ even on
+        // Keep relative assets and ./swagger.json anchored inside /api-reference/ even on
         // static servers that serve directory index HTML without trailing-slash redirects.
         if (!pathname.endsWith('/') && !pathname.endsWith('/index.html')) {
           location.replace(pathname + '/' + location.search + location.hash);
