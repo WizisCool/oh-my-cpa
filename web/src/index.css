@@ -643,7 +643,21 @@
     transform var(--motion-fast) var(--ease-standard),
     visibility 0s linear var(--motion-fast);
 }
-/* A disclosure panel folds open from nothing to its content's height and back. */
+/* A disclosure panel folds open from nothing to its content's height and back. Once settled open,
+   overflow returns to visible so shadows and focus rings near the panel edge are never clipped. */
+.omc-fold-panel {
+  overflow: hidden;
+}
+.omc-fold-panel[data-open]:not([data-starting-style]):not([data-ending-style]) {
+  overflow: visible;
+  animation: omc-fold-clip var(--motion-slow) step-end;
+}
+@keyframes omc-fold-clip {
+  from { overflow: hidden; }
+}
+:root[data-reduced-motion='true'] .omc-fold-panel[data-open]:not([data-starting-style]):not([data-ending-style]) {
+  animation: none;
+}
 :root:not([data-reduced-motion='true']) .omc-fold-panel {
   height: var(--accordion-panel-height, var(--collapsible-panel-height, auto));
   transition: height var(--motion-slow) var(--ease-out), opacity var(--motion-base) var(--ease-standard);
@@ -2534,13 +2548,11 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    only applies when the panel is rendered under search results, where the header
    names the search rather than the section. */
 .payload-builder-group {
-  padding: 0 !important;
-  background: transparent !important;
-  border: none !important;
+  scroll-margin-top: 96px;
 }
 
 .payload-builder-group .settings-group-head {
-  padding: 0 0 16px 0 !important;
+  padding: 0 0 16px 0;
   border-bottom: 1px solid var(--border-soft);
   margin-bottom: 16px;
 }

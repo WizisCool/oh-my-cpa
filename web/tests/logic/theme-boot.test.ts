@@ -515,3 +515,15 @@ test('no retired Ant Design, rc-component, dayjs or ECharts packages or selector
   assert.deepEqual(legacySelectors, []);
 });
 
+test('foldable panels and card-stack accordions do not permanently clip shadows or focus rings', () => {
+  const indexCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'index.css'), 'utf8'));
+  const configCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/config/config.css'), 'utf8'));
+  const agentCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'pages/agent/AgentPage.module.css'), 'utf8'));
+
+  assert.match(indexCss, /\.omc-fold-panel\[data-open\]:not\(\[data-starting-style\]\):not\(\[data-ending-style\]\)\s*\{[^}]*overflow:\s*visible\s*;/);
+  assert.match(agentCss, /\.fold\[data-open\]\s*>\s*\.fold-inner\s*\{[^}]*overflow:\s*visible\s*;/);
+  assert.match(configCss, /\.settings-tls-body\.is-open\s*>\s*\.settings-tls-inner\s*\{[^}]*overflow:\s*visible\s*;/);
+  assert.match(configCss, /\.payload-collapse\s*\{[^}]*overflow:\s*visible\s*;/);
+  assert.match(configCss, /\.payload-collapse\s*>\s*\[data-slot="accordion-item"\]\s*\{[^}]*overflow:\s*visible\s*;/);
+});
+

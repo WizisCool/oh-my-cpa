@@ -43,6 +43,38 @@ describe('payload rule disclosures', () => {
     expect(getDefaultHeader().getAttribute('aria-expanded')).toBe('true');
     expect(onDocChange).not.toHaveBeenCalled();
   });
+
+  it('renders category disclosures as standalone cards without wrapping them in an outer card or clipping edge shadows', () => {
+    const doc = parseDocument(POPULATED_YAML);
+    const { container } = render(<PayloadSurface doc={doc} onDocChange={() => {}} />);
+    const root = container.querySelector('.payload-collapse[data-slot="accordion"]')!;
+    expect(root.getAttribute('data-variant')).toBe('cards');
+    const rootTokens = root.className.split(/\s+/);
+    expect(rootTokens).not.toContain('overflow-hidden');
+    expect(rootTokens).not.toContain('divide-y');
+    expect(rootTokens).not.toContain('shadow-edge');
+
+    const items = Array.from(container.querySelectorAll('.payload-collapse > [data-slot="accordion-item"]'));
+    expect(items).toHaveLength(5);
+    for (const item of items) {
+      const tokens = item.className.split(/\s+/);
+      expect(tokens).toContain('shadow-edge');
+      expect(tokens).not.toContain('overflow-hidden');
+    }
+  });
+});
+
+it('does not wrap the payload builder in a clipping .settings-group shell', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(['management-config'], { scalars: {}, revision: 'fixture-r1', safe_yaml: 'requests: {}\n' });
+  try {
+    const { container } = render(<React.StrictMode><I18nProvider><QueryClientProvider client={client}><ConfigPayloadDraft /></QueryClientProvider></I18nProvider></React.StrictMode>);
+    await waitFor(() => expect(screen.getByTestId('payload-draft').textContent).toBe('requests: {}\n'));
+    const wrapper = container.querySelector('.payload-builder-group')!;
+    expect(wrapper).not.toBeNull();
+    expect(wrapper.classList.contains('settings-group')).toBe(false);
+    expect(wrapper.querySelector('.settings-group-body')).toBeNull();
+  } finally { client.clear(); }
 });
 
 function ConfigPayloadDraft() {

@@ -23,6 +23,7 @@ import { MaskedText } from '../src/components/common/MaskedText';
 import { MarkArtwork } from '../src/components/common/MarkArtwork';
 import { RemoteImage } from '../src/components/common/RemoteImage';
 import { Select } from '../src/components/ui/select';
+import { Collapse } from '../src/components/ui/accordion';
 import { Tabs } from '../src/components/ui/tabs';
 import { Combobox } from '../src/components/ui/combobox';
 import { AutoComplete } from '../src/components/ui/autocomplete';
@@ -1173,5 +1174,35 @@ describe('Select and Combobox inline action controls', () => {
 
     fireEvent.click(clearAll);
     expect(onChange.mock.calls[1][0]).toEqual([]);
+  });
+});
+
+describe('Collapse variants', () => {
+  it('keeps edge shadows and focus rings unclipped across grouped, cards, and ghost variants', () => {
+    const items = [
+      { key: 'a', label: 'Alpha', children: 'Body A' },
+      { key: 'b', label: 'Beta', children: 'Body B' },
+    ];
+    const { container, rerender } = render(<Collapse items={items} />);
+    let root = container.querySelector('[data-slot="accordion"]')!;
+    expect(root.getAttribute('data-variant')).toBe('grouped');
+    expect(root.className.split(/\s+/)).toContain('shadow-edge');
+    expect(root.className.split(/\s+/)).not.toContain('overflow-hidden');
+
+    rerender(<Collapse variant="cards" items={items} />);
+    root = container.querySelector('[data-slot="accordion"]')!;
+    expect(root.getAttribute('data-variant')).toBe('cards');
+    expect(root.className.split(/\s+/)).not.toContain('overflow-hidden');
+    expect(root.className.split(/\s+/)).not.toContain('divide-y');
+    expect(root.className.split(/\s+/)).not.toContain('shadow-edge');
+    for (const item of container.querySelectorAll('[data-slot="accordion-item"]')) {
+      expect(item.className.split(/\s+/)).toContain('shadow-edge');
+      expect(item.className.split(/\s+/)).not.toContain('overflow-hidden');
+    }
+
+    rerender(<Collapse ghost items={items} />);
+    root = container.querySelector('[data-slot="accordion"]')!;
+    expect(root.getAttribute('data-variant')).toBe('ghost');
+    expect(root.className.split(/\s+/)).not.toContain('overflow-hidden');
   });
 });

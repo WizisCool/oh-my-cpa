@@ -423,28 +423,28 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
     // Payload Builder variant (structured JSON rules for models and parameters)
     if (grp.variant === 'payload-builder') {
       return (
-        <div key={grp.id} id={groupAnchorId(grp.id)} className="settings-group payload-builder-group">
+        // The section header already frames the payload workspace; keeping it unboxed avoids
+        // stacking a second .settings-group card around the rule cards and clipping their edge shadows.
+        <div key={grp.id} id={groupAnchorId(grp.id)} className="payload-builder-group">
           {context === 'search' && (
             <SectionHeading className="settings-group-head" title={t(grp.labelKey)} description={grp.descKey ? t(grp.descKey) : undefined} />
           )}
-          <div className="settings-group-body">
-            <PayloadRulesEditor
-              doc={docRef.current}
-              onDocChange={() => {
-                if (docRef.current) {
-                  // Check semantic equality with serverDocRef before setting rawYaml
-                  if (serverDocRef.current && isConfigSemanticallyEqual(docRef.current, serverDocRef.current, ALL_CONFIG_FIELDS)) {
-                    setRawYaml(serverYaml);
-                    docRef.current = parseDocument(serverYaml);
-                  } else {
-                    setRawYaml(docRef.current.toString());
-                  }
+          <PayloadRulesEditor
+            doc={docRef.current}
+            onDocChange={() => {
+              if (docRef.current) {
+                // Check semantic equality with serverDocRef before setting rawYaml
+                if (serverDocRef.current && isConfigSemanticallyEqual(docRef.current, serverDocRef.current, ALL_CONFIG_FIELDS)) {
+                  setRawYaml(serverYaml);
+                  docRef.current = parseDocument(serverYaml);
+                } else {
+                  setRawYaml(docRef.current.toString());
                 }
-              }}
-              onValidationChange={setPayloadIssues}
-              validateTrigger={validateTrigger}
-            />
-          </div>
+              }
+            }}
+            onValidationChange={setPayloadIssues}
+            validateTrigger={validateTrigger}
+          />
         </div>
       );
     }

@@ -220,6 +220,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
   return (
     <div className="payload-rules-container">
       <Collapse
+        variant="cards"
         activeKey={activePanels}
         onChange={(keys) => setActivePanels(Array.isArray(keys) ? keys : [keys])}
         items={items}
