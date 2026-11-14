@@ -552,7 +552,10 @@ func TestStateCoordinatorExternalRefreshUpdatesHTTPAndSSE(t *testing.T) {
 func TestStateCoordinatorBaselineRefreshRetainsNewerPendingIntents(t *testing.T) {
 	upstream := &configFixtureCPA{}
 	var handler *Handler
-	_, _, _ = startDashboardTestServer(t, upstream.serve, func(h *Handler) { handler = h })
+	_, _, _ = startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("ETag", `"preceding-save"`)
+		upstream.serve(writer, request)
+	}, func(h *Handler) { handler = h })
 	if err := handler.EnableStateCoordinator(context.Background(), StateCoordinatorOptions{
 		DebounceWindow: time.Hour, MaxBatchWait: time.Hour, RefreshInterval: time.Hour,
 	}); err != nil {
@@ -573,6 +576,9 @@ func TestStateCoordinatorBaselineRefreshRetainsNewerPendingIntents(t *testing.T)
 	upstream.configData["routing"].(map[string]any)["retry"].(map[string]any)["request-retry"] = 7
 	wantRevision := configyaml.ComputeRevision(upstream.yamlData)
 	upstream.mu.Unlock()
+	handler.stateCoord.UpdateBaseline(func(state *projectedConfigState, _ []statecoord.DomainKey) {
+		state.CommittedETag = `"preceding-save"`
+	})
 	handler.refreshCoordinatorBaseline(t.Context())
 	env, err := handler.stateCoord.Read(t.Context())
 	if err != nil {
@@ -907,5 +913,220 @@ func TestStateCoordinatorPendingFamilyToggleSurvivesRuntimeReindex(t *testing.T)
 	fixture.state.mu.Unlock()
 	if isPersistedDisabled {
 		t.Fatal("CPA still holds the older disabled state after the second batch")
+	}
+}
+
+func TestStateCoordinatorProviderRecoveryRejectsOlderGeneration(t *testing.T) {
+	for _, mode := range []string{"refresh", "write-readback"} {
+		for _, family := range []string{"codex", "openai-compatibility"} {
+			t.Run(mode+"/"+family, func(t *testing.T) {
+				upstream := &configFixtureCPA{}
+				var handler *Handler
+				var generation, groupStatus atomic.Int32
+				generation.Store(1)
+				groupStatus.Store(http.StatusServiceUnavailable)
+				var shouldBlock atomic.Bool
+				started, release := make(chan struct{}), make(chan struct{})
+				var releaseOnce sync.Once
+				unblock := func() { releaseOnce.Do(func() { close(release) }) }
+				defer unblock()
+				runtimePath := "/v0/management/" + family
+				if family == "codex" {
+					runtimePath += "-api-key"
+				}
+				_, _, _ = startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
+					switch request.URL.Path {
+					case "/v8/management/config", "/v8/management/config.yaml":
+						upstream.serve(writer, request)
+					case "/v0/management/config":
+						_, _ = fmt.Fprintf(writer, `{"generation":%d}`, generation.Load())
+					case runtimePath:
+						captured := generation.Load()
+						if shouldBlock.CompareAndSwap(true, false) {
+							close(started)
+							<-release
+						}
+						if family == "codex" {
+							_, _ = fmt.Fprintf(writer, `{"codex-api-key":[{"api-key":"recovery-test-key","prefix":"generation-%d"}]}`, captured)
+						} else {
+							_, _ = fmt.Fprintf(writer, `{"openai-compatibility":[{"name":"generation-%d"}]}`, captured)
+						}
+					case "/v8/management/config/api-keys/" + family:
+						if status := groupStatus.Load(); status != 0 {
+							writer.WriteHeader(int(status))
+						} else {
+							_, _ = writer.Write([]byte(`[]`))
+						}
+					default:
+						if strings.HasPrefix(request.URL.Path, "/v8/management/config/api-keys/") {
+							_, _ = writer.Write([]byte(`[]`))
+						} else {
+							_, _ = writer.Write([]byte(`{}`))
+						}
+					}
+				}, func(h *Handler) { handler = h })
+				if err := handler.EnableStateCoordinator(t.Context(), StateCoordinatorOptions{RefreshInterval: time.Hour}); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { handler.CloseStateCoordinator(context.Background()) })
+				client, err := handler.capabilityClient(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				groupStatus.Store(0)
+				shouldBlock.Store(true)
+				result := make(chan []ProviderItemDTO, 1)
+				go func() { items, _ := handler.readProviderItemsWithVersion(t.Context(), client); result <- items }()
+				select {
+				case <-started:
+				case <-time.After(2 * time.Second):
+					t.Fatal("provider recovery did not start")
+				}
+				generation.Store(2)
+				if mode == "write-readback" {
+					handler.refreshCoordinatorBaseline(t.Context())
+				} else if err := handler.stateCoord.RefreshNow(t.Context()); err != nil {
+					t.Fatal(err)
+				}
+				unblock()
+				select {
+				case items := <-result:
+					for _, item := range items {
+						if item.Family == family && (item.Prefix == "generation-1" || item.Name == "generation-1") {
+							t.Errorf("recovery response used the older generation: prefix=%s name=%s", item.Prefix, item.Name)
+						}
+					}
+				case <-time.After(2 * time.Second):
+					t.Fatal("provider recovery did not finish")
+				}
+				env, err := handler.stateCoord.Read(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				if family == "codex" {
+					if got := env.Data.ConfigFamilies[management.ConfigFamilyCodex][0].Prefix; got != "generation-2" {
+						t.Fatalf("old recovery overwrote the current provider generation: %s", got)
+					}
+				} else if got := env.Data.OpenAICompat[0].Name; got != "generation-2" {
+					t.Fatalf("old recovery overwrote the current OpenAI generation: %s", got)
+				}
+			})
+		}
+	}
+}
+
+func TestStateCoordinatorPendingBatchRejectsUncertifiedReadback(t *testing.T) {
+	upstream := &configFixtureCPA{}
+	var handler *Handler
+	var writes atomic.Int32
+	_, _, _ = startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodPatch && request.URL.Path == "/v8/management/config" && writes.Add(1) == 1 {
+			_, err := handler.stateCoord.Mutate(t.Context(), stateDomainScalars, func(state *projectedConfigState) error {
+				state.ScalarSeq++
+				state.PendingScalars["request_retry"] = pendingScalarEntry{Value: int64(11), Seq: state.ScalarSeq}
+				state.Scalars.RequestRetry = 11
+				return nil
+			})
+			if err != nil {
+				t.Error(err)
+			}
+			upstream.serve(writer, request)
+			upstream.mu.Lock()
+			upstream.yamlData += "# external writer after accepted save\n"
+			upstream.configData["routing"] = map[string]any{"retry": map[string]any{"request-retry": 7}}
+			upstream.mu.Unlock()
+			return
+		}
+		upstream.serve(writer, request)
+	}, func(h *Handler) { handler = h })
+	if err := handler.EnableStateCoordinator(t.Context(), StateCoordinatorOptions{
+		DebounceWindow: time.Hour, MaxBatchWait: time.Hour, RefreshInterval: time.Hour,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { handler.CloseStateCoordinator(context.Background()) })
+	_, err := handler.stateCoord.Mutate(t.Context(), stateDomainScalars, func(state *projectedConfigState) error {
+		state.ScalarSeq++
+		state.PendingScalars["debug"] = pendingScalarEntry{Value: true, Seq: state.ScalarSeq}
+		state.Scalars.Debug = true
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := handler.stateCoord.FlushNow(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := handler.stateCoord.FlushNow(t.Context()); !errors.Is(err, management.ErrConfigChanged) || writes.Load() != 1 {
+		t.Fatalf("uncertified readback hid an external write: writes=%d error=%v", writes.Load(), err)
+	}
+	env, err := handler.stateCoord.Read(t.Context())
+	if err != nil || env.Data.Scalars.RequestRetry != 7 || handler.stateCoord.IsDirty() {
+		t.Fatalf("conflict did not restore the external value: retry=%d error=%v", env.Data.Scalars.RequestRetry, err)
+	}
+}
+
+func TestStateCoordinatorRetriesFailedRuntimeFallback(t *testing.T) {
+	for _, family := range []string{"codex", "openai-compatibility"} {
+		t.Run(family, func(t *testing.T) {
+			upstream := &configFixtureCPA{}
+			var handler *Handler
+			var isDegraded atomic.Bool
+			isDegraded.Store(true)
+			var runtimeReads atomic.Int32
+			runtimePath := "/v0/management/" + family
+			if family == "codex" {
+				runtimePath += "-api-key"
+			}
+			_, _, _ = startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
+				switch request.URL.Path {
+				case "/v8/management/config", "/v8/management/config.yaml":
+					upstream.serve(writer, request)
+				case "/v0/management/config":
+					_, _ = writer.Write([]byte(`{"generation":1}`))
+				case runtimePath:
+					if count := runtimeReads.Add(1); isDegraded.Load() && count%2 == 0 {
+						writer.WriteHeader(http.StatusServiceUnavailable)
+						return
+					}
+					if family == "codex" {
+						_, _ = writer.Write([]byte(`{"codex-api-key":[{"api-key":"runtime-recovery-test-key"}]}`))
+					} else {
+						_, _ = writer.Write([]byte(`{"openai-compatibility":[{"name":"runtime-recovered"}]}`))
+					}
+				case "/v8/management/config/api-keys/" + family:
+					writer.WriteHeader(http.StatusNotFound)
+				default:
+					if strings.HasPrefix(request.URL.Path, "/v8/management/config/api-keys/") {
+						_, _ = writer.Write([]byte(`[]`))
+					} else {
+						_, _ = writer.Write([]byte(`{}`))
+					}
+				}
+			}, func(h *Handler) { handler = h })
+			if err := handler.EnableStateCoordinator(t.Context(), StateCoordinatorOptions{RefreshInterval: time.Hour}); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { handler.CloseStateCoordinator(context.Background()) })
+			initial, err := handler.stateCoord.Read(t.Context())
+			if err != nil || !initial.Data.ProviderSliceFailed {
+				t.Fatalf("failed runtime fallback was not retained for retry: %v", err)
+			}
+			isDegraded.Store(false)
+			if err := handler.stateCoord.RefreshNow(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			recovered, err := handler.stateCoord.Read(t.Context())
+			if err != nil || recovered.Data.ProviderSliceFailed || recovered.Data.RuntimeRevision != initial.Data.RuntimeRevision || recovered.Data.Revision != initial.Data.Revision {
+				t.Fatalf("runtime fallback did not recover on unchanged configuration: %v", err)
+			}
+			if family == "codex" {
+				if len(recovered.Data.ConfigFamilies[management.ConfigFamilyCodex]) != 1 {
+					t.Fatal("runtime provider did not recover")
+				}
+			} else if len(recovered.Data.OpenAICompat) != 1 {
+				t.Fatal("runtime OpenAI provider did not recover")
+			}
+		})
 	}
 }

@@ -1003,6 +1003,7 @@ func (c *Coordinator[S]) reconcileFlushFailure(ctx context.Context, flushErr err
 
 // UpdateBaseline updates upstream-owned state while exposing dirty domains so callers
 // can preserve only unflushed optimistic intents when adopting a complete baseline.
+// Advancing the generation also rejects in-flight recovery reads of the old baseline.
 func (c *Coordinator[S]) UpdateBaseline(updateFn func(state *S, dirtyDomains []DomainKey)) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1016,22 +1017,22 @@ func (c *Coordinator[S]) UpdateBaseline(updateFn func(state *S, dirtyDomains []D
 	}
 	updateFn(&candidate, dirtyDomains)
 	c.state = candidate
+	c.version++
 	return true
 }
 
-// RefreshCleanBaseline updates non-dirty baseline metadata in place only when
-// no write-behind mutations are pending in memory. If a new Mutate landed while
-// the caller was reading upstream metadata, the update is skipped so speculative
-// state is never overwritten.
-func (c *Coordinator[S]) RefreshCleanBaseline(updateFn func(state *S)) bool {
+// RefreshCleanBaseline commits recovered metadata only to the clean projection
+// generation that initiated the read. Newer refreshes and mutations own their state.
+func (c *Coordinator[S]) RefreshCleanBaseline(expectedVersion uint64, updateFn func(state *S)) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.isClosed || !c.isReady || len(c.dirtyGen) > 0 {
+	if c.isClosed || !c.isReady || c.version != expectedVersion || len(c.dirtyGen) > 0 {
 		return false
 	}
 	candidate := c.opts.Clone(c.state)
 	updateFn(&candidate)
 	c.state = candidate
+	c.version++
 	return true
 }
 

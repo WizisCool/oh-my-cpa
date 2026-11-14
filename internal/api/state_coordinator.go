@@ -763,7 +763,11 @@ func (h *Handler) refreshCoordinatorBaseline(ctx context.Context) {
 		return
 	}
 	h.stateCoord.UpdateBaseline(func(state *projectedConfigState, dirty []statecoord.DomainKey) {
-		if len(dirty) > 0 && state.CommittedETag != "" && fresh.StoredETag != state.CommittedETag {
+		// Without a receipt, pending intents may retain an unchanged revision,
+		// but cannot safely adopt a newer document that may be an external write.
+		hasUncertifiedRevision := state.CommittedETag == "" && fresh.Revision != state.Revision
+		hasConflictingReceipt := state.CommittedETag != "" && fresh.StoredETag != state.CommittedETag
+		if len(dirty) > 0 && (hasUncertifiedRevision || hasConflictingReceipt) {
 			state.IsBaselineUnknown = true
 			return
 		}
@@ -912,8 +916,7 @@ func (h *Handler) loadUpstreamProjectedState(ctx context.Context) (projectedConf
 				openAICompat = runtime.Entries
 				openAIRuntime = true
 				return
-			}
-			if !management.IsMissingCapability(errCompat) {
+			} else if !management.IsMissingCapability(runtimeErr) {
 				openAIFailed = true
 			}
 		} else {
@@ -933,8 +936,7 @@ func (h *Handler) loadUpstreamProjectedState(ctx context.Context) (projectedConf
 					familyEntries[idx] = runtimeEntries
 					familyFallback[idx] = true
 					return
-				}
-				if !management.IsMissingCapability(errFam) {
+				} else if !management.IsMissingCapability(runtimeErr) {
 					familyFailed[idx] = true
 				}
 				return
