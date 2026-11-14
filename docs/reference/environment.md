@@ -5,10 +5,11 @@ directory (`OMCPA_ENV_FILE` names another file); real environment variables win.
 `internal/config/config.go` is authoritative, and a malformed value stops start-up with
 a message naming the variable.
 
-A container receives only the variables its Compose file names under `environment:`. The
-supplied files list the ones this release reads; a variable added to `.env` alone reaches a
-native install, which reads that file itself, but not a container whose Compose file was
-copied from an earlier release. Add the line to that service's `environment:` as well.
+A container receives only the variables its Compose file names under `environment:`. Even
+current Compose files omit optional settings listed below (such as
+`OMCPA_USAGE_RETENTION_DAYS`); adding a variable to `.env` alone reaches a native install,
+which reads that file itself, but leaves a container at its default unless the variable is
+also forwarded under that service's `environment:` in your Compose file.
 
 ## Required
 

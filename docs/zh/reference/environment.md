@@ -2,7 +2,7 @@
 
 OMC 从环境变量读取全部配置，同时也会读取工作目录下的 `.env` 文件（可用 `OMCPA_ENV_FILE` 指定其他路径）；进程环境变量优先于 `.env`。所有字段定义以 `internal/config/config.go` 为准，格式非法会在启动时直接报错退出。
 
-Docker 容器仅能读取其 Compose `environment:` 段显式传递的变量。沿用旧版 Compose 模板时，新增的环境变量需同时补充到 `environment:` 区块中才能传入容器。
+Docker 容器仅能读取其 Compose `environment:` 段显式传入的变量。即便是最新版 Compose 模板，也只声明了最常用的字段（例如 `OMCPA_USAGE_RETENTION_DAYS` 等可选参数未默认透传）；仅写入 `.env` 只对直接运行二进制生效，在容器部署中还需把对应变量补充到所选 Compose 服务的 `environment:` 下才能改变容器内默认值。
 
 ## 必填项
 

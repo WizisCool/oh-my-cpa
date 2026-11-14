@@ -54,15 +54,16 @@ volumes:
 `cli-proxy-api` is the service name in CPA's official Compose file; if your CPA service
 has another name, set `OMCPA_CPA_BASE_URL=http://<cpa-service-name>:8317` in `.env`.
 
-Append `OMCPA_MASTER_KEY` and CPA's plaintext management key (single-quoted in `.env` so
-`$` is not expanded) to `.env` in the Compose directory (`>>` preserves existing lines):
+Append `OMCPA_MASTER_KEY` (preserving any existing `OMCPA_MASTER_KEY` in `.env` so encrypted
+OMC data stays readable) and CPA's plaintext management key (single-quoted in `.env` so
+`$` is not expanded) to `.env` in the Compose directory:
 
 ```bash
-printf 'OMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
-cat >> .env <<'EOF'
+touch .env && chmod 600 .env
+grep -q '^OMCPA_MASTER_KEY=' .env || printf 'OMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
+grep -q '^OMCPA_CPA_MANAGEMENT_KEY=' .env || cat >> .env <<'EOF'
 OMCPA_CPA_MANAGEMENT_KEY='<CPA plaintext management key>'
 EOF
-chmod 600 .env
 ```
 
 Edit `.env` to replace `<CPA plaintext management key>` (and add

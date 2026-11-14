@@ -14,6 +14,7 @@ Docker Compose. It takes about three minutes and four commands. Already running 
 ## 1. Download the stack
 
 ```bash
+test ! -e oh-my-cpa/compose.yml && test ! -e oh-my-cpa/config.yaml || { echo "Existing deployment found in oh-my-cpa/; aborting to avoid overwriting config.yaml" >&2; exit 1; }
 mkdir -p oh-my-cpa && cd oh-my-cpa
 curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.full.yml -o compose.yml
 curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/cpa.config.example.yaml -o config.yaml
@@ -27,11 +28,13 @@ management and usage statistics, which OMC needs, and holds no client keys.
 
 ```bash
 test ! -e .env || { echo ".env already exists; keep it to preserve OMCPA_MASTER_KEY" >&2; exit 1; }
-cat > .env <<EOF
+(
+  umask 077
+  cat > .env <<EOF
 CPA_MANAGEMENT_KEY=$(openssl rand -hex 24)
 OMCPA_MASTER_KEY=$(openssl rand -hex 32)
 EOF
-chmod 600 .env
+)
 ```
 
 `CPA_MANAGEMENT_KEY` is CPA's management key and the console's sign-in password.

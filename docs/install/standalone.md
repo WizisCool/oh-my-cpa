@@ -4,25 +4,32 @@ Runs OMC and its updater from `compose.omc.yml` beside an existing CPA (on the h
 another Docker Compose project, or on another machine). CPA, its configuration, its keys
 and any other management panel are not modified or restarted.
 
-1. Create a directory and download `compose.omc.yml`:
+1. Create a directory and download `compose.omc.yml` (for existing installs, see [Upgrading](upgrade.md)):
 
    ```bash
-   mkdir -p oh-my-cpa && cd oh-my-cpa
-   curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.omc.yml -o compose.yml
+   (
+     [ ! -e oh-my-cpa/compose.yml ] && [ ! -e oh-my-cpa/.env ] &&
+     mkdir -p oh-my-cpa && cd oh-my-cpa &&
+     curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.omc.yml -o compose.yml
+   ) && cd oh-my-cpa
    ```
 
-2. Create `.env` with a generated `OMCPA_MASTER_KEY`, CPA's reachable URL and CPA's
+2. Create `.env` (skip or stop if `.env` already exists so you never overwrite an existing
+   `OMCPA_MASTER_KEY`) with a generated `OMCPA_MASTER_KEY`, CPA's reachable URL and CPA's
    existing plaintext management key (the key typed to sign in, not the bcrypt hash in
    `config.yaml`). Wrap `OMCPA_CPA_MANAGEMENT_KEY` in single quotes in `.env` so Docker
    Compose does not treat `$` in the key as variable interpolation (escape any literal `'`
    as `\'`):
 
    ```bash
-   printf 'OMCPA_CPA_BASE_URL=http://host.docker.internal:8317\nOMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" > .env
-   cat >> .env <<'EOF'
+   test ! -e .env || { echo ".env already exists; reuse its OMCPA_MASTER_KEY" >&2; exit 1; }
+   (
+     umask 077
+     printf 'OMCPA_CPA_BASE_URL=http://host.docker.internal:8317\nOMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" > .env
+     cat >> .env <<'EOF'
    OMCPA_CPA_MANAGEMENT_KEY='<CPA plaintext management key>'
    EOF
-   chmod 600 .env
+   )
    ```
 
    Edit `.env` to replace `<CPA plaintext management key>`, and set `OMCPA_CPA_BASE_URL`

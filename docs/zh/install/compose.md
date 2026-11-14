@@ -50,14 +50,14 @@ volumes:
 
 `cli-proxy-api` 是 CPA 官方 Compose 中的默认服务名；若你的服务名不同，请在 `.env` 中指定 `OMCPA_CPA_BASE_URL=http://<cpa-service-name>:8317`。
 
-将 `OMCPA_MASTER_KEY` 与 CPA 明文管理密钥追加到同目录 `.env`（使用 `>>` 保留现有配置）：
+将 `OMCPA_MASTER_KEY`（若 `.env` 中已有则保留原值，避免已有加密数据无法解密）与 CPA 明文管理密钥追加到同目录 `.env`：
 
 ```bash
-printf 'OMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
-cat >> .env <<'EOF'
+touch .env && chmod 600 .env
+grep -q '^OMCPA_MASTER_KEY=' .env || printf 'OMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
+grep -q '^OMCPA_CPA_MANAGEMENT_KEY=' .env || cat >> .env <<'EOF'
 OMCPA_CPA_MANAGEMENT_KEY='<CPA 明文管理密钥>'
 EOF
-chmod 600 .env
 ```
 
 编辑 `.env` 替换 `<CPA 明文管理密钥>`（若已有其他管理面板在消费 CPA 的 Redis 用量队列，可加设 `OMCPA_USAGE_INGEST_MODE=off`；详见[与其他管理面板共存](standalone.md#与其他管理面板共存)）。

@@ -11,6 +11,7 @@
 ## 1. 下载编排文件
 
 ```bash
+test ! -e oh-my-cpa/compose.yml && test ! -e oh-my-cpa/config.yaml || { echo "oh-my-cpa/ 中已存在配置文件，停止下载以避免覆盖 config.yaml" >&2; exit 1; }
 mkdir -p oh-my-cpa && cd oh-my-cpa
 curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/compose.full.yml -o compose.yml
 curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/cpa.config.example.yaml -o config.yaml
@@ -22,11 +23,13 @@ curl -fsSL https://github.com/WizisCool/oh-my-cpa/releases/latest/download/cpa.c
 
 ```bash
 test ! -e .env || { echo ".env 已存在，请勿覆盖以免丢失 OMCPA_MASTER_KEY" >&2; exit 1; }
-cat > .env <<EOF
+(
+  umask 077
+  cat > .env <<EOF
 CPA_MANAGEMENT_KEY=$(openssl rand -hex 24)
 OMCPA_MASTER_KEY=$(openssl rand -hex 32)
 EOF
-chmod 600 .env
+)
 ```
 
 `CPA_MANAGEMENT_KEY` 是 CPA 的管理密钥，也是控制台的登录密码。`OMCPA_MASTER_KEY` 加密 OMC 的数据库：请立即备份 `.env` 且不要覆盖已有文件，丢失原主密钥将无法读取已存数据。

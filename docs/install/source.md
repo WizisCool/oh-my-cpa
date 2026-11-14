@@ -7,6 +7,7 @@ git clone https://github.com/WizisCool/oh-my-cpa.git
 cd oh-my-cpa
 pnpm install --frozen-lockfile
 cp .env.example .env
+chmod 600 .env
 ```
 
 In `.env`, set `OMCPA_MASTER_KEY` (`openssl rand -hex 32`), `OMCPA_CPA_MANAGEMENT_KEY`

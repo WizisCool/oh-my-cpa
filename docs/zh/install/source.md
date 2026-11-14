@@ -7,6 +7,7 @@ git clone https://github.com/WizisCool/oh-my-cpa.git
 cd oh-my-cpa
 pnpm install --frozen-lockfile
 cp .env.example .env
+chmod 600 .env
 ```
 
 在 `.env` 中填好 `OMCPA_MASTER_KEY`、`OMCPA_CPA_MANAGEMENT_KEY` 与 `OMCPA_CPA_BASE_URL`，然后编译并启动：

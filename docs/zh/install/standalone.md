@@ -16,9 +16,11 @@
 2. 创建 `.env`（若 `.env` 已存在则跳过，避免覆盖既有 `OMCPA_MASTER_KEY`），写入新生成的 `OMCPA_MASTER_KEY`、CPA 可达地址及现有 CPA 的明文管理密钥（登录界面输入的原始密钥，而非 `config.yaml` 里的 bcrypt 哈希）。建议用单引号包裹 `OMCPA_CPA_MANAGEMENT_KEY`，避免 Docker Compose 将密钥里的 `$` 当作环境变量展开（若密钥本身含单引号 `'`，写为 `\'`）：
 
    ```bash
-   [ ! -e .env ] &&
-   printf "OMCPA_CPA_BASE_URL=http://host.docker.internal:8317\nOMCPA_MASTER_KEY=%s\nOMCPA_CPA_MANAGEMENT_KEY='<CPA 明文管理密钥>'\n" "$(openssl rand -hex 32)" > .env &&
-   chmod 600 .env
+   test ! -e .env || { echo ".env 已存在，请保留原文件中的 OMCPA_MASTER_KEY" >&2; exit 1; }
+   (
+     umask 077
+     printf "OMCPA_CPA_BASE_URL=http://host.docker.internal:8317\nOMCPA_MASTER_KEY=%s\nOMCPA_CPA_MANAGEMENT_KEY='<CPA 明文管理密钥>'\n" "$(openssl rand -hex 32)" > .env
+   )
    ```
 
    编辑 `.env` 填入实际密钥，并根据[连接现有 CPA](#连接现有-cpa) 调整 `OMCPA_CPA_BASE_URL`（若 CPA 在另一个 Docker 项目中，还需配置网络变量）。如果 CPA 时区不是 UTC，请在 `.env` 中加入 `TZ=<CPA 所在时区>` 保持日历切分一致。

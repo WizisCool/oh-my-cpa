@@ -12,9 +12,13 @@
 
 | 传输方式 | 连接地址 | 凭据 |
 | --- | --- | --- |
-| Streamable HTTP（控制台直接提供） | `<控制台 URL>/api/mcp`，如 `https://omc.example.com/api/mcp` | `Authorization: Bearer <CPA 管理密钥>` |
+| Streamable HTTP（控制台直接提供，远程接入必须使用 HTTPS） | `<控制台 URL>/api/mcp`，如 `https://omc.example.com/api/mcp` | `Authorization: Bearer <CPA 管理密钥>` |
 | stdio 桥接（`oh-my-cpa mcp`） | 环境变量 `OMCPA_SERVER_URL` | 环境变量 `OMCPA_CPA_MANAGEMENT_KEY` |
+
+远程通过 Streamable HTTP 接入时必须在控制台前配置反向代理或控制台自身终止 TLS 并全程使用 **HTTPS**，避免管理密钥在网络上明文传输。
 
 ## 审批
 
-外部 Agent 提交涉及状态变更的高风险操作时不会直接绕过安全边界，而是生成 `pending` 审批单与 `<控制台 URL>/authorize/<id>` 链接，由已登录管理员在浏览器完成确认、密码/密钥录入或 OAuth 登录授权后才执行。只读 SQL 查询工具仅对内置 Agent 开放。
+MCP 的人工审批门槛仅约束通过 MCP 发起的状态变更操作；由于 CPA 管理密钥同时也是控制台管理员登录凭据，持有该密钥的 Agent 等同具备管理员权限（可直接用于登录控制台，绕过 MCP 审批流），请仅向受信任的 Agent 提供管理密钥。
+
+在 MCP 流程内，外部 Agent 提交涉及状态变更的高风险操作时不会直接执行，而是生成 `pending` 审批单与 `<控制台 URL>/authorize/<id>` 链接，由已登录管理员在浏览器完成确认、密码/密钥录入或 OAuth 登录授权后才执行。只读 SQL 查询工具仅对内置 Agent 开放。
