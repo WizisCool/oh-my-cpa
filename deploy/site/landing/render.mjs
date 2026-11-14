@@ -575,6 +575,9 @@ export function renderLanding(lang, { version = '' } = {}) {
     <meta name="color-scheme" content="light dark">
     <script>
       document.documentElement.classList.add('js');
+      setTimeout(function () {
+        if (!document.documentElement.classList.contains('is-ready')) document.documentElement.classList.remove('js');
+      }, 4000);
       try {
         var scheme = localStorage.getItem('omc-site-theme');
         if (scheme === 'light' || scheme === 'dark') {
@@ -613,9 +616,6 @@ export function renderLanding(lang, { version = '' } = {}) {
     <meta name="twitter:description" content="${escapeHtml(text.description)}">
     <meta name="twitter:image" content="${ogImage}">
     <meta name="twitter:image:alt" content="${escapeHtml(text.ogAlt)}">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..600&display=swap">
     <link rel="stylesheet" href="/site.css">
     <script type="application/ld+json">${jsonLd(text, page, version)}</script>
   </head>

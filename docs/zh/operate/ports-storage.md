@@ -24,6 +24,8 @@ Compose 从 `compose.yml` 所在目录读取 `.env`，`.env` 中的相对路径�
 
 修改宿主机端口后，请同步更新浏览器访问地址、本地健康检查 URL 与反向代理上游地址。
 
+如果 `compose.full.yml` 中 CPA 的网关端口 `8317` 在宿主机上被占用，可在 `.env` 中设置 `CPA_BIND`（例如 `CPA_BIND=127.0.0.1:18318`），并把客户端接入地址改为新的宿主机端口（`http://127.0.0.1:18318`）；同一 Compose 项目内的 OMC 仍通过 Docker 内网访问 `http://cpa:8317`。若使用完整编排栈，请运行 `docker compose -f compose.full.yml up -d` 重建服务以使新端口生效。
+
 ## 存储与目录权限
 
 两份官方 Compose 文件默认配置为 `volumes: - ${OMCPA_DATA_PATH:-oh-my-cpa-data}:/data`。未设置 `OMCPA_DATA_PATH` 时，Docker 会自动创建 `oh-my-cpa-data` 命名卷并继承镜像 `/data` 的权限（`10001:10001`，`0700`），无需手动创建目录。使用该命名卷时请保持默认的 `OMCPA_USER=10001:10001`。

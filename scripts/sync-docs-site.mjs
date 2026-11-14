@@ -8,8 +8,10 @@ export { SITE_ORIGIN };
 export const DOCS_LANGUAGES = ['en', 'zh'];
 
 function readBranch() {
-  const ref = process.env.GITHUB_REF_NAME?.trim();
-  return ref || 'main';
+  // Always link to `main` (matching GITHUB_SOURCE in deploy/site/docs/src/lib/site.ts)
+  // unless an explicit repository branch override is provided; PR builds set GITHUB_REF_NAME to `<pr>/merge`.
+  const override = process.env.OMCPA_DOCS_REF?.trim();
+  return override || 'main';
 }
 
 /** Console assets the public site reuses: `[repository source, published file name]`. */
