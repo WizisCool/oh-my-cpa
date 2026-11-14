@@ -20,9 +20,10 @@ const OPENAPI_SPEC = /^docs\/openapi\/swagger\.json$/;
 const GO_READS_WEB = /^(?:scripts\/acceptance\/contracts\/|web\/public\/|web\/index\.html$)/;
 const WEB = /^(?:web\/|vitest\.config\.[cm]?[jt]s$|deploy\/cloudflare\/|scripts\/acceptance\/|scripts\/(?:api-target|browser-acceptance|build-demo|compact-locales|dev-base-redirect|fake-cpa|generate-demo-data|install-chromium|check-bundle-budget|sync-web-dist|sync-lobe-icons|bundle-[^/]+|generate-lucide-icons|sync-lobe-icon-catalog|sync-brand)\.(?:mjs|ts|json)$)/;
 const SITE_WORKER_OR_BUNDLER = /^(?:deploy\/site\/(?:worker(?:\.test)?\.mjs$|wrangler\.jsonc$)|scripts\/build-site\.mjs$)/;
-const SITE_DOCS_SCRIPTS = /^scripts\/(?:sync-docs-site\.mjs|build-site\.test\.mjs)$/;
-const SITE_STATIC_DOCS = /^deploy\/site\/(?:docs\/|landing\/|api-reference\/|_headers$)/;
-const DOCS_INPUTS = /^(?:README(?:\.zh-CN)?\.md|CONTEXT\.md|CONTRIBUTING\.md|docs\/(?:install(?:-for-agents)?|operations|pricing|agent-capabilities|cpa-v8-compat)\.md|docs\/ops\/sqlite-operations\.md|docs\/zh\/.*\.md|docs\/dev\/architecture\.md|docs\/images\/readme\/.*\.webp)$/;
+const SITE_DOCS_SCRIPTS = /^scripts\/(?:sync-docs-site\.mjs|build-site\.test\.mjs|render-social-cards\.mjs)$/;
+const SITE_STATIC_DOCS = /^deploy\/site\/(?:docs\/|landing\/|api-reference\/|og\/|site-meta\.mjs$|_headers$)/;
+const DOCS_SHARED_WEB = /^(?:web\/src\/assets\/(?:brand\/|fonts\/sarasa\/)|web\/public\/favicon\.svg$)/;
+const DOCS_INPUTS = /^(?:README(?:\.zh-CN)?\.md|CONTEXT\.md|CONTRIBUTING\.md|docs\/(?:quickstart|how-it-works|install(?:-for-agents)?|operations|pricing|agent-capabilities|cpa-v8-compat)\.md|docs\/(?:install|operate|features|reference|ops)\/.*\.md|docs\/zh\/.*\.md|docs\/dev\/architecture\.md|docs\/images\/readme\/.*\.webp)$/;
 const DEPLOY_OR_WORKFLOW = /^(?:deploy\/[^/]+\.ya?ml$|deploy\/native\.env\.example$|\.env\.example$|\.github\/workflows\/.+\.ya?ml$)/;
 const SCRIPTS_OTHER = /^scripts\/.+/;
 // Always verified by the unconditional `static-repo` lane (workflow lint, docs links, secret scan).
@@ -59,6 +60,7 @@ export function scopeOf(files) {
     if (WEB.test(file)) {
       frontend = true;
       browser = true;
+      if (DOCS_SHARED_WEB.test(file)) docs = true;
       matched = true;
     }
     if (SITE_WORKER_OR_BUNDLER.test(file)) {

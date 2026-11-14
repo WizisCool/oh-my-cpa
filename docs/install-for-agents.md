@@ -1,11 +1,24 @@
-# Installation by an agent
+# Install with an agent
 
-Use the same [installation guide](install.md) as a human operator. It owns the commands,
+To have a coding agent (Claude Code, Codex, Cursor or another) install Oh My CPA, paste
+this prompt into it:
+
+```text
+Install Oh My CPA for me by following
+https://raw.githubusercontent.com/WizisCool/oh-my-cpa/main/docs/install-for-agents.md
+```
+
+The agent inspects the host, asks before anything it cannot undo, and reports the console
+address when it is done. The rest of this page is written for the agent.
+
+## For the agent
+
+Use the same [installation guides](install.md) as a human operator. They own the commands,
 published Compose files (`compose.full.yml` and `compose.omc.yml`), native release assets
 and supported deployment paths; this page adds the agent's preflight, authorization,
 verification and handoff rules.
 
-## Inspect before acting
+### Inspect before acting
 
 Determine whether CPA and OMC already exist, how they are started, their network
 reachability, OS/architecture, storage mounts and occupied host ports. Inspect container
@@ -26,14 +39,14 @@ assuming `.env` variables take effect:
 Never test CPA availability by consuming a record from the usage queue. OMC requires
 the v8 management API and the existing plaintext management key.
 
-## Preserve the existing installation
+### Preserve the existing installation
 
 - Inspect target paths first and get user approval before overwriting any existing file
   (`compose.yml`, `config.yaml`, `.env`) in the target directory. An existing OMC
-  deployment follows [Upgrading](install.md#upgrading), not fresh key generation.
+  deployment follows [Upgrading](install/upgrade.md), not fresh key generation.
 - Let the user supply missing secrets privately; placeholders are not working credentials.
 - Never replace an existing `OMCPA_MASTER_KEY`. If encrypted data exists and its key is
-  lost, stop and explain recovery limits ([`docs/ops/sqlite-operations.md`](ops/sqlite-operations.md))
+  lost, stop and explain recovery limits ([the backup runbook](ops/sqlite-operations.md))
   before changing the deployment.
 - Do not edit, upgrade, restart or remove an existing CPA or another management panel
   without the user's explicit authorization. Keep its configuration, ports and auth
@@ -42,24 +55,24 @@ the v8 management API and the existing plaintext management key.
   (or vice versa), recursively `chown` existing host directories, or change
   `OMCPA_BASE_PATH`, networks or reverse-proxy rules. If replacing an older
   `deploy/compose.*.yml` that used `../oh-my-cpa-data`, preserve `OMCPA_DATA_PATH` in
-  `.env` as documented in [Upgrading](install.md#upgrading).
+  `.env` as documented in [Upgrading](install/upgrade.md).
 - Never copy a live SQLite WAL directory while `oh-my-cpa` is running.
 - Get explicit approval for privilege elevation (`sudo`), tool installation, opening a
   non-loopback port, granting Docker socket access (`oh-my-cpa-updater`) or sending a
   billable inference request.
 
-## Choose one path and use its guide
+### Choose one path and use its guide
 
 | Situation | Procedure |
 | --- | --- |
-| CPA is not installed | [New install](install.md#new-install) |
-| Existing CPA reachable from a separate container (host, another Docker network, or remote) | [Standalone](install.md#standalone) |
-| Existing editable CPA Compose project where one file is preferred | [Add to Compose](install.md#add-to-the-existing-compose-file) |
-| Host-loopback CPA (`127.0.0.1:8317`), or Docker unavailable | [Native executable](install.md#native-executable) |
-| Explicit source request or unsupported native target | [From source](install.md#from-source) |
-| Existing OMC deployment | [Upgrading](install.md#upgrading) |
+| CPA is not installed | [New install](quickstart.md) |
+| Existing CPA reachable from a separate container (host, another Docker network, or remote) | [Standalone](install/standalone.md) |
+| Existing editable CPA Compose project where one file is preferred | [Add to Compose](install/compose.md) |
+| Host-loopback CPA (`127.0.0.1:8317`), or Docker unavailable | [Native executable](install/native.md) |
+| Explicit source request or unsupported native target | [From source](install/source.md) |
+| Existing OMC deployment | [Upgrading](install/upgrade.md) |
 
-Apply the configuration rules from [`docs/install.md`](install.md#ports-storage-and-common-settings):
+Apply the configuration rules from [Ports and storage](operate/ports-storage.md) and [Environment variables](reference/environment.md):
 - **Updater**: Recommended Docker paths include `oh-my-cpa-updater` by default. Disclose
   that `oh-my-cpa-updater` mounts `/var/run/docker.sock` (host-level Docker authority)
   while `oh-my-cpa` itself stays non-root (`10001:10001`), read-only and socket-free. If
@@ -78,9 +91,9 @@ Apply the configuration rules from [`docs/install.md`](install.md#ports-storage-
   align the non-root container user (`OMCPA_USER`) with the directory owner (write
   numeric `OMCPA_USER=<uid>:<gid>` from `id -u` / `id -g` to `.env`, or `chown 10001:10001`).
 
-## Verify and hand off
+### Verify and hand off
 
-Follow [Verifying the install](install.md#verifying-the-install). Check the actual
+Follow [Troubleshooting](install/troubleshooting.md). Check the actual
 host port and `OMCPA_BASE_PATH`, `/api/healthz` (`"status":"ok"` and
 `"cpa_connected":true`), CPA management reachability and usage ingestion status. Do not
 claim historical usage was imported or issue paid traffic just to populate a graph.

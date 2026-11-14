@@ -4,11 +4,13 @@
 
 | 文档 | 内容 |
 | --- | --- |
-| [`install.md`](install.md) | Docker Compose、原生可执行文件与源码安装、端口/存储设置、反向代理、升级与排障 |
-| [`install-for-agents.md`](install-for-agents.md) | 供编码 Agent 执行的检查、授权与安装规范 |
-| [`operations.md`](operations.md) | 环境变量全量参考、安全与运行约束、自动更新器、Agent/MCP、模型目录与配额预热 |
-| [`ops/sqlite-operations.md`](ops/sqlite-operations.md) | SQLite WAL 备份、云端恢复、主密钥治理与数据库维护 |
-| [`pricing.md`](pricing.md) | 模型价目表、阶梯计费规则与不可变费用快照 |
+| [`quickstart.md`](quickstart.md) | 用 Docker Compose 约三分钟完成首次部署 |
+| [`install-for-agents.md`](install-for-agents.md) | 让编码 Agent 按检查、授权与安装规范替你部署 |
+| [`how-it-works.md`](how-it-works.md) | 两个进程、两把密钥与请求路径 |
+| [`install.md`](install.md) 与 [`install/`](install/standalone.md) | 安装方式、远程访问、升级与排障 |
+| [`operations.md`](operations.md)、[`operate/`](operate/ports-storage.md) 与 [`ops/sqlite-operations.md`](ops/sqlite-operations.md) | 端口与存储、更新、备份与恢复、密钥与时区 |
+| [`features/`](features/agent.md) 与 [`pricing.md`](pricing.md) | Agent 与 MCP、路由、额度、定价、模型试验场、插件与显示 |
+| [`reference/environment.md`](reference/environment.md) | 全部环境变量 |
 | [`agent-capabilities.md`](agent-capabilities.md) | 智能体能力注册表、只读 SQL、人工审批与 MCP 接入 |
 | [`cpa-v8-compat.md`](cpa-v8-compat.md) | CLIProxyAPI v8 管理接口契约与配置写回边界 |
 

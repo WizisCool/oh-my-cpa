@@ -126,4 +126,4 @@ For stdio clients, run `oh-my-cpa mcp` with `OMCPA_SERVER_URL` and
 `OMCPA_CPA_MANAGEMENT_KEY` in its private environment. This bridge opens no OMC database.
 Non-loopback targets require HTTPS; redirects are refused. Both transports expose the
 same authorized registry and human-approval behavior. Operator configuration and
-recovery are in [Operations](operations.md#agent-and-mcp).
+recovery are in [Agent and MCP](features/agent.md).

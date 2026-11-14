@@ -4,7 +4,7 @@ import '../global.css';
 
 export const metadata: Metadata = {
   title: 'Oh My CPA Documentation',
-  description: 'Self-hosted control plane and usage observability console for CLIProxyAPI v8+.',
+  description: 'Install, operate and extend Oh My CPA, the self-hosted AI gateway console.',
   icons: {
     icon: '/docs/favicon.svg',
   },

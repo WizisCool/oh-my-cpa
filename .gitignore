@@ -25,6 +25,10 @@ deploy/site/docs/.next/
 deploy/site/docs/.source/
 deploy/site/docs/content/docs/
 deploy/site/docs/public/images/
+deploy/site/docs/public/llms.txt
+deploy/site/docs/public/en/
+deploy/site/docs/public/zh/
+deploy/site/docs/public/brand/
 deploy/site/docs/out/
 deploy/site/docs/next-env.d.ts
 

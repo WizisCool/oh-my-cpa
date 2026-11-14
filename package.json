@@ -11,6 +11,7 @@
     "build:demo": "node scripts/build-demo.mjs",
     "build:docs": "pnpm --dir deploy/site/docs build",
     "build:site": "node scripts/build-site.mjs",
+    "site:social-cards": "node scripts/render-social-cards.mjs",
     "check-brand": "node scripts/sync-brand.mjs --check",
     "check-css-modules": "node scripts/check-css-modules.mjs",
     "check-docs": "node scripts/check-docs.mjs",

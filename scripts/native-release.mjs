@@ -12,7 +12,8 @@ export const RELEASE_TARGETS = ['darwin', 'windows', 'linux', 'freebsd'].flatMap
   ['amd64', 'arm64'].map(goarch => ({ goos, goarch })));
 const INSTALLATION_FILES = ['compose.full.yml', 'compose.omc.yml', 'cpa.config.example.yaml'];
 const ARCHIVE_FILES = ['LICENSE', 'README.md', 'README.zh-CN.md', '.env.example',
-  'docs/install.md', 'docs/install-for-agents.md', 'docs/operations.md', 'docs/ops/sqlite-operations.md'];
+  'docs/install.md', 'docs/install-for-agents.md', 'docs/install/native.md', 'docs/install/upgrade.md',
+  'docs/install/troubleshooting.md', 'docs/operations.md', 'docs/reference/environment.md', 'docs/ops/sqlite-operations.md'];
 export const RELEASE_DIRECTORY = path.join(ROOT, 'tmp/native-release');
 
 export function createNativePlan(tag, packageVersion, webVersion) {

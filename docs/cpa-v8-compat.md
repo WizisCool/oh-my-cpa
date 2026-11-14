@@ -196,7 +196,7 @@ Installing OMC must not rewrite or upgrade an existing CPA deployment implicitly
 Keep its files, auth directory, network topology and other panels intact.
 Authentication probes must never pop the queue.
 
-[Installation](install.md#other-management-panels) covers coexistence choices.
+[Standalone](install/standalone.md#other-management-panels) covers coexistence choices.
 [SQLite operations](ops/sqlite-operations.md) covers encrypted configuration copies
-and manual recovery of legacy layouts. [Operations](operations.md) covers current
+and manual recovery of legacy layouts. [Quota and warmup](features/quota.md) covers current
 credential/quota controls and their limitations.

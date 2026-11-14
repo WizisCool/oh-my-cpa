@@ -148,12 +148,12 @@ Read online at **[omc.junze.dev/docs](https://omc.junze.dev/docs/)** or directly
 
 | Guide | Topics |
 | --- | --- |
-| [Installation](docs/install.md) · [Agent Install](docs/install-for-agents.md) | Docker Compose, standalone CPA, native binaries, reverse proxy, upgrades, troubleshooting |
-| [Configuration & Operations](docs/operations.md) | Environment variables, security boundaries, updater, Agent/MCP, quota & warmup |
-| [SQLite Operations](docs/ops/sqlite-operations.md) | `.omcbackup` / cloud recovery, master key governance, WAL & retention |
-| [Pricing & Usage Accounting](docs/pricing.md) | Price selection, billing tiers, multipliers, locked cost snapshots |
-| [Agent Capabilities & MCP](docs/agent-capabilities.md) | Capability registry, human approvals, read-only SQL, Streamable HTTP & stdio |
-| [CPA v8 Contract](docs/cpa-v8-compat.md) | Gateway v8 baseline, write coalescing, plugin boundaries |
+| [Quickstart](docs/quickstart.md) | Run CPA, OMC and the updater with Docker Compose in about three minutes |
+| [Install with an agent](docs/install-for-agents.md) | One prompt for Claude Code, Codex or Cursor |
+| [Install](docs/install.md) | Beside an existing CPA, Compose, native binaries, source, HTTPS, upgrades and troubleshooting |
+| [Operations](docs/operations.md) | Ports and storage, updates, [backup and restore](docs/ops/sqlite-operations.md), keys and time zone |
+| Features | [Agent and MCP](docs/features/agent.md), [routing](docs/features/routing.md), [quota and warmup](docs/features/quota.md), [pricing](docs/pricing.md), [playground](docs/features/playground.md), [plugins](docs/features/plugins.md) |
+| Reference | [Environment variables](docs/reference/environment.md), [CPA v8 contract](docs/cpa-v8-compat.md), [agent capabilities](docs/agent-capabilities.md) |
 | [API Reference](https://omc.junze.dev/api-reference/) | Interactive Swagger 2.0 / OpenAPI documentation |
 | [Contributor Guides](CONTRIBUTING.md) | [Architecture](docs/dev/architecture.md) · [Design](docs/dev/design.md) · [Testing](docs/dev/testing.md) · [Releasing](docs/dev/releasing.md) · [Demo Ops](docs/ops/cloudflare-demo.md) |
 

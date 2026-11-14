@@ -16,12 +16,17 @@ test('public docs, landing page, and Fumadocs app changes trigger docs-site only
   for (const file of [
     'README.md',
     'README.zh-CN.md',
-    'docs/install.md',
+    'docs/quickstart.md',
+    'docs/how-it-works.md',
+    'docs/install/compose.md',
+    'docs/features/agent.md',
     'docs/zh/operations.md',
-    'deploy/site/landing/index.html',
+    'deploy/site/landing/render.mjs',
     'deploy/site/api-reference/index.html',
+    'deploy/site/og/home-en.png',
     'deploy/site/_headers',
     'deploy/site/docs/src/lib/source.ts',
+    'scripts/render-social-cards.mjs',
   ]) {
     assert.deepEqual(scopeOf([file]), {
       go: false,
@@ -31,6 +36,13 @@ test('public docs, landing page, and Fumadocs app changes trigger docs-site only
       docs: true,
     }, file);
   }
+  assert.deepEqual(scopeOf(['web/src/assets/brand/markup.ts']), {
+    go: false,
+    frontend: true,
+    browser: true,
+    docker: false,
+    docs: true,
+  });
 });
 
 test('Go backend changes trigger go + browser, and API/migration changes also verify demo parity in frontend', () => {

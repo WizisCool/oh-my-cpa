@@ -160,7 +160,7 @@ while preserving networks it already belonged to.
 
 A failed replacement health check restores the previous container and image tag.
 Namespace dependents require coordinated rebinding; recovery details and limits are
-in [Operations](../operations.md#console-updates), publication in [Releasing](releasing.md).
+in [Updates](../operate/updates.md#console-updates), publication in [Releasing](releasing.md).
 
 ## State and request lifetimes
 

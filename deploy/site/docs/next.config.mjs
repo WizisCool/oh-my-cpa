@@ -7,6 +7,8 @@ const config = {
   output: 'export',
   basePath: '/docs',
   trailingSlash: true,
+  // `next dev` would otherwise write and keep re-adding an AGENTS.md beside this app.
+  agentRules: false,
   images: {
     unoptimized: true,
   },
