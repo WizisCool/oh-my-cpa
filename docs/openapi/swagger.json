@@ -18643,6 +18643,12 @@
         "success": {
           "type": "integer"
         },
+        "tos_appeal_url": {
+          "type": "string"
+        },
+        "tos_appeal_url_text": {
+          "type": "string"
+        },
         "type": {
           "type": "string"
         },

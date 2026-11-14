@@ -14,6 +14,7 @@ import {
   hasAuthFileStatusWarning,
   summarizeAuthFileStatusMessage,
   deriveAuthFileIdentity,
+  deriveAuthFileTOSAppeal,
   matchesStatusFilter,
   sortAuthFiles,
   filterAuthFiles,
@@ -230,4 +231,43 @@ test('an edited paste name gets the extension and the gateway selector rules', (
   for (const name of ['', '.json', '../a.json', 'a\\b.json', 'c:a.json', 'a\nb.json', `${'a'.repeat(251)}.json`]) {
     assert.equal(isValidAuthFileName(name), false, name);
   }
+});
+
+test('TOS appeal link derivation preserves safe http(s) URLs, falls back on blank labels, and drops unsafe schemes', () => {
+  assert.deepEqual(
+    deriveAuthFileTOSAppeal(
+      {
+        tos_appeal_url: '  https://support.google.com/accounts/contact/suspended?hl=en  ',
+        tos_appeal_url_text: '  Request review  ',
+      },
+      'Submit Appeal',
+    ),
+    {
+      url: 'https://support.google.com/accounts/contact/suspended?hl=en',
+      label: 'Request review',
+    },
+  );
+
+  assert.deepEqual(
+    deriveAuthFileTOSAppeal(
+      {
+        tos_appeal_url: 'http://appeal.example.test/review',
+        tos_appeal_url_text: '   ',
+      },
+      'Submit Appeal',
+    ),
+    {
+      url: 'http://appeal.example.test/review',
+      label: 'Submit Appeal',
+    },
+  );
+
+  for (const unsafe of ['javascript:alert(1)', 'data:text/html,hi', '/appeal', '', '   ']) {
+    assert.equal(
+      deriveAuthFileTOSAppeal({ tos_appeal_url: unsafe, tos_appeal_url_text: 'Appeal' }, 'Submit Appeal'),
+      undefined,
+      unsafe,
+    );
+  }
+  assert.equal(deriveAuthFileTOSAppeal(null, 'Submit Appeal'), undefined);
 });

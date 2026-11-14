@@ -16,6 +16,7 @@ import {
   SaveOutlined,
   DownloadOutlined,
   ExclamationCircleOutlined,
+  ExternalLinkOutlined,
   CopyOutlined,
   SyncOutlined,
 } from '../icons';
@@ -33,6 +34,7 @@ import type {
 import {
   credentialNameProblem,
   deriveAuthFileIdentity,
+  deriveAuthFileTOSAppeal,
   hasAuthFileStatusWarning,
   isAuthFileDisabled,
   isAuthFileProblem,
@@ -557,21 +559,41 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   // The account under a renamed credential, else the file it lives in: the line that says which
   // credential this is when the title is the operator's own name for it.
   const heroSubtitle = file?.display_name ? identity?.primary : identity?.primary ? file?.name : undefined;
-  const statusWarning = file && hasWarning && file.status_message ? (
+  const appeal = deriveAuthFileTOSAppeal(file, t('af.tos_appeal_action'));
+  const appealAction = appeal ? (
+    <Button
+      size="sm"
+      icon={<ExternalLinkOutlined />}
+      href={appeal.url}
+      target="_blank"
+      rel="noreferrer noopener"
+      className={styles['appeal-link']}
+      data-testid="auth-file-tos-appeal"
+    >
+      <span className={styles['appeal-link-label']} data-tip={appeal.label} data-tip-overflow="">
+        {appeal.label}
+      </span>
+    </Button>
+  ) : undefined;
+  const warningMessage = file && hasWarning && file.status_message ? file.status_message : undefined;
+  const statusWarning = file && (warningMessage || appeal) ? (
     <Notice
       tone="warning"
       title={t('af.warning_status')}
+      action={appealAction}
       description={
-        <>
-          <div>{summarizeAuthFileStatusMessage(file.status_message)}</div>
-          {/* The upstream body backs the summary; it stays folded so the warning reads as one line. */}
-          {summarizeAuthFileStatusMessage(file.status_message) !== file.status_message.trim() && (
-            <details className={styles['identity-alert-details']}>
-              <summary>{t('af.warning_raw')}</summary>
-              <pre className={styles['identity-alert-raw']}>{file.status_message}</pre>
-            </details>
-          )}
-        </>
+        warningMessage ? (
+          <>
+            <div>{summarizeAuthFileStatusMessage(warningMessage)}</div>
+            {/* The upstream body backs the summary; it stays folded so the warning reads as one line. */}
+            {summarizeAuthFileStatusMessage(warningMessage) !== warningMessage.trim() && (
+              <details className={styles['identity-alert-details']}>
+                <summary>{t('af.warning_raw')}</summary>
+                <pre className={styles['identity-alert-raw']}>{warningMessage}</pre>
+              </details>
+            )}
+          </>
+        ) : undefined
       }
       className={styles['identity-alert']}
     />

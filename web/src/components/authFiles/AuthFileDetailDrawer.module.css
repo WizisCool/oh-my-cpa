@@ -109,6 +109,22 @@
   min-width: 0;
 }
 
+.identity-alert :global(.omc-notice-tools) {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.appeal-link {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.appeal-link-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .identity-alert-raw {
   margin: 6px 0 0;
   padding: 6px 8px;

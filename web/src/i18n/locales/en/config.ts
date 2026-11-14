@@ -457,6 +457,8 @@ export default {
   'cfg.f_claude_show_codex_commentary': 'Show Codex commentary',
   'cfg.f_claude_show_codex_commentary_desc': 'Mirror Codex public commentary as visible Claude text',
   'cfg.f_claude_timezone': 'Timezone',
+  'cfg.f_ag_tos_pause_window': 'TOS Pause Window',
+  'cfg.f_ag_tos_pause_window_desc': 'Pool-wide protective pause duration after an Antigravity TOS_VIOLATION suspension',
   'cfg.f_ag_pool_enabled': 'Enable Connection Pool',
   'cfg.f_ag_pool_idle_timeout': 'Idle Connection Timeout',
   'cfg.f_ag_pool_max_idle': 'Max Idle Connections per Host',

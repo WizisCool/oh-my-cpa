@@ -42,6 +42,8 @@ export interface ManagementAuthFile {
   oauth_provider?: string;
   status?: string;
   status_message?: string;
+  tos_appeal_url?: string;
+  tos_appeal_url_text?: string;
   disabled: boolean;
   unavailable: boolean;
   runtime_only: boolean;

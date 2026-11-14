@@ -457,6 +457,8 @@ export default {
   "cfg.f_claude_show_codex_commentary": "顯示 Codex 旁注",
   "cfg.f_claude_show_codex_commentary_desc": "將 Codex 公開進度旁註轉換為可見的 Claude 文字",
   "cfg.f_claude_timezone": "時區",
+  "cfg.f_ag_tos_pause_window": "TOS 保護暫停視窗",
+  "cfg.f_ag_tos_pause_window_desc": "觸發 TOS_VIOLATION 停權後整個 Antigravity 憑證池的保護性暫停時長",
   "cfg.f_ag_pool_enabled": "啟用連線池",
   "cfg.f_ag_pool_idle_timeout": "閒置連線逾時",
   "cfg.f_ag_pool_max_idle": "每主機最大閒置連線",

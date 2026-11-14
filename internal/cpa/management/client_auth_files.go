@@ -179,18 +179,20 @@ type AuthFile struct {
 	// OAuthProvider is the login entry that issued the credential, for a plugin
 	// that declares several (Harbor and Harbor CN share the type "harbor"). Gateways
 	// that do not report it leave it empty.
-	OAuthProvider string `json:"oauth_provider,omitempty"`
-	Label         string `json:"label"`
-	Status        string `json:"status"`
-	StatusMessage string `json:"status_message"`
-	Disabled      bool   `json:"disabled"`
-	Unavailable   bool   `json:"unavailable"`
-	RuntimeOnly   bool   `json:"runtime_only"`
-	Source        string `json:"source"`
-	Email         string `json:"email"`
-	ProjectID     string `json:"project_id"`
-	AccountType   string `json:"account_type"`
-	Account       string `json:"account"`
+	OAuthProvider    string `json:"oauth_provider,omitempty"`
+	Label            string `json:"label"`
+	Status           string `json:"status"`
+	StatusMessage    string `json:"status_message"`
+	TOSAppealURL     string `json:"tos_appeal_url,omitempty"`
+	TOSAppealURLText string `json:"tos_appeal_url_text,omitempty"`
+	Disabled         bool   `json:"disabled"`
+	Unavailable      bool   `json:"unavailable"`
+	RuntimeOnly      bool   `json:"runtime_only"`
+	Source           string `json:"source"`
+	Email            string `json:"email"`
+	ProjectID        string `json:"project_id"`
+	AccountType      string `json:"account_type"`
+	Account          string `json:"account"`
 	// IDToken carries CPA-projected identity claims (e.g. Codex
 	// chatgpt_account_id). It is non-secret metadata used to scope
 	// upstream quota queries, never a credential.
