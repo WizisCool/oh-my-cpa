@@ -1,7 +1,8 @@
 /* Three cards drawn the way every card in the console is: the page's ground inside the dialog's
    elevated fill, the edge shadow, a PanelTitle head over a rule. Nothing here names a colour;
-   the theme's tokens carry every palette, light or dark. The forecast is told apart the way a
-   selected tile is, picked up and lit, and its figures by their "≈". */
+   the theme's tokens carry every palette, light or dark. Inside an elevated dialog, dark palettes
+   lift the forecast onto `--selected-inset` so it stays distinct from the dialog itself, and
+   `--float-rule` keeps row hairlines visible across every surface. */
 .dialog-title {
   display: inline-flex;
   align-items: center;
@@ -51,6 +52,22 @@
   font-variant-numeric: tabular-nums;
 }
 
+.cards,
+.note {
+  --capacity-label-color: var(--fg-2);
+  --capacity-quiet-color: var(--muted);
+  --capacity-forecast-bg: var(--selected-inset);
+  --capacity-forecast-foot-bg: color-mix(in srgb, var(--bg) 30%, transparent);
+}
+
+:global(:root[data-theme-mode='light']) .cards,
+:global(:root[data-theme-mode='light']) .note {
+  --capacity-label-color: var(--muted);
+  --capacity-quiet-color: var(--meta);
+  --capacity-forecast-bg: var(--select-surface);
+  --capacity-forecast-foot-bg: var(--surface);
+}
+
 .card {
   border: 0;
   display: grid;
@@ -67,7 +84,7 @@
 
 .card[data-tone='forecast'] {
   box-shadow: var(--shadow-selected);
-  background: var(--select-surface);
+  background: var(--capacity-forecast-bg);
 }
 
 .head {
@@ -76,7 +93,7 @@
   gap: 2px;
   min-inline-size: 0;
   padding: 12px 14px 10px;
-  border-block-end: 1px solid var(--border-soft);
+  border-block-end: 1px solid var(--float-rule);
   font-size: var(--text-sm);
   font-weight: 600;
 }
@@ -84,7 +101,7 @@
 .caption {
   min-inline-size: 0;
   overflow: clip;
-  color: var(--meta);
+  color: var(--capacity-quiet-color);
   font-size: var(--text-2xs);
   font-weight: 400;
   text-overflow: ellipsis;
@@ -102,7 +119,7 @@
 
 .label,
 .row dt {
-  color: var(--muted);
+  color: var(--capacity-label-color);
   font-size: var(--text-xs);
 }
 
@@ -129,7 +146,7 @@
   gap: 8px;
   min-inline-size: 0;
   padding: 9px 0;
-  border-block-start: 1px solid var(--border-soft);
+  border-block-start: 1px solid var(--float-rule);
 }
 
 .row dd {
@@ -159,7 +176,7 @@
 /* With no reading the card keeps its rows, and the dashes in the quiet ink stand in for figures. */
 .card[data-empty] .lead-value,
 .card[data-empty] .row dd {
-  color: var(--meta);
+  color: var(--capacity-quiet-color);
   font-weight: 400;
 }
 
@@ -169,10 +186,14 @@
   gap: 10px;
   min-block-size: 38px;
   padding: 8px 14px;
-  border-block-start: 1px solid var(--border-soft);
+  border-block-start: 1px solid var(--float-rule);
   background: var(--surface);
-  color: var(--meta);
+  color: var(--capacity-quiet-color);
   font-size: var(--text-2xs);
+}
+
+.card[data-tone='forecast'] .foot {
+  background: var(--capacity-forecast-foot-bg);
 }
 
 .meter {
@@ -208,7 +229,7 @@
   align-items: flex-start;
   gap: 8px;
   margin-block-start: 14px;
-  color: var(--meta);
+  color: var(--capacity-quiet-color);
   font-size: var(--text-2xs);
   line-height: 1.6;
 }
@@ -280,12 +301,12 @@
 
   .lead,
   .rows .row:nth-child(1) {
-    border-block-end: 1px solid var(--border-soft);
+    border-block-end: 1px solid var(--float-rule);
   }
 
   .rows .row:nth-child(1),
   .rows .row:nth-child(3) {
-    border-inline-start: 1px solid var(--border-soft);
+    border-inline-start: 1px solid var(--float-rule);
   }
 
   .lead-value,
@@ -326,7 +347,7 @@
   }
 
   .card[data-tone='forecast'][data-empty] .head {
-    border-block-end: 1px solid var(--border-soft);
+    border-block-end: 1px solid var(--float-rule);
   }
 
   .note {
