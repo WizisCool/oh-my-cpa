@@ -18,6 +18,7 @@ import { parseDocument, type Document } from 'yaml';
 
 import { PayloadRulesEditor } from './PayloadRulesEditor';
 import { IceServersEditor } from './IceServersEditor';
+import { PatternRulesEditor } from './PatternRulesEditor';
 import { StringMapEditor } from './StringMapEditor';
 
 import type { useT } from '../../i18n';
@@ -202,6 +203,22 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
     );
   }
 
+  if (field.type === 'pattern_rules') {
+    return (
+      <PatternRulesEditor
+        field={field}
+        value={val}
+        disabled={disabled}
+        ariaDescribedBy={ariaDescribedBy}
+        draftState={view.patternRulesDrafts[field.id]}
+        onDraftStateChange={view.setPatternRulesDraft}
+        onValidationChange={view.setPatternRulesIssue}
+        t={t}
+        onChange={(target, next) => updateFieldInDoc(target, next)}
+      />
+    );
+  }
+
   if (field.type === 'ice_servers') {
     return (
       <IceServersEditor
@@ -267,6 +284,7 @@ export function renderGridField(view: ConfigSectionContext, field: ConfigFieldDe
     field.type === 'textarea' ||
     field.type === 'json_editor' ||
     field.type === 'string_map' ||
+    field.type === 'pattern_rules' ||
     field.id === 'proxyUrl' ||
     field.id === 'authDir' ||
     field.id === 'logDir' ||

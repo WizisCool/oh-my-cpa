@@ -8,6 +8,12 @@ import { parseDocument } from 'yaml';
 
 import { getFieldSemanticValue, updateFieldWithBaseline } from '../../src/components/config/configDirty.ts';
 import { computeConfigChanges, rebaseDraft } from '../../src/components/config/configPatch.ts';
+import {
+  findRe2PatternProblem,
+  patternRulesRowsToWire,
+  rebasePatternRulesDraft,
+  validatePatternRuleRows,
+} from '../../src/components/config/PatternRulesEditor.tsx';
 import { rebaseStringMapDraft, stringMapRowsToWire } from '../../src/components/config/StringMapEditor.tsx';
 import { writePayloadCategory } from '../../src/components/config/payloadRules.ts';
 import { ALL_CONFIG_FIELDS, CONFIG_GROUPS, type ConfigFieldDefinition } from '../../src/types/configSchema.ts';
@@ -918,6 +924,236 @@ test('rebaseStringMapDraft carries concurrent baseline entries into retained inv
       { key: 'b', value: 'renamed' },
       { key: '', value: 'two' },
       { key: 'concurrent', value: 'kept' },
+    ],
+  );
+});
+
+for (const setting of [
+  {
+    id: 'antigravitySensitivePatternsReplace',
+    siblingId: 'antigravitySensitiveWordsReplace',
+    groupId: 'grp_antigravity_behavior',
+    path: ['oauth', 'providers', 'antigravity', 'sensitive-patterns-replace'],
+    yaml: `${SERVER_YAML}oauth:
+    providers:
+        antigravity:
+            sensitive-words: [claude]
+            sensitive-words-replace:
+                Claude Code: ""
+            sensitive-patterns-replace:
+                - pattern: "(?i)claude\\\\s+code" # retained comment
+                  replacement: ""
+                - pattern: "internal/v1"
+                  replacement: "public"
+`,
+    initial: [
+      { pattern: '(?i)claude\\s+code', replacement: '' },
+      { pattern: 'internal/v1', replacement: 'public' },
+    ],
+    // Order and duplicate patterns are significant in CPA's ordered rule sequence.
+    edited: [
+      { pattern: 'internal/v1', replacement: 'public' },
+      { pattern: '(?i)claude\\s+code', replacement: '' },
+      { pattern: 'internal/v1', replacement: 'edge' },
+    ],
+  },
+  {
+    id: 'devinSensitivePatternsReplace',
+    siblingId: 'devinSensitiveWordsReplace',
+    groupId: 'grp_other_providers',
+    path: ['oauth', 'providers', 'devin', 'sensitive-patterns-replace'],
+    yaml: `${SERVER_YAML}oauth:
+    providers:
+        devin:
+            sensitive-words: [secret-line]
+            sensitive-patterns-replace:
+                - pattern: "(?m)^Devin internal.*$"
+                  replacement: ""
+`,
+    initial: [{ pattern: '(?m)^Devin internal.*$', replacement: '' }],
+    edited: [
+      { pattern: 'foo ', replacement: '' },
+      { pattern: '(?m)^Devin internal.*$', replacement: 'Assistant' },
+    ],
+  },
+]) {
+  test(`${setting.id} reads, replaces in order, and clears pattern rules while preserving siblings`, () => {
+    const rulesField = field(setting.id);
+    assert.equal(rulesField.type, 'pattern_rules');
+    const group = CONFIG_GROUPS.find((item) => item.id === setting.groupId);
+    assert.ok(group);
+    assert.equal(
+      group.fieldIds.indexOf(setting.id),
+      group.fieldIds.indexOf(setting.siblingId) + 1,
+    );
+
+    const server = parseDocument(setting.yaml);
+    const draft = server.clone();
+    assert.deepEqual(getFieldSemanticValue(server, rulesField), setting.initial);
+    assert.deepEqual(computeConfigChanges(server, draft), []);
+
+    updateFieldWithBaseline(draft, server, rulesField, setting.edited);
+    assert.deepEqual(computeConfigChanges(server, draft), [
+      { path: setting.path, value: setting.edited },
+    ]);
+    const readback = parseDocument(draft.toString());
+    assert.deepEqual(getFieldSemanticValue(readback, rulesField), setting.edited);
+
+    const cleared = readback.clone();
+    updateFieldWithBaseline(cleared, readback, rulesField, []);
+    assert.deepEqual(computeConfigChanges(readback, cleared), [
+      { path: setting.path, remove: true },
+    ]);
+
+    const absent = parseDocument(cleared.toString());
+    const empty = absent.clone();
+    updateFieldWithBaseline(empty, absent, rulesField, []);
+    assert.deepEqual(computeConfigChanges(absent, empty), []);
+    updateFieldWithBaseline(empty, absent, rulesField, setting.edited);
+    assert.deepEqual(computeConfigChanges(absent, empty), [
+      { path: setting.path, value: setting.edited },
+    ]);
+
+    updateFieldWithBaseline(draft, server, rulesField, setting.initial);
+    assert.equal(draft.toString(), server.toString());
+  });
+}
+
+test('rebasing a sensitive-patterns-replace edit preserves concurrent sibling settings', () => {
+  const rulesField = field('antigravitySensitivePatternsReplace');
+  const base = parseDocument(SERVER_YAML);
+  const draft = parseDocument(SERVER_YAML);
+  updateFieldWithBaseline(draft, base, rulesField, [{ pattern: '(?i)claude', replacement: '' }]);
+
+  const newer = `${SERVER_YAML}oauth:
+    providers:
+        antigravity:
+            sensitive-words: [claude]
+            sensitive-words-replace:
+                concurrent: kept
+`;
+  const rebased = parseDocument(rebaseDraft(base, draft, newer) ?? '');
+  assert.deepEqual(rebased.getIn(['oauth', 'providers', 'antigravity', 'sensitive-words'])?.toJSON(), ['claude']);
+  assert.deepEqual(rebased.getIn(['oauth', 'providers', 'antigravity', 'sensitive-words-replace'])?.toJSON(), { concurrent: 'kept' });
+  assert.deepEqual(getFieldSemanticValue(rebased, rulesField), [{ pattern: '(?i)claude', replacement: '' }]);
+  assert.deepEqual(computeConfigChanges(parseDocument(newer), rebased), [
+    {
+      path: ['oauth', 'providers', 'antigravity', 'sensitive-patterns-replace'],
+      value: [{ pattern: '(?i)claude', replacement: '' }],
+    },
+  ]);
+});
+
+test('patternRulesRowsToWire preserves significant whitespace in patterns and empty deletions', () => {
+  assert.deepEqual(
+    patternRulesRowsToWire([
+      { pattern: '  foo  ', replacement: '' },
+      { pattern: '   ', replacement: '' },
+      { pattern: '(?i)bar', replacement: '  baz  ' },
+    ]),
+    [
+      { pattern: '  foo  ', replacement: '' },
+      { pattern: '(?i)bar', replacement: '  baz  ' },
+    ],
+  );
+});
+
+test('findRe2PatternProblem and validatePatternRuleRows accept valid Go RE2 and flag blank or unsupported rules', () => {
+  for (const valid of [
+    '(?i)claude\\s+code',
+    '(?P<word>foo|bar)',
+    '\\Q(?=a)\\1\\E',
+    '\\\\1',
+    '\\0',
+    '\\12',
+    '\\123',
+    '\\777',
+    '\\123\\12',
+    '\\(?=a)',
+    '[(?=)]',
+    '[[:alpha:]]+',
+    '[]a]',
+    '[^]a]',
+  ]) {
+    assert.equal(findRe2PatternProblem(valid), null, valid);
+  }
+  for (const unsupported of ['foo(?=bar)', 'foo(?!bar)', '(?<=a)b', '(?<!a)b', '(a)\\1', '\\18', '\\80', '\\9']) {
+    assert.equal(findRe2PatternProblem(unsupported), 'unsupported_re2', unsupported);
+  }
+  assert.equal(findRe2PatternProblem('foo\\'), 'trailing_backslash');
+
+  assert.deepEqual(validatePatternRuleRows([{ pattern: '', replacement: '' }]), {
+    issue: null,
+    rowErrors: [false],
+  });
+  assert.deepEqual(validatePatternRuleRows([{ pattern: '   ', replacement: '' }]), {
+    issue: { kind: 'empty_pattern' },
+    rowErrors: [true],
+  });
+  assert.deepEqual(validatePatternRuleRows([{ pattern: '', replacement: 'x' }]), {
+    issue: { kind: 'empty_pattern' },
+    rowErrors: [true],
+  });
+  assert.deepEqual(validatePatternRuleRows([{ pattern: 'a', replacement: '' }, { pattern: '(a)\\1', replacement: '' }]), {
+    issue: { kind: 'unsupported_re2', pattern: '(a)\\1' },
+    rowErrors: [false, true],
+  });
+});
+
+test('rebasePatternRulesDraft carries concurrent baseline rules into retained incomplete rows without ID collisions', () => {
+  const rebased = rebasePatternRulesDraft(
+    {
+      rows: [
+        { id: 'prule_wire_0', pattern: 'a', replacement: 'one' },
+        // Simulate an earlier refresh row that now sits at index 1 while index 0 changes on refresh.
+        { id: 'prule_sync_0', pattern: 'kept', replacement: 'stay' },
+        { id: 'prule_sync_1', pattern: '', replacement: 'two' },
+      ],
+      baseWire: [
+        { pattern: 'a', replacement: 'one' },
+        { pattern: 'kept', replacement: 'stay' },
+      ],
+    },
+    [
+      { pattern: 'updated', replacement: 'fresh' },
+      { pattern: 'kept', replacement: 'stay' },
+      { pattern: 'concurrent', replacement: 'kept' },
+    ],
+  );
+  assert.equal(rebased.rows[1]?.id, 'prule_sync_0');
+  assert.equal(rebased.rows[3]?.id, 'prule_sync_1');
+  const ids = rebased.rows.map((row) => row.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.deepEqual(
+    rebased.rows.map(({ pattern, replacement }) => ({ pattern, replacement })),
+    [
+      { pattern: 'updated', replacement: 'fresh' },
+      { pattern: 'kept', replacement: 'stay' },
+      { pattern: 'concurrent', replacement: 'kept' },
+      { pattern: '', replacement: 'two' },
+    ],
+  );
+
+  // A pending blank row moved before an existing rule retains its relative precedence on refresh.
+  const rebasedLeadingBlank = rebasePatternRulesDraft(
+    {
+      rows: [
+        { id: 'prule_new_1', pattern: '', replacement: 'leading' },
+        { id: 'prule_wire_0', pattern: 'a', replacement: 'one' },
+      ],
+      baseWire: [{ pattern: 'a', replacement: 'one' }],
+    },
+    [
+      { pattern: 'a_updated', replacement: 'two' },
+      { pattern: 'concurrent', replacement: 'kept' },
+    ],
+  );
+  assert.deepEqual(
+    rebasedLeadingBlank.rows.map(({ pattern, replacement }) => ({ pattern, replacement })),
+    [
+      { pattern: '', replacement: 'leading' },
+      { pattern: 'a_updated', replacement: 'two' },
+      { pattern: 'concurrent', replacement: 'kept' },
     ],
   );
 });

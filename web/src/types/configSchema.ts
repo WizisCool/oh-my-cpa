@@ -17,6 +17,7 @@ export type ConfigFieldType =
   | 'api_keys'
   | 'string_list'
   | 'string_map'
+  | 'pattern_rules'
   | 'textarea'
   | 'ice_servers'
   | 'json_editor';
@@ -55,7 +56,7 @@ export interface ConfigFieldDefinition {
   placeholder?: string;
   /** The id of an example value that reads differently per language. */
   placeholderKey?: MessageKey;
-  /** Key-input placeholder for `string_map` fields when domain-specific wording clarifies the pair. */
+  /** Key-input placeholder for `string_map` or pattern placeholder for `pattern_rules` fields. */
   keyPlaceholderKey?: MessageKey;
   unitKey?: MessageKey;
   min?: number;
@@ -265,7 +266,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_antigravity_behavior',
     descKey: 'cfg.grp_antigravity_behavior_desc',
     variant: 'settings-list',
-    fieldIds: ['antigravityCredits', 'antigravityPoolEnabled', 'antigravityPoolIdleConnTimeout', 'antigravityPoolMaxIdleConnsPerHost', 'antigravitySensitiveWords', 'antigravitySensitiveWordsReplace'],
+    fieldIds: ['antigravityCredits', 'antigravityPoolEnabled', 'antigravityPoolIdleConnTimeout', 'antigravityPoolMaxIdleConnsPerHost', 'antigravitySensitiveWords', 'antigravitySensitiveWordsReplace', 'antigravitySensitivePatternsReplace'],
   },
   {
     id: 'grp_other_providers',
@@ -273,7 +274,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_other_providers',
     descKey: 'cfg.grp_other_providers_desc',
     variant: 'settings-list',
-    fieldIds: ['xaiInjectXSearch', 'devinSensitiveWords', 'devinSensitiveWordsReplace'],
+    fieldIds: ['xaiInjectXSearch', 'devinSensitiveWords', 'devinSensitiveWordsReplace', 'devinSensitivePatternsReplace'],
   },
 
   // ── 6. Advanced & experimental ────────────────────────────────────────────
@@ -1435,6 +1436,15 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['antigravity', 'sensitive', 'words', 'replace', 'sensitive-words-replace'],
   },
   {
+    id: 'antigravitySensitivePatternsReplace',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_ag_sensitive_patterns_replace',
+    descKey: 'cfg.f_ag_sensitive_patterns_replace_desc',
+    yamlPath: ['oauth', 'providers', 'antigravity', 'sensitive-patterns-replace'],
+    type: 'pattern_rules',
+    keywords: ['antigravity', 'sensitive', 'patterns', 'regex', 're2', 'replace', 'sensitive-patterns-replace'],
+  },
+  {
     id: 'xaiInjectXSearch',
     sectionId: 'providers',
     labelKey: 'cfg.f_xai_inject_search',
@@ -1465,6 +1475,15 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keyPlaceholderKey: 'cfg.sensitive_words_replace_target',
     placeholderKey: 'cfg.sensitive_words_replace_value',
     keywords: ['devin', 'sensitive', 'words', 'replace', 'sensitive-words-replace'],
+  },
+  {
+    id: 'devinSensitivePatternsReplace',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_devin_sensitive_patterns_replace',
+    descKey: 'cfg.f_devin_sensitive_patterns_replace_desc',
+    yamlPath: ['oauth', 'providers', 'devin', 'sensitive-patterns-replace'],
+    type: 'pattern_rules',
+    keywords: ['devin', 'sensitive', 'patterns', 'regex', 're2', 'replace', 'sensitive-patterns-replace'],
   },
 
   // ── 6. Advanced & experimental ────────────────────────────────────────────

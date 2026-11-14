@@ -2371,7 +2371,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   width: auto;
 }
 
-.settings-toggle-row:has(.string-map-editor.has-rows) {
+.settings-toggle-row:has(.string-map-editor.has-rows),
+.settings-toggle-row:has(.pattern-rules-editor.has-rows) {
   align-items: flex-start;
 }
 
@@ -2384,6 +2385,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 .settings-toggle-control.is-string_map {
   width: min(440px, 100%);
+}
+
+.settings-toggle-control.is-pattern_rules {
+  width: min(500px, 100%);
 }
 
 .settings-toggle-control.is-number {
@@ -2500,6 +2505,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .settings-toggle-control.is-string,
   .settings-toggle-control.is-string_list,
   .settings-toggle-control.is-string_map,
+  .settings-toggle-control.is-pattern_rules,
   .settings-toggle-control.is-select,
   .settings-toggle-control.is-textarea {
     width: 100%;
