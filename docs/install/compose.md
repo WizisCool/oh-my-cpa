@@ -60,6 +60,7 @@ OMC data stays readable) and CPA's plaintext management key (single-quoted in `.
 
 ```bash
 touch .env && chmod 600 .env
+[ ! -s .env ] || [ -z "$(tail -c 1 .env)" ] || printf '\n' >> .env
 grep -q '^OMCPA_MASTER_KEY=' .env || printf 'OMCPA_MASTER_KEY=%s\n' "$(openssl rand -hex 32)" >> .env
 grep -q '^OMCPA_CPA_MANAGEMENT_KEY=' .env || cat >> .env <<'EOF'
 OMCPA_CPA_MANAGEMENT_KEY='<CPA plaintext management key>'

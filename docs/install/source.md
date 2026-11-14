@@ -11,7 +11,9 @@ chmod 600 .env
 ```
 
 In `.env`, set `OMCPA_MASTER_KEY` (`openssl rand -hex 32`), `OMCPA_CPA_MANAGEMENT_KEY`
-and `OMCPA_CPA_BASE_URL`. Then:
+and `OMCPA_CPA_BASE_URL`. Note that `.env.example` sets `OMCPA_CPA_USAGE_ADDR=127.0.0.1:8317`;
+if CPA is remote and you set `OMCPA_USAGE_INGEST_MODE` to `subscribe` or `resp_pull`, clear
+`OMCPA_CPA_USAGE_ADDR` or set it to the remote CPA's RESP host and port. Then:
 
 ```bash
 pnpm build

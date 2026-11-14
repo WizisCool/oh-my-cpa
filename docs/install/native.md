@@ -27,9 +27,9 @@ platforms and installation attachments). On Linux use `sha256sum -c`, on macOS
 `shasum -a 256 -c`, or on FreeBSD compare `sha256 -q "$ASSET"` with its entry:
 
 ```bash
-grep -F "  $ASSET" checksums.txt | sha256sum -c -
-tar -xzf "$ASSET"
-cp -n .env.example .env
+grep -F "  $ASSET" checksums.txt | sha256sum -c - &&
+tar -xzf "$ASSET" &&
+cp -n .env.example .env &&
 chmod 600 .env
 ```
 

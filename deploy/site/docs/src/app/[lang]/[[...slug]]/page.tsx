@@ -15,8 +15,6 @@ import { i18n } from '@/lib/i18n';
 import { asLang, docsPath, GITHUB_SOURCE, markdownPath, SITE_ORIGIN } from '@/lib/site';
 import { source } from '@/lib/source';
 
-const COPY_LABEL = { en: 'Copy Markdown', zh: '复制 Markdown' } as const;
-
 export default async function DocsContentPage(props: {
   params: Promise<{ lang: string; slug?: string[] }>;
 }) {
@@ -43,7 +41,7 @@ export default async function DocsContentPage(props: {
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <div className="flex flex-row flex-wrap items-center gap-2 border-b pb-6">
-        <MarkdownCopyButton markdownUrl={markdownUrl}>{COPY_LABEL[lang]}</MarkdownCopyButton>
+        <MarkdownCopyButton markdownUrl={markdownUrl} />
         <ViewOptionsPopover
           markdownUrl={markdownUrl}
           pageUrl={`${SITE_ORIGIN}${docsPath(lang, slugs)}`}

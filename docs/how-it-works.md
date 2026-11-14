@@ -2,8 +2,9 @@
 
 Oh My CPA (OMC) is the control plane for [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
 (CPA). CPA is the gateway: it holds provider credentials and proxies your clients' model
-requests. OMC sits beside it and never carries model traffic. It manages CPA through its
-Management API and records what CPA did.
+requests. OMC sits beside it and never carries ordinary client model traffic (only
+console Playground and built-in Agent turns send model requests through OMC). It manages
+CPA through its Management API and records what CPA did.
 
 ```text
 Clients ──▶ CLIProxyAPI (:8317) ──▶ Model providers

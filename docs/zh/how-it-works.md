@@ -1,6 +1,6 @@
 # 工作原理
 
-Oh My CPA（OMC）是 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)（CPA）的控制平面。CPA 是网关：保存提供商凭据，并代理客户端的模型请求。OMC 运行在它旁边，从不承载模型流量，而是通过管理 API 管理 CPA，并记录 CPA 处理过的每个请求。
+Oh My CPA（OMC）是 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)（CPA）的控制平面。CPA 是网关：保存提供商凭据，并代理客户端的模型请求。OMC 运行在它旁边，不承载普通客户端模型流量（仅内置操练场 Playground 与智能体 Agent 的对话请求会经 OMC 转发），而是通过管理 API 管理 CPA，并记录 CPA 处理过的每个请求。
 
 ```text
 客户端 ──▶ CLIProxyAPI (:8317) ──▶ 模型提供商

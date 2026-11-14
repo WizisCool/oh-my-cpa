@@ -216,7 +216,7 @@ export async function stageSite({
   const isRendered = existsSync(join(landingDir, LANDING_RENDERER));
   await cp(landingDir, outDir, {
     recursive: true,
-    filter: (source) => !LANDING_SOURCES.has(relative(landingDir, source)),
+    filter: (source) => !isRendered || !LANDING_SOURCES.has(relative(landingDir, source)),
   });
   let landingPages = [];
   if (isRendered) {

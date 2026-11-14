@@ -94,6 +94,7 @@ test('stageSite composes replaceable landing root, /docs, /api-reference, and /d
 
     fs.mkdirSync(customLanding, { recursive: true });
     fs.writeFileSync(path.join(customLanding, 'index.html'), '<!doctype html><html><body>Custom Landing</body></html>\n');
+    fs.writeFileSync(path.join(customLanding, 'copy.mjs'), 'export const x = 1;\n');
 
     fs.mkdirSync(path.join(fakeDocsDist, 'en'), { recursive: true });
     fs.mkdirSync(path.join(fakeDocsDist, 'zh'), { recursive: true });
@@ -118,6 +119,7 @@ test('stageSite composes replaceable landing root, /docs, /api-reference, and /d
     assert.equal(hasDocs, true);
     assert.equal(hasDemo, true);
     assert.equal(fs.readFileSync(path.join(outDir, 'index.html'), 'utf8'), '<!doctype html><html><body>Custom Landing</body></html>\n');
+    assert.ok(fs.existsSync(path.join(outDir, 'copy.mjs')), 'unrendered custom landing copies all files as-is');
     assert.ok(fs.existsSync(path.join(outDir, '_headers')));
     assert.ok(fs.existsSync(path.join(outDir, 'favicon.svg')));
     assert.ok(fs.existsSync(path.join(outDir, 'wordmark-light.svg')));

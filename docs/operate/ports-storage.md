@@ -36,6 +36,11 @@ When you change the host port (for example to `18317`), update:
 - Your browser URL and local health check: `http://127.0.0.1:18317/`
 - Your reverse-proxy upstream target: `127.0.0.1:18317`
 
+If port `8317` (CPA's gateway port in `compose.full.yml`) is occupied on the host, set
+`CPA_BIND` in `.env` (for example `CPA_BIND=127.0.0.1:18318`) and point your clients at
+that new host port (`http://127.0.0.1:18318`). OMC inside the same Compose project keeps
+talking to `http://cli-proxy-api:8317` over the Docker network.
+
 ## Storage and permissions
 
 By default, both Compose files set `volumes: - ${OMCPA_DATA_PATH:-oh-my-cpa-data}:/data`.
