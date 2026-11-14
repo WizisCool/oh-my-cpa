@@ -1,4 +1,4 @@
-import { DocsLayout } from 'fumadocs-ui/layouts/docs';
+import { DocsLayout } from 'fumadocs-ui/layouts/notebook';
 import type { ReactNode } from 'react';
 import { baseOptions } from '@/lib/layout.shared';
 import { source } from '@/lib/source';
@@ -11,9 +11,10 @@ export default async function DocsShellLayout({
   children: ReactNode;
 }) {
   const { lang } = await params;
+  const base = baseOptions(lang);
 
   return (
-    <DocsLayout {...baseOptions(lang)} tree={source.getPageTree(lang)}>
+    <DocsLayout {...base} nav={{ ...base.nav, mode: 'top' }} tabs={false} tree={source.getPageTree(lang)}>
       {children}
     </DocsLayout>
   );

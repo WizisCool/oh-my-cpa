@@ -62,9 +62,9 @@ signed automatic OMC updates.
 1. Update root and web package versions together and add user-visible changes and
    upgrade notes under [`docs/releases`](../releases/README.md). Keep lockfile metadata consistent.
    The installation guides use stable aliases, so they do not need a version bump.
-   Refresh the bundled models.dev snapshot as described in
-   [Operations](../operations.md#available-model-directory); release verification rejects
-   a snapshot more than 30 days older than the tagged commit.
+   Refresh the bundled models.dev snapshot (`internal/modelcatalog/snapshot.json`) with
+   `pnpm models:sync` and update the Model Square API goldens (`UPDATE_GOLDEN=1`); release
+   verification rejects a snapshot more than 30 days older than the tagged commit.
 2. Run the checks required by [Testing](testing.md). Land the preparation on `main`
    and wait for that exact commit's main CI to be green. A release-preparation PR may
    use `chore(release): prepare vX.Y.Z` so automated review does not re-review notes
@@ -142,4 +142,4 @@ release or moving its tag. Latest-version policy must be checked again on retrie
 Update observation uses GitHub stable release metadata, not registry tags. It ignores
 drafts/prereleases and retains the last successful result after a failed fetch. Cached
 results and the attempt floor can delay a post-release observation; do not weaken the
-floor to force an immediate fresh result. See [Update checks](../operations.md#update-checks).
+floor to force an immediate fresh result. See [Update checks](../operate/updates.md#update-checks).

@@ -139,12 +139,12 @@ docker compose up -d
 
 | 文档 | 内容 |
 | --- | --- |
-| [安装指南](docs/zh/install.md) · [Agent 安装规范](docs/zh/install-for-agents.md) | Docker Compose、独立接入 CPA、原生包、反代、升级与排障（[EN](docs/install.md)） |
-| [配置与运维指南](docs/zh/operations.md) | 全量环境变量、安全约束、自动更新、Agent/MCP、模型目录与配额预热（[EN](docs/operations.md)） |
-| [SQLite 运维与恢复手册](docs/zh/ops/sqlite-operations.md) | `.omcbackup` 与云端容灾备份、主密钥治理、WAL 与数据清理（[EN](docs/ops/sqlite-operations.md)） |
-| [定价与费用核算](docs/zh/pricing.md) | 价格匹配优先级、阶梯计费规则、倍率与费用快照（[EN](docs/pricing.md)） |
-| [智能体能力与 MCP 接入](docs/zh/agent-capabilities.md) | 能力注册表、只读 SQL、人工审批与 Streamable HTTP / stdio 桥接（[EN](docs/agent-capabilities.md)） |
-| [CLIProxyAPI v8 契约](docs/zh/cpa-v8-compat.md) | v8 管理门禁、250ms 写合并、插件页面边界（[EN](docs/cpa-v8-compat.md)） |
+| [快速开始](docs/zh/quickstart.md) | 用 Docker Compose 约三分钟跑起 CPA、OMC 与更新器 |
+| [让 Agent 安装](docs/zh/install-for-agents.md) | 一句提示词交给 Claude Code、Codex 或 Cursor |
+| [安装](docs/zh/install.md) | 现有 CPA 旁独立部署、Compose、原生可执行文件、源码、HTTPS、升级与排障 |
+| [运维](docs/zh/operations.md) | 端口与存储、更新、[备份与恢复](docs/zh/ops/sqlite-operations.md)、密钥与时区 |
+| 功能 | [Agent 与 MCP](docs/zh/features/agent.md)、[路由](docs/zh/features/routing.md)、[额度与预热](docs/zh/features/quota.md)、[定价](docs/zh/pricing.md)、[模型试验场](docs/zh/features/playground.md)、[插件](docs/zh/features/plugins.md) |
+| 参考 | [环境变量](docs/zh/reference/environment.md)、[CPA v8 契约](docs/zh/cpa-v8-compat.md)、[智能体能力](docs/zh/agent-capabilities.md) |
 | [API 接口参考](https://omc.junze.dev/api-reference/) | 交互式 Swagger 2.0 / OpenAPI 文档 |
 | [开发者与贡献指南](CONTRIBUTING.md) | [系统架构](docs/dev/architecture.md) · [界面设计](docs/dev/design.md) · [测试规范](docs/dev/testing.md) · [发布流程](docs/dev/releasing.md) · [Demo 运维](docs/ops/cloudflare-demo.md) |
 

@@ -21,7 +21,7 @@ deterministic; its normalization and precedence belong to
 [`internal/pricing`](../internal/pricing), not a duplicated vendor table here.
 
 A model without an automatic match is offered reference rates from the bundled models.dev
-snapshot ([Operations](operations.md#available-model-directory)), resolved only by its exact
+snapshot ([Playground and models](features/playground.md#model-directory)), resolved only by its exact
 name or an unambiguous models.dev alias. Each distinct rate is listed with the providers that
 publish it, because these are often cloud or reseller listings that disagree. A reference is
 never applied: filling it into the editor and saving creates an ordinary custom price.

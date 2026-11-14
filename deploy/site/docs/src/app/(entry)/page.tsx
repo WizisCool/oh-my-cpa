@@ -12,7 +12,7 @@ export default function DocsEntryPage() {
                 var lang = saved === 'zh' || saved === 'en'
                   ? saved
                   : ((navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en');
-                location.replace('/docs/' + lang + '/');
+                location.replace('/docs/' + lang + '/' + location.search + location.hash);
               } catch (e) {
                 location.replace('/docs/en/');
               }
