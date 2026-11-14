@@ -30,7 +30,7 @@ export const ConfigOutline: React.FC<{ entries: ConfigOutlineEntry[] }> = ({ ent
   // A pressed row stays current until the reader scrolls again: a card near the end cannot always be
   // scrolled to the top, and position alone would then name a different card than the one pressed.
   const pressedId = React.useRef<string | null>(null);
-  const isShown = entries.length > 1;
+  const isShown = entries.length > 0;
   // The rows' counts and change marks follow every edit; the measuring only cares which cards exist.
   const cardIds = entries.map((entry) => entry.id).join('\n');
 
