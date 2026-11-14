@@ -515,6 +515,15 @@ func (s *Service) run(
 				fail(fmt.Errorf("clean up the previous replacement: %w", reconcileErr))
 				return
 			}
+			current, inspectErr := engine.InspectContainer(ctx, container.ContainerName())
+			if inspectErr != nil {
+				fail(fmt.Errorf("inspect the reconciled target: %w", inspectErr))
+				return
+			}
+			if current.ID != container.ID || !current.State.Running {
+				fail(errors.New("the interrupted replacement was restored during recovery; retry the update against the restored container"))
+				return
+			}
 		} else {
 			fail(errors.New("an interrupted replacement still needs recovery; restart the updater before updating this product"))
 			return

@@ -1961,6 +1961,47 @@ func TestStartCleansUpStalePreviousWhenTargetIsHealthy(t *testing.T) {
 			t.Fatalf("refused update must not pull images; pulls = %d", stack.daemon.pulls)
 		}
 	})
+
+	t.Run("stops job if target degrades and reconcile restores backup", func(t *testing.T) {
+		stack := newDeployment(t, OMC_REPOSITORY+":latest")
+		stack.daemon.mu.Lock()
+		console := stack.daemon.find("oh-my-cpa")
+		console.Health = "healthy"
+		stale := stack.daemon.addContainer(containerSpec{name: "oh-my-cpa" + PREVIOUS_SUFFIX, image: OMC_REPOSITORY + ":latest"})
+		stale.IsRunning = false
+		stack.daemon.mu.Unlock()
+
+		engine := stack.service.options.Engine
+		transport := engine.httpClient.Transport
+		var flipped atomic.Bool
+		engine.httpClient.Transport = updaterTransport(func(request *http.Request) (*http.Response, error) {
+			path := strings.TrimPrefix(request.URL.Path, "/v"+MAX_API_VERSION)
+			// Flip the target unhealthy right when reconcilePrevious inspects the previous
+			// backup (after Start and preflight already saw it healthy).
+			if request.Method == http.MethodGet && path == "/containers/"+stale.ID+"/json" && flipped.CompareAndSwap(false, true) {
+				stack.daemon.mu.Lock()
+				console.Health = "unhealthy"
+				stack.daemon.mu.Unlock()
+			}
+			return transport.RoundTrip(request)
+		})
+
+		manifest, signature := stack.signer.manifest("v1.1.0", OMC_REPOSITORY, TEST_DIGEST)
+		if _, err := stack.service.Start(context.Background(), ProductOMC, manifest, signature, ""); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		job := awaitJob(t, stack.service)
+		if job.Stage != StageFailed || !strings.Contains(job.Error, "restored during recovery") {
+			t.Fatalf("job = %+v, want failed requiring fresh admission", job)
+		}
+		restored := stack.daemon.named("oh-my-cpa")
+		if restored == nil || restored.ID != stale.ID || !restored.IsRunning {
+			t.Fatalf("restored = %+v, want stale %+v running", restored, stale)
+		}
+		if stack.daemon.pulls != 0 {
+			t.Fatalf("aborted job must not pull images; pulls = %d", stack.daemon.pulls)
+		}
+	})
 }
 
 func TestAwaitStartedAndHealthTimeoutConfig(t *testing.T) {

@@ -289,7 +289,9 @@ through another dependent, or if the target itself uses a shared or host namespa
 has dependents. Configure shared helpers to reference the actual namespace owner
 directly, or recreate this topology on the Docker host.
 
-An existing `<name>-omc-previous` backup also blocks another update before mutation.
+An existing `<name>-omc-previous` backup blocks another update before mutation unless
+it is already stopped, the target container is healthy, and cleaning it up requires
+no updater self-handover, in which case the updater removes that stale backup first.
 When a self-handover cannot start its successor, the running predecessor restores the
 previous owner and retries from that live namespace. If that restore also fails, recover
 the updater from the Docker host rather than restarting it in the dead namespace. In the
