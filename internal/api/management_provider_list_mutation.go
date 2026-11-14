@@ -112,7 +112,7 @@ func (h *Handler) deleteConfigKeyProvider(
 ) error {
 	return gatedProviderListWrite(h, ctx,
 		func(ctx context.Context) ([]management.ConfigAPIKey, error) {
-			if snapErr := h.snapshotProvidersBeforeDelete(ctx, client, string(spec.Family)); snapErr != nil {
+			if snapErr := h.snapshotProvidersBeforeDelete(ctx, client); snapErr != nil {
 				return nil, snapErr
 			}
 			return client.EditableConfigAPIKeys(ctx, spec.Family)

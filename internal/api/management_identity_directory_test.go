@@ -53,7 +53,7 @@ func TestIdentityDirectoryLifecycleAcrossToggleDisableAndDeletion(t *testing.T) 
 			if !oaiDisabled {
 				idx := "idx-inception-v1"
 				if oaiAuthGen > 1 {
-					idx = "idx-inception-v2"
+					idx = "idx-inception-a2"
 				}
 				authIdxField = `,"auth-index":"` + idx + `"`
 			}
@@ -323,8 +323,8 @@ func TestIdentityDirectoryLifecycleAcrossToggleDisableAndDeletion(t *testing.T) 
 		t.Fatalf("disabled provider lost recovered auth_index: %+v", dirDisabled.Providers[0].AuthIndexes)
 	}
 
-	// Step 3: Re-enable Inception. CPA assigns regenerated idx-inception-v2; StateCoordinator flush
-	// refreshes baseline so live provider carries idx-inception-v2 while archive still remembers idx-inception-v1.
+	// Step 3: Re-enable Inception. CPA assigns regenerated idx-inception-a2; StateCoordinator flush
+	// refreshes baseline so live provider carries idx-inception-a2 while archive still remembers idx-inception-v1.
 	toggleOnResp, toggleOnBody := doJSON(t, client, http.MethodPatch,
 		server.URL+"/omc/api/v1/management/providers/status",
 		`{"family":"openai-compatibility","index":0,"disabled":false,"expected_name":"inception"}`,
@@ -344,12 +344,12 @@ func TestIdentityDirectoryLifecycleAcrossToggleDisableAndDeletion(t *testing.T) 
 	if dirReenabled.Providers[0].Disabled {
 		t.Fatal("expected provider to be re-enabled")
 	}
-	if len(dirReenabled.Providers[0].AuthIndexes) != 1 || dirReenabled.Providers[0].AuthIndexes[0] != "idx-inception-v2" {
-		t.Fatalf("expected refreshed runtime auth_index idx-inception-v2, got %+v", dirReenabled.Providers[0].AuthIndexes)
+	if len(dirReenabled.Providers[0].AuthIndexes) != 1 || dirReenabled.Providers[0].AuthIndexes[0] != "idx-inception-a2" {
+		t.Fatalf("expected refreshed runtime auth_index idx-inception-a2, got %+v", dirReenabled.Providers[0].AuthIndexes)
 	}
 
 	// Step 3b: Disable Inception a second time. Fingerprint recovery must restore BOTH
-	// generations (idx-inception-v2 and idx-inception-v1) rather than treating same-key
+	// generations (idx-inception-a2 and idx-inception-v1) rather than treating same-key
 	// index rotation as a cross-provider conflict!
 	toggleOffAgainResp, toggleOffAgainBody := doJSON(t, client, http.MethodPatch,
 		server.URL+"/omc/api/v1/management/providers/status",
@@ -362,13 +362,19 @@ func TestIdentityDirectoryLifecycleAcrossToggleDisableAndDeletion(t *testing.T) 
 		t.Fatalf("FlushNow second disable failed: %v", err)
 	}
 	_ = awaitStateSync()
-	dirDisabledTwice := readDirectory()
-	if !dirDisabledTwice.Providers[0].Disabled {
-		t.Fatal("expected provider to be disabled on second toggle")
-	}
-	if !slices.Contains(dirDisabledTwice.Providers[0].AuthIndexes, "idx-inception-v2") ||
-		!slices.Contains(dirDisabledTwice.Providers[0].AuthIndexes, "idx-inception-v1") {
-		t.Fatalf("second disable lost multi-generation recovered auth_indexes: %+v", dirDisabledTwice.Providers[0].AuthIndexes)
+	dirDisabledTwice1 := readDirectory()
+	handler.identityArchive.reset()
+	dirDisabledTwice2 := readDirectory()
+	for pass, dirSnap := range []IdentityDirectoryResponse{dirDisabledTwice1, dirDisabledTwice2} {
+		if !dirSnap.Providers[0].Disabled {
+			t.Fatalf("read %d: expected provider to be disabled on second toggle", pass+1)
+		}
+		if len(dirSnap.Providers[0].AuthIndexes) < 2 || dirSnap.Providers[0].AuthIndexes[0] != "idx-inception-a2" {
+			t.Fatalf("read %d: expected latest generation idx-inception-a2 first, got %+v", pass+1, dirSnap.Providers[0].AuthIndexes)
+		}
+		if !slices.Contains(dirSnap.Providers[0].AuthIndexes, "idx-inception-v1") {
+			t.Fatalf("read %d: second disable lost prior generation idx-inception-v1: %+v", pass+1, dirSnap.Providers[0].AuthIndexes)
+		}
 	}
 
 	// Step 4: Delete Inception provider, OAuth credential file, and Qoder plugin.
@@ -643,4 +649,155 @@ func mustMarshalString(t *testing.T, v any) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+func TestProviderDeletionPartialSnapshotRefusal(t *testing.T) {
+	cases := []struct {
+		name       string
+		providerID string
+		emptyAll   bool
+		failPath   string
+	}{
+		{
+			name:       "config_key_provider_with_items",
+			providerID: "codex-0",
+			emptyAll:   false,
+			failPath:   "/v0/management/claude-api-key",
+		},
+		{
+			name:       "config_key_provider_when_items_and_target_empty",
+			providerID: "codex-0",
+			emptyAll:   true,
+			failPath:   "/v0/management/claude-api-key",
+		},
+		{
+			name:       "config_key_provider_target_family_fails",
+			providerID: "codex-0",
+			emptyAll:   true,
+			failPath:   "/v0/management/codex-api-key",
+		},
+		{
+			name:       "openai_compatible_with_items",
+			providerID: "openai-compat-0",
+			emptyAll:   false,
+			failPath:   "/v0/management/claude-api-key",
+		},
+		{
+			name:       "openai_compatible_when_items_and_target_empty",
+			providerID: "openai-compat-0",
+			emptyAll:   true,
+			failPath:   "/v0/management/claude-api-key",
+		},
+		{
+			name:       "openai_compatible_target_family_fails",
+			providerID: "openai-compat-0",
+			emptyAll:   true,
+			failPath:   "/v0/management/openai-compatibility",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cipher, err := crypto.New("01234567890123456789012345678901")
+			if err != nil {
+				t.Fatal(err)
+			}
+			db, err := repository.Open(context.Background(), dashboardMemoryDSN("partial_snap_"+tc.name), repository.WithCipher(cipher))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = db.Close() })
+			repo := repository.New(db)
+
+			var mu sync.Mutex
+			writeCount := 0
+			cpa := newFakeCPA(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				defer mu.Unlock()
+				if r.Method != http.MethodGet && r.Method != http.MethodHead {
+					writeCount++
+				}
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case r.Method == http.MethodGet && (r.URL.Path == "/v0/management/config.yaml" || r.URL.Path == "/v8/management/config.yaml"):
+					_, _ = w.Write([]byte("config-version: 8\n"))
+				case r.Method == http.MethodGet && r.URL.Path == "/v8/management/config":
+					_, _ = w.Write([]byte(`{"config-version":8}`))
+				// Force selected family to fail both editable and runtime reads -> readProviderItemsUpstreamWithStatus returns known=false.
+				case r.Method == http.MethodGet && r.URL.Path == tc.failPath:
+					w.WriteHeader(http.StatusInternalServerError)
+					_, _ = w.Write([]byte(`{"error":"upstream family unavailable"}`))
+				case r.Method == http.MethodGet && r.URL.Path == "/v0/management/openai-compatibility":
+					if tc.emptyAll {
+						_, _ = w.Write([]byte(`{"openai-compatibility":[]}`))
+						return
+					}
+					_, _ = w.Write([]byte(`{"openai-compatibility":[{"name":"relay","base-url":"https://relay.test/v1","api-key-entries":[{"api-key":"dummy-key-alpha-beta","auth-index":"idx-relay"}]}]}`))
+				case r.Method == http.MethodGet && r.URL.Path == "/v0/management/codex-api-key":
+					if tc.emptyAll {
+						_, _ = w.Write([]byte(`{"codex-api-key":[]}`))
+						return
+					}
+					_, _ = w.Write([]byte(`{"codex-api-key":[{"api-key":"sk-codex-alpha-1234","base-url":"https://api.openai.com/v1","auth-index":"idx-codex-1"}]}`))
+				case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v0/management/"):
+					_, _ = w.Write([]byte(`{}`))
+				case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v8/management/config/api-keys/"):
+					w.WriteHeader(http.StatusNotFound)
+					_, _ = w.Write([]byte(`{"error":"not_found"}`))
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			t.Cleanup(cpa.Close)
+
+			ciphertext, nonce, err := cipher.Encrypt([]byte("cpa-management-secret"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			now := time.Now().UTC().Truncate(time.Second)
+			if err := repo.UpsertInstance(context.Background(), domain.CPAInstance{
+				ID:                      "default",
+				Name:                    "Test CPA",
+				BaseURL:                 cpa.URL,
+				UsageAddr:               strings.TrimPrefix(cpa.URL, "http://"),
+				ManagementKeyCiphertext: ciphertext,
+				ManagementKeyNonce:      nonce,
+				CreatedAt:               now,
+				UpdatedAt:               now,
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			authManager, err := auth.New("app-admin-secret", "", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			handler := NewHandler(config.Config{
+				BasePath: "/omc",
+				Version:  "v0.1.0-test",
+				CPA:      config.CPAConfig{BaseURL: cpa.URL, ManagementKey: "app-admin-secret"},
+			}, repo, cipher, nil, authManager)
+			server := httptest.NewServer(handler.Router())
+			t.Cleanup(server.Close)
+			client := signedInClient(t, server.URL+"/omc/api/auth/login", "app-admin-secret")
+
+			delResp, delBody := doJSON(t, client, http.MethodDelete, server.URL+"/omc/api/v1/management/providers/"+tc.providerID, "")
+			if delResp.StatusCode != http.StatusInternalServerError {
+				t.Fatalf("expected 500 on partial snapshot failure, got %d: %s", delResp.StatusCode, delBody)
+			}
+			var errPayload map[string]string
+			if err := json.Unmarshal([]byte(delBody), &errPayload); err != nil {
+				t.Fatalf("decode error payload: %v (%s)", err, delBody)
+			}
+			if errPayload["code"] != providerArchiveFailedCode {
+				t.Fatalf("expected code %q, got %+v", providerArchiveFailedCode, errPayload)
+			}
+			mu.Lock()
+			gotWrites := writeCount
+			mu.Unlock()
+			if gotWrites != 0 {
+				t.Fatalf("expected 0 upstream write/delete requests after partial snapshot failure, got %d", gotWrites)
+			}
+		})
+	}
 }

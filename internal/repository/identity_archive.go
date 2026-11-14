@@ -30,6 +30,7 @@ type ArchivedCredential struct {
 	MaskedAccount  string `json:"masked_account,omitempty"`
 	KeyMask        string `json:"key_mask,omitempty"`
 	KeyFingerprint string `json:"-"`
+	IsRecovered    bool   `json:"-"`
 	IsAmbiguous    bool   `json:"is_ambiguous,omitempty"`
 	UpdatedAtMS    int64  `json:"updated_at_ms,omitempty"`
 }
@@ -148,6 +149,14 @@ func (r *Repository) UpsertArchivedCredentials(ctx context.Context, instanceID s
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	var maxLiveSeq int64
+	if err := tx.QueryRowContext(ctx, `
+		SELECT COALESCE(MAX(live_generation_seq), 0)
+		FROM archived_credentials
+		WHERE instance_id = ?`, instanceID).Scan(&maxLiveSeq); err != nil {
+		return fmt.Errorf("read archived credentials live sequence: %w", err)
+	}
+
 	conflictGuard := `(archived_credentials.is_ambiguous = 1
 		OR excluded.is_ambiguous = 1
 		OR archived_credentials.kind <> excluded.kind
@@ -158,8 +167,8 @@ func (r *Repository) UpsertArchivedCredentials(ctx context.Context, instanceID s
 		INSERT INTO archived_credentials (
 			instance_id, auth_index, kind, provider_key, oauth_provider, provider_family,
 			provider_name, upstream_name, base_url, icon_id, file_name, display_name,
-			masked_account, key_mask, key_fingerprint, is_ambiguous, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			masked_account, key_mask, key_fingerprint, is_ambiguous, live_generation_seq, updated_at_ms
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (instance_id, auth_index) DO UPDATE SET
 			is_ambiguous = CASE WHEN `+conflictGuard+` THEN 1 ELSE 0 END,
 			kind = CASE WHEN `+conflictGuard+` THEN archived_credentials.kind ELSE excluded.kind END,
@@ -229,6 +238,11 @@ func (r *Repository) UpsertArchivedCredentials(ctx context.Context, instanceID s
 				WHEN excluded.kind = 'apikey' THEN archived_credentials.key_fingerprint
 				ELSE ''
 			END,
+			live_generation_seq = CASE
+				WHEN `+conflictGuard+` THEN 0
+				WHEN excluded.live_generation_seq > 0 THEN excluded.live_generation_seq
+				ELSE archived_credentials.live_generation_seq
+			END,
 			updated_at_ms = excluded.updated_at_ms
 	`)
 	if err != nil {
@@ -245,11 +259,16 @@ func (r *Repository) UpsertArchivedCredentials(ctx context.Context, instanceID s
 		if ts <= 0 {
 			ts = nowMS
 		}
+		var liveSeq int64
+		if !entry.IsRecovered && !entry.IsAmbiguous {
+			maxLiveSeq++
+			liveSeq = maxLiveSeq
+		}
 		if _, err := stmt.ExecContext(ctx,
 			instanceID, entry.AuthIndex, entry.Kind, entry.ProviderKey, entry.OAuthProvider,
 			entry.ProviderFamily, entry.ProviderName, entry.UpstreamName, entry.BaseURL,
 			entry.IconID, entry.FileName, entry.DisplayName, entry.MaskedAccount,
-			entry.KeyMask, entry.KeyFingerprint, ambiguous, ts,
+			entry.KeyMask, entry.KeyFingerprint, ambiguous, liveSeq, ts,
 		); err != nil {
 			return fmt.Errorf("upsert archived credential %q: %w", entry.AuthIndex, err)
 		}
@@ -401,7 +420,7 @@ func (r *Repository) ResolveArchivedAuthIndexesByFingerprints(
 			SELECT key_fingerprint, auth_index, provider_family, provider_key, is_ambiguous
 			FROM archived_credentials
 			WHERE instance_id = ? AND kind = 'apikey' AND key_fingerprint IN (`+placeholders+`)
-			ORDER BY updated_at_ms DESC, auth_index DESC`, args...)
+			ORDER BY live_generation_seq DESC, updated_at_ms DESC, auth_index DESC`, args...)
 		if err != nil {
 			return nil, fmt.Errorf("query archived key fingerprints: %w", err)
 		}

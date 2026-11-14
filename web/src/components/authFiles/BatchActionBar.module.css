@@ -27,21 +27,46 @@
   .bar:global(.selection-bar) {
     gap: 4px;
     padding: 6px;
-    padding-inline-start: 14px;
+    padding-inline-start: 12px;
   }
 
   .bar :global(.selection-bar-start) {
+    flex: 1 1 auto;
+    min-width: 0;
     gap: 4px;
   }
 
+  .bar :global(.selection-bar-count) {
+    flex-shrink: 0;
+  }
+
+  .bar :global(.selection-bar-note) {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .bar :global(.selection-bar-actions) {
+    flex: none;
     gap: 0;
   }
 
   .scope-menu {
+    position: relative;
+    flex-shrink: 0;
     gap: 2px;
-    padding-inline: 8px 6px;
+    padding-inline: 6px 4px;
     color: var(--fg-2);
+  }
+
+  @media (pointer: coarse) {
+    .scope-menu::before {
+      content: '';
+      position: absolute;
+      inset: -6px -2px;
+    }
   }
 
   .phone-divider {

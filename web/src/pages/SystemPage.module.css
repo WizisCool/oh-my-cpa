@@ -904,7 +904,7 @@
     .check-updates-action::before {
       content: '';
       position: absolute;
-      inset: -4px;
+      inset: -6px -4px;
     }
   }
 
