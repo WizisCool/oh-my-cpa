@@ -49,7 +49,12 @@ export const PricingEditorProvider: React.FC<{ routeKey?: string; children: Reac
     setTarget({ model, options, session: sessionRef.current });
     setIsOpen(true);
   }, []);
-  const close = React.useCallback(() => setIsOpen(false), []);
+  const targetSession = target?.session ?? 0;
+  const closeCurrentSession = React.useCallback(() => {
+    if (sessionRef.current === targetSession) {
+      setIsOpen(false);
+    }
+  }, [targetSession]);
   return (
     <PricingEditorContext.Provider value={open}>
       <OpenModelContext.Provider value={isOpen && target ? target.model : null}>
@@ -64,7 +69,7 @@ export const PricingEditorProvider: React.FC<{ routeKey?: string; children: Reac
             initialMode={target.options.mode}
             initialUpstream={target.options.upstream}
             isOpen={isOpen}
-            onClose={close}
+            onClose={closeCurrentSession}
           />
         </React.Suspense>
       )}

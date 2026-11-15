@@ -27,6 +27,7 @@ import { consoleRouteRegistry, warmRouteIntent } from '../../routePreload';
 import {
   HOT_ACTIVITY_ROUTES,
   RouteActivityContext,
+  RoutePollingContext,
   reconcileHotRouteSlots,
   useTransitionNavigate,
   type HotRouteSlotEntry,
@@ -137,12 +138,39 @@ const HotRoutePollingBoundary = React.memo<HotRoutePollingBoundaryProps>(functio
   outlet,
   routerSnapshot,
 }) {
+  const [isVisibleActive, setIsVisibleActive] = React.useState(isActive);
   const [isPollingActive, setIsPollingActive] = React.useState(isActive);
 
+  // Actual route visibility transitions right after the paint frame with zero debounce so leaving
+  // and rapidly returning always produces a true `false -> true` edge for draft cleanup and
+  // stale-query revalidation while keeping the navigation paint frame itself free of child renders.
+  React.useEffect(() => {
+    if (isVisibleActive === isActive) return undefined;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    const frameId = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame(() => {
+          timerId = setTimeout(() => {
+            React.startTransition(() => setIsVisibleActive(isActive));
+          }, 0);
+        })
+      : undefined;
+    if (frameId === undefined) {
+      timerId = setTimeout(() => {
+        React.startTransition(() => setIsVisibleActive(isActive));
+      }, 0);
+    }
+    return () => {
+      if (frameId !== undefined && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(frameId);
+      }
+      if (timerId !== undefined) clearTimeout(timerId);
+    };
+  }, [isActive, isVisibleActive]);
+
+  // Polling teardown alone uses a brief settle delay so rapid back-and-forth switches skip
+  // interval/stream teardown and re-setup.
   React.useEffect(() => {
     if (isPollingActive === isActive) return undefined;
-    // Pause hidden routes after a brief settle delay so rapid back-and-forth switches skip
-    // polling teardown/re-setup completely; resume active routes right after the paint frame.
     const settleDelayMs = isActive ? 0 : 180;
     let timerId: ReturnType<typeof setTimeout> | undefined;
     const frameId = typeof requestAnimationFrame === 'function'
@@ -179,8 +207,10 @@ const HotRoutePollingBoundary = React.memo<HotRoutePollingBoundaryProps>(functio
   );
 
   return (
-    <RouteActivityContext.Provider value={isPollingActive}>
-      {body}
+    <RouteActivityContext.Provider value={isVisibleActive}>
+      <RoutePollingContext.Provider value={isPollingActive}>
+        {body}
+      </RoutePollingContext.Provider>
     </RouteActivityContext.Provider>
   );
 });

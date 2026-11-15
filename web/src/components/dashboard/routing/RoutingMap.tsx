@@ -197,12 +197,12 @@ export const RoutingMap = React.memo(function RoutingMap({
     }
   }, [modelTiles, targetTiles, paths]);
 
-  const keysSignature = `${models.map((e) => e.key).join(',')}|${targets.map((e) => e.key).join(',')}|${ghosts.map((e) => e.key).join(',')}`;
+  const keysSignature = `${models.map((e) => e.key).join(',')}|${targets.map((e) => `${e.key}:${e.item.cooldown ? 1 : 0}`).join(',')}|${ghosts.map((e) => e.key).join(',')}`;
   const latestKeysRef = React.useRef(keysSignature);
-  latestKeysRef.current = keysSignature;
   const lastDrawnKeysRef = React.useRef<string>('');
   const prevRouteActiveRef = React.useRef(isRouteActive);
   React.useLayoutEffect(() => {
+    latestKeysRef.current = keysSignature;
     const justBecameActive = isRouteActive && !prevRouteActiveRef.current;
     prevRouteActiveRef.current = isRouteActive;
     if (!isRouteActive || !hasObservedLayoutRef.current) return;
@@ -301,6 +301,11 @@ export const RoutingMap = React.memo(function RoutingMap({
 
   const playerRef = React.useRef<ReturnType<typeof createPacketPlayer> | undefined>(undefined);
   React.useEffect(() => {
+    if (!isRouteActive) {
+      playerRef.current?.dispose();
+      playerRef.current = undefined;
+      return undefined;
+    }
     const player = createPacketPlayer({
       layer: () => layerRef.current,
       path: paths.get,
@@ -322,12 +327,12 @@ export const RoutingMap = React.memo(function RoutingMap({
       player.dispose();
       playerRef.current = undefined;
     };
-  }, [paths, washes, halos]);
+  }, [paths, washes, halos, isRouteActive]);
 
   React.useEffect(() => {
-    if (arrivals.routes.length === 0) return;
+    if (!isRouteActive || arrivals.routes.length === 0) return;
     playerRef.current?.play(arrivals.routes);
-  }, [arrivals]);
+  }, [arrivals, isRouteActive]);
 
   const isDense = Math.max(models.length, targets.length) > DENSE_ROWS;
 

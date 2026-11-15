@@ -75,7 +75,7 @@ import { KeyCompositionPanel } from './components/KeyCompositionPanel';
 import { InsightsValue } from './components/InsightsValue';
 import { ChartLegend } from '../../components/common/ChartLegend';
 import { DeferredPanel } from '../../components/common/DeferredPanel';
-import { useIsRouteActive } from '../../performance/routeContract';
+import { useIsRouteActive, useIsRoutePollingActive } from '../../performance/routeContract';
 import { PanelNarrowing } from './components/PanelNarrowing';
 import { RhythmGrid } from './components/RhythmGrid';
 import { KeyDetailDrawer } from './components/KeyDetailDrawer';
@@ -142,6 +142,7 @@ export const InsightsPage: React.FC = () => {
   const { theme } = useTheme();
   const isPhone = useIsPhoneViewport();
   const isRouteActive = useIsRouteActive();
+  const isPollingActive = useIsRoutePollingActive();
   const { modelView } = useTokenDisplayStyle();
   const modelDimension: 'call_point' | 'model' = modelView === 'model' ? 'model' : 'call_point';
 
@@ -171,8 +172,8 @@ export const InsightsPage: React.FC = () => {
     enabled: isRangeReady,
     placeholderData: keepPreviousData,
     staleTime: 15_000,
-    refetchOnWindowFocus: isRouteActive,
-    refetchInterval: (query) => (isRouteActive ? insightsPollInterval(query.state.data?.window) : false),
+    refetchOnWindowFocus: isPollingActive,
+    refetchInterval: (query) => (isPollingActive ? insightsPollInterval(query.state.data?.window) : false),
   });
   const { configuredProviders, archivedCredentialsByIndex } = useProviderBranding();
   // A provider's own name is the identity of the connection that answered, and the credential that
@@ -203,7 +204,7 @@ export const InsightsPage: React.FC = () => {
     enabled: isRangeReady,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
-    refetchOnWindowFocus: isRouteActive,
+    refetchOnWindowFocus: isPollingActive,
     retry: (count, error) => apiErrorCode(error) !== 'demo_uncaptured' && count < 2,
     meta: { silent: true },
   });

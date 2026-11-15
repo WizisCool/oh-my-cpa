@@ -13,6 +13,12 @@ export interface ResizeSubscriptionOptions {
   freezeOnTransition?: boolean;
   /** Minimum dimension delta in pixels required to emit an update. Defaults to `0.5`. */
   epsilonPx?: number;
+  /**
+   * Deliver observations with positive width even when `height === 0`, allowing width-responsive
+   * containers with fallback heights (such as `ChartContainer`) to initialize without forcing
+   * non-zero height CSS on callers.
+   */
+  allowZeroHeight?: boolean;
 }
 
 export type ResizeSubscriberCallback = (size: ObservedBoxSize) => void;
@@ -29,6 +35,7 @@ interface SubscriberRecord {
   readonly callback: ResizeSubscriberCallback;
   readonly freezeOnTransition: boolean;
   readonly epsilonPx: number;
+  readonly allowZeroHeight: boolean;
   lastDelivered: ObservedBoxSize | null;
   deferredSize: ObservedBoxSize | null;
   active: boolean;
@@ -73,6 +80,7 @@ export function createResizeObserverHub(deps: ResizeObserverHubDeps = {}): Resiz
 
   const deliver = (record: SubscriberRecord, size: ObservedBoxSize) => {
     if (!record.active) return;
+    if (!(size.width > 0 && (size.height > 0 || record.allowZeroHeight))) return;
     if (!hasMeaningfulChange(record.lastDelivered, size, record.epsilonPx)) return;
     record.lastDelivered = size;
     record.callback(size);
@@ -103,8 +111,10 @@ export function createResizeObserverHub(deps: ResizeObserverHubDeps = {}): Resiz
       const set = byElement.get(entry.target);
       if (!set || set.size === 0) continue;
       const { width, height } = entry.contentRect;
-      // Ignore 0x0 observations from detached or collapsed transient nodes.
-      if (!(width > 0 && height > 0)) continue;
+      // Ignore 0-width or negative observations from detached or collapsed transient nodes;
+      // positive-width, zero-height boxes are retained only for `allowZeroHeight` subscribers.
+      if (!(width > 0 && height >= 0)) continue;
+      if (height === 0 && ![...set].some((record) => record.allowZeroHeight)) continue;
       const size = { width, height };
       lastSizeByElement.set(entry.target, size);
       measured.push({ subscribers: [...set], size });
@@ -162,6 +172,7 @@ export function createResizeObserverHub(deps: ResizeObserverHubDeps = {}): Resiz
         callback,
         freezeOnTransition: options.freezeOnTransition ?? true,
         epsilonPx: options.epsilonPx ?? 0.5,
+        allowZeroHeight: options.allowZeroHeight ?? false,
         lastDelivered: null,
         deferredSize: null,
         active: true,

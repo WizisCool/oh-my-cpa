@@ -1,6 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import { useFrameBudgetMount, type MountPriority } from '../../performance/frameScheduler';
+import { useIsRouteActive } from '../../performance/routeContract';
 
 export interface DeferredPanelProps {
   /** Frame-budget priority tier (`p0` hero -> `p1` primary chart -> `p2` secondary panel). */
@@ -29,7 +30,8 @@ export const DeferredPanel: React.FC<DeferredPanelProps> = ({
   style,
   children,
 }) => {
-  const isMounted = useFrameBudgetMount(priority, { immediate });
+  const isRouteActive = useIsRouteActive();
+  const isMounted = useFrameBudgetMount(priority, { immediate, enabled: isRouteActive });
   if (isMounted) return <>{children}</>;
   const mergedStyle: React.CSSProperties | undefined = minHeight !== undefined || style
     ? { ...(minHeight !== undefined ? { minHeight } : {}), ...style }

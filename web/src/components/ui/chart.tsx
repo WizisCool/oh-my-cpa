@@ -143,7 +143,7 @@ export function ChartContainer({
             : { width: w, height: resolvedHeight },
         );
       },
-      { freezeOnTransition: true, epsilonPx: 1 },
+      { freezeOnTransition: true, epsilonPx: 1, allowZeroHeight: true },
     );
   }, [responsive, fallbackHeight]);
 

@@ -23,16 +23,21 @@ const KEYED_OPTIONS = new Set([
 ]);
 
 function serializeOptionsKey(locale: string, options: Intl.DateTimeFormatOptions): string {
-  const byLocale = OPTIONS_KEY_CACHE.get(options);
+  // Only cache by object identity when `options` is frozen so a caller mutating fields (such as
+  // `options.timeZone`) on a reused object never hits a stale formatter key.
+  const canCacheByIdentity = Object.isFrozen(options);
+  const byLocale = canCacheByIdentity ? OPTIONS_KEY_CACHE.get(options) : undefined;
   const existing = byLocale?.get(locale);
   if (existing !== undefined) return existing;
 
   for (const name in options) {
     if (!KEYED_OPTIONS.has(name)) {
       const fallbackKey = `${locale}|${JSON.stringify(Object.entries(options).sort(([a], [b]) => a.localeCompare(b)))}`;
-      const map = byLocale ?? new Map<string, string>();
-      map.set(locale, fallbackKey);
-      if (!byLocale) OPTIONS_KEY_CACHE.set(options, map);
+      if (canCacheByIdentity) {
+        const map = byLocale ?? new Map<string, string>();
+        map.set(locale, fallbackKey);
+        if (!byLocale) OPTIONS_KEY_CACHE.set(options, map);
+      }
       return fallbackKey;
     }
   }
@@ -60,9 +65,11 @@ function serializeOptionsKey(locale: string, options: Intl.DateTimeFormatOptions
     options.hour12 === undefined ? '' : String(options.hour12),
     options.timeZoneName ?? '',
   ].join('|');
-  const map = byLocale ?? new Map<string, string>();
-  map.set(locale, computed);
-  if (!byLocale) OPTIONS_KEY_CACHE.set(options, map);
+  if (canCacheByIdentity) {
+    const map = byLocale ?? new Map<string, string>();
+    map.set(locale, computed);
+    if (!byLocale) OPTIONS_KEY_CACHE.set(options, map);
+  }
   return computed;
 }
 

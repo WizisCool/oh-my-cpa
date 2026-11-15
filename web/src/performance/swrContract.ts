@@ -7,7 +7,7 @@ import {
   type UseQueryOptions,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import { useIsRouteActive } from './routeContract';
+import { useIsRouteActive, useIsRoutePollingActive } from './routeContract';
 
 export type SwrPlaceholderStrategy = 'keepPrevious' | 'sameScope' | 'none';
 
@@ -165,7 +165,8 @@ export function useSwrQuery<TParams, TData, TKey extends QueryKey = QueryKey>(
   overrides?: SwrQueryRuntimeOverrides<TData, TKey>,
 ): UseQueryResult<TData, Error> {
   const isRouteActive = useIsRouteActive();
-  const effectiveOverrides: SwrQueryRuntimeOverrides<TData, TKey> | undefined = isRouteActive
+  const isPollingActive = useIsRoutePollingActive();
+  const effectiveOverrides: SwrQueryRuntimeOverrides<TData, TKey> | undefined = isPollingActive
     ? overrides
     : {
         ...overrides,

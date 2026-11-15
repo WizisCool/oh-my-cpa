@@ -36,9 +36,9 @@ import { Panel } from '../common/Panel';
 import './dashboard.css';
 
 const FULL_NUMBER_FORMAT = new Intl.NumberFormat('en');
-const TOOLTIP_DAY_OPTIONS: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
-const MONTH_LABEL_OPTIONS: Intl.DateTimeFormatOptions = { month: 'short' };
-const CELL_DAY_OPTIONS: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
+const TOOLTIP_DAY_OPTIONS: Intl.DateTimeFormatOptions = Object.freeze({ year: 'numeric', month: 'long', day: 'numeric' });
+const MONTH_LABEL_OPTIONS: Intl.DateTimeFormatOptions = Object.freeze({ month: 'short' });
+const CELL_DAY_OPTIONS: Intl.DateTimeFormatOptions = Object.freeze({ year: 'numeric', month: 'short', day: 'numeric' });
 
 /**
  * The weekday labels, Monday first, matching the grid's rows.

@@ -180,6 +180,8 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
     ? sparklineViewBoxToHostX(activePoint.x, hostWidth, LOGICAL_WIDTH)
     : hostWidth / 2;
   const activeLeftPct = activePoint ? `${(activePoint.x / LOGICAL_WIDTH) * 100}%` : '50%';
+  const activeTopPct = activePoint ? `${(activePoint.y / height) * 100}%` : '50%';
+  const singleTopPct = singlePoint ? `${(singlePoint.y / height) * 100}%` : '50%';
   const tooltipX = activePoint
     ? clampSparklineTooltipX(activeCursorPx, hostWidth, tooltipWidth)
     : 0;
@@ -368,7 +370,7 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
               style={{
                 position: 'absolute',
                 left: '50%',
-                top: singlePoint.y,
+                top: singleTopPct,
                 width: geometry.hasPositiveValue ? 7 : 5,
                 height: geometry.hasPositiveValue ? 7 : 5,
                 borderRadius: '50%',
@@ -387,7 +389,7 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
               style={{
                 position: 'absolute',
                 left: activeLeftPct,
-                top: activePoint.y,
+                top: activeTopPct,
                 width: 7,
                 height: 7,
                 borderRadius: '50%',

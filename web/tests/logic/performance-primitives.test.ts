@@ -179,9 +179,17 @@ test('resize observer hub multiplexes one observer, delivers cached size to late
     );
   };
 
-  // Initial measurement delivers; 0x0 and sub-epsilon jitter are ignored.
+  // Initial measurement delivers; 0x0 and sub-epsilon jitter are ignored for default subscribers,
+  // while allowZeroHeight subscribers receive positive-width, zero-height boxes without affecting peers.
   emitResize(0, 0);
   assert.equal(seenA.length, 0);
+  const zeroHeightSeen: ObservedBoxSize[] = [];
+  const unsubZeroH = hub.observe(target, (size) => zeroHeightSeen.push(size), { allowZeroHeight: true });
+  emitResize(480, 0);
+  assert.equal(seenA.length, 0, 'default subscribers still ignore height === 0');
+  assert.deepEqual(zeroHeightSeen, [{ width: 480, height: 0 }], 'allowZeroHeight subscriber receives width with 0 height');
+  unsubZeroH();
+
   emitResize(480, 220);
   emitResize(480.4, 220.2);
   assert.deepEqual(seenA, [{ width: 480, height: 220 }]);

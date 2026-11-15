@@ -291,6 +291,11 @@ export const sharedFrameScheduler = createFrameBudgetScheduler({
 export interface UseFrameBudgetMountOptions {
   /** Mount synchronously on the first render (e.g., for `p0` static shells or test overrides). */
   immediate?: boolean;
+  /**
+   * When `false` (e.g., while a cached route is parked off-screen), cancels any pending queued
+   * mount job without unmounting an already-hydrated subtree, and requeues cleanly upon return.
+   */
+  enabled?: boolean;
   scheduler?: FrameBudgetScheduler;
 }
 
@@ -302,13 +307,13 @@ export function useFrameBudgetMount(
   priority: MountPriority = 'p1',
   options: UseFrameBudgetMountOptions = {},
 ): boolean {
-  const { immediate = false, scheduler = sharedFrameScheduler } = options;
+  const { immediate = false, enabled = true, scheduler = sharedFrameScheduler } = options;
   const [isMounted, setIsMounted] = React.useState(immediate);
 
   React.useEffect(() => {
-    if (isMounted) return undefined;
+    if (isMounted || !enabled) return undefined;
     return scheduler.schedule(priority, () => setIsMounted(true));
-  }, [isMounted, priority, scheduler]);
+  }, [enabled, isMounted, priority, scheduler]);
 
   return isMounted;
 }

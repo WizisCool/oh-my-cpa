@@ -2,11 +2,13 @@ import React from 'react';
 import NumberFlow, { NumberFlowGroup } from '@number-flow/react';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { useFrameBudgetMount } from '../../performance/frameScheduler';
+import { useIsRouteActive } from '../../performance/routeContract';
 import { MOTION_ROLL, MOTION_ROLL_PRESENCE } from '../../theme/themeConfig';
 import type { RollingReadout } from '../../types/rollingNumber';
 
 export const RollingNumberGroup: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const isGroupFlowMounted = useFrameBudgetMount('p2', { immediate: false });
+  const isRouteActive = useIsRouteActive();
+  const isGroupFlowMounted = useFrameBudgetMount('p2', { immediate: false, enabled: isRouteActive });
   return (
     <RollingGroupHydrationContext.Provider value={isGroupFlowMounted}>
       <NumberFlowGroup>{children}</NumberFlowGroup>
@@ -59,8 +61,12 @@ interface RollingNumberProps {
  */
 const RollingNumberView: React.FC<RollingNumberProps> = ({ readout }) => {
   const isReducedMotion = usePrefersReducedMotion();
+  const isRouteActive = useIsRouteActive();
   const groupHydrated = React.useContext(RollingGroupHydrationContext);
-  const standaloneHydrated = useFrameBudgetMount('p2', { immediate: groupHydrated !== null });
+  const standaloneHydrated = useFrameBudgetMount('p2', {
+    immediate: groupHydrated !== null,
+    enabled: isRouteActive,
+  });
   const isFlowMounted = groupHydrated ?? standaloneHydrated;
   const hasHydratedFlowRef = React.useRef(false);
   const unit = `${readout?.prefix ?? ''}\0${readout?.suffix ?? ''}`;

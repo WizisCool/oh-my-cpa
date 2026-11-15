@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { usageLiveChannel, type UsageLiveState } from '../api/usageLive';
-import { useIsRouteActive } from '../performance/routeContract';
+import { useIsRoutePollingActive } from '../performance/routeContract';
 import { createCoalescedSignalGate } from '../performance/streamBuffer';
 
 /** Default trailing-edge coalesce interval for bursty SSE invalidations (leading edge stays 0ms). */
@@ -38,7 +38,7 @@ export function useLiveRevision({
   isBusyRef,
   coalesceMs = DEFAULT_LIVE_COALESCE_MS,
 }: LiveRevisionOptions) {
-  const isRouteActive = useIsRouteActive();
+  const isRouteActive = useIsRoutePollingActive();
   const effectiveEnabled = isEnabled && isRouteActive;
   const [revision, setRevision] = React.useState(0);
   const [liveState, setLiveState] = React.useState<UsageLiveState>('connecting');

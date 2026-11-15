@@ -302,13 +302,25 @@ export const PINNED_HOT_ROUTES: ReadonlySet<string> = new Set(['/dashboard']);
 
 /**
  * Publishes whether the enclosing route container is currently visible (`true`) or cached
- * off-screen via `content-visibility: hidden` (`false`), allowing polling hooks and live
- * streams inside cached views to pause cleanly while inactive.
+ * off-screen via `content-visibility: hidden` (`false`). Transitions post-paint on every route
+ * switch without a debounce so rapid exit-and-return bounces still observe a clean activation
+ * edge for transient draft cleanup and stale-query revalidation.
  */
 export const RouteActivityContext = React.createContext<boolean>(true);
 
+/**
+ * Publishes whether background polling/streams inside a cached route should remain active.
+ * Debounces teardown briefly on route exit so rapid back-and-forth switches avoid tearing down
+ * and re-establishing polling intervals and live streams.
+ */
+export const RoutePollingContext = React.createContext<boolean>(true);
+
 export function useIsRouteActive(): boolean {
   return React.useContext(RouteActivityContext);
+}
+
+export function useIsRoutePollingActive(): boolean {
+  return React.useContext(RoutePollingContext);
 }
 
 export interface HotRouteSlotEntry<TOutlet = React.ReactNode, TLocationContext = unknown> {
