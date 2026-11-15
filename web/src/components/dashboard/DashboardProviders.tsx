@@ -24,6 +24,7 @@ import { useRankedSortableList } from '../../hooks/useSortableList';
 import { DASHBOARD_PROVIDER_ORDER_PREFERENCE } from '../../types/dashboardLayout';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { formatMinuteSpan } from '../../utils/dateTimeFormat';
+import { useIsRouteActive } from '../../performance/routeContract';
 import './dashboard.css';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
@@ -78,6 +79,7 @@ export const DashboardProviders = React.memo(function DashboardProviders({
   const navigate = useNavigate();
   const [isExpanded, setIsExpanded] = useState(false);
   const isPhone = useIsPhoneViewport();
+  const isRouteActive = useIsRouteActive();
   const sliding = range ? isSlidingRange(range) : true;
 
   const {
@@ -94,8 +96,9 @@ export const DashboardProviders = React.memo(function DashboardProviders({
     queryKey: ['dashboard-providers', query],
     queryFn: () => api.getDashboardProviders(query),
     enabled: Boolean(query && enabled !== false),
-    refetchInterval: sliding ? 30000 : false,
-    staleTime: 5000,
+    refetchInterval: isRouteActive && sliding ? 30000 : false,
+    refetchOnWindowFocus: isRouteActive,
+    staleTime: 15_000,
     placeholderData: keepPreviousData,
   });
 

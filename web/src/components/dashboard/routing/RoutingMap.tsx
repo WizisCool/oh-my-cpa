@@ -2,6 +2,7 @@ import React from 'react';
 import clsx from 'clsx';
 import { usePrefersReducedMotion } from '../../../hooks/usePrefersReducedMotion';
 import { isMotionReduced } from '../../../utils/motionPreference';
+import { useIsRouteActive } from '../../../performance/routeContract';
 import { sharedResizeObserverHub } from '../../../performance/resizeObserverHub';
 
 import { BrandArtwork } from '../../common/BrandArtwork';
@@ -129,6 +130,8 @@ export const RoutingMap = React.memo(function RoutingMap({
   const halos = useRegistry<HTMLElement>();
 
   const isReducedMotion = usePrefersReducedMotion();
+  const isRouteActive = useIsRouteActive();
+  const hasObservedLayoutRef = React.useRef(false);
   const exitMs = isReducedMotion ? 0 : MOTION_ROUTE_EXIT.duration;
   const isEmpty = model.models.length === 0;
   const models = usePresence(model.models, modelKey, exitMs);
@@ -194,10 +197,21 @@ export const RoutingMap = React.memo(function RoutingMap({
     }
   }, [modelTiles, targetTiles, paths]);
 
-  // Synchronously align SVG lane endpoints after every committed `RoutingMap` render before paint.
+  const keysSignature = `${models.map((e) => e.key).join(',')}|${targets.map((e) => e.key).join(',')}|${ghosts.map((e) => e.key).join(',')}`;
+  const latestKeysRef = React.useRef(keysSignature);
+  latestKeysRef.current = keysSignature;
+  const lastDrawnKeysRef = React.useRef<string>('');
+  const prevRouteActiveRef = React.useRef(isRouteActive);
   React.useLayoutEffect(() => {
+    const justBecameActive = isRouteActive && !prevRouteActiveRef.current;
+    prevRouteActiveRef.current = isRouteActive;
+    if (!isRouteActive || !hasObservedLayoutRef.current) return;
+    // When returning to a cached route (`content-visibility: hidden` -> visible), container
+    // geometry and SVG `d` paths are already preserved intact when rendered keys did not change.
+    if (justBecameActive && lastDrawnKeysRef.current === keysSignature) return;
+    lastDrawnKeysRef.current = keysSignature;
     draw();
-  });
+  }, [draw, isRouteActive, keysSignature]);
 
   // Deadline-extending frame tracker: runs `draw()` on `requestAnimationFrame` strictly while rows
   // are animating (enter/exit/FLIP), never cancelling mid-flight when presence settles from
@@ -219,7 +233,7 @@ export const RoutingMap = React.memo(function RoutingMap({
   }, []);
 
   const extendTracking = React.useCallback((durationMs: number = TRACKING_MS) => {
-    if (isMotionReduced()) return;
+    if (isMotionReduced() || !isRouteActive) return;
     trackingUntilRef.current = Math.max(trackingUntilRef.current, performance.now() + durationMs);
     if (trackingFrameRef.current) return;
     const step = (now: number) => {
@@ -236,18 +250,17 @@ export const RoutingMap = React.memo(function RoutingMap({
       }
     };
     trackingFrameRef.current = requestAnimationFrame(step);
-  }, [draw]);
+  }, [draw, isRouteActive]);
 
   React.useEffect(() => () => stopTracking(), [stopTracking]);
   React.useLayoutEffect(() => {
-    if (isReducedMotion) stopTracking();
-  }, [isReducedMotion, stopTracking]);
+    if (isReducedMotion || !isRouteActive) stopTracking();
+  }, [isReducedMotion, isRouteActive, stopTracking]);
 
   const notifyRowMotion = React.useCallback(() => {
     extendTracking(TRACKING_MS);
   }, [extendTracking]);
 
-  const keysSignature = `${models.map((e) => e.key).join(',')}|${targets.map((e) => e.key).join(',')}|${ghosts.map((e) => e.key).join(',')}`;
   const prevKeysRef = React.useRef(keysSignature);
   const hasTransientPhase = models.some((e) => e.phase !== 'present')
     || targets.some((e) => e.phase !== 'present')
@@ -256,16 +269,35 @@ export const RoutingMap = React.memo(function RoutingMap({
   React.useLayoutEffect(() => {
     const keysChanged = prevKeysRef.current !== keysSignature;
     prevKeysRef.current = keysSignature;
-    if (!isReducedMotion && (hasTransientPhase || keysChanged)) {
+    if (!isReducedMotion && isRouteActive && (hasTransientPhase || keysChanged)) {
       extendTracking(TRACKING_MS);
     }
-  }, [keysSignature, hasTransientPhase, isReducedMotion, extendTracking]);
+  }, [keysSignature, hasTransientPhase, isReducedMotion, isRouteActive, extendTracking]);
 
+  const lastObservedWidthRef = React.useRef(0);
+  const lastObservedHeightRef = React.useRef(0);
   React.useEffect(() => {
     const container = containerRef.current;
-    if (!container) return undefined;
-    return sharedResizeObserverHub.observe(container, () => draw(), { freezeOnTransition: false });
-  }, [draw]);
+    if (!container || !isRouteActive) return undefined;
+    return sharedResizeObserverHub.observe(
+      container,
+      (size) => {
+        if (
+          hasObservedLayoutRef.current &&
+          Math.abs(size.width - lastObservedWidthRef.current) < 0.5 &&
+          Math.abs(size.height - lastObservedHeightRef.current) < 0.5
+        ) {
+          return;
+        }
+        lastObservedWidthRef.current = size.width;
+        lastObservedHeightRef.current = size.height;
+        hasObservedLayoutRef.current = true;
+        lastDrawnKeysRef.current = latestKeysRef.current;
+        draw();
+      },
+      { freezeOnTransition: false },
+    );
+  }, [draw, isRouteActive]);
 
   const playerRef = React.useRef<ReturnType<typeof createPacketPlayer> | undefined>(undefined);
   React.useEffect(() => {

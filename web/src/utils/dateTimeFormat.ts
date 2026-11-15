@@ -2,6 +2,7 @@ const FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat>();
 const MAX_CACHED_FORMATTERS = 32;
 const CALENDAR_DAY_CACHE = new Map<string, string>();
 const MAX_CACHED_CALENDAR_DAYS = 2048;
+const OPTIONS_KEY_CACHE = new WeakMap<Intl.DateTimeFormatOptions, Map<string, string>>();
 
 const KEYED_OPTIONS = new Set([
   'timeZone',
@@ -22,9 +23,17 @@ const KEYED_OPTIONS = new Set([
 ]);
 
 function serializeOptionsKey(locale: string, options: Intl.DateTimeFormatOptions): string {
+  const byLocale = OPTIONS_KEY_CACHE.get(options);
+  const existing = byLocale?.get(locale);
+  if (existing !== undefined) return existing;
+
   for (const name in options) {
     if (!KEYED_OPTIONS.has(name)) {
-      return `${locale}|${JSON.stringify(Object.entries(options).sort(([a], [b]) => a.localeCompare(b)))}`;
+      const fallbackKey = `${locale}|${JSON.stringify(Object.entries(options).sort(([a], [b]) => a.localeCompare(b)))}`;
+      const map = byLocale ?? new Map<string, string>();
+      map.set(locale, fallbackKey);
+      if (!byLocale) OPTIONS_KEY_CACHE.set(options, map);
+      return fallbackKey;
     }
   }
   const extended = options as Intl.DateTimeFormatOptions & {
@@ -33,7 +42,7 @@ function serializeOptionsKey(locale: string, options: Intl.DateTimeFormatOptions
     fractionalSecondDigits?: number;
     hourCycle?: string;
   };
-  return [
+  const computed = [
     locale,
     options.timeZone ?? '',
     extended.dateStyle ?? '',
@@ -51,6 +60,10 @@ function serializeOptionsKey(locale: string, options: Intl.DateTimeFormatOptions
     options.hour12 === undefined ? '' : String(options.hour12),
     options.timeZoneName ?? '',
   ].join('|');
+  const map = byLocale ?? new Map<string, string>();
+  map.set(locale, computed);
+  if (!byLocale) OPTIONS_KEY_CACHE.set(options, map);
+  return computed;
 }
 
 // Formatter construction loads locale and timezone rules; a grid must not repeat that per cell.

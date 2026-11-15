@@ -48,6 +48,7 @@ import { ReorderHandle, RowReorder, useReorderRow } from '../common/RowReorder';
 import { useSortableList } from '../../hooks/useSortableList';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { useVisibleNow } from '../../hooks/useVisibleNow';
+import { useIsRouteActive } from '../../performance/routeContract';
 import { DASHBOARD_ORDER_PREFERENCE } from '../../types/dashboardLayout';
 import './dashboard.css';
 
@@ -358,21 +359,24 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
  * workspace uses, and it reports under the same toast key so the two never stack reports.
  */
 export const CredentialQuota: React.FC = React.memo(function CredentialQuota() {
+  const isRouteActive = useIsRouteActive();
   const pluginLogos = usePluginOAuthLogos();
   const multiPortalKeys = usePluginMultiPortalKeys();
   const filesQuery = useQuery({
     queryKey: [CREDENTIAL_FILES_QUERY_KEY],
     queryFn: () => api.getManagementAuthFiles(),
-    refetchInterval: 60_000,
-    staleTime: 10_000,
+    refetchInterval: isRouteActive ? 60_000 : false,
+    refetchOnWindowFocus: isRouteActive,
+    staleTime: 30_000,
     placeholderData: keepPreviousData,
     meta: { silent: true },
   });
   const quotaQuery = useQuery({
     queryKey: [CREDENTIAL_QUOTA_QUERY_KEY],
     queryFn: api.getQuotaOverview,
-    refetchInterval: 60_000,
-    staleTime: 15_000,
+    refetchInterval: isRouteActive ? 60_000 : false,
+    refetchOnWindowFocus: isRouteActive,
+    staleTime: 30_000,
     placeholderData: keepPreviousData,
     meta: { silent: true },
   });

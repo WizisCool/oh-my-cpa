@@ -11,3 +11,21 @@ export function keepsSomething(previous: readonly string[], next: readonly strin
   const held = new Set(previous);
   return next.some((key) => held.has(key));
 }
+
+export function sameOrder(previous: readonly string[], next: readonly string[]): boolean {
+  if (previous.length !== next.length) return false;
+  for (let i = 0; i < previous.length; i += 1) {
+    if (previous[i] !== next[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Whether a render actually rearranges, narrows, or widens a previously drawn list:
+ * it shares at least one key with `previous` (`keepsSomething`) AND its ordered key list
+ * differs (`!sameOrder`). Unrelated re-renders (selection toggles, hover, polling ticks,
+ * route activity pauses) keep `sameOrder === true`, so layout measurement stays dormant.
+ */
+export function movesKeys(previous: readonly string[], next: readonly string[]): boolean {
+  return !sameOrder(previous, next) && keepsSomething(previous, next);
+}

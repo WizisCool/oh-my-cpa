@@ -21,6 +21,8 @@ export interface FrameBudgetSchedulerOptions {
   frameBudgetMs?: number;
   /** Maximum number of queued mount jobs executed in one slice before yielding to paint. Defaults to `4`. */
   maxJobsPerSlice?: number;
+  /** Optional per-tier slice cap overriding `maxJobsPerSlice` for heavy `p1`/`p2` subtrees. */
+  maxJobsByPriority?: Partial<Record<MountPriority, number>>;
   now?: () => number;
   /** Schedules a post-paint execution slice and returns its cancellation function. */
   scheduleSlice?: (run: () => void) => () => void;
@@ -51,17 +53,53 @@ export interface FrameBudgetScheduler {
   dispose: () => void;
 }
 
+interface SchedulerLike {
+  postTask?: (callback: () => void, options?: { priority?: string; signal?: AbortSignal }) => Promise<unknown>;
+}
+
+function isTaskAbortError(error: unknown): boolean {
+  return Boolean(
+    error &&
+    typeof error === 'object' &&
+    'name' in error &&
+    (error as { name?: unknown }).name === 'AbortError',
+  );
+}
+
+function reportUncaughtSliceError(error: unknown): void {
+  if (typeof reportError === 'function') {
+    reportError(error);
+    return;
+  }
+  setTimeout(() => {
+    throw error;
+  }, 0);
+}
+
 function defaultScheduleSlice(run: () => void): () => void {
   if (typeof requestAnimationFrame !== 'function') {
     const timer = setTimeout(run, 0);
     return () => clearTimeout(timer);
   }
   let timerId: ReturnType<typeof setTimeout> | undefined;
+  let taskController: AbortController | undefined;
   const frameId = requestAnimationFrame(() => {
+    const winScheduler = typeof globalThis !== 'undefined'
+      ? (globalThis as typeof globalThis & { scheduler?: SchedulerLike }).scheduler
+      : undefined;
+    if (winScheduler && typeof winScheduler.postTask === 'function' && typeof AbortController === 'function') {
+      taskController = new AbortController();
+      void winScheduler.postTask(run, { priority: 'user-visible', signal: taskController.signal }).catch((error: unknown) => {
+        if (isTaskAbortError(error)) return;
+        reportUncaughtSliceError(error);
+      });
+      return;
+    }
     timerId = setTimeout(run, 0);
   });
   return () => {
     cancelAnimationFrame(frameId);
+    taskController?.abort();
     if (timerId !== undefined) clearTimeout(timerId);
   };
 }
@@ -77,6 +115,11 @@ function defaultScheduleSlice(run: () => void): () => void {
 export function createFrameBudgetScheduler(options: FrameBudgetSchedulerOptions = {}): FrameBudgetScheduler {
   const frameBudgetMs = options.frameBudgetMs ?? 8;
   const maxJobsPerSlice = Math.max(1, options.maxJobsPerSlice ?? 4);
+  const tierCaps: Record<MountPriority, number> = {
+    p0: Math.max(1, options.maxJobsByPriority?.p0 ?? maxJobsPerSlice),
+    p1: Math.max(1, options.maxJobsByPriority?.p1 ?? maxJobsPerSlice),
+    p2: Math.max(1, options.maxJobsByPriority?.p2 ?? maxJobsPerSlice),
+  };
   const now = options.now ?? (() => (typeof performance !== 'undefined' ? performance.now() : Date.now()));
   const scheduleSlice = options.scheduleSlice ?? defaultScheduleSlice;
   const batchUpdates = options.batchUpdates ?? ((fn) => fn());
@@ -145,7 +188,8 @@ export function createFrameBudgetScheduler(options: FrameBudgetSchedulerOptions 
         // Jobs typically enqueue React state updates whose subtree render cost lands after this
         // batch returns: cap per-slice job count and stop at tier boundaries so higher-priority
         // commits paint before lower-priority mounts begin.
-        if (ranCount > 0 && (ranCount >= maxJobsPerSlice || now() - sliceStart >= frameBudgetMs)) {
+        const sliceCap = ranTier !== undefined ? tierCaps[ranTier] : maxJobsPerSlice;
+        if (ranCount > 0 && (ranCount >= sliceCap || now() - sliceStart >= frameBudgetMs)) {
           break;
         }
         const job = peekJob();
@@ -227,6 +271,7 @@ export function bindSchedulerTransitionReader(reader: (() => boolean) | undefine
 
 export const sharedFrameScheduler = createFrameBudgetScheduler({
   frameBudgetMs: 8,
+  maxJobsByPriority: { p0: 6, p1: 2, p2: 1 },
   batchUpdates: (run) => {
     if (typeof ReactDOM.unstable_batchedUpdates === 'function') {
       ReactDOM.unstable_batchedUpdates(run);

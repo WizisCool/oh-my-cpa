@@ -33,10 +33,17 @@ interface EditorTarget {
   session: number;
 }
 
-export const PricingEditorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const PricingEditorProvider: React.FC<{ routeKey?: string; children: React.ReactNode }> = ({ routeKey, children }) => {
   const [target, setTarget] = React.useState<EditorTarget | null>(null);
   const [isOpen, setIsOpen] = React.useState(false);
   const sessionRef = React.useRef(0);
+  const lastRouteKeyRef = React.useRef(routeKey);
+  React.useEffect(() => {
+    if (lastRouteKeyRef.current !== routeKey) {
+      lastRouteKeyRef.current = routeKey;
+      setIsOpen(false);
+    }
+  }, [routeKey]);
   const open = React.useCallback<OpenPriceEditor>((model, options = {}) => {
     sessionRef.current += 1;
     setTarget({ model, options, session: sessionRef.current });

@@ -4,6 +4,7 @@ import React from 'react';
 import { TooltipContent, TooltipReadout, TooltipRoot } from '@/components/ui/tooltip';
 import { RightOutlined } from '../icons';
 import { ApiError } from '../../api/client';
+import { useIsRouteActive } from '../../performance/routeContract';
 import { sharedResizeObserverHub } from '../../performance/resizeObserverHub';
 import { useSwrQuery } from '../../performance/swrContract';
 import {
@@ -35,6 +36,9 @@ import { Panel } from '../common/Panel';
 import './dashboard.css';
 
 const FULL_NUMBER_FORMAT = new Intl.NumberFormat('en');
+const TOOLTIP_DAY_OPTIONS: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+const MONTH_LABEL_OPTIONS: Intl.DateTimeFormatOptions = { month: 'short' };
+const CELL_DAY_OPTIONS: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
 
 /**
  * The weekday labels, Monday first, matching the grid's rows.
@@ -130,7 +134,7 @@ export const HeatmapTooltipContent: React.FC<{
 }> = ({ day, lang, href }) => {
   const t = useT();
   const { style: tokenStyle } = useTokenDisplayStyle();
-  const date = formatDay(day.day, lang, { year: 'numeric', month: 'long', day: 'numeric' });
+  const date = formatDay(day.day, lang, TOOLTIP_DAY_OPTIONS);
   const isRecorded = day.requests > 0 || day.tokens > 0;
   const compactTokens = formatTokens(day.tokens, tokenStyle);
   const exactTokens = formatTokensFull(day.tokens);
@@ -250,8 +254,14 @@ export const TokenHeatmap: React.FC = React.memo(function TokenHeatmap() {
   const { lang } = useI18n();
 
   const timezone = useTimeZone();
+  const isRouteActive = useIsRouteActive();
   const [focusDay, setFocusDay] = React.useState<string | null>(null);
   const [popupTarget, setPopupTarget] = React.useState<HeatmapPopupTarget | null>(null);
+  React.useEffect(() => {
+    if (!isRouteActive) {
+      setPopupTarget((current) => (current?.isOpen ? { ...current, isOpen: false } : current));
+    }
+  }, [isRouteActive]);
   const gridRef = React.useRef<HTMLDivElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const isPinnedToNewest = React.useRef(true);
@@ -281,7 +291,7 @@ export const TokenHeatmap: React.FC = React.memo(function TokenHeatmap() {
     [data],
   );
   const monthLabels = React.useMemo(
-    () => heatmapMonthLabels(cells, columns, (day) => formatDay(day, lang, { month: 'short' })),
+    () => heatmapMonthLabels(cells, columns, (day) => formatDay(day, lang, MONTH_LABEL_OPTIONS)),
     [cells, columns, lang],
   );
   const resolvedFocus = heatmapFocusDay(cells, focusDay);
@@ -340,13 +350,28 @@ export const TokenHeatmap: React.FC = React.memo(function TokenHeatmap() {
       }
     };
 
-    const fitCells = (width: number, height: number): boolean => {
+    let cachedStyleBand: 'narrow' | 'wide' | null = null;
+    let cachedTokens = { gutter: 0, gap: 0, axis: 0, target: 0, max: 0 };
+
+    const readLayoutTokens = () => {
+      const band: 'narrow' | 'wide' = typeof window !== 'undefined' && window.innerWidth <= 900 ? 'narrow' : 'wide';
+      if (cachedStyleBand === band) return cachedTokens;
       const tokens = getComputedStyle(container);
       const readToken = (name: string) => Number.parseFloat(tokens.getPropertyValue(name)) || 0;
-      const gutter = readToken('--heatmap-label') + readToken('--heatmap-label-gap');
-      const gap = readToken('--heatmap-gap');
-      const axis = readToken('--heatmap-axis');
-      const fit = fitHeatmapField(width - gutter, height - axis, columns, readToken('--heatmap-cell-target'), gap, readToken('--heatmap-cell-max'));
+      cachedStyleBand = band;
+      cachedTokens = {
+        gutter: readToken('--heatmap-label') + readToken('--heatmap-label-gap'),
+        gap: readToken('--heatmap-gap'),
+        axis: readToken('--heatmap-axis'),
+        target: readToken('--heatmap-cell-target'),
+        max: readToken('--heatmap-cell-max'),
+      };
+      return cachedTokens;
+    };
+
+    const fitCells = (width: number, height: number): boolean => {
+      const { gutter, gap, axis, target, max } = readLayoutTokens();
+      const fit = fitHeatmapField(width - gutter, height - axis, columns, target, gap, max);
       const cell = fit?.cell ?? (width - gutter - (columns - 1) * gap) / columns;
       setVar('fieldMin', '--heatmap-field-min', `${axis + 7 * cell + 6 * gap}px`);
       if (fit === null) {
@@ -394,8 +419,11 @@ export const TokenHeatmap: React.FC = React.memo(function TokenHeatmap() {
           pinFrame = requestAnimationFrame(() => {
             pinFrame = undefined;
             if (!container.isConnected || !isPinnedToNewest.current) return;
+            // Write `scrollLeft` without immediately reading `container.scrollLeft` back: reading
+            // after mutating DOM/styles forced a synchronous ~150ms full-document layout pass, while
+            // `newestOffset > 1` already predicts older-week overflow and the passive `'scroll'`
+            // listener reconciles any manual scroll offset after layout.
             container.scrollLeft = HEATMAP_SCROLL_END;
-            markOlderWeeks(container.scrollLeft > 1);
           });
         }
       },
@@ -496,7 +524,7 @@ export const TokenHeatmap: React.FC = React.memo(function TokenHeatmap() {
       // "0 requests, 0 tokens" for a day nothing is stored for - asserting a measurement that does
       // not exist, and disagreeing with the cell's own tooltip and colour. A measured day reports
       // its counts; every other day says nothing is stored, in the words the tooltip uses.
-      const formattedDay = entry ? formatDay(entry.day, lang, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+      const formattedDay = entry ? formatDay(entry.day, lang, CELL_DAY_OPTIONS) : '';
       const label = entry
         ? state === 'measured'
           ? t('dash.heatmap.cell_label', {

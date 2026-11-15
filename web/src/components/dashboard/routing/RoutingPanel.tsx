@@ -9,6 +9,7 @@ import { LoadFailure } from '../../feedback';
 import { useLiveRevision } from '../../../hooks/useLiveRevision';
 import { useProviderBranding } from '../../../hooks/useProviderBranding';
 import { useT } from '../../../i18n';
+import { useIsRouteActive } from '../../../performance/routeContract';
 import { EVENT_AUTO_REFRESH_MS } from '../../../types/usageEventCadence';
 import type { UsageEvent } from '../../../types/usageEvents';
 import {
@@ -92,16 +93,17 @@ export function nextRoutingExpiryDelayMs(rolling: RoutingWindow | undefined, now
   return Math.max(250, Math.ceil(earliestExpiryMs - nowServerMs) + 25);
 }
 
-function useExpiryClock(rolling: RoutingWindow | undefined): number {
+function useExpiryClock(rolling: RoutingWindow | undefined, isRouteActive: boolean): number {
   const skewMs = rolling?.skewMs ?? 0;
   const [nowMs, setNowMs] = React.useState(() => Date.now() + skewMs);
 
   React.useEffect(() => {
+    if (!isRouteActive) return;
     setNowMs(Date.now() + skewMs);
-  }, [rolling, skewMs]);
+  }, [isRouteActive, rolling, skewMs]);
 
   React.useEffect(() => {
-    if (!rolling) return undefined;
+    if (!rolling || !isRouteActive) return undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const scheduleNext = () => {
@@ -133,7 +135,7 @@ function useExpiryClock(rolling: RoutingWindow | undefined): number {
       if (timer !== undefined) clearTimeout(timer);
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [rolling]);
+  }, [isRouteActive, rolling]);
 
   return nowMs;
 }
@@ -150,6 +152,7 @@ function useExpiryClock(rolling: RoutingWindow | undefined): number {
 export const RoutingPanel = React.memo(function RoutingPanel() {
   const t = useT();
   const queryClient = useQueryClient();
+  const isRouteActive = useIsRouteActive();
 
   const cachedWindow = queryClient.getQueryData<RoutingWindow>(ROUTING_WINDOW_CACHE_KEY);
   const [rolling, setRolling] = React.useState<RoutingWindow | undefined>(() => {
@@ -182,7 +185,8 @@ export const RoutingPanel = React.memo(function RoutingPanel() {
       const response = await api.getUsageRouting(after);
       return { response, after, skewMs: response.as_of_ms - Date.now() };
     },
-    staleTime: 0,
+    refetchOnWindowFocus: isRouteActive,
+    staleTime: 15_000,
     gcTime: 2 * 60_000,
     meta: { silent: revision > 0 || Boolean(cachedWindow) },
   });
@@ -245,7 +249,7 @@ export const RoutingPanel = React.memo(function RoutingPanel() {
     }
   }, [read, queryClient, refetchRouting, shownSinceRef]);
 
-  const nowMs = useExpiryClock(rolling);
+  const nowMs = useExpiryClock(rolling, isRouteActive);
   const model = React.useMemo<RoutingModel | undefined>(
     () => (rolling ? buildRoutingModel(liveRecords(rolling.records, nowMs, rolling.windowMs), rolling.cooldowns, nowMs) : undefined),
     [rolling, nowMs],

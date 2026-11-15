@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { keepsSomething } from '../../src/motion/filterMove';
+import { keepsSomething, movesKeys, sameOrder } from '../../src/motion/filterMove';
 
 test('a change that keeps a key is the same list narrowing', () => {
   assert.equal(keepsSomething(['a', 'b', 'c'], ['b']), true);
@@ -18,4 +18,15 @@ test('a change that keeps nothing replaces the list', () => {
   // The first read has nothing to have been narrowed from.
   assert.equal(keepsSomething([], ['a', 'b']), false);
   assert.equal(keepsSomething([], []), false);
+});
+
+test('sameOrder and movesKeys distinguish unchanged re-renders from actual list narrowing or reordering', () => {
+  assert.equal(sameOrder(['a', 'b'], ['a', 'b']), true);
+  assert.equal(sameOrder(['a', 'b'], ['b', 'a']), false);
+  assert.equal(sameOrder(['a', 'b'], ['a']), false);
+
+  assert.equal(movesKeys(['a', 'b'], ['a', 'b']), false, 'unchanged order must not trigger layout motion');
+  assert.equal(movesKeys(['a', 'b', 'c'], ['a', 'c']), true);
+  assert.equal(movesKeys(['a', 'b'], ['b', 'a']), true);
+  assert.equal(movesKeys(['a', 'b'], ['c', 'd']), false);
 });

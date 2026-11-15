@@ -786,11 +786,11 @@
 :root:not([data-reduced-motion='true']) :is(.recharts-rectangle, .recharts-sector, .recharts-dot, .recharts-area-area, .omc-stack-series) {
   transition: fill-opacity var(--motion-slow) var(--ease-standard), stroke-opacity var(--motion-slow) var(--ease-standard);
 }
-:root:not([data-reduced-motion='true']) .omc-chart-morph .recharts-surface {
+:root:not([data-reduced-motion='true']) .omc-chart-morph :is(.recharts-surface, .omc-sparkline-surface) {
   transition: opacity var(--motion-slow) var(--ease-out);
 }
 @starting-style {
-  :root:not([data-reduced-motion='true']) .omc-chart-morph .recharts-surface { opacity: 0; }
+  :root:not([data-reduced-motion='true']) .omc-chart-morph :is(.recharts-surface, .omc-sparkline-surface) { opacity: 0; }
 }
 .omc-chart-morph::view-transition-group(root) {
   animation-duration: var(--motion-slow);
@@ -1627,6 +1627,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   padding-left: env(safe-area-inset-left);
   background: var(--canvas);
   transition: width var(--motion-base) var(--ease-standard);
+  contain: layout style paint;
 }
 /* The wordmark is left-aligned with the navigation's own text axis rather than centred.
    Every other row in this rail starts on that axis, so a centred mark is the only element
@@ -1769,7 +1770,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    to the chrome that touches an edge rather than to `.app-content`, because a scroll
    container given a bottom inset scrolls its last line out from under itself. Each inset
    is a floor beneath the design system's own padding, never a replacement for it. */
-.app-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: var(--app-header-height); padding: 0 max(16px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); background: var(--bg); }
+.app-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: var(--app-header-height); padding: 0 max(16px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); background: var(--bg); contain: layout style; }
 .app-header-left, .app-header-actions, .app-breadcrumb { display: flex; align-items: center; }
 .app-header-left { min-width: 0; gap: 8px; }
 .app-header-actions { gap: 6px; flex-shrink: 0; }
@@ -1794,6 +1795,20 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    drag held at the window's edge would auto-scroll the whole console out of the window. */
 .app-content { position: relative; flex: 1 1 0; min-width: 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; overscroll-behavior: contain; background: var(--bg); }
 .app-content:has(> .workspace-route) { overflow: hidden; scrollbar-gutter: auto; }
+.route-cached-view.is-inactive {
+  display: none;
+}
+@supports (content-visibility: hidden) {
+  .route-cached-view.is-inactive {
+    display: block;
+    content-visibility: hidden;
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+}
 /* A phone has no room for a frame around the page: the panel becomes the screen. */
 @media (max-width: 900px) {
   .app-shell > .app-body { border: 0; height: 100%; margin: 0; border-radius: 0; box-shadow: none; }

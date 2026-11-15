@@ -75,6 +75,7 @@ import { KeyCompositionPanel } from './components/KeyCompositionPanel';
 import { InsightsValue } from './components/InsightsValue';
 import { ChartLegend } from '../../components/common/ChartLegend';
 import { DeferredPanel } from '../../components/common/DeferredPanel';
+import { useIsRouteActive } from '../../performance/routeContract';
 import { PanelNarrowing } from './components/PanelNarrowing';
 import { RhythmGrid } from './components/RhythmGrid';
 import { KeyDetailDrawer } from './components/KeyDetailDrawer';
@@ -140,6 +141,7 @@ export const InsightsPage: React.FC = () => {
   const t = useT();
   const { theme } = useTheme();
   const isPhone = useIsPhoneViewport();
+  const isRouteActive = useIsRouteActive();
   const { modelView } = useTokenDisplayStyle();
   const modelDimension: 'call_point' | 'model' = modelView === 'model' ? 'model' : 'call_point';
 
@@ -168,10 +170,10 @@ export const InsightsPage: React.FC = () => {
     queryFn: () => api.getInsightsCube(insightsRangeParams(range, requestedView.bucket)),
     enabled: isRangeReady,
     placeholderData: keepPreviousData,
-    staleTime: 10_000,
-    refetchInterval: (query) => insightsPollInterval(query.state.data?.window),
+    staleTime: 15_000,
+    refetchOnWindowFocus: isRouteActive,
+    refetchInterval: (query) => (isRouteActive ? insightsPollInterval(query.state.data?.window) : false),
   });
-  const [wasCubeWarm] = React.useState(() => Boolean(cubeQuery.data));
   const { configuredProviders, archivedCredentialsByIndex } = useProviderBranding();
   // A provider's own name is the identity of the connection that answered, and the credential that
   // served a row is what says which connection that was: CPA labels an API-key request with its
@@ -188,6 +190,9 @@ export const InsightsPage: React.FC = () => {
   const formatCompareWindow = useCompareWindowLabel();
 
   const [openKey, setOpenKey] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!isRouteActive) setOpenKey((current) => (current !== null ? null : current));
+  }, [isRouteActive]);
   // The rhythm read filters request records, where a connection is the credentials that served it;
   // the page's provider filter names the connection.
   const requestFilters = React.useMemo(() => requestFilterValues(cube, view.filters), [cube, view.filters]);
@@ -198,6 +203,7 @@ export const InsightsPage: React.FC = () => {
     enabled: isRangeReady,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
+    refetchOnWindowFocus: isRouteActive,
     retry: (count, error) => apiErrorCode(error) !== 'demo_uncaptured' && count < 2,
     meta: { silent: true },
   });
@@ -205,11 +211,36 @@ export const InsightsPage: React.FC = () => {
   const drawerRhythmQuery = useQuery({
     queryKey: ['insights-rhythm', drawerRhythmString],
     queryFn: () => api.getInsightsRhythm(drawerRhythmString),
-    enabled: isRangeReady && openKey !== null,
+    enabled: isRouteActive && isRangeReady && openKey !== null,
     staleTime: 60_000,
     retry: (count, error) => apiErrorCode(error) !== 'demo_uncaptured' && count < 2,
     meta: { silent: true },
   });
+
+  // When a cached Insights slot resumes after being parked off-screen, revalidate stale cube and
+  // rhythm snapshots (including closed calendar presets whose server-resolved bounds cross midnight,
+  // where `refetchOnWindowFocus` was suppressed while the route was inactive).
+  const wasRouteActiveRef = React.useRef(isRouteActive);
+  React.useEffect(() => {
+    const becameActive = isRouteActive && !wasRouteActiveRef.current;
+    wasRouteActiveRef.current = isRouteActive;
+    if (!becameActive || !isRangeReady) return;
+    if (cubeQuery.isStale && !cubeQuery.isFetching) {
+      void cubeQuery.refetch();
+    }
+    if (rhythmQuery.isStale && !rhythmQuery.isFetching) {
+      void rhythmQuery.refetch();
+    }
+  }, [
+    isRouteActive,
+    isRangeReady,
+    cubeQuery.isStale,
+    cubeQuery.isFetching,
+    cubeQuery.refetch,
+    rhythmQuery.isStale,
+    rhythmQuery.isFetching,
+    rhythmQuery.refetch,
+  ]);
 
   const metric = view.metric;
   const isLineMetric = !isAdditiveMetric(metric);
@@ -592,7 +623,6 @@ export const InsightsPage: React.FC = () => {
       {!isPhone && (
         <DeferredPanel
           priority="p1"
-          immediate={wasCubeWarm}
           fallback={<Panel className={styles['trend-panel']}><ChartFallback height={280} /></Panel>}
         >
           <KeyCompositionPanel
@@ -626,7 +656,6 @@ export const InsightsPage: React.FC = () => {
       {flow && flow.links.length > 0 && (
         <DeferredPanel
           priority="p2"
-          immediate={wasCubeWarm}
           fallback={<Panel className={styles['trend-panel']}><ChartFallback height={320} /></Panel>}
         >
           <Panel
@@ -666,7 +695,6 @@ export const InsightsPage: React.FC = () => {
       )}
       <DeferredPanel
         priority="p2"
-        immediate={Boolean(rhythmQuery.data)}
         fallback={<Panel className={styles['trend-panel']}><ChartFallback height={220} /></Panel>}
       >
         <RhythmGrid

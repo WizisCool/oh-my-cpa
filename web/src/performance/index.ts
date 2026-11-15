@@ -40,12 +40,19 @@ export {
 } from './swrContract';
 
 export {
+  HOT_ACTIVITY_ROUTES,
+  PINNED_HOT_ROUTES,
+  RouteActivityContext,
   bindActiveRouteRegistry,
   createRouteRegistry,
   createRouteTransitionStore,
   preloadRegisteredRoute,
+  reconcileHotRouteSlots,
   routeTransitionStore,
+  useIsRouteActive,
   useTransitionNavigate,
+  type HotRouteSlotEntry,
+  type ReconcileHotRouteOptions,
   type RouteDescriptor,
   type RoutePrefetchContext,
   type RoutePriority,

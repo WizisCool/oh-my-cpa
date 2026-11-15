@@ -14,6 +14,8 @@ import { reconcileStateSyncEvent, type StateVersionTracker } from '../../src/hoo
 import { invalidateQueriesSilently, queryProgressSource } from '../../src/utils/progressSources.ts';
 
 import {
+  HOT_ACTIVITY_ROUTES,
+  PINNED_HOT_ROUTES,
   createCoalescedSignalGate,
   createFrameBudgetScheduler,
   createResizeObserverHub,
@@ -22,8 +24,16 @@ import {
   createStreamStore,
   defineSwrQuery,
   invalidateSwrScopes,
+  reconcileHotRouteSlots,
   type ObservedBoxSize,
 } from '../../src/performance/index.ts';
+import {
+  buildMonotoneSparkline,
+  resolveSparklineIndex,
+  sparklineViewBoxToHostX,
+} from '../../src/charts/monotoneSparkline.ts';
+import { getIdentityDirectoryProjection } from '../../src/hooks/useIdentityDirectory.ts';
+import type { IdentityDirectoryResponse } from '../../src/types/identityDirectory.ts';
 import { dashboardWidgetSpec } from '../../src/types/dashboardLayout.ts';
 import { isDiscreteWheel, keyScrollFor, pageDistance, type WheelSample } from '../../src/utils/scrollSmoothing.ts';
 import { isSameDrawing } from '../../src/charts/useChartMorph.ts';
@@ -845,4 +855,177 @@ test('a rolling number re-renders only when the reading it prints changes', () =
   assert.equal(isSameReadout({ ...reading, format: { maximumFractionDigits: 2 } }, reading), false);
   assert.equal(isSameReadout(undefined, reading), false);
   assert.equal(isSameReadout(undefined, undefined), true);
+});
+
+test('frame scheduler enforces per-tier maxJobsByPriority caps independently', () => {
+  const slices: Array<() => void> = [];
+  const executed: string[] = [];
+
+  const scheduler = createFrameBudgetScheduler({
+    frameBudgetMs: 100,
+    maxJobsPerSlice: 4,
+    maxJobsByPriority: { p0: 6, p1: 2, p2: 1 },
+    scheduleSlice: (run) => {
+      slices.push(run);
+      return () => {
+        const idx = slices.indexOf(run);
+        if (idx >= 0) slices.splice(idx, 1);
+      };
+    },
+  });
+
+  for (let i = 0; i < 5; i += 1) scheduler.schedule('p0', () => executed.push(`p0-${i}`));
+  for (let i = 0; i < 3; i += 1) scheduler.schedule('p1', () => executed.push(`p1-${i}`));
+  for (let i = 0; i < 2; i += 1) scheduler.schedule('p2', () => executed.push(`p2-${i}`));
+
+  // All 5 p0 jobs fit under p0 cap (6) in slice 1.
+  slices.shift()!();
+  assert.deepEqual(executed, ['p0-0', 'p0-1', 'p0-2', 'p0-3', 'p0-4']);
+
+  // p1 runs 2 jobs in slice 2 and 1 job in slice 3.
+  slices.shift()!();
+  assert.deepEqual(executed.slice(5), ['p1-0', 'p1-1']);
+  slices.shift()!();
+  assert.deepEqual(executed.slice(7), ['p1-2']);
+
+  // p2 runs strictly 1 heavy subtree per slice.
+  slices.shift()!();
+  assert.deepEqual(executed.slice(8), ['p2-0']);
+  slices.shift()!();
+  assert.deepEqual(executed.slice(9), ['p2-1']);
+  assert.equal(scheduler.pendingCount(), 0);
+  scheduler.dispose();
+});
+
+test('reconcileHotRouteSlots preserves slot order, keeps outlet identity on warm return, and pins dashboard during LRU eviction', () => {
+  assert.equal(HOT_ACTIVITY_ROUTES.has('/dashboard'), true);
+  assert.equal(HOT_ACTIVITY_ROUTES.has('/insights'), true);
+  assert.equal(HOT_ACTIVITY_ROUTES.has('/api-keys'), false, 'secret-bearing routes never enter hot route pool');
+  assert.equal(PINNED_HOT_ROUTES.has('/dashboard'), true);
+
+  const dashOutlet1 = { id: 'dash-1' };
+  const dashLoc1 = { locationContext: { location: { pathname: '/dashboard', search: '', hash: '', state: null } } };
+  const slots1 = reconcileHotRouteSlots([], { key: '/dashboard', outlet: dashOutlet1, locationContext: dashLoc1 });
+  assert.equal(slots1.length, 1);
+  assert.equal(slots1[0]?.outlet, dashOutlet1);
+
+  // Navigating away to a non-hot route (null active) returns the exact same array reference.
+  const afterNonHot = reconcileHotRouteSlots(slots1, null);
+  assert.equal(afterNonHot, slots1);
+
+  // Visiting /insights appends a second slot without reordering /dashboard.
+  const insightsOutlet = { id: 'insights-1' };
+  const insightsLoc = { locationContext: { location: { pathname: '/insights', search: '', hash: '', state: null } } };
+  const slots2 = reconcileHotRouteSlots(slots1, { key: '/insights', outlet: insightsOutlet, locationContext: insightsLoc });
+  assert.deepEqual(slots2.map((s) => s.key), ['/dashboard', '/insights']);
+
+  // Returning to /dashboard with a newly allocated outlet wrapper keeps the original dashOutlet1 identity
+  // and original dashLoc1 reference when location fields match, avoiding subtree reconciliation.
+  const dashOutlet2 = { id: 'dash-2' };
+  const dashLoc2 = { locationContext: { location: { pathname: '/dashboard', search: '', hash: '', state: null } } };
+  const slots3 = reconcileHotRouteSlots(slots2, { key: '/dashboard', outlet: dashOutlet2, locationContext: dashLoc2 });
+  assert.equal(slots3[0]?.outlet, dashOutlet1, 'preserves original outlet element identity on warm return');
+  assert.equal(slots3[0]?.locationContext, dashLoc1, 'preserves snapshot identity when URL search/hash/state match');
+
+  // Repeat render on the same active route returns the exact input array reference.
+  const slots3Repeat = reconcileHotRouteSlots(slots3, { key: '/dashboard', outlet: dashOutlet2, locationContext: dashLoc2 });
+  assert.equal(slots3Repeat, slots3);
+
+  // Updating search params updates locationContext while still keeping outlet element identity.
+  const dashLocFiltered = { locationContext: { location: { pathname: '/dashboard', search: '?key=k1', hash: '', state: null } } };
+  const slots4 = reconcileHotRouteSlots(slots3, { key: '/dashboard', outlet: dashOutlet2, locationContext: dashLocFiltered });
+  assert.equal(slots4[0]?.outlet, dashOutlet1);
+  assert.equal(slots4[0]?.locationContext, dashLocFiltered);
+
+  // LRU eviction with maxSlots=2 never evicts pinned /dashboard even when /dashboard is older than /insights.
+  const slotsInsightsNewest = reconcileHotRouteSlots(slots4, { key: '/insights', outlet: insightsOutlet, locationContext: insightsLoc });
+  const extraOutlet = { id: 'extra-1' };
+  const extraLoc = { locationContext: { location: { pathname: '/extra', search: '', hash: '', state: null } } };
+  const evicted = reconcileHotRouteSlots(
+    slotsInsightsNewest,
+    { key: '/extra', outlet: extraOutlet, locationContext: extraLoc },
+    { maxSlots: 2, pinnedKeys: PINNED_HOT_ROUTES },
+  );
+  assert.deepEqual(evicted.map((s) => s.key), ['/dashboard', '/extra'], 'evicts unpinned /insights in place, keeping /dashboard pinned');
+});
+
+test('buildMonotoneSparkline produces overshoot-free monotone paths and maps pointer x to nearest bucket', () => {
+  const empty = buildMonotoneSparkline([], 240, 64);
+  assert.equal(empty.points.length, 0);
+  assert.equal(empty.linePath, '');
+
+  const single = buildMonotoneSparkline([{ t: 1_000, value: 42 }], 240, 64);
+  assert.equal(single.isSinglePoint, true);
+  assert.equal(single.hasPositiveValue, true);
+  assert.equal(single.points[0]?.x, 120);
+  assert.equal(single.linePath, '');
+
+  const flatZero = buildMonotoneSparkline(
+    [{ t: 1, value: 0 }, { t: 2, value: 0 }, { t: 3, value: 0 }],
+    240,
+    64,
+  );
+  assert.equal(flatZero.hasPositiveValue, false);
+  assert.ok(flatZero.linePath.startsWith('M6,62C'));
+  assert.ok(flatZero.areaPath.endsWith('Z'));
+
+  // Step series [0, 0, 100, 100] must never overshoot above yTop (6) or below yBottom (62).
+  const step = buildMonotoneSparkline(
+    [{ t: 1, value: 0 }, { t: 2, value: 0 }, { t: 3, value: 100 }, { t: 4, value: 100 }],
+    240,
+    64,
+  );
+  const coords = [...step.linePath.matchAll(/-?\d+(?:\.\d+)?/g)].map((m) => Number(m[0]));
+  const ys = coords.filter((_, idx) => idx % 2 === 1);
+  for (const y of ys) {
+    assert.ok(y >= step.yTop - 1e-6 && y <= step.yBottom + 1e-6, `control point y=${y} stays within [${step.yTop}, ${step.yBottom}]`);
+  }
+
+  assert.equal(resolveSparklineIndex(-20, 240, 5), 0);
+  assert.equal(resolveSparklineIndex(120, 240, 5), 2);
+  assert.equal(resolveSparklineIndex(999, 240, 5), 4);
+  // Scaled host width (480px vs 240 viewBox): first point at x=6 in viewBox sits at 12px in host space.
+  assert.equal(resolveSparklineIndex(12, 480, 73), 0);
+  assert.equal(sparklineViewBoxToHostX(6, 480, 240), 12);
+  assert.equal(sparklineViewBoxToHostX(234, 480, 240), 468);
+});
+
+test('getIdentityDirectoryProjection caches derived Maps and Sets per response object via WeakMap', () => {
+  const emptyA = getIdentityDirectoryProjection(undefined);
+  const emptyB = getIdentityDirectoryProjection(undefined);
+  assert.equal(emptyA, emptyB);
+
+  const sample: IdentityDirectoryResponse = {
+    catalog_status: {
+      providers_known: true,
+      credentials_known: true,
+      plugins_known: true,
+    },
+    provider_icons: {},
+    providers: [
+      { id: 'openai-0', family: 'openai', name: 'OpenAI', protocol: 'OpenAI', disabled: false, key_configured: true },
+    ],
+    credentials: [],
+    plugins: [],
+    archived_credentials: [],
+    archived_providers: [
+      {
+        provider_key: 'codex-plus',
+        kind: 'oauth_plugin',
+        name: 'Codex Plus',
+        logo: 'https://example.test/logo.svg',
+        icon_id: 'openai',
+        is_plugin_owned: true,
+        is_multi_portal: true,
+        is_ambiguous: false,
+      },
+    ],
+  };
+
+  const first = getIdentityDirectoryProjection(sample);
+  const second = getIdentityDirectoryProjection(sample);
+  assert.equal(first, second, 'identical response object reuses cached projection in O(1)');
+  assert.equal(first.providersByID.get('openai-0')?.name, 'OpenAI');
+  assert.equal(first.pluginTitles.get('codex-plus'), 'Codex Plus');
+  assert.equal(first.multiPortalKeys.has('codex-plus'), true);
 });

@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { usageLiveChannel, type UsageLiveState } from '../api/usageLive';
+import { useIsRouteActive } from '../performance/routeContract';
 import { createCoalescedSignalGate } from '../performance/streamBuffer';
 
 /** Default trailing-edge coalesce interval for bursty SSE invalidations (leading edge stays 0ms). */
@@ -37,6 +38,8 @@ export function useLiveRevision({
   isBusyRef,
   coalesceMs = DEFAULT_LIVE_COALESCE_MS,
 }: LiveRevisionOptions) {
+  const isRouteActive = useIsRouteActive();
+  const effectiveEnabled = isEnabled && isRouteActive;
   const [revision, setRevision] = React.useState(0);
   const [liveState, setLiveState] = React.useState<UsageLiveState>('connecting');
   const bump = React.useCallback(() => setRevision((value) => value + 1), []);
@@ -53,7 +56,7 @@ export function useLiveRevision({
   );
 
   React.useEffect(() => {
-    if (!isEnabled) {
+    if (!effectiveEnabled) {
       gate.reset();
       return undefined;
     }
@@ -74,25 +77,25 @@ export function useLiveRevision({
       }
       gate.reset();
     };
-  }, [isEnabled, gate]);
+  }, [effectiveEnabled, gate]);
 
-  const isLive = isEnabled && liveState === 'live';
+  const isLive = effectiveEnabled && liveState === 'live';
   React.useEffect(() => {
-    if (!isEnabled || isLive) return undefined;
+    if (!effectiveEnabled || isLive) return undefined;
     const timer = setInterval(() => {
       gate.onFallbackTick(isLive);
     }, fallbackPollMs);
     return () => clearInterval(timer);
-  }, [isEnabled, isLive, fallbackPollMs, gate]);
+  }, [effectiveEnabled, isLive, fallbackPollMs, gate]);
 
   const notifySettled = React.useCallback(() => {
-    if (!isEnabled) return;
+    if (!effectiveEnabled) return;
     gate.onSettled();
-  }, [isEnabled, gate]);
+  }, [effectiveEnabled, gate]);
 
   return {
     revision,
-    liveState: isEnabled ? liveState : ('connecting' as UsageLiveState),
+    liveState: effectiveEnabled ? liveState : ('connecting' as UsageLiveState),
     notifySettled,
   };
 }
