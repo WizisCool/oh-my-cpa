@@ -92,6 +92,10 @@ func TestOutboundTierMigrationPreservesRecordsAndSequence(t *testing.T) {
 			}
 			afterObjects := schemaObjects()
 			for name, ddl := range objects {
+				// 065 lets an unpriced request be priced once; the refusals below still hold.
+				if name == "usage_cost_no_reprice" {
+					continue
+				}
 				if afterObjects[name] != ddl {
 					t.Fatalf("existing index or immutability trigger %s changed: %q -> %q", name, ddl, afterObjects[name])
 				}

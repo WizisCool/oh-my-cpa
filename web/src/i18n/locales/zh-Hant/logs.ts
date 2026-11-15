@@ -212,6 +212,8 @@ export default {
   "audit.action.routing.apply": "套用路由編排",
   "audit.action.plugin.settings": "修改插件系統設定",
   "audit.action.pricing.model.dismiss_candidate": "忽略價格候選",
+  "audit.action.pricing.model.price_unpriced": "按目前價格補計未計價請求",
+  "audit.action.pricing.price_unpriced_all": "按目前價格補計全部未計價請求",
   "audit.action.quota.clear_cooldown.automatic": "自動解除冷卻",
   "audit.action.system.data_retention": "修改資料保留",
   "audit.action.system.update.apply": "要求更新版本",

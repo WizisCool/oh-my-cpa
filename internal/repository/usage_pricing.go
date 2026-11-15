@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
@@ -178,21 +179,25 @@ func (book *priceBook) channel(ctx context.Context, channel string, atMS int64) 
 // removed price from leaking forward; a missing or tombstoned channel is 1x.
 func lockUsagePrice(ctx context.Context, book *priceBook, event usage.Event) (lockedPrice, error) {
 	serviceTier, source := pricing.ResolveServiceTier(event.Provider, event.ExecutorType, event.ResponseServiceTier, event.ServiceTier, event.EffectiveServiceTier)
-	locked, err := lockUsageCost(ctx, book, event, serviceTier)
+	locked, err := lockUsageCost(ctx, book, event, serviceTier, event.TimestampMS)
 	locked.serviceTier, locked.serviceTierSource = serviceTier, source
 	return locked, err
 }
 
-func lockUsageCost(ctx context.Context, book *priceBook, event usage.Event, serviceTier string) (lockedPrice, error) {
+// lockUsageCost prices event with the price and channel multiplier in effect at
+// priceAtMS. Recording passes the request time; pricing a request that found no
+// price passes the moment the operator asked. Time-of-day tiers always read the
+// request time, since that is when the tokens were spent.
+func lockUsageCost(ctx context.Context, book *priceBook, event usage.Event, serviceTier string, priceAtMS int64) (lockedPrice, error) {
 	// A supplied but unresolved partition cannot be turned into a billable one by
 	// guessing its dialect. Legacy records retain the established raw-count policy.
 	if event.Accounting != nil && event.Accounting.Status != "complete" {
 		return lockedPrice{status: "unpriced"}, nil
 	}
-	version, err := book.price(ctx, event.Provider, event.Model, event.TimestampMS)
-	// A channel tombstone restores the shared price effective at the request time.
+	version, err := book.price(ctx, event.Provider, event.Model, priceAtMS)
+	// A channel tombstone restores the shared price effective at the same instant.
 	if event.Provider != "" && (errors.Is(err, sql.ErrNoRows) || err == nil && !version.Available) {
-		version, err = book.price(ctx, "", event.Model, event.TimestampMS)
+		version, err = book.price(ctx, "", event.Model, priceAtMS)
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return lockedPrice{status: "unpriced"}, nil
@@ -210,7 +215,7 @@ func lockUsageCost(ctx context.Context, book *priceBook, event usage.Event, serv
 	locked := lockedPrice{version: &version.ID}
 	multiplier := 1.0
 	if event.Provider != "" {
-		channel, err := book.channel(ctx, event.Provider, event.TimestampMS)
+		channel, err := book.channel(ctx, event.Provider, priceAtMS)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 		case err != nil:
@@ -398,4 +403,175 @@ func decodeStoredTokenAccounting(stored sql.NullString) (*usage.TokenAccounting,
 		return nil, fmt.Errorf("read stored token accounting: %w", err)
 	}
 	return &accounting, nil
+}
+
+// priceUnpricedBatch bounds one transaction of PriceUnpricedUsage, so pricing a
+// long history yields the single writer to ingestion between batches.
+var priceUnpricedBatch = 2000
+
+// PriceUnpricedUsage prices the retained requests of model, or of every model
+// when model is empty, that found no price when they happened, at the price and
+// channel multiplier in effect at atMS, and returns how many it priced. It is
+// the one exception to request-time locking and runs only when an operator asks:
+// a request that already locked a price, or whose tokens could not be resolved,
+// keeps what it has, and a request that still finds no usable price stays
+// unpriced.
+//
+// Requests the facts already absorbed have their new cost added to every grain
+// in the same transaction as the request, so a total never counts a request as
+// both unpriced and priced. Requests past retention survive only in the facts
+// and stay as they were recorded.
+func (r *Repository) PriceUnpricedUsage(ctx context.Context, model string, atMS int64) (int64, error) {
+	if r == nil || r.SQL() == nil {
+		return 0, errors.New("repository is not initialized")
+	}
+	var total, after int64
+	for {
+		priced, last, more, err := r.priceUnpricedBatch(ctx, model, atMS, after)
+		total += priced
+		if err != nil || !more {
+			return total, err
+		}
+		after = last
+	}
+}
+
+// priceUnpricedBatch prices up to priceUnpricedBatch requests after the id
+// cursor and returns how many it priced, the last id it read, and whether more
+// may follow.
+func (r *Repository) priceUnpricedBatch(ctx context.Context, model string, atMS, after int64) (int64, int64, bool, error) {
+	tx, err := r.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		return 0, after, false, fmt.Errorf("begin pricing unpriced usage: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, model, timestamp_ms, COALESCE(provider, ''), COALESCE(executor_type, ''),
+		       COALESCE(service_tier, ''), COALESCE(effective_service_tier, ''), COALESCE(response_service_tier, ''),
+		       input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, COALESCE(billed_service_tier, '')
+		FROM usage_events
+		WHERE id > ?1 AND (?2 = '' OR model = ?2) AND pricing_status = 'unpriced' AND cost_nanos IS NULL
+		  AND (token_accounting IS NULL OR json_extract(token_accounting, '$.status') = 'complete')
+		ORDER BY id ASC
+		LIMIT ?3`, after, model, priceUnpricedBatch)
+	if err != nil {
+		return 0, after, false, fmt.Errorf("read unpriced usage: %w", err)
+	}
+	type pending struct {
+		id         int64
+		event      usage.Event
+		billedTier string
+	}
+	var events []pending
+	for rows.Next() {
+		var item pending
+		e := &item.event
+		if err := rows.Scan(&item.id, &e.Model, &e.TimestampMS, &e.Provider, &e.ExecutorType, &e.ServiceTier, &e.EffectiveServiceTier,
+			&e.ResponseServiceTier, &e.InputTokens, &e.OutputTokens, &e.CacheReadTokens, &e.CacheCreationTokens, &item.billedTier); err != nil {
+			_ = rows.Close()
+			return 0, after, false, fmt.Errorf("scan unpriced usage: %w", err)
+		}
+		events = append(events, item)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, after, false, fmt.Errorf("read unpriced usage: %w", err)
+	}
+	if len(events) == 0 {
+		return 0, after, false, nil
+	}
+	last := events[len(events)-1].id
+	more := len(events) == priceUnpricedBatch
+
+	var foldedThrough int64
+	err = tx.QueryRowContext(ctx, `
+		SELECT last_usage_event_id FROM usage_aggregation_checkpoints WHERE name = ?`, CheckpointFacts).Scan(&foldedThrough)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, after, false, fmt.Errorf("read usage fold checkpoint: %w", err)
+	}
+
+	book := newPriceBook(tx)
+	var priced int64
+	folded := make([]int64, 0, len(events))
+	for _, item := range events {
+		// The tier the request recorded is the one its cost breakdown reads back; only a record
+		// that predates the billed tier resolves it again.
+		serviceTier := item.billedTier
+		if serviceTier == "" {
+			serviceTier, _ = pricing.ResolveServiceTier(item.event.Provider, item.event.ExecutorType, item.event.ResponseServiceTier, item.event.ServiceTier, item.event.EffectiveServiceTier)
+		}
+		locked, err := lockUsageCost(ctx, book, item.event, serviceTier, atMS)
+		if err != nil {
+			return 0, after, false, err
+		}
+		if locked.status != "priced" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE usage_events
+			SET cost_nanos = ?, price_version_id = ?, channel_version_id = ?, price_tier = ?, pricing_status = 'priced'
+			WHERE id = ?`,
+			locked.cost, locked.version, locked.channelVersion, locked.tier, item.id); err != nil {
+			return 0, after, false, fmt.Errorf("price unpriced usage: %w", err)
+		}
+		priced++
+		if item.id <= foldedThrough {
+			folded = append(folded, item.id)
+		}
+	}
+
+	if len(folded) > 0 {
+		if err := foldPricedCorrections(ctx, tx, folded); err != nil {
+			return 0, after, false, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, after, false, fmt.Errorf("commit pricing unpriced usage: %w", err)
+	}
+	return priced, last, more, nil
+}
+
+// foldPricedCorrections adds requests that moved from unpriced to priced to the
+// facts that already counted them: their cost, and one priced and one costed
+// request each. Every other measure was folded when they were recorded.
+func foldPricedCorrections(ctx context.Context, tx *sql.Tx, ids []int64) error {
+	if err := resetUsageFoldBuffer(ctx, tx); err != nil {
+		return err
+	}
+	defer func() { _, _ = tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_fold_15m`) }()
+	measures := make([]string, 0, len(usageFactMeasures))
+	for _, measure := range usageFactMeasures {
+		switch measure {
+		case "cost_nanos":
+			measures = append(measures, "SUM(cost_nanos)")
+		case "priced_requests", "costed_requests":
+			measures = append(measures, "COUNT(1)")
+		default:
+			measures = append(measures, "0")
+		}
+	}
+	encoded, err := json.Marshal(ids)
+	if err != nil {
+		return err
+	}
+	var fromMS, toMS sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `
+		SELECT MIN(timestamp_ms), MAX(timestamp_ms) FROM usage_events WHERE id IN (SELECT value FROM json_each(?))`,
+		string(encoded)).Scan(&fromMS, &toMS); err != nil {
+		return fmt.Errorf("bound priced usage corrections: %w", err)
+	}
+	// The key expressions are the fold's own, so each correction lands on the row
+	// its request was folded into.
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO temp._omc_usage_fold_15m (instance_id, bucket_start_ms, `+usageFactDimensions+`, `+strings.Join(usageFactMeasures, ", ")+`)
+		SELECT instance_id, (timestamp_ms / ?1) * ?1, api_group_key, model, COALESCE(model_alias, ''),
+		       auth_index, provider, auth_type, `+strings.Join(measures, ", ")+`
+		FROM usage_events
+		WHERE id IN (SELECT value FROM json_each(?2))
+		GROUP BY instance_id, (timestamp_ms / ?1) * ?1, api_group_key, model, COALESCE(model_alias, ''),
+		         auth_index, provider, auth_type`,
+		QuarterHourBucketMS, string(encoded)); err != nil {
+		return fmt.Errorf("stage priced usage corrections: %w", err)
+	}
+	return foldUsageBuffer(ctx, tx, fromMS.Int64, toMS.Int64)
 }

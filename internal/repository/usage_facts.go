@@ -750,28 +750,9 @@ func (r *Repository) AggregateUsageFacts(ctx context.Context, batchSize int) (in
 		return 0, nil
 	}
 
-	updates := make([]string, 0, len(usageFactMeasures))
-	sums := make([]string, 0, len(usageFactMeasures))
-	for _, measure := range usageFactMeasures {
-		updates = append(updates, measure+" = "+measure+" + excluded."+measure)
-		sums = append(sums, "SUM("+measure+")")
-	}
-	updateSet := strings.Join(updates, ", ")
-	sumSelect := strings.Join(sums, ", ")
 	measureColumns := strings.Join(usageFactMeasures, ", ")
-
-	// Materialize the 15-minute grain of this batch once into a connection-local
-	// TEMP table, short-circuiting json_extract when token_accounting is NULL.
-	// Because every civil UTC offset is a multiple of 15 minutes, 15m, UTC-daily,
-	// and local-daily all roll up from this single scan of usage_events.
-	if _, err := tx.ExecContext(ctx, `
-		CREATE TEMP TABLE IF NOT EXISTS _omc_usage_fold_15m AS
-		SELECT instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`
-		FROM `+usageFactsFineTable+` WHERE 0`); err != nil {
-		return 0, fmt.Errorf("prepare temp usage fold buffer: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_fold_15m`); err != nil {
-		return 0, fmt.Errorf("reset temp usage fold buffer: %w", err)
+	if err := resetUsageFoldBuffer(ctx, tx); err != nil {
+		return 0, err
 	}
 	defer func() { _, _ = tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_fold_15m`) }()
 
@@ -797,26 +778,7 @@ func (r *Repository) AggregateUsageFacts(ctx context.Context, batchSize int) (in
 		return 0, fmt.Errorf("stage usage fold batch: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO `+usageFactsFineTable+` (instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`)
-		SELECT instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`
-		FROM temp._omc_usage_fold_15m
-		WHERE true
-		ON CONFLICT DO UPDATE SET `+updateSet); err != nil {
-		return 0, fmt.Errorf("fold usage into %s: %w", usageFactsFineTable, err)
-	}
-
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO `+usageFactsDailyTable+` (instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`)
-		SELECT instance_id, (bucket_start_ms / ?1) * ?1, `+usageFactDimensions+`, `+sumSelect+`
-		FROM temp._omc_usage_fold_15m
-		GROUP BY instance_id, (bucket_start_ms / ?1) * ?1, `+usageFactDimensions+`
-		ON CONFLICT DO UPDATE SET `+updateSet,
-		DayBucketMS); err != nil {
-		return 0, fmt.Errorf("fold usage into %s: %w", usageFactsDailyTable, err)
-	}
-
-	if err := foldLocalUsageFactsFromStaged(ctx, tx, (minTS.Int64/QuarterHourBucketMS)*QuarterHourBucketMS, (maxTS.Int64/QuarterHourBucketMS)*QuarterHourBucketMS, measureColumns, sumSelect, updateSet); err != nil {
+	if err := foldUsageBuffer(ctx, tx, minTS.Int64, maxTS.Int64); err != nil {
 		return 0, err
 	}
 
@@ -835,6 +797,58 @@ func (r *Repository) AggregateUsageFacts(ctx context.Context, batchSize int) (in
 		return 0, fmt.Errorf("commit usage fold: %w", err)
 	}
 	return absorbed, nil
+}
+
+// resetUsageFoldBuffer readies the connection-local TEMP table a fold stages its
+// 15-minute rows in. Because every civil UTC offset is a multiple of 15 minutes,
+// 15m, UTC-daily and local-daily all roll up from those rows.
+func resetUsageFoldBuffer(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TEMP TABLE IF NOT EXISTS _omc_usage_fold_15m AS
+		SELECT instance_id, bucket_start_ms, `+usageFactDimensions+`, `+strings.Join(usageFactMeasures, ", ")+`
+		FROM `+usageFactsFineTable+` WHERE 0`); err != nil {
+		return fmt.Errorf("prepare temp usage fold buffer: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_fold_15m`); err != nil {
+		return fmt.Errorf("reset temp usage fold buffer: %w", err)
+	}
+	return nil
+}
+
+// foldUsageBuffer adds the staged rows, whose requests started between fromMS and
+// toMS, to every fact grain. Rows are additive, so a staged row may be a batch of
+// new records or a correction to records already folded.
+func foldUsageBuffer(ctx context.Context, tx *sql.Tx, fromMS, toMS int64) error {
+	updates := make([]string, 0, len(usageFactMeasures))
+	sums := make([]string, 0, len(usageFactMeasures))
+	for _, measure := range usageFactMeasures {
+		updates = append(updates, measure+" = "+measure+" + excluded."+measure)
+		sums = append(sums, "SUM("+measure+")")
+	}
+	updateSet := strings.Join(updates, ", ")
+	sumSelect := strings.Join(sums, ", ")
+	measureColumns := strings.Join(usageFactMeasures, ", ")
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO `+usageFactsFineTable+` (instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`)
+		SELECT instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`
+		FROM temp._omc_usage_fold_15m
+		WHERE true
+		ON CONFLICT DO UPDATE SET `+updateSet); err != nil {
+		return fmt.Errorf("fold usage into %s: %w", usageFactsFineTable, err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO `+usageFactsDailyTable+` (instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`)
+		SELECT instance_id, (bucket_start_ms / ?1) * ?1, `+usageFactDimensions+`, `+sumSelect+`
+		FROM temp._omc_usage_fold_15m
+		GROUP BY instance_id, (bucket_start_ms / ?1) * ?1, `+usageFactDimensions+`
+		ON CONFLICT DO UPDATE SET `+updateSet,
+		DayBucketMS); err != nil {
+		return fmt.Errorf("fold usage into %s: %w", usageFactsDailyTable, err)
+	}
+
+	return foldLocalUsageFactsFromStaged(ctx, tx, (fromMS/QuarterHourBucketMS)*QuarterHourBucketMS, (toMS/QuarterHourBucketMS)*QuarterHourBucketMS, measureColumns, sumSelect, updateSet)
 }
 
 // localFactsSelect renders the grouped SELECT that turns rows of a source with an

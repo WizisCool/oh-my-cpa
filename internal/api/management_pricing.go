@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
@@ -273,6 +274,11 @@ type DismissPricingCandidateRequestDTO struct {
 // PricingDismissedResponseDTO acknowledges candidate dismissal.
 type PricingDismissedResponseDTO struct {
 	Dismissed bool `json:"dismissed"`
+}
+
+// PricingUnpricedPricedResponseDTO reports how many recorded requests were priced.
+type PricingUnpricedPricedResponseDTO struct {
+	Priced int64 `json:"priced"`
 }
 
 // PricingDeletedResponseDTO reports whether a model price or channel multiplier was deleted.
@@ -810,6 +816,72 @@ func (h *Handler) dismissPricingCandidate(writer http.ResponseWriter, request *h
 		return
 	}
 	writeJSON(writer, http.StatusOK, PricingDismissedResponseDTO{Dismissed: true})
+}
+
+// priceUnpricedUsage prices a model's retained requests that found no price
+// when they happened, at its current price. Requests that locked a price keep it.
+//
+// @Summary Price a model's unpriced requests
+// @Description Price the retained requests of a model that had no price when they happened, using the model's current price and channel multipliers. Requests that already locked a price are unchanged.
+// @Tags Pricing
+// @Produce json
+// @Security CookieAuth
+// @Param model path string true "Model ID"
+// @Success 200 {object} PricingUnpricedPricedResponseDTO
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/pricing/models/{model}/price-unpriced [post]
+func (h *Handler) priceUnpricedUsage(writer http.ResponseWriter, request *http.Request) {
+	model, ok := pricingPathParam(request, "model")
+	if !ok {
+		writeError(writer, http.StatusBadRequest, "model path parameter is required")
+		return
+	}
+	h.priceUnpriced(writer, request, "pricing.model.price_unpriced", model)
+}
+
+// priceAllUnpricedUsage prices every model's retained requests that found no
+// price when they happened, each at its model's current price.
+//
+// @Summary Price every model's unpriced requests
+// @Description Price the retained requests of every model that had no price when they happened, using each model's current price and channel multipliers. Requests of models that still have no price stay unpriced.
+// @Tags Pricing
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} PricingUnpricedPricedResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 500 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/pricing/price-unpriced [post]
+func (h *Handler) priceAllUnpricedUsage(writer http.ResponseWriter, request *http.Request) {
+	h.priceUnpriced(writer, request, "pricing.price_unpriced_all", "")
+}
+
+// priceUnpriced changes recorded spend, so the attempt is on record before
+// anything is priced. An empty model prices every model.
+func (h *Handler) priceUnpriced(writer http.ResponseWriter, request *http.Request, action, model string) {
+	if h.repo == nil {
+		writeError(writer, http.StatusServiceUnavailable, "database is unavailable")
+		return
+	}
+	target := model
+	if target == "" {
+		target = "*"
+	}
+	if err := h.recordAudit(request, action, "pricing", target, "attempt", nil); err != nil {
+		writeAuditFailure(writer, "audit log failure; pricing aborted")
+		return
+	}
+	priced, err := h.repo.PriceUnpricedUsage(request.Context(), model, time.Now().UnixMilli())
+	if err != nil {
+		_ = h.recordAudit(request, action, "pricing", target, "failure", map[string]any{"error": err.Error(), "priced": priced})
+		writeInternalError(writer, err)
+		return
+	}
+	_ = h.recordAudit(request, action, "pricing", target, "success", map[string]any{"priced": priced})
+	writeJSON(writer, http.StatusOK, PricingUnpricedPricedResponseDTO{Priced: priced})
 }
 
 // deletePricingModel retires the current price and any pin. A later sync may

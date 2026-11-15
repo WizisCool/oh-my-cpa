@@ -105,7 +105,11 @@ func TestFailureCodeMigrationPreservesExistingEvidence(t *testing.T) {
 	if err := db.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if after := schemaObjects(); !reflect.DeepEqual(before, after) {
+	after := schemaObjects()
+	// 065 lets an unpriced request be priced once; its own test covers the trigger.
+	delete(before, "usage_cost_no_reprice")
+	delete(after, "usage_cost_no_reprice")
+	if !reflect.DeepEqual(before, after) {
 		t.Fatalf("usage-event indexes or triggers changed: before=%v after=%v", before, after)
 	}
 	for _, code := range []string{"", "request_scoped", "stream_truncated"} {

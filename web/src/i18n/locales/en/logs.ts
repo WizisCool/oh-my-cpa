@@ -212,6 +212,8 @@ export default {
   'audit.action.routing.apply': 'Applied the routing arrangement',
   'audit.action.plugin.settings': 'Changed plugin system settings',
   'audit.action.pricing.model.dismiss_candidate': 'Dismissed a price candidate',
+  'audit.action.pricing.model.price_unpriced': 'Priced unpriced requests at the current price',
+  'audit.action.pricing.price_unpriced_all': 'Priced all unpriced requests at current prices',
   'audit.action.quota.clear_cooldown.automatic': 'Cleared a cooldown automatically',
   'audit.action.system.data_retention': 'Changed data retention',
   'audit.action.system.update.apply': 'Requested an update',
