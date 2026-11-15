@@ -175,26 +175,6 @@ export const UsageEventsPage: React.FC = () => {
   const selectionAnchorRef = React.useRef<SelectionAnchor<number> | null>(null);
 
   const isQueryEnabled = isEnabled;
-  const facetParams = usageEventParams(facetWindow);
-  const facets = useQuery({
-    queryKey: ['usage-facets', facetParams, facetRevision],
-    queryFn: async () => {
-      const response = await api.getUsageFacets(facetParams);
-      // A response missing a facet is treated as a failed load, not as an empty
-      // window: an empty dropdown for a dimension that certainly has values is
-      // the one way this control can lie about the data.
-      if (!isUsageFacetsResponse(response)) {
-        throw new Error('usage facets response is incomplete');
-      }
-      return response;
-    },
-    enabled: isQueryEnabled,
-    placeholderData: keepPreviousData,
-    // Facets materialize the window once and group its dimensions. They change
-    // only when the window moves - not on every poll - and the cache keeps the
-    // dropdowns populated while a poll is in flight.
-    staleTime: 5 * 60_000,
-  });
   // While the reader is holding rows, ask the server how much has been recorded
   // since the newest row id they are holding. The anchor is an id rather than a
   // timestamp because the list is sorted by request time: the records ingested
@@ -234,12 +214,12 @@ export const UsageEventsPage: React.FC = () => {
   }
   const result = useQuery({
     queryKey: ['usage-events', queryString],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const heldBoundaryID = getHeldBoundaryID();
       const params = heldBoundaryID !== undefined
         ? usageEventParams({ ...baseEventParams, since: heldBoundaryID })
         : queryString;
-      const page = await api.getUsageEvents(params);
+      const page = await api.getUsageEvents(params, signal);
       noteFetchedBoundaryID(heldBoundaryID);
       return page;
     },
@@ -247,6 +227,28 @@ export const UsageEventsPage: React.FC = () => {
     placeholderData: keepPreviousData,
     staleTime: 5_000,
     meta: { silent: readCauseRef.current.isLiveRead },
+  });
+  const facetParams = usageEventParams(facetWindow);
+  const facets = useQuery({
+    queryKey: ['usage-facets', facetParams, facetRevision],
+    queryFn: async ({ signal }) => {
+      const response = await api.getUsageFacets(facetParams, signal);
+      // A response missing a facet is treated as a failed load, not as an empty
+      // window: an empty dropdown for a dimension that certainly has values is
+      // the one way this control can lie about the data.
+      if (!isUsageFacetsResponse(response)) {
+        throw new Error('usage facets response is incomplete');
+      }
+      return response;
+    },
+    // The full-window facet scan must not queue ahead of the bounded page read
+    // on the server's shared SQLite connection, including when old rows are shown.
+    enabled: isQueryEnabled && !result.isPending && !result.isPlaceholderData && !result.isFetching,
+    placeholderData: keepPreviousData,
+    // Facets scan the window once to count its dimensions. They change
+    // only when the window moves - not on every poll - and the cache keeps the
+    // dropdowns populated while a poll is in flight.
+    staleTime: 5 * 60_000,
   });
   const refetchEvents = result.refetch;
   const lastRefreshTriggerRef = React.useRef({ queryString, refresh });

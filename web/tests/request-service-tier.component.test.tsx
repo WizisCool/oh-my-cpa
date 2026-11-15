@@ -20,7 +20,7 @@ import { CostBreakdownView } from '../src/components/pricing/CostBreakdownView';
 import type { RequestCostBreakdown } from '../src/types/pricing';
 import { RequestRow } from '../src/components/usage/RequestRow';
 import { TokenDisplayProvider } from '../src/types/tokenDisplayContext';
-import type { UsageEvent } from '../src/types/usageEvents';
+import { USAGE_FACET_KEYS, type UsageEvent } from '../src/types/usageEvents';
 import { installOmcApi } from './support/omcApi';
 import { createTestQueryClient, renderWithOmc } from './support/render';
 
@@ -436,6 +436,48 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
     expect(bandsByGroup).toEqual([['odd', 'even', 'odd'], ['odd']]);
   });
 
+  it('loads records before facets and cancels obsolete reads when the window changes', async () => {
+    const api = installOmcApi({
+      preferences: { usage_events_view: { preset: '24h', limit: 100, grouping: 'time' } },
+    });
+    api.on('GET', '/usage/ingest-status', () => ({ enabled: false }));
+    api.on('GET', '/usage/events', () => ({ items: makeSyntheticEvents(2), has_more: false }));
+    api.on('GET', '/usage/facets', () => ({
+      facets: Object.fromEntries(USAGE_FACET_KEYS.map(key => [key, []])),
+    }));
+    const firstPage = api.hold('GET', '/usage/events');
+    const firstFacets = api.hold('GET', '/usage/facets');
+    const router = createMemoryRouter([{ path: '/usage/events', element: <UsageEventsPage /> }], {
+      initialEntries: ['/usage/events?preset=30d'],
+    });
+    const { container } = renderWithOmc(<ThemeProvider><TokenDisplayProvider><RouterProvider router={router} /></TokenDisplayProvider></ThemeProvider>);
+
+    await firstPage.arrived;
+    expect(api.requests.filter(request => request.path === '/usage/facets')).toHaveLength(0);
+    firstPage.release();
+    const obsoleteFacets = await firstFacets.arrived;
+    expect(container.querySelector('.request-pagination')?.textContent).toContain('Page 1, 2 records');
+
+    const nextPage = api.hold('GET', '/usage/events');
+    const nextFacets = api.hold('GET', '/usage/facets');
+    await act(async () => { await router.navigate('/usage/events?preset=90d'); });
+    const obsoletePage = await nextPage.arrived;
+    expect(obsoleteFacets.init.signal?.aborted).toBe(true);
+    expect(api.requests.filter(request => request.path === '/usage/facets')).toHaveLength(1);
+
+    const latestPage = api.hold('GET', '/usage/events');
+    await act(async () => { await router.navigate('/usage/events?preset=7d'); });
+    await latestPage.arrived;
+    expect(obsoletePage.init.signal?.aborted).toBe(true);
+    expect(api.requests.filter(request => request.path === '/usage/facets')).toHaveLength(1);
+    firstFacets.release();
+    nextPage.release();
+    latestPage.release();
+    expect((await nextFacets.arrived).query.get('preset')).toBe('7d');
+    nextFacets.release();
+    await waitFor(() => expect(container.querySelector('.request-pagination')?.textContent).not.toContain('Updating'));
+  });
+
   it('refetches live SSE signals in place without blinking Updating in the footer, while still showing Updating on page changes', async () => {
     const sseListeners = new Map<string, Set<() => void>>();
     vi.stubGlobal('EventSource', class {
@@ -457,11 +499,11 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
       preferences: {
         omc_models_view: 'model',
         omc_request_model_icons: false,
-        omc_usage_events_view: { preset: '24h', limit: 100, grouping: 'time' },
+        usage_events_view: { preset: '24h', limit: 100, grouping: 'time' },
       },
     });
     api.on('GET', '/usage/ingest-status', () => ({ enabled: true, healthy: true, collector: { mode: 'subscribe', running: true, captured: 2 }, stats: { pending: 0 } }));
-    api.on('GET', '/usage/facets', () => ({ facets: { models: [], model_aliases: [], providers: [], auth_indexes: [], auth_types: [], sources: [], api_keys: [], executors: [], endpoints: [] } }));
+    api.on('GET', '/usage/facets', () => ({ facets: Object.fromEntries(USAGE_FACET_KEYS.map(key => [key, []])) }));
     api.on('GET', '/usage/events', (req) => {
       const cursor = req.query.get('cursor');
       if (cursor === 'page-2') {
@@ -470,7 +512,7 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
       return { items: initialEvents, has_more: true, next_cursor: 'page-2' };
     });
 
-    const router = createMemoryRouter([{ path: '/usage/events', element: <UsageEventsPage /> }], { initialEntries: ['/usage/events'] });
+    const router = createMemoryRouter([{ path: '/usage/events', element: <UsageEventsPage /> }], { initialEntries: ['/usage/events?preset=24h'] });
     const { container } = renderWithOmc(<ThemeProvider><TokenDisplayProvider><RouterProvider router={router} /></TokenDisplayProvider></ThemeProvider>);
 
     const pagination = () => container.querySelector<HTMLElement>('.request-pagination')!;
@@ -511,5 +553,19 @@ describe('request stream virtualization and desktop/mobile header fold', () => {
       expect(pagination().textContent).toContain('Page 2, 1 records');
       expect(pagination().textContent).not.toContain('Updating');
     });
+
+    for (const limit of [25, 50]) {
+      fireEvent.click(screen.getByRole('combobox', { name: 'Page size' }));
+      expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([
+        '25 / page', '50 / page', '100 / page', '250 / page', '500 / page',
+      ]);
+      fireEvent.click(screen.getByRole('option', { name: `${limit} / page` }));
+      await waitFor(() => expect(pagination().textContent).toContain('Page 1, 2 records'));
+      await waitFor(() => expect(api.preferenceWrites()).toContainEqual(expect.objectContaining({
+        key: 'usage_events_view', value: expect.objectContaining({ limit }),
+      })));
+      expect(api.requests.filter(request => request.path === '/usage/events').at(-1)?.query.get('limit')).toBe(String(limit));
+      expect(api.requests.filter(request => request.path === '/usage/events').at(-1)?.query.has('cursor')).toBe(false);
+    }
   });
 });

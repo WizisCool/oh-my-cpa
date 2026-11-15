@@ -1002,8 +1002,8 @@ export const api = {
     return downloadBlob(`${apiBaseUrl}/management/request-logs/${encodeURIComponent(requestId)}`);
   },
 
-  async getUsageEvents(query: string): Promise<UsageEventPage> {
-    return request<UsageEventPage>(`/usage/events${query ? `?${query}` : ''}`, { method: 'GET' });
+  async getUsageEvents(query: string, signal?: AbortSignal): Promise<UsageEventPage> {
+    return request<UsageEventPage>(`/usage/events${query ? `?${query}` : ''}`, { method: 'GET', signal });
   },
 
   async getUsageEvent(id: number): Promise<UsageEventDetail> {
@@ -1015,8 +1015,8 @@ export const api = {
     return downloadBlob(`${apiBaseUrl}/usage/events/${id}/request-log`);
   },
 
-  async getUsageFacets(query: string): Promise<UsageFacetsResponse> {
-    return request<UsageFacetsResponse>(`/usage/facets${query ? `?${query}` : ''}`, { method: 'GET' });
+  async getUsageFacets(query: string, signal?: AbortSignal): Promise<UsageFacetsResponse> {
+    return request<UsageFacetsResponse>(`/usage/facets${query ? `?${query}` : ''}`, { method: 'GET', signal });
   },
 
   /**

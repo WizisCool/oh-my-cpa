@@ -81,7 +81,7 @@ export const RequestPagination = React.memo(function RequestPagination({
               aria-label={t('events.page_size')}
               value={limit}
               onChange={onPageSizeChange}
-              options={Array.from(new Set([100, 250, 500, limit]))
+              options={Array.from(new Set([25, 50, 100, 250, 500, limit]))
                 .sort((a, b) => a - b)
                 .map((value) => ({ value, label: t('events.per_page', { n: value }) }))}
             />
