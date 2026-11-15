@@ -630,44 +630,50 @@ function accentLadder(mode: ThemeMode, accent: string): { hover: string; active:
 /** How far a pressed ink surface travels back toward the page, so hover and press read as give. */
 const INK_STEP = { hover: 0.1, active: 0.18 } as const;
 
+type PrimarySurface = { primary: string; primaryHover: string; primaryActive: string; primaryOn: string };
+
+/** Solves states and label for one fill hex, keeping the hex itself when it can hold a label. */
+function solvePrimaryFill(mode: ThemeMode, fill: string): PrimarySurface {
+  const solved = accentLadder(mode, fill);
+  const further = accentLadder(mode, solved.hover);
+  // If the supplied hex itself clears 4.6:1 with one ink alongside its stepped hover/active, keep it as the resting fill.
+  const directStep = oklchLightness(fill) > 0.5
+    ? { hover: withLightness(fill, Math.max(0, oklchLightness(fill) - 0.06)), active: withLightness(fill, Math.max(0, oklchLightness(fill) - 0.12)) }
+    : { hover: withLightness(fill, Math.min(1, oklchLightness(fill) + 0.06)), active: withLightness(fill, Math.min(1, oklchLightness(fill) + 0.12)) };
+  const directInk = bestInkAcross([fill, directStep.hover, directStep.active]);
+  if (directInk.ratio >= LABEL_CONTRAST_TARGET) {
+    return {
+      primary: fill,
+      primaryHover: directStep.hover,
+      primaryActive: directStep.active,
+      primaryOn: directInk.ink,
+    };
+  }
+  return {
+    primary: solved.hover,
+    primaryHover: solved.active,
+    primaryActive: further.active,
+    primaryOn: solved.ink,
+  };
+}
+
 function resolvePrimarySurface(
   mode: ThemeMode,
   core: ThemeCore,
   override: string | ThemePrimaryOverride | undefined,
-): { primary: string; primaryHover: string; primaryActive: string; primaryOn: string } {
+): PrimarySurface {
   if (!override) {
     // The filled action is the palette's own ink with the page as its label: the accent stays a
     // signal (links, focus, selection) instead of painting the one button that must carry weight.
-    return {
-      primary: core.fg,
-      primaryHover: mixOklch(core.fg, core.bg, INK_STEP.hover),
-      primaryActive: mixOklch(core.fg, core.bg, INK_STEP.active),
-      primaryOn: core.bg,
-    };
-  }
-  if (typeof override === 'string') {
-    const solved = accentLadder(mode, override);
-    const further = accentLadder(mode, solved.hover);
-    // If the supplied hex itself clears 4.6:1 with one ink alongside its stepped hover/active, keep it as the resting fill.
-    const directStep = oklchLightness(override) > 0.5
-      ? { hover: withLightness(override, Math.max(0, oklchLightness(override) - 0.06)), active: withLightness(override, Math.max(0, oklchLightness(override) - 0.12)) }
-      : { hover: withLightness(override, Math.min(1, oklchLightness(override) + 0.06)), active: withLightness(override, Math.min(1, oklchLightness(override) + 0.12)) };
-    const directInk = bestInkAcross([override, directStep.hover, directStep.active]);
-    if (directInk.ratio >= LABEL_CONTRAST_TARGET) {
-      return {
-        primary: override,
-        primaryHover: directStep.hover,
-        primaryActive: directStep.active,
-        primaryOn: directInk.ink,
-      };
+    const hover = mixOklch(core.fg, core.bg, INK_STEP.hover);
+    const active = mixOklch(core.fg, core.bg, INK_STEP.active);
+    if ([core.fg, hover, active].every((step) => contrastRatio(core.bg, step) >= LABEL_CONTRAST_TARGET)) {
+      return { primary: core.fg, primaryHover: hover, primaryActive: active, primaryOn: core.bg };
     }
-    return {
-      primary: solved.hover,
-      primaryHover: solved.active,
-      primaryActive: further.active,
-      primaryOn: solved.ink,
-    };
+    // An ink too faint to carry the page as its label on hover and press is solved as a fill.
+    return solvePrimaryFill(mode, core.fg);
   }
+  if (typeof override === 'string') return solvePrimaryFill(mode, override);
   const fillL = oklchLightness(override.fill);
   const hover = override.hover ?? withLightness(override.fill, fillL > 0.5 ? Math.max(0, fillL - 0.06) : Math.min(1, fillL + 0.06));
   const active = override.active ?? withLightness(override.fill, fillL > 0.5 ? Math.max(0, fillL - 0.12) : Math.min(1, fillL + 0.12));

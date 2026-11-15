@@ -304,8 +304,9 @@
   --well-drop: inset 0 1px 2px color-mix(in srgb, var(--shade) 28%, transparent);
   /* The ink button is a solid key: light catches its top lip, its foot sits in its own shadow and it
      rests on the page with the control drop. White and shade work on either ink, so one recipe holds
-     for a dark face on a light page and a light face on a dark one; the sheen falls down its face. */
-  --primary-sheen: linear-gradient(to bottom, rgb(255 255 255 / 0.07), transparent);
+     for a dark face on a light page and a light face on a dark one. The sheen fades out above the
+     label, so it never thins a fill and label pair the palette solved for contrast. */
+  --primary-sheen: linear-gradient(to bottom, rgb(255 255 255 / 0.07), transparent 30%);
   --shadow-primary:
     inset 0 1px 0 rgb(255 255 255 / 0.18),
     inset 0 -1px 0 color-mix(in srgb, var(--shade) 22%, transparent),

@@ -344,6 +344,13 @@ test('open theme SDK validates manifests, registers external themes, and falls b
   assert.ok(contrastRatio(mismatchedPrimary.primaryOn, mismatchedPrimary.primary) >= ACCENT_LABEL_CONTRAST_FLOOR);
   assert.ok(contrastRatio(mismatchedPrimary.primaryOn, mismatchedPrimary.primaryHover) >= ACCENT_LABEL_CONTRAST_FLOOR);
   assert.ok(contrastRatio(mismatchedPrimary.primaryOn, mismatchedPrimary.primaryActive) >= ACCENT_LABEL_CONTRAST_FLOOR);
+
+  // The default ink fill keeps its label legible on hover and press even when the theme's ink only
+  // just clears the floor against its page.
+  const faintInk = derivePalette('light', { ...getBuiltInPalette('omc-light').core, bg: '#ffffff', fg: '#767676' });
+  for (const fill of [faintInk.primary, faintInk.primaryHover, faintInk.primaryActive]) {
+    assert.ok(contrastRatio(faintInk.primaryOn, fill) >= ACCENT_LABEL_CONTRAST_FLOOR, `faint ink ${fill}`);
+  }
 });
 
 test('every corner in the console sits on the scale', () => {
