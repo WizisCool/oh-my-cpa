@@ -242,17 +242,90 @@ describe('public site worker (live landing release injection)', () => {
     assert.equal(staleFallback.status, 200);
     assert.equal(await staleFallback.text(), renderLanding('en', { version: '0.4.4' }));
 
-    // If both cache and GitHub are unavailable on a true cold start, the build-time HTML is preserved.
+    // If both cache and GitHub are unavailable on a true cold start, the build-time HTML is preserved
+    // and sequential requests within retryTtlMs do not hammer GitHub.
     failUpstream = true;
+    let coldCalls = 0;
+    const coldCache = createMemoryCache();
     const coldNoCache = createSiteHandler({
-      cacheStorage: null,
+      cacheStorage: coldCache,
+      freshTtlMs: 60_000,
+      retryTtlMs: 15_000,
       now: () => clock,
       fetchImpl: async () => {
+        coldCalls += 1;
         throw new Error('offline');
       },
     });
     const builtFallback = await coldNoCache.fetch(makeRequest('/'), env, ctx);
+    await Promise.all(waitUntilPromises.splice(0));
     assert.equal(builtFallback.status, 200);
     assert.equal(await builtFallback.text(), enBuilt);
+    assert.equal(coldCalls, 1);
+
+    clock += 5_000;
+    const backedOff = await coldNoCache.fetch(makeRequest('/'), env, ctx);
+    assert.equal(backedOff.status, 200);
+    assert.equal(await backedOff.text(), enBuilt);
+    assert.equal(coldCalls, 1);
+
+    // After the retry backoff expires, the worker retries GitHub.
+    clock += 15_000;
+    await coldNoCache.fetch(makeRequest('/'), env, ctx);
+    await Promise.all(waitUntilPromises.splice(0));
+    assert.equal(coldCalls, 2);
+
+    // When isolate memory holds an older stale version than the shared cache, GitHub failure keeps the newer cached version.
+    const multiIsolateCache = createMemoryCache();
+    let multiTag = 'v0.4.3';
+    let multiFail = false;
+    const isolateA = createSiteHandler({
+      cacheStorage: multiIsolateCache,
+      freshTtlMs: 60_000,
+      retryTtlMs: 15_000,
+      staleMaxAgeSeconds: 300,
+      now: () => clock,
+      fetchImpl: async () => {
+        if (multiFail) throw new Error('offline');
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `https://github.com/WizisCool/oh-my-cpa/releases/tag/${multiTag}` },
+        });
+      },
+    });
+    const isolateB = createSiteHandler({
+      cacheStorage: multiIsolateCache,
+      freshTtlMs: 60_000,
+      retryTtlMs: 15_000,
+      staleMaxAgeSeconds: 300,
+      now: () => clock,
+      fetchImpl: async () => {
+        if (multiFail) throw new Error('offline');
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `https://github.com/WizisCool/oh-my-cpa/releases/tag/${multiTag}` },
+        });
+      },
+    });
+
+    await isolateA.fetch(makeRequest('/'), env, ctx);
+    await Promise.all(waitUntilPromises.splice(0));
+    clock += 70_000;
+    multiTag = 'v0.4.5';
+    await isolateB.fetch(makeRequest('/'), env, ctx);
+    await Promise.all(waitUntilPromises.splice(0));
+
+    // Expire both isolateA memory (0.4.3) and shared cache (0.4.5), then fail GitHub: isolateA must keep 0.4.5.
+    clock += 70_000;
+    multiFail = true;
+    const newerStale = await isolateA.fetch(makeRequest('/'), env, ctx);
+    await Promise.all(waitUntilPromises.splice(0));
+    assert.equal(await newerStale.text(), renderLanding('en', { version: '0.4.5' }));
+
+    // Once staleMaxAgeSeconds elapses since the last successful confirmation, repeated failures stop serving stale data.
+    clock += 250_000;
+    const expiredStale = await isolateA.fetch(makeRequest('/'), env, ctx);
+    await Promise.all(waitUntilPromises.splice(0));
+    assert.equal(await expiredStale.text(), enBuilt);
   });
 });

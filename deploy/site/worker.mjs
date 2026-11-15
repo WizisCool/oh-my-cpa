@@ -124,16 +124,33 @@ function buildVersionedEtag(rawEtag, version) {
   return `W/"${unwrapped}-v${version}"`;
 }
 
+function selectMostRecentValid(first, second, currentTime, staleTtlMs) {
+  const isValidStale = (entry) =>
+    entry &&
+    entry.version &&
+    Number.isFinite(entry.confirmedAt) &&
+    currentTime - entry.confirmedAt < staleTtlMs;
+  const a = isValidStale(first) ? first : null;
+  const b = isValidStale(second) ? second : null;
+  if (a && b) return b.confirmedAt > a.confirmedAt ? b : a;
+  return a || b;
+}
+
 async function readCachedVersion(cache, cacheKey) {
   if (!cache) return null;
   try {
     const matched = await cache.match(cacheKey);
     if (!matched) return null;
     const payload = await matched.json();
-    const version = parseStableVersion(payload?.version);
     const freshUntil = Number(payload?.freshUntil);
-    if (!version || !Number.isFinite(freshUntil)) return null;
-    return { version, freshUntil };
+    if (!Number.isFinite(freshUntil)) return null;
+    if (payload?.version === null) {
+      return { version: null, confirmedAt: 0, freshUntil };
+    }
+    const version = parseStableVersion(payload?.version);
+    const confirmedAt = Number(payload?.confirmedAt);
+    if (!version || !Number.isFinite(confirmedAt)) return null;
+    return { version, confirmedAt, freshUntil };
   } catch {
     return null;
   }
@@ -165,6 +182,7 @@ export function createSiteHandler({
   now = () => Date.now(),
 } = {}) {
   const demoHandler = createDemoHandler({ basePath: demoBasePath });
+  const staleTtlMs = staleMaxAgeSeconds * 1000;
   let memoryEntry = null;
   let inFlight = null;
 
@@ -173,37 +191,52 @@ export function createSiteHandler({
   }
 
   async function resolveLatestVersion(origin, ctx) {
-    if (memoryEntry && now() < memoryEntry.freshUntil) {
+    const currentTime = now();
+    const isFresh = (entry) =>
+      entry &&
+      currentTime < entry.freshUntil &&
+      (entry.version === null || currentTime - entry.confirmedAt < staleTtlMs);
+
+    if (isFresh(memoryEntry)) {
       return memoryEntry.version;
     }
     const cache = getCache();
     const cacheUrl = new URL(CACHE_KEY_PATH, origin && origin !== 'null' ? origin : 'https://omc.junze.dev');
     const cacheKey = new Request(cacheUrl.toString());
     const cached = await readCachedVersion(cache, cacheKey);
-    if (cached && now() < cached.freshUntil) {
+    if (isFresh(cached)) {
       memoryEntry = cached;
       return cached.version;
     }
-    if (memoryEntry && now() < memoryEntry.freshUntil) {
+    if (isFresh(memoryEntry)) {
       return memoryEntry.version;
     }
-    const stale = memoryEntry?.version ? memoryEntry : cached;
+    const stale = selectMostRecentValid(memoryEntry, cached, currentTime, staleTtlMs);
     if (!inFlight) {
       inFlight = (async () => {
         const fresh = await fetchLatestStableRelease({ fetchImpl, timeoutMs, repo });
         const updatedAt = now();
         if (fresh) {
-          const next = { version: fresh, freshUntil: updatedAt + freshTtlMs };
+          const next = { version: fresh, confirmedAt: updatedAt, freshUntil: updatedAt + freshTtlMs };
           memoryEntry = next;
           await writeCachedVersion(cache, cacheKey, next, staleMaxAgeSeconds, ctx);
           return fresh;
         }
-        if (stale?.version) {
-          const backoff = { version: stale.version, freshUntil: updatedAt + retryTtlMs };
+        const activeStale = selectMostRecentValid(stale, null, updatedAt, staleTtlMs);
+        if (activeStale) {
+          const remainingSeconds = Math.max(1, Math.ceil((activeStale.confirmedAt + staleTtlMs - updatedAt) / 1000));
+          const backoff = {
+            version: activeStale.version,
+            confirmedAt: activeStale.confirmedAt,
+            freshUntil: updatedAt + retryTtlMs,
+          };
           memoryEntry = backoff;
-          await writeCachedVersion(cache, cacheKey, backoff, staleMaxAgeSeconds, ctx);
-          return stale.version;
+          await writeCachedVersion(cache, cacheKey, backoff, remainingSeconds, ctx);
+          return activeStale.version;
         }
+        const negativeBackoff = { version: null, confirmedAt: 0, freshUntil: updatedAt + retryTtlMs };
+        memoryEntry = negativeBackoff;
+        await writeCachedVersion(cache, cacheKey, negativeBackoff, Math.max(1, Math.ceil(retryTtlMs / 1000)), ctx);
         return null;
       })().finally(() => {
         inFlight = null;
