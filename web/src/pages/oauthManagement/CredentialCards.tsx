@@ -17,7 +17,8 @@ import {
   credentialFacts,
   type CredentialActions,
 } from './CredentialParts';
-import { isRecordBodyClick, type CredentialViewProps } from './CredentialList';
+import { type CredentialViewProps } from './CredentialList';
+import { isRecordBodyClick } from '../../components/common/recordClick';
 import { rowClickIntent } from '../../types/rowSelection';
 import { activityOf } from './fleetPresentation';
 import { maskedCredentialLabel, type OAuthWorkspaceRecord } from './oauthWorkspaceLogic';

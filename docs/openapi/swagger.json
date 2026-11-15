@@ -11864,6 +11864,107 @@
         }
       }
     },
+    "/v1/pricing/models/{model}/price-unpriced": {
+      "post": {
+        "security": [
+          {
+            "CookieAuth": []
+          }
+        ],
+        "description": "Price the retained requests of a model that had no price when they happened, using the model's current price and channel multipliers. Requests that already locked a price are unchanged.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "Pricing"
+        ],
+        "summary": "Price a model's unpriced requests",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Model ID",
+            "name": "model",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/api.PricingUnpricedPricedResponseDTO"
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          }
+        }
+      }
+    },
+    "/v1/pricing/price-unpriced": {
+      "post": {
+        "security": [
+          {
+            "CookieAuth": []
+          }
+        ],
+        "description": "Price the retained requests of every model that had no price when they happened, using each model's current price and channel multipliers. Requests of models that still have no price stay unpriced.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "Pricing"
+        ],
+        "summary": "Price every model's unpriced requests",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/api.PricingUnpricedPricedResponseDTO"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          }
+        }
+      }
+    },
     "/v1/pricing/sync": {
       "post": {
         "security": [
@@ -15160,6 +15261,14 @@
       "properties": {
         "started": {
           "type": "boolean"
+        }
+      }
+    },
+    "api.PricingUnpricedPricedResponseDTO": {
+      "type": "object",
+      "properties": {
+        "priced": {
+          "type": "integer"
         }
       }
     },

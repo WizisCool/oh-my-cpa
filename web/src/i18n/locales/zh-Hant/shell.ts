@@ -124,7 +124,7 @@ export default {
   "nav.logs": "日誌檢視",
   "nav.audit": "操作稽核",
   "nav.usage_events": "請求記錄",
-  "nav.pricing": "費用與用量",
+  "nav.pricing": "模型定價",
   "nav.config": "設定面板",
   "nav.omc_settings": "OMC 設定",
   "nav.plugins": "外掛管理",

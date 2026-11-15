@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { compareModelNames, groupPricingModels, pagePricingGroups } from '../../src/types/pricingGroups.ts';
+import { buildPriceBook, compareModelNames, filterPriceBook, modelScopes, multiplierDelta, priceBookCounts } from '../../src/types/pricingBook.ts';
 import { pricingProviderIdentity, pricingModelIdentity } from '../../src/components/pricing/pricingIdentity.ts';
-import type { PricingProvider } from '../../src/types/pricing.ts';
+import type { PricedModel, PricingProvider, PricingResponse, UpstreamModel } from '../../src/types/pricing.ts';
 import {
   billedServiceTier,
   convertTierDraftUnit,
@@ -294,17 +294,43 @@ test('pricing display', () => {
     assert.equal(searchUpstreamModels(models, 'claude 4 5 sonnet')[0]?.id, models[0].id);
   });
 
-  check('provider groups preserve shared membership, priority and natural case order', () => {
-    const provider = (id: string, priority: number, models: string[]): PricingProvider => ({ id, priority, models, name: id, family: 'codex', channel: 'codex', is_oauth: false });
-    const rows = ['gpt-10', 'gpt-2', 'GPT-2', 'orphan'].map((model) => ({ model }));
-    const groups = groupPricingModels(rows, [provider('Beta', 1, ['gpt-2']), provider('Alpha', 10, ['gpt-10', 'gpt-2', 'GPT-2', 'gpt-2'])]);
-    assert.deepEqual(groups.map((group) => group.id), ['Alpha', 'Beta', 'unassigned']);
-    assert.deepEqual(groups[0].rows.map((row) => row.model), ['GPT-2', 'gpt-2', 'gpt-10']);
-    assert.equal(groups[1].rows[0].model, 'gpt-2', 'shared models remain in each actual provider');
+  check('the price book lists each model once, however many channels serve it', () => {
+    const provider = (id: string, priority: number, channel: string, models: string[]): PricingProvider => ({ id, priority, models, name: id, family: 'codex', channel, is_oauth: false });
+    const price = (model: string, extra: Partial<PricedModel> = {}): PricedModel => ({
+      model, prompt_price_per_1m: 1, completion_price_per_1m: 2, cache_read_price_per_1m: 0.1, cache_write_price_per_1m: 1,
+      price_multiplier: 1, tiers: null, source: 'openrouter', upstream_id: `x/${model}`, match_kind: 'exact', mode: 'auto',
+      synced_at_ms: 0, updated_at_ms: 0, usage_30d: { requests: 0, priced_requests: 0 }, ...extra,
+    });
+    const upstream = { id: 'x/orphan' } as UpstreamModel;
+    const response = {
+      models: [price('gpt-10', { usage_30d: { requests: 5, priced_requests: 3 } }), price('gpt-2', { mode: 'custom', source: 'manual', candidate: { model: upstream, kind: 'automatic' } })],
+      unpriced: [{ model: 'orphan', usage_30d: { requests: 3, priced_requests: 0 }, suggestions: [upstream] }, { model: 'lost', usage_30d: { requests: 0, priced_requests: 0 }, suggestions: [] }],
+      providers: [provider('beta', 1, 'relay', ['gpt-2']), provider('alpha', 10, 'codex', ['gpt-10', 'gpt-2', 'gpt-2']), provider('gamma', 5, 'codex', ['gpt-2'])],
+      channel_models: [{ ...price('gpt-2'), channel: 'relay' }, { ...price('gpt-10'), channel: 'retired' }],
+      channels: [], upstream_count: 0, source: 'openrouter', sync: { known: true, running: false, state: { source: '', last_error: '', last_matched: 0, last_unmatched: 0, updated_at_ms: 0 } },
+    } satisfies PricingResponse;
+    const book = buildPriceBook(response);
+    assert.deepEqual(book.map((row) => row.model), ['gpt-2', 'gpt-10', 'lost', 'orphan']);
+    assert.deepEqual(book[0].channels, ['codex', 'relay'], 'channels follow provider priority and appear once');
+    assert.equal(book[0].attention?.kind, 'candidate');
+    assert.equal(book[3].attention?.kind, 'suggestion');
+    assert.equal(book[2].attention, null);
+    assert.deepEqual(priceBookCounts(book), { all: 4, unbilled: 2, auto: 1, linked: 0, custom: 1, unpriced: 2 });
+    assert.deepEqual(filterPriceBook(book, { filter: 'unpriced', channel: '', search: '' }).map((row) => row.model), ['lost', 'orphan']);
+    assert.deepEqual(filterPriceBook(book, { filter: 'unbilled', channel: '', search: '' }).map((row) => row.model), ['gpt-10', 'orphan'], 'a priced model with unpriced requests is listed for pricing after the fact');
+    assert.deepEqual(filterPriceBook(book, { filter: 'all', channel: 'relay', search: '' }).map((row) => row.model), ['gpt-2']);
+    assert.deepEqual(filterPriceBook(book, { filter: 'all', channel: 'retired', search: '' }).map((row) => row.model), ['gpt-10'], 'an own price keeps a model under its channel');
+    assert.deepEqual(filterPriceBook(book, { filter: 'auto', channel: '', search: 'x gpt 10' }).map((row) => row.model), ['gpt-10']);
+    assert.deepEqual(modelScopes(response, 'gpt-2'), [{ channel: '', hasOwnPrice: false }, { channel: 'codex', hasOwnPrice: false }, { channel: 'relay', hasOwnPrice: true }]);
+    assert.deepEqual(modelScopes(response, 'gpt-10').map((scope) => scope.channel), ['', 'codex', 'retired']);
     assert.equal(compareModelNames('model-9', 'model-10') < 0, true);
-    assert.deepEqual(pagePricingGroups(groups, 1, 2).flatMap((group) => group.rows.map((row) => row.model)), ['GPT-2', 'gpt-2']);
-    assert.deepEqual(pagePricingGroups(groups, 2, 2).flatMap((group) => group.rows.map((row) => row.model)), ['gpt-10', 'gpt-2']);
-    assert.deepEqual(pagePricingGroups(groups, 3, 2).flatMap((group) => group.rows.map((row) => row.model)), ['orphan']);
+  });
+
+  check('a channel multiplier reads as a change from list price', () => {
+    assert.equal(multiplierDelta(0.3), -70);
+    assert.equal(multiplierDelta(1.2), 20);
+    assert.equal(multiplierDelta(1), null);
+    assert.equal(multiplierDelta(1.001), null);
   });
 
   check('pricing identity reuses provider overrides and keeps model names text-only', () => {

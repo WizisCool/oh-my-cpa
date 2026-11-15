@@ -60,7 +60,7 @@ export default {
   "omc.sidebar_hidden_count": "已隱藏 {n} 項",
   "omc.sidebar_all_shown": "全部入口都顯示",
   "omc.display_currency": "價格單位",
-  "omc.display_currency_desc": "儀表板、請求記錄和洞察使用此貨幣顯示；費用與用量及記帳仍使用美元。",
+  "omc.display_currency_desc": "儀表板、請求記錄和洞察使用此貨幣顯示；模型定價及記帳仍使用美元。",
   "omc.exchange_rate": "按 1 USD = {value} 換算（{date} 匯率）",
   "omc.exchange_empty": "更新匯率後可選擇其他貨幣。",
   "omc.exchange_refresh": "更新匯率",

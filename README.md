@@ -56,8 +56,8 @@ audit logging, and automatic pre-write configuration backups.
 <p align="center"><b>Request records</b><br />Filter every attempt by model, provider, key, status, and cost</p>
 </td>
 <td width="50%" valign="top">
-<img src="docs/images/readme/pricing.en.webp" alt="Model price book grouped by provider">
-<p align="center"><b>Cost &amp; usage</b><br />OpenRouter price book matching, channel multipliers, and custom tiers</p>
+<img src="docs/images/readme/pricing.en.webp" alt="Model pricing list with match filters, channel filter and 30-day spend per model">
+<p align="center"><b>Model pricing</b><br />OpenRouter price book matching, channel multipliers, and custom tiers</p>
 </td>
 </tr>
 <tr>

@@ -1588,6 +1588,16 @@ export const api = {
     });
   },
 
+  /** Prices a model's retained requests that had no price when they happened, at its current price. */
+  async priceUnpricedUsage(model: string): Promise<{ priced: number }> {
+    return request<{ priced: number }>(`/pricing/models/${encodeURIComponent(model)}/price-unpriced`, { method: 'POST' });
+  },
+
+  /** Prices every model's retained requests that had no price when they happened, each at its current price. */
+  async priceAllUnpricedUsage(): Promise<{ priced: number }> {
+    return request<{ priced: number }>('/pricing/price-unpriced', { method: 'POST' });
+  },
+
   async deletePricingModel(model: string, channel?: string): Promise<{ deleted: boolean }> {
     const scope = channel ? `?${new URLSearchParams({ channel })}` : '';
     return request<{ deleted: boolean }>(`/pricing/models/${encodeURIComponent(model)}${scope}`, {

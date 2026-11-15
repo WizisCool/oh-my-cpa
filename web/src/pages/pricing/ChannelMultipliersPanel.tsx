@@ -3,13 +3,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '../../components/common/NumberInput';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckOutlined, UndoOutlined } from '../../components/icons';
+import { CheckOutlined, RightOutlined, UndoOutlined } from '../../components/icons';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import { ResponsiveList } from '../../components/common/ResponsiveList';
 import { ProviderBrandIcon } from '../../components/LobeIcon';
 import type { ProviderBrandSources } from '../../types/brandMark';
-import type { PricingChannel, PricingProvider } from '../../types/pricing';
+import type { ModelPrice, PricingChannel, PricingProvider } from '../../types/pricing';
+import { multiplierDelta } from '../../types/pricingBook';
 import { channelIdentity } from '../../components/pricing/pricingIdentity';
 import { PRICING_QUERY_KEYS } from '../../components/pricing/pricingQueries';
 import { pricingErrorText } from '../../components/pricing/pricingErrors';
@@ -23,16 +24,20 @@ import { Tooltip } from '../../components/common/Tooltip';
  * Channel multipliers: what one CPA provider actually charges relative to list price. A relay
  * that resells at 30% is 0.3; a subscription counted at its API-equivalent value stays 1. The
  * list is every configured channel plus every channel the window's traffic used, so a channel
- * can be scaled the moment it shows up.
+ * can be scaled the moment it shows up. A channel's own model prices are counted here and listed
+ * on the model tab, where they are edited.
  */
 export const ChannelMultipliersPanel: React.FC<{
   channels: PricingChannel[];
   providers: PricingProvider[];
   branding: ProviderBrandSources;
+  ownPrices: ModelPrice[];
   isLoading: boolean;
   isBlocked: boolean;
-}> = ({ channels, providers, branding, isLoading, isBlocked }) => {
+  onShowModels: (channel: string) => void;
+}> = ({ channels, providers, branding, ownPrices, isLoading, isBlocked, onShowModels }) => {
   const t = useT();
+  const ownCount = (channel: string) => ownPrices.filter((price) => price.channel === channel).length;
   const columns = [
     {
       title: t('pricing.channels.col.channel'),
@@ -53,20 +58,33 @@ export const ChannelMultipliersPanel: React.FC<{
     {
       title: t('pricing.channels.col.multiplier'),
       key: 'multiplier',
-      width: 320,
+      width: 420,
       render: (_: unknown, channel: PricingChannel) => <ChannelEditor channel={channel} label={channelIdentity(channel.channel, providers, branding).label} />,
+    },
+    {
+      title: t('pricing.channels.col.own_prices'),
+      key: 'own',
+      width: 120,
+      render: (_: unknown, channel: PricingChannel) => {
+        const count = ownCount(channel.channel);
+        return count === 0 ? <span className={styles.dimmed}>—</span> : (
+          <Button size="sm" variant="link" className={styles['own-prices']} onClick={() => onShowModels(channel.channel)} data-testid="pricing-channel-own-prices">
+            {t('pricing.channels.own_prices', { n: count })}
+            <RightOutlined />
+          </Button>
+        );
+      },
     },
     {
       title: t('pricing.col.usage'),
       key: 'usage',
       align: 'right' as const,
-      width: 150,
+      width: 180,
       render: (_: unknown, channel: PricingChannel) => <UsageCell usage={channel.usage_30d} scope={{ key: 'provider', value: channel.channel }} />,
     },
   ];
   return (
     <section className={styles.workbench} data-testid="pricing-channels">
-      <p className={styles['channels-formula']}>{t('pricing.channels.formula')}</p>
       <ResponsiveList<PricingChannel>
         columns={columns}
         dataSource={channels}
@@ -76,7 +94,7 @@ export const ChannelMultipliersPanel: React.FC<{
         isBlocked={isBlocked}
         emptyText={t('pricing.channels.empty')}
         phone={{ identity: 'channel' }}
-        tableProps={{ size: 'small' }}
+        tableProps={{ scroll: { x: 'max-content' } }}
       />
     </section>
   );
@@ -97,6 +115,7 @@ const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ c
     setNote(channel.note);
   }, [channel.multiplier, channel.note]);
   const isDirty = multiplier !== channel.multiplier || note !== channel.note || (!channel.is_configured && multiplier !== 1);
+  const delta = multiplierDelta(multiplier);
   const refresh = () => void queryClient.invalidateQueries({ queryKey: PRICING_QUERY_KEYS.book });
   const save = useMutation({
     mutationFn: () => api.updatePricingChannel(channel.channel, { multiplier, note }),
@@ -117,7 +136,6 @@ const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ c
   return (
     <div className={styles['channel-editor']}>
       <NumberInput
-        size="small"
         min={0.01}
         max={100}
         step={0.05}
@@ -128,8 +146,11 @@ const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ c
         aria-label={`${t('pricing.channels.col.multiplier')}: ${label}`}
         data-testid="pricing-channel-multiplier"
       />
+      {/* The multiplier read as a discount or a markup, live as it is typed; list price reads as nothing. */}
+      <span className={styles['multiplier-delta']} aria-live="polite" data-testid="pricing-channel-delta">
+        {delta === null ? '' : `${delta > 0 ? '+' : '−'}${Math.abs(delta)}%`}
+      </span>
       <Input
-        size="sm"
         value={note}
         maxLength={512}
         onChange={(event) => setNote(event.target.value)}

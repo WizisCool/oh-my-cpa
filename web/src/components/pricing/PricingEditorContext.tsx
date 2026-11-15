@@ -10,9 +10,8 @@ import type { PricingMode, UpstreamModel } from '../../types/pricing';
  * open it are the ones whose first paint the bundle budget guards most closely.
  */
 export interface OpenPriceEditorOptions {
-  /** The provider label recorded on requests; absent edits the shared price. */
+  /** The provider label recorded on requests: the editor opens on that channel's scope. */
   channel?: string;
-  channelLabel?: string;
   /** Start in this mode instead of the model's current one. */
   mode?: PricingMode;
   /** Preselect this OpenRouter model for a link, e.g. a suggestion the operator clicked. */
@@ -22,6 +21,7 @@ export interface OpenPriceEditorOptions {
 type OpenPriceEditor = (model: string, options?: OpenPriceEditorOptions) => void;
 
 const PricingEditorContext = React.createContext<OpenPriceEditor | null>(null);
+const OpenModelContext = React.createContext<string | null>(null);
 
 const LazyPriceEditorDrawer = React.lazy(() =>
   import('./PriceEditorDrawer').then((module) => ({ default: module.PriceEditorDrawer })));
@@ -45,14 +45,15 @@ export const PricingEditorProvider: React.FC<{ children: React.ReactNode }> = ({
   const close = React.useCallback(() => setIsOpen(false), []);
   return (
     <PricingEditorContext.Provider value={open}>
-      {children}
+      <OpenModelContext.Provider value={isOpen && target ? target.model : null}>
+        {children}
+      </OpenModelContext.Provider>
       {target && (
         <React.Suspense fallback={null}>
           <LazyPriceEditorDrawer
             key={target.session}
             model={target.model}
             channel={target.options.channel}
-            channelLabel={target.options.channelLabel}
             initialMode={target.options.mode}
             initialUpstream={target.options.upstream}
             isOpen={isOpen}
@@ -70,4 +71,9 @@ export const PricingEditorProvider: React.FC<{ children: React.ReactNode }> = ({
  */
 export function useOpenPriceEditor(): OpenPriceEditor | null {
   return React.useContext(PricingEditorContext);
+}
+
+/** The model the editor is open on, so a list can keep that row marked while it is edited. */
+export function useOpenPriceModel(): string | null {
+  return React.useContext(OpenModelContext);
 }

@@ -60,7 +60,7 @@ export default {
   'omc.sidebar_hidden_count': '{n} hidden',
   'omc.sidebar_all_shown': 'Every entry is shown',
   'omc.display_currency': "Display currency",
-  'omc.display_currency_desc': "Used in the dashboard, request records and Insights. Cost & Usage and accounting stay in USD.",
+  'omc.display_currency_desc': "Used in the dashboard, request records and Insights. Model Pricing and accounting stay in USD.",
   'omc.exchange_rate': "Converted at 1 USD = {value} ({date} rate)",
   'omc.exchange_empty': "Update rates to choose another currency.",
   'omc.exchange_refresh': "Update rates",

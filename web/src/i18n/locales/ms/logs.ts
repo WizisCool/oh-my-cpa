@@ -212,6 +212,8 @@ export default {
   "audit.action.routing.apply": "Menggunakan susunan penghalaan",
   "audit.action.plugin.settings": "Menukar tetapan sistem pemalam",
   "audit.action.pricing.model.dismiss_candidate": "Mengetepikan calon harga",
+  "audit.action.pricing.model.price_unpriced": "Mengira permintaan tanpa harga pada harga semasa",
+  "audit.action.pricing.price_unpriced_all": "Mengira permintaan tanpa harga bagi model yang mempunyai harga semasa",
   "audit.action.quota.clear_cooldown.automatic": "Mengosongkan tempoh bertenang secara automatik",
   "audit.action.system.data_retention": "Menukar pengekalan data",
   "audit.action.system.update.apply": "Meminta kemas kini",

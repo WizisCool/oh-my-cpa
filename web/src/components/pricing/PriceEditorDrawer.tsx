@@ -4,12 +4,13 @@ import { Collapse } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
+import { Tabs } from '@/components/ui/tabs';
 import { NumberInput } from '../common/NumberInput';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import dayjs from '../../utils/time';
 import clsx from 'clsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { EditOutlined, LinkOutlined, ThunderboltOutlined } from '../icons';
+import { EditOutlined, LinkOutlined, PlusOutlined, ThunderboltOutlined } from '../icons';
 import { api } from '../../api/client';
 import { pricingErrorText } from './pricingErrors';
 import { useT } from '../../i18n';
@@ -33,17 +34,23 @@ import {
   type TierDraft,
 } from '../../types/pricingDisplay';
 import { PriceSchedule, RateGrid, TierBadges, TieredPricingEditor, UpstreamPicker, UpstreamSummary, describeTier } from './PricingParts';
-import { PRICING_QUERY_KEYS } from './pricingQueries';
+import { PRICING_QUERY_KEYS, pricingBookSwr } from './pricingQueries';
+import { channelIdentity } from './pricingIdentity';
 import styles from './Pricing.module.css';
-import { useToast } from '../feedback';
-import { LoadFailure, Notice } from '../feedback';
+import { confirmModal, LoadFailure, Notice, useToast } from '../feedback';
 import { AppDrawer } from '../common/AppDrawer';
 import { ConfirmAction } from '../common/ConfirmAction';
+import { FactList } from '../common/FactList';
+import { SectionHeading } from '../common/SectionHeading';
+import { ProviderBrandIcon } from '../LobeIcon';
+import { useProviderBranding } from '../../hooks/useProviderBranding';
+import { useSwrQuery } from '../../performance/swrContract';
+import { modelScopes, type PriceScope } from '../../types/pricingBook';
 
 export interface PriceEditorDrawerProps {
   model: string;
+  /** The scope the drawer opens on: a channel's own price, or the shared price when absent. */
   channel?: string;
-  channelLabel?: string;
   initialMode?: PricingMode;
   initialUpstream?: UpstreamModel;
   isOpen: boolean;
@@ -105,13 +112,27 @@ export function modeTone(mode: PricingMode | null): StatusTone {
  * model, or use the operator's own rates. Every decision prices requests from now on; the drawer
  * says so once, beside the Save button, and shows what a typical recent request would cost before
  * and after so the change is read in money rather than in per-million rates.
+ *
+ * A model has one shared price and, for any channel that bills differently, that channel's own.
+ * The scope tabs name where an edit lands: a channel without its own price shows the shared price
+ * it bills at, and pricing it separately is a deliberate step rather than a side effect of editing.
  */
-export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, channel, channelLabel, initialMode, initialUpstream, isOpen, onClose }) => {
+export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, channel: initialChannel, initialMode, initialUpstream, isOpen, onClose }) => {
   useTimeZone();
   const t = useT();
   const toast = useToast();
   const queryClient = useQueryClient();
   const { style: tokenStyle } = useTokenDisplayStyle();
+  const branding = useProviderBranding();
+  const book = useSwrQuery(pricingBookSwr, undefined, { enabled: isOpen });
+
+  const [scope, setScope] = React.useState(initialChannel ?? '');
+  const channel = scope || undefined;
+  const scopes = React.useMemo((): PriceScope[] => {
+    const listed = modelScopes(book.data, model);
+    return listed.some((item) => item.channel === scope) ? listed : [...listed, { channel: scope, hasOwnPrice: false }];
+  }, [book.data, model, scope]);
+  const scopeLabel = (value: string) => channelIdentity(value, book.data?.providers, branding).label;
 
   const detail = useQuery({
     queryKey: PRICING_QUERY_KEYS.model(model, channel),
@@ -132,6 +153,10 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
   const [tierDrafts, setTierDrafts] = React.useState<TierDraft[]>([]);
   const [multiplier, setMultiplier] = React.useState<number>(1);
   const [isSeeded, setIsSeeded] = React.useState(false);
+  /** A channel without its own price is read-only until the operator chooses to price it separately. */
+  const [isOverriding, setIsOverriding] = React.useState(false);
+  const isInherited = Boolean(channel && detail.data?.is_inherited);
+  const isReadOnly = isInherited && !isOverriding;
 
   // The first answer decides the starting point: the model's own mode, or for an unpriced model
   // the cheapest route to a price - automatic when it matches, then reference rates listed for
@@ -158,6 +183,41 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
     }
     setIsSeeded(true);
   }, [detail.data, channel, initialMode, initialUpstream, isSeeded]);
+
+  // The draft as first seeded, so changing scope only asks before discarding an actual edit. A pin
+  // resolved from the catalog after seeding is the same choice, so a link is compared by its id.
+  const draftKey = JSON.stringify([mode, mode === 'linked' ? linked?.id ?? current?.upstream_id ?? '' : '', rates, tierDrafts, multiplier, isOverriding]);
+  const baselineRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (isSeeded && baselineRef.current === null) baselineRef.current = draftKey;
+  }, [isSeeded, draftKey]);
+  const isDirty = baselineRef.current !== null && baselineRef.current !== draftKey;
+
+  const enterScope = (next: string) => {
+    baselineRef.current = null;
+    setScope(next);
+    setMode(next ? null : initialMode ?? null);
+    setLinked(next ? null : initialUpstream ?? null);
+    setRates(EMPTY_RATES);
+    setTierDrafts([]);
+    setMultiplier(1);
+    setIsOverriding(false);
+    setIsSeeded(false);
+  };
+  const changeScope = (next: string) => {
+    // A save closes the editor when it lands, which would drop another scope's edits unasked.
+    if (next === scope || save.isPending || remove.isPending) return;
+    if (!isDirty) {
+      enterScope(next);
+      return;
+    }
+    confirmModal({
+      title: t('pricing.scope.discard'),
+      okText: t('pricing.scope.discard_ok'),
+      danger: true,
+      onOk: () => enterScope(next),
+    });
+  };
 
   const catalog = useQuery({
     queryKey: PRICING_QUERY_KEYS.catalog,
@@ -205,6 +265,8 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
     return null;
   }, [mode, automatic, linked, tierResult, baseRates, multiplier]);
 
+  // The model's key is a prefix of every scope's, so one invalidation rereads the shared price and
+  // each channel's.
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: PRICING_QUERY_KEYS.book });
     void queryClient.invalidateQueries({ queryKey: PRICING_QUERY_KEYS.attention });
@@ -265,7 +327,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
     }
   };
 
-  const canSave = mode === 'auto' ? automatic !== null : mode === 'linked' ? linked !== null : mode === 'custom' && isCustomValid;
+  const canSave = !isReadOnly && mode === 'auto' ? automatic !== null : mode === 'linked' ? linked !== null : mode === 'custom' && isCustomValid;
   const profile = detail.data?.profile;
 
   const title = (
@@ -277,7 +339,9 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
     </div>
   );
 
-  const footer = (
+  const footer = isReadOnly ? (
+    <Button onClick={onClose}>{t('common.close')}</Button>
+  ) : (
     <>
         {current && !detail.data?.is_inherited && (
           <ConfirmAction
@@ -303,20 +367,55 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
       open={isOpen}
       onClose={onClose}
       footer={footer}
-      footerStart={t('pricing.editor.forward_note')}
+      footerStart={isReadOnly ? undefined : t('pricing.editor.forward_note')}
       destroyOnHidden
       className={styles.drawer}
       data-testid="pricing-editor"
     >
+      {scopes.length > 1 && (
+        <Tabs
+          className={styles.scopes}
+          listClassName="scroll-fade-x"
+          activeKey={scope}
+          onChange={changeScope}
+          items={scopes.map((item) => ({
+            key: item.channel,
+            disabled: item.channel !== scope && (save.isPending || remove.isPending),
+            label: item.channel ? (
+              <span className={styles['scope-tab']} data-testid="pricing-scope-tab">
+                <ProviderBrandIcon mark={channelIdentity(item.channel, book.data?.providers, branding)} size={16} />
+                {scopeLabel(item.channel)}
+                {item.hasOwnPrice && <span className={styles['scope-own']} role="img" aria-label={t('pricing.scope.own_price')} />}
+              </span>
+            ) : (
+              <span data-testid="pricing-scope-tab">{t('pricing.scope.shared')}</span>
+            ),
+          }))}
+        />
+      )}
       {detail.isLoading || mode === null ? (
         detail.isError ? (
           <LoadFailure title={t('pricing.load_error')} error={detail.error} onRetry={() => void detail.refetch()} />
         ) : (
           <ParagraphPlaceholder rows={8} />
         )
+      ) : isReadOnly ? (
+        <InheritedPrice
+          price={current}
+          channelLabel={scopeLabel(scope)}
+          channelMultiplier={book.data ? book.data.channels.find((item) => item.channel === scope)?.multiplier ?? 1 : undefined}
+          onOverride={() => {
+            // Start from the price on screen, which a refresh may have changed since seeding.
+            if (current) {
+              setRates(ratesDraftFrom(current));
+              setTierDrafts(tierDraftsFrom(current.tiers, current));
+              setMultiplier(current.price_multiplier || 1);
+            }
+            setIsOverriding(true);
+          }}
+        />
       ) : (
-        <div className={styles['drawer-body']}>
-          {channel && <Notice tone="info" title={t('pricing.editor.channel_scope', { channel: channelLabel || channel })} description={t('pricing.editor.channel_hint')} />}
+        <div className={styles['drawer-body']} key={scope}>
           {candidate && !isCandidateAdopted && (
             <Notice
               tone="info"
@@ -402,9 +501,9 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
 
           {mode === 'custom' && (
             <section className={styles.section}>
-              <div className={styles['section-head']}>
-                <h3>{t('pricing.editor.rates')}</h3>
-                {reference && (
+              <SectionHeading
+                title={t('pricing.editor.rates')}
+                extra={reference && (
                   <Button size="sm" variant="link" onClick={() => {
                     setRates(ratesDraftFrom(upstreamRates(reference)));
                     setTierDrafts(tierDraftsFrom(reference.tiers, upstreamRates(reference)));
@@ -413,7 +512,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
                     {t('pricing.editor.fill_reference', { id: reference.id })}
                   </Button>
                 )}
-              </div>
+              />
               {referencePrices.length > 0 && (
                 <div className={styles['reference-prices']} data-testid="pricing-reference-prices">
                   <span className={styles['reference-prices-label']}>
@@ -501,7 +600,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
 
           {mode === 'custom' && draftPrice && draftPrice.tiers.length > 0 && (
             <section className={styles.section}>
-              <h3>{t('pricing.editor.schedule')}</h3>
+              <SectionHeading title={t('pricing.editor.schedule')} />
               <PriceSchedule price={draftPrice} tiers={draftPrice.tiers} />
             </section>
           )}
@@ -523,7 +622,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
           </section>
 
           <section className={styles.section} data-testid="pricing-preview">
-            <h3>{t('pricing.editor.preview')}</h3>
+            <SectionHeading title={t('pricing.editor.preview')} />
             <PreviewRows
               profile={profile ?? { samples: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, max_input: 0 }}
               current={current}
@@ -549,6 +648,51 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
         </div>
       )}
     </AppDrawer>
+  );
+};
+
+/**
+ * A channel billing at the shared price: what it pays, and the one way to make it pay something
+ * else. Nothing here is editable, so the drawer cannot change the shared price from a channel's tab.
+ */
+const InheritedPrice: React.FC<{
+  price: ModelPrice | null;
+  channelLabel: string;
+  /** Undefined until the price book is read, so an unknown multiplier is never shown as 1x. */
+  channelMultiplier?: number;
+  onOverride: () => void;
+}> = ({ price, channelLabel, channelMultiplier, onOverride }) => {
+  const t = useT();
+  const mode = price ? modeOf(price) : null;
+  return (
+    <div className={styles['drawer-body']} data-testid="pricing-scope-inherited">
+      <section className={styles.section}>
+        <SectionHeading
+          title={t('pricing.scope.inherits')}
+          extra={<StatusLabel tone={modeTone(mode)}>{mode ? t(`pricing.mode.${mode}`) : t('pricing.mode.unpriced')}</StatusLabel>}
+        />
+        {price && (
+          <RateGrid rates={{
+            prompt: price.prompt_price_per_1m,
+            completion: price.completion_price_per_1m,
+            cacheRead: price.cache_read_price_per_1m,
+            cacheWrite: price.cache_write_price_per_1m,
+          }}
+          />
+        )}
+        {price && (price.tiers?.length ?? 0) > 0 && <PriceSchedule price={price} tiers={price.tiers} />}
+        <FactList
+          emphasis="quiet"
+          facts={[
+            ...(price && price.price_multiplier !== 1 ? [{ key: 'model', label: t('pricing.editor.multiplier'), value: formatMultiplier(price.price_multiplier) }] : []),
+            ...(channelMultiplier === undefined ? [] : [{ key: 'channel', label: t('pricing.scope.channel_multiplier'), value: formatMultiplier(channelMultiplier) }]),
+          ]}
+        />
+      </section>
+      <Button variant="dashed" block icon={<PlusOutlined />} onClick={onOverride} data-testid="pricing-scope-override">
+        {t('pricing.scope.override', { channel: channelLabel })}
+      </Button>
+    </div>
   );
 };
 

@@ -78,7 +78,8 @@ export function ActionMenu({ children, label }: ActionMenuProps) {
           onClick={(event) => {
             const target = event.target;
             const action = target instanceof Element ? target.closest('button, a[href]') : null;
-            if (action && !action.hasAttribute('disabled')) {
+            // A select opens its own list from inside the menu; closing the menu would take it away.
+            if (action && !action.hasAttribute('disabled') && !action.matches('[data-slot="select-trigger"]')) {
               setIsOpen(false);
             }
           }}

@@ -124,7 +124,7 @@ export default {
   "nav.logs": "Log",
   "nav.audit": "Jejak audit",
   "nav.usage_events": "Peristiwa Permintaan",
-  "nav.pricing": "Kos & Penggunaan",
+  "nav.pricing": "Harga Model",
   "nav.config": "Konfigurasi",
   "nav.omc_settings": "Tetapan OMC",
   "nav.plugins": "Pengurusan pemalam",

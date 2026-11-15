@@ -16,6 +16,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
 type fakePricing struct {
@@ -818,5 +819,38 @@ func BenchmarkListPricingHandler(b *testing.B) {
 		if rec.Code != http.StatusOK {
 			b.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 		}
+	}
+}
+
+func TestPriceUnpricedUsageRefusesUnauditedWrite(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusNotFound)
+	})
+	ctx := context.Background()
+	const model = "late-model"
+	id, err := repo.InsertUsageEvents(ctx, []usage.Event{{InstanceID: "default", EventKey: "late", Model: model, TimestampMS: time.Now().UnixMilli(), InputTokens: 1_000_000}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.UpsertModelPrices(ctx, []pricing.ModelPrice{{Model: model, PromptPricePer1M: 2, PriceMultiplier: 1, Source: pricing.SourceManual}}); err != nil {
+		t.Fatal(err)
+	}
+	endpoint := baseURL + "/omc/api/v1/pricing/models/" + model + "/price-unpriced"
+	if _, err := repo.SQL().Exec(`CREATE TRIGGER reject_pricing_audit BEFORE INSERT ON audit_events BEGIN SELECT RAISE(ABORT,'audit unavailable'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if response, payload := doJSON(t, client, http.MethodPost, endpoint, ""); response.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("unaudited pricing: %d %s", response.StatusCode, payload)
+	}
+	if row, err := repo.GetUsageEvent(ctx, id); err != nil || row.PricingStatus != "unpriced" {
+		t.Fatalf("priced without an audit record: %+v %v", row, err)
+	}
+	if _, err := repo.SQL().Exec(`DROP TRIGGER reject_pricing_audit`); err != nil {
+		t.Fatal(err)
+	}
+	response, payload := doJSON(t, client, http.MethodPost, endpoint, "")
+	var result PricingUnpricedPricedResponseDTO
+	if response.StatusCode != http.StatusOK || json.Unmarshal(payload, &result) != nil || result.Priced != 1 {
+		t.Fatalf("pricing: %d %s", response.StatusCode, payload)
 	}
 }

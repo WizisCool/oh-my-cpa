@@ -328,7 +328,7 @@ reads as one undifferentiated line. Pick the structure the content already has:
 | --- | --- |
 | Short facts side by side (size and line count, provider and priority, requests and failures) | [`MetaLine`](../../web/src/components/common/MetaLine.tsx): space between facts, each wraps whole; a figure that matters takes `<b>`, a failure its tone |
 | A label with its value | [`FactList`](../../web/src/components/common/FactList.tsx) in a panel, label/value rows in a tooltip |
-| A name and the thing it qualifies (an instant and its countdown, a channel, an id behind a name) | Parentheses through a catalog sentence: `09/30 01:05 (4h left)`, `Channel price (relay)` |
+| A name and the thing it qualifies (an instant and its countdown, a channel, an id behind a name) | Parentheses through a catalog sentence: `09/30 01:05 (4h left)`, `Channel multiplier (relay)` |
 | Clauses of one description | A sentence: `joinPhrases` in [`utils/format.ts`](../../web/src/utils/format.ts) uses the locale's comma |
 | A machine error | `formatErrorCode`: `invalid_grant (HTTP 400): max_tokens` |
 | An action on a target, as an accessible name | `common.action_on`: `Move earlier: Playground` |

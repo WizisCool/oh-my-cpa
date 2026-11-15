@@ -31,18 +31,24 @@
   gap: 12px;
 }
 
-.section h3 {
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--fg);
+/* The scope the editor writes to. It sits above the body so changing it reads as changing what
+   the drawer edits, not as one more field inside it. */
+.scopes {
+  margin-bottom: 20px;
 }
 
-.section-head {
-  display: flex;
+.scope-tab {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
+}
+
+/* A channel with its own price: the one exception the tabs mark. The shared price is the quiet default. */
+.scope-own {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .mode-option {

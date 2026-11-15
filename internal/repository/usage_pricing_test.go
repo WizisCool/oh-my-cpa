@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -316,5 +317,122 @@ func TestCanonicalAccountingSurvivesPricingAndRetention(t *testing.T) {
 			query.Calendar = &UsageCalendar{Location: time.UTC, Unit: UsageCalendarDay}
 			verify("rebuilt local-day facts")
 		})
+	}
+}
+
+func TestPriceUnpricedUsageCorrectsRecordsAndFacts(t *testing.T) {
+	r := usageTestRepository(t)
+	ctx := context.Background()
+	const model = "late-priced-model"
+	at := time.Now().Add(-time.Hour).UnixMilli()
+	insert := func(key string) int64 {
+		t.Helper()
+		id, err := r.InsertUsageEvents(ctx, []usage.Event{{InstanceID: "default", EventKey: key, Model: model, TimestampMS: at, InputTokens: 1_000_000}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	foldedID := insert("folded")
+	if _, err := r.AggregateUsageFacts(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+	pendingID := insert("not-yet-folded")
+
+	if n, err := r.PriceUnpricedUsage(ctx, model, time.Now().UnixMilli()); err != nil || n != 0 {
+		t.Fatalf("priced without a price: %d %v", n, err)
+	}
+	if err := r.UpsertModelPrices(ctx, []pricing.ModelPrice{{Model: model, PromptPricePer1M: 2, PriceMultiplier: 1, Source: pricing.SourceManual}}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := r.PriceUnpricedUsage(ctx, model, time.Now().UnixMilli()); err != nil || n != 2 {
+		t.Fatalf("priced %d %v, want 2", n, err)
+	}
+	for _, id := range []int64{foldedID, pendingID} {
+		row, err := r.GetUsageEvent(ctx, id)
+		if err != nil || row.PricingStatus != "priced" || row.CostUSD == nil || *row.CostUSD != 2 {
+			t.Fatalf("row %d not priced: %+v %v", id, row, err)
+		}
+	}
+	if _, err := r.AggregateUsageFacts(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{usageFactsFineTable, usageFactsDailyTable} {
+		var requests, priced, costed, cost int64
+		if err := r.SQL().QueryRow(`SELECT SUM(requests), SUM(priced_requests), SUM(costed_requests), SUM(cost_nanos) FROM `+table+` WHERE model = ?`, model).
+			Scan(&requests, &priced, &costed, &cost); err != nil {
+			t.Fatal(err)
+		}
+		if requests != 2 || priced != 2 || costed != 2 || cost != 4_000_000_000 {
+			t.Fatalf("%s = %d requests, %d priced, %d costed, %d nanos", table, requests, priced, costed, cost)
+		}
+	}
+
+	if n, err := r.PriceUnpricedUsage(ctx, model, time.Now().UnixMilli()); err != nil || n != 0 {
+		t.Fatalf("priced twice: %d %v", n, err)
+	}
+	if _, err := r.SQL().Exec(`UPDATE usage_events SET cost_nanos = 0 WHERE id = ?`, foldedID); err == nil {
+		t.Fatal("a priced request's cost became mutable")
+	}
+	if _, err := r.SQL().Exec(`UPDATE usage_events SET pricing_status = 'unpriced', cost_nanos = NULL, price_version_id = NULL WHERE id = ?`, foldedID); err == nil {
+		t.Fatal("a priced request returned to unpriced")
+	}
+}
+
+func TestPriceUnpricedUsageCoversEveryModelInBatches(t *testing.T) {
+	r := usageTestRepository(t)
+	ctx := context.Background()
+	defer func(size int) { priceUnpricedBatch = size }(priceUnpricedBatch)
+	priceUnpricedBatch = 2
+	at := time.Now().Add(-time.Hour).UnixMilli()
+	var events []usage.Event
+	for i, model := range []string{"model-a", "model-b", "model-a", "unknown-model", "model-b"} {
+		events = append(events, usage.Event{InstanceID: "default", EventKey: fmt.Sprintf("e%d", i), Model: model, TimestampMS: at, InputTokens: 1_000_000})
+	}
+	if _, err := r.InsertUsageEvents(ctx, events); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.UpsertModelPrices(ctx, []pricing.ModelPrice{
+		{Model: "model-a", PromptPricePer1M: 1, PriceMultiplier: 1, Source: pricing.SourceManual},
+		{Model: "model-b", PromptPricePer1M: 3, PriceMultiplier: 1, Source: pricing.SourceManual},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := r.PriceUnpricedUsage(ctx, "", time.Now().UnixMilli()); err != nil || n != 4 {
+		t.Fatalf("priced %d %v, want 4 across batches", n, err)
+	}
+	stats, err := r.QueryUsageCost(ctx, "default", 0, time.Now().UnixMilli()+1000)
+	if err != nil || stats.CostUSD != 8 || stats.PricedEvents != 4 || stats.UnpricedEvents != 1 {
+		t.Fatalf("stats %+v %v", stats, err)
+	}
+}
+
+// A record that predates the billed-tier snapshot reads its cost back on the original response-first
+// policy, so pricing it later must lock that same tier rather than today's Codex resolution.
+func TestPriceUnpricedUsagePricesLegacyRecordsOnTheirReadbackTier(t *testing.T) {
+	r := usageTestRepository(t)
+	ctx := context.Background()
+	at := time.Now().Add(-time.Hour).UnixMilli()
+	result, err := r.SQL().ExecContext(ctx, `INSERT INTO usage_events(instance_id, event_key, api_group_key, model, provider, service_tier, response_service_tier,
+ timestamp_ms, created_at_ms, input_tokens, output_tokens, pricing_status)
+ VALUES ('default', 'legacy', '', 'm', 'codex', 'priority', 'default', ?, ?, 1000, 100, 'unpriced')`, at, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	price := pricing.ModelPrice{Model: "m", PromptPricePer1M: 2, CompletionPer1M: 10, PriceMultiplier: 1, Source: pricing.SourceManual,
+		Tiers: []pricing.PriceTier{{ServiceTiers: []string{"priority"}, PromptPricePer1M: float(4), CompletionPer1M: float(20)}}}
+	if err := r.ApplyModelPrice(ctx, price, ""); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := r.PriceUnpricedUsage(ctx, "m", time.Now().UnixMilli()); err != nil || n != 1 {
+		t.Fatalf("priced %d %v, want 1", n, err)
+	}
+	breakdown, err := r.GetUsageEventCostBreakdown(ctx, id)
+	if err != nil || breakdown.StoredNanos == nil || *breakdown.StoredNanos != 3_000_000 || !breakdown.RecomputedMatches || breakdown.ServiceTier != "default" {
+		t.Fatalf("legacy record priced off its readback tier: %+v %v", breakdown, err)
 	}
 }

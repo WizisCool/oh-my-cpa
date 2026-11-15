@@ -1525,6 +1525,7 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
    frame, so the strip keeps its own timeline here. */
 :root[data-reduced-motion='true'] .scroll-fade-x { animation-duration: auto !important; }
 .responsive-list [data-slot="pager"] { margin-top: 12px; }
+.list-pager { display: flex; justify-content: flex-end; margin-top: 12px; }
 /* A phone row inside a card takes the card's own inset rather than adding its own on top: the
    two stacked to 36px a side, which on a 390px screen is a tenth of the width spent on margin. */
 [data-slot="panel-body"] [data-testid="phone-row"] { padding-inline: 0; }
