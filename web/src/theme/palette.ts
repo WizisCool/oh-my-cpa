@@ -627,19 +627,22 @@ function accentLadder(mode: ThemeMode, accent: string): { hover: string; active:
   return { hover: withLightness(accent, end), active: withLightness(accent, end), ink: best.ink };
 }
 
+/** How far a pressed ink surface travels back toward the page, so hover and press read as give. */
+const INK_STEP = { hover: 0.1, active: 0.18 } as const;
+
 function resolvePrimarySurface(
   mode: ThemeMode,
-  defaultLadder: { hover: string; active: string; ink: string },
+  core: ThemeCore,
   override: string | ThemePrimaryOverride | undefined,
 ): { primary: string; primaryHover: string; primaryActive: string; primaryOn: string } {
   if (!override) {
-    // Default for 9-token custom palettes: primary buttons use the solved accent ladder.
-    const further = accentLadder(mode, defaultLadder.hover);
+    // The filled action is the palette's own ink with the page as its label: the accent stays a
+    // signal (links, focus, selection) instead of painting the one button that must carry weight.
     return {
-      primary: defaultLadder.hover,
-      primaryHover: defaultLadder.active,
-      primaryActive: further.active,
-      primaryOn: defaultLadder.ink,
+      primary: core.fg,
+      primaryHover: mixOklch(core.fg, core.bg, INK_STEP.hover),
+      primaryActive: mixOklch(core.fg, core.bg, INK_STEP.active),
+      primaryOn: core.bg,
     };
   }
   if (typeof override === 'string') {
@@ -725,7 +728,7 @@ export function derivePalette(
   const thumbBg = deriveThumbBg(mode, core);
   const borderSoft = standOff(core.bg, mixOklch(core.bg, core.border, blend.borderSoft), core.fg, BORDER_SOFT_FLOOR);
   const ladder = accentLadder(mode, core.accent);
-  const primarySurface = resolvePrimarySurface(mode, ladder, overrides?.primary);
+  const primarySurface = resolvePrimarySurface(mode, core, overrides?.primary);
   const canvasBlend = CANVAS_BLEND[mode];
   const reference = getBuiltInPalette(SIGNAL_REFERENCE[mode]).core;
   const referenceHover = mixOklch(reference.bg, reference.fg, blend.hover);
@@ -834,9 +837,6 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
       border: '#dcdcde',
       accent: '#1c6ba3',
     },
-    overrides: {
-      primary: { fill: '#1c6ba3', hover: '#175e90', active: '#13517d', ink: '#ffffff' },
-    },
   },
   {
     id: 'pewter',
@@ -853,9 +853,6 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
       meta: '#666f7d',
       border: '#363d49',
       accent: '#6ea3f0',
-    },
-    overrides: {
-      primary: { fill: '#355f99', hover: '#3f6fb0', active: '#2b4d7d', ink: '#f5f8fc' },
     },
   },
   {
@@ -874,9 +871,6 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
       border: '#d3dbe3',
       accent: '#245399',
     },
-    overrides: {
-      primary: { fill: '#245399', hover: '#1c427a', active: '#15325e', ink: '#ffffff' },
-    },
   },
   {
     id: 'forest',
@@ -894,9 +888,6 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
       border: '#293a2f',
       accent: '#7bd4a4',
     },
-    overrides: {
-      primary: { fill: '#23593e', hover: '#2b6b4b', active: '#1c4731', ink: '#edf5ef' },
-    },
   },
   {
     id: 'sandstone',
@@ -913,9 +904,6 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
       meta: '#9b8f7d',
       border: '#ded3c0',
       accent: '#0f6d66',
-    },
-    overrides: {
-      primary: { fill: '#135953', hover: '#0e4742', active: '#0a3834', ink: '#fffcf5' },
     },
   },
 ];

@@ -17,7 +17,8 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-primary text-primary-foreground hover:enabled:bg-primary-hover active:enabled:bg-primary-active shadow-[var(--control-drop)]',
+        // Ink, not accent: the palette's foreground as a solid key.
+        primary: 'bg-primary bg-(image:--primary-sheen) text-primary-foreground hover:enabled:bg-primary-hover active:enabled:bg-primary-active shadow-primary',
         // Switched on: the same control material as `secondary`, the state carried by the wash and ink
         // alone, so a toggled tool never gains an outline its neighbours do not have.
         active: 'bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-brand hover:enabled:bg-[color-mix(in_srgb,var(--accent)_20%,transparent)] shadow-control',
