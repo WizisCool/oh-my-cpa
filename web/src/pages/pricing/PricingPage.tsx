@@ -22,7 +22,6 @@ import { Toolbar } from '../../components/common/Toolbar';
 import { Count } from '../../components/common/Count';
 import { confirmModal, LoadFailure, Notice, useToast } from '../../components/feedback';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
-import { formatTokensFull } from '../../types/tokenDisplay';
 import { useOpenPriceEditor, useOpenPriceModel } from '../../components/pricing/PricingEditorContext';
 import { PRICING_QUERY_KEYS, pricingBookSwr } from '../../components/pricing/pricingQueries';
 import { channelIdentity } from '../../components/pricing/pricingIdentity';
@@ -198,7 +197,6 @@ export const PricingPage: React.FC = () => {
   }, [isFilterEmpty]); // eslint-disable-line react-hooks/exhaustive-deps
   const rows = React.useMemo(() => filterPriceBook(book, { filter: activeFilter, channel: channelFilter, search }), [book, activeFilter, channelFilter, search]);
   const billable = book.filter((row) => hasUnbilledRequests(row) && (row.price || row.channelPrices.length > 0));
-  const billableRequests = billable.reduce((sum, row) => sum + row.usage.requests - row.usage.priced_requests, 0);
   const confirmRepriceAll = () => {
     confirmModal({
       title: t('pricing.reprice_all.final'),
@@ -370,8 +368,8 @@ export const PricingPage: React.FC = () => {
                 />
                 {activeFilter === 'unbilled' && billable.length > 0 && (
                   <ConfirmAction
-                    title={t('pricing.reprice_all.confirm', { models: billable.length })}
-                    description={t('pricing.reprice_all.confirm_note', { n: formatTokensFull(billableRequests) })}
+                    title={t('pricing.reprice_all.confirm')}
+                    description={t('pricing.reprice_all.confirm_note')}
                     confirmLabel={t('pricing.reprice_all.action')}
                     placement="bottomRight"
                     onConfirm={confirmRepriceAll}
