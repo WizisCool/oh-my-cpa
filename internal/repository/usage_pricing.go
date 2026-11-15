@@ -449,7 +449,7 @@ func (r *Repository) priceUnpricedBatch(ctx context.Context, model string, atMS,
 	rows, err := tx.QueryContext(ctx, `
 		SELECT id, model, timestamp_ms, COALESCE(provider, ''), COALESCE(executor_type, ''),
 		       COALESCE(service_tier, ''), COALESCE(effective_service_tier, ''), COALESCE(response_service_tier, ''),
-		       input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, COALESCE(billed_service_tier, '')
+		       input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, billed_service_tier
 		FROM usage_events
 		WHERE id > ?1 AND (?2 = '' OR model = ?2) AND pricing_status = 'unpriced' AND cost_nanos IS NULL
 		  AND (token_accounting IS NULL OR json_extract(token_accounting, '$.status') = 'complete')
@@ -461,7 +461,7 @@ func (r *Repository) priceUnpricedBatch(ctx context.Context, model string, atMS,
 	type pending struct {
 		id         int64
 		event      usage.Event
-		billedTier string
+		billedTier sql.NullString
 	}
 	var events []pending
 	for rows.Next() {
@@ -473,6 +473,10 @@ func (r *Repository) priceUnpricedBatch(ctx context.Context, model string, atMS,
 			return 0, after, false, fmt.Errorf("scan unpriced usage: %w", err)
 		}
 		events = append(events, item)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, after, false, fmt.Errorf("read unpriced usage: %w", err)
 	}
 	if err := rows.Close(); err != nil {
 		return 0, after, false, fmt.Errorf("read unpriced usage: %w", err)
@@ -494,11 +498,11 @@ func (r *Repository) priceUnpricedBatch(ctx context.Context, model string, atMS,
 	var priced int64
 	folded := make([]int64, 0, len(events))
 	for _, item := range events {
-		// The tier the request recorded is the one its cost breakdown reads back; only a record
-		// that predates the billed tier resolves it again.
-		serviceTier := item.billedTier
-		if serviceTier == "" {
-			serviceTier, _ = pricing.ResolveServiceTier(item.event.Provider, item.event.ExecutorType, item.event.ResponseServiceTier, item.event.ServiceTier, item.event.EffectiveServiceTier)
+		// Price on the tier the cost breakdown reads back: the recorded selection (empty is a
+		// recorded choice of none), or for a record predating it, the original response-first policy.
+		serviceTier := item.billedTier.String
+		if !item.billedTier.Valid {
+			serviceTier, _ = pricing.BilledServiceTier(item.event.ResponseServiceTier, item.event.ServiceTier)
 		}
 		locked, err := lockUsageCost(ctx, book, item.event, serviceTier, atMS)
 		if err != nil {

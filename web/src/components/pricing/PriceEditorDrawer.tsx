@@ -403,7 +403,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
         <InheritedPrice
           price={current}
           channelLabel={scopeLabel(scope)}
-          channelMultiplier={book.data?.channels.find((item) => item.channel === scope)?.multiplier ?? 1}
+          channelMultiplier={book.data ? book.data.channels.find((item) => item.channel === scope)?.multiplier ?? 1 : undefined}
           onOverride={() => {
             // Start from the price on screen, which a refresh may have changed since seeding.
             if (current) {
@@ -658,7 +658,8 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
 const InheritedPrice: React.FC<{
   price: ModelPrice | null;
   channelLabel: string;
-  channelMultiplier: number;
+  /** Undefined until the price book is read, so an unknown multiplier is never shown as 1x. */
+  channelMultiplier?: number;
   onOverride: () => void;
 }> = ({ price, channelLabel, channelMultiplier, onOverride }) => {
   const t = useT();
@@ -684,7 +685,7 @@ const InheritedPrice: React.FC<{
           emphasis="quiet"
           facts={[
             ...(price && price.price_multiplier !== 1 ? [{ key: 'model', label: t('pricing.editor.multiplier'), value: formatMultiplier(price.price_multiplier) }] : []),
-            { key: 'channel', label: t('pricing.scope.channel_multiplier'), value: formatMultiplier(channelMultiplier) },
+            ...(channelMultiplier === undefined ? [] : [{ key: 'channel', label: t('pricing.scope.channel_multiplier'), value: formatMultiplier(channelMultiplier) }]),
           ]}
         />
       </section>

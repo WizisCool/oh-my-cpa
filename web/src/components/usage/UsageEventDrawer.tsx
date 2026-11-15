@@ -1,7 +1,7 @@
 import { StructuredUsageView } from './StructuredUsageView';
 import { formatCurrency } from '../../types/currencyDisplay';
 import { useDisplayCurrency } from '../../types/CurrencyDisplayContext';
-import { TokenAccountingNote } from './TokenAccountingNote';
+import { TokenAccountingNote, tokenAccountingMessage } from './TokenAccountingNote';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Tabs } from '@/components/ui/tabs';
@@ -366,7 +366,8 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                 {event.cost_usd != null ? (
                   <dd>{formatCurrency(event.cost_usd, currency)}</dd>
                 ) : (
-                  <Tooltip title={t('events.cost_unpriced')}>
+                  // Incomplete token counts are why such a request has no cost, and pricing cannot add one.
+                  <Tooltip title={event.token_accounting && event.token_accounting.status !== 'complete' ? tokenAccountingMessage(t, event.token_accounting) : t('events.cost_unpriced')}>
                     <dd tabIndex={0} className="terminal-muted">{t('events.cost_unpriced_short')}</dd>
                   </Tooltip>
                 )}

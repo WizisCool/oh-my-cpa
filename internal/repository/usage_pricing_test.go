@@ -406,3 +406,33 @@ func TestPriceUnpricedUsageCoversEveryModelInBatches(t *testing.T) {
 		t.Fatalf("stats %+v %v", stats, err)
 	}
 }
+
+// A record that predates the billed-tier snapshot reads its cost back on the original response-first
+// policy, so pricing it later must lock that same tier rather than today's Codex resolution.
+func TestPriceUnpricedUsagePricesLegacyRecordsOnTheirReadbackTier(t *testing.T) {
+	r := usageTestRepository(t)
+	ctx := context.Background()
+	at := time.Now().Add(-time.Hour).UnixMilli()
+	result, err := r.SQL().ExecContext(ctx, `INSERT INTO usage_events(instance_id, event_key, api_group_key, model, provider, service_tier, response_service_tier,
+ timestamp_ms, created_at_ms, input_tokens, output_tokens, pricing_status)
+ VALUES ('default', 'legacy', '', 'm', 'codex', 'priority', 'default', ?, ?, 1000, 100, 'unpriced')`, at, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	price := pricing.ModelPrice{Model: "m", PromptPricePer1M: 2, CompletionPer1M: 10, PriceMultiplier: 1, Source: pricing.SourceManual,
+		Tiers: []pricing.PriceTier{{ServiceTiers: []string{"priority"}, PromptPricePer1M: float(4), CompletionPer1M: float(20)}}}
+	if err := r.ApplyModelPrice(ctx, price, ""); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := r.PriceUnpricedUsage(ctx, "m", time.Now().UnixMilli()); err != nil || n != 1 {
+		t.Fatalf("priced %d %v, want 1", n, err)
+	}
+	breakdown, err := r.GetUsageEventCostBreakdown(ctx, id)
+	if err != nil || breakdown.StoredNanos == nil || *breakdown.StoredNanos != 3_000_000 || !breakdown.RecomputedMatches || breakdown.ServiceTier != "default" {
+		t.Fatalf("legacy record priced off its readback tier: %+v %v", breakdown, err)
+	}
+}

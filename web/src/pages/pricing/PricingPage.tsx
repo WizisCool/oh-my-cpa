@@ -170,9 +170,10 @@ export const PricingPage: React.FC = () => {
     onSuccess: ({ priced }) => {
       if (priced > 0) toast.success(t('pricing.reprice_all.done', { n: priced }));
       else toast.info(t('pricing.reprice_all.none'));
-      refreshSpend();
     },
     onError: (err) => toast.error(t('pricing.reprice.failed', { msg: pricingErrorText(t, err) })),
+    // Batches that committed before a failure still changed spend, so a failure refreshes too.
+    onSettled: () => refreshSpend(),
   });
 
   // Pricing a model's unpriced requests changes recorded spend, so every usage read refreshes.
@@ -181,9 +182,9 @@ export const PricingPage: React.FC = () => {
     onSuccess: ({ priced }, model) => {
       if (priced > 0) toast.success(t('pricing.reprice.done', { model, n: priced }));
       else toast.info(t('pricing.reprice.none', { model }));
-      refreshSpend(model);
     },
     onError: (err) => toast.error(t('pricing.reprice.failed', { msg: pricingErrorText(t, err) })),
+    onSettled: (_result, _err, model) => refreshSpend(model),
   });
 
   const book = React.useMemo(() => (data ? buildPriceBook(data) : []), [data]);
@@ -369,8 +370,8 @@ export const PricingPage: React.FC = () => {
                 />
                 {activeFilter === 'unbilled' && billable.length > 0 && (
                   <ConfirmAction
-                    title={t('pricing.reprice_all.confirm', { models: billable.length, n: formatTokensFull(billableRequests) })}
-                    description={t('pricing.reprice_all.confirm_note')}
+                    title={t('pricing.reprice_all.confirm', { models: billable.length })}
+                    description={t('pricing.reprice_all.confirm_note', { n: formatTokensFull(billableRequests) })}
                     confirmLabel={t('pricing.reprice_all.action')}
                     placement="bottomRight"
                     onConfirm={confirmRepriceAll}

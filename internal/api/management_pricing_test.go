@@ -849,7 +849,8 @@ func TestPriceUnpricedUsageRefusesUnauditedWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	response, payload := doJSON(t, client, http.MethodPost, endpoint, "")
-	if response.StatusCode != http.StatusOK || !strings.Contains(string(payload), `"priced":1`) {
+	var result PricingUnpricedPricedResponseDTO
+	if response.StatusCode != http.StatusOK || json.Unmarshal(payload, &result) != nil || result.Priced != 1 {
 		t.Fatalf("pricing: %d %s", response.StatusCode, payload)
 	}
 }
