@@ -59,7 +59,7 @@
 .model-sources { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 12px; min-width: 0; margin-left: auto; }
 .model-source { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--fg-2); font-size: var(--text-sm); }
 .source-marks { display: inline-flex; align-items: center; gap: 4px; }
-.model-details { grid-column: 2; grid-row: 1; display: flex; align-items: center; justify-content: center; height: 28px; padding: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.model-details { grid-column: 2; grid-row: 1; display: flex; align-items: center; justify-content: center; height: 28px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: var(--text-lg); cursor: pointer; }
 .model-details::after { content: ""; position: absolute; inset: 0; }
 .model-row:hover .model-details { color: var(--fg-2); }
 .is-absent { color: var(--meta); }
