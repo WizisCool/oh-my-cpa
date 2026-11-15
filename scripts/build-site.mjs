@@ -99,7 +99,27 @@ export async function buildDocs({
 const LANDING_RENDERER = 'render.mjs';
 const LANDING_SOURCES = new Set([LANDING_RENDERER, 'copy.mjs']);
 const HREFLANG = { en: 'en', zh: 'zh-CN' };
-const STABLE_VERSION_RE = /^v?(\d+\.\d+\.\d+)$/;
+const STABLE_VERSION_RE = /^v?((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))$/;
+
+function parseLatestRedirectLocation(location, repo) {
+  if (typeof location !== 'string' || !location.trim()) return null;
+  let parsed;
+  try {
+    parsed = new URL(location, 'https://github.com');
+  } catch {
+    return null;
+  }
+  if (parsed.origin !== 'https://github.com') return null;
+  const escapedRepo = repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pathMatch = parsed.pathname.match(new RegExp(`^/${escapedRepo}/releases/tag/([^/]+)/?$`, 'i'));
+  if (!pathMatch) return null;
+  try {
+    const tagMatch = decodeURIComponent(pathMatch[1]).trim().match(STABLE_VERSION_RE);
+    return tagMatch ? tagMatch[1] : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function fetchLatestReleaseVersion({
   fetchImpl = globalThis.fetch,
@@ -107,17 +127,34 @@ export async function fetchLatestReleaseVersion({
   repo = GITHUB_REPO,
 } = {}) {
   if (typeof fetchImpl !== 'function') return null;
+  const requestInit = {
+    method: 'HEAD',
+    redirect: 'manual',
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'oh-my-cpa-site-builder',
+    },
+    ...(typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+      ? { signal: AbortSignal.timeout(timeoutMs) }
+      : {}),
+  };
   try {
-    const response = await fetchImpl(`https://api.github.com/repos/${repo}/releases/latest`, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'oh-my-cpa-site-builder',
-      },
-      ...(typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
-        ? { signal: AbortSignal.timeout(timeoutMs) }
-        : {}),
-    });
-    if (!response.ok) return null;
+    let response = await fetchImpl(`https://github.com/${repo}/releases/latest`, requestInit);
+    if (response.status === 405) {
+      void response.body?.cancel?.().catch?.(() => {});
+      response = await fetchImpl(`https://github.com/${repo}/releases/latest`, {
+        ...requestInit,
+        method: 'GET',
+      });
+    }
+    if (response.status >= 300 && response.status < 400) {
+      void response.body?.cancel?.().catch?.(() => {});
+      return parseLatestRedirectLocation(response.headers.get('location'), repo);
+    }
+    if (!response.ok) {
+      void response.body?.cancel?.().catch?.(() => {});
+      return null;
+    }
     const payload = await response.json();
     const match = typeof payload?.tag_name === 'string' ? payload.tag_name.trim().match(STABLE_VERSION_RE) : null;
     return match ? match[1] : null;
