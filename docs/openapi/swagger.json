@@ -15087,7 +15087,7 @@
           "type": "string"
         },
         "model": {
-          "$ref": "#/definitions/pricing.UpstreamModel"
+          "$ref": "#/definitions/api.pricingUpstreamModelDTO"
         }
       }
     },
@@ -15147,7 +15147,7 @@
         "models": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/pricing.UpstreamModel"
+            "$ref": "#/definitions/api.pricingUpstreamModelDTO"
           }
         }
       }
@@ -15183,7 +15183,7 @@
           "$ref": "#/definitions/api.PricingAutomaticMatchDTO"
         },
         "candidate": {
-          "$ref": "#/definitions/pricing.Candidate"
+          "$ref": "#/definitions/api.pricingCandidateDTO"
         },
         "channel": {
           "type": "string"
@@ -15203,7 +15203,7 @@
         "suggestions": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/pricing.UpstreamModel"
+            "$ref": "#/definitions/api.pricingUpstreamModelDTO"
           }
         },
         "versions": {
@@ -19456,6 +19456,20 @@
         }
       }
     },
+    "api.pricingCandidateDTO": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "match_kind": {
+          "type": "string"
+        },
+        "model": {
+          "$ref": "#/definitions/api.pricingUpstreamModelDTO"
+        }
+      }
+    },
     "api.pricingChannelDTO": {
       "type": "object",
       "properties": {
@@ -19503,7 +19517,7 @@
           "description": "Candidate is an OpenRouter model a custom or linked price could follow\nthat the operator has not seen yet.",
           "allOf": [
             {
-              "$ref": "#/definitions/pricing.Candidate"
+              "$ref": "#/definitions/api.pricingCandidateDTO"
             }
           ]
         },
@@ -19740,11 +19754,49 @@
         "suggestions": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/pricing.UpstreamModel"
+            "$ref": "#/definitions/api.pricingUpstreamModelDTO"
           }
         },
         "usage_30d": {
           "$ref": "#/definitions/api.pricingUsageDTO"
+        }
+      }
+    },
+    "api.pricingUpstreamModelDTO": {
+      "type": "object",
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "cache_read_price_per_1m": {
+          "type": "number"
+        },
+        "cache_write_price_per_1m": {
+          "type": "number"
+        },
+        "canonical_slug": {
+          "type": "string"
+        },
+        "completion_price_per_1m": {
+          "type": "number"
+        },
+        "context_length": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "prompt_price_per_1m": {
+          "type": "number"
+        },
+        "tiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/api.pricingPriceTierDTO"
+          }
         }
       }
     },
@@ -21108,20 +21160,6 @@
         }
       }
     },
-    "pricing.Candidate": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string"
-        },
-        "match_kind": {
-          "type": "string"
-        },
-        "model": {
-          "$ref": "#/definitions/pricing.UpstreamModel"
-        }
-      }
-    },
     "pricing.ChannelMultiplier": {
       "type": "object",
       "properties": {
@@ -21203,97 +21241,6 @@
         },
         "updated_at_ms": {
           "type": "integer"
-        }
-      }
-    },
-    "pricing.UpstreamModel": {
-      "type": "object",
-      "properties": {
-        "author": {
-          "type": "string"
-        },
-        "cache_read_price_per_1m": {
-          "type": "number"
-        },
-        "cache_write_price_per_1m": {
-          "type": "number"
-        },
-        "canonical_slug": {
-          "type": "string"
-        },
-        "completion_price_per_1m": {
-          "type": "number"
-        },
-        "context_length": {
-          "type": "integer"
-        },
-        "description": {
-          "type": "string"
-        },
-        "hugging_face_id": {
-          "type": "string"
-        },
-        "id": {
-          "type": "string"
-        },
-        "input_modalities": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "knowledge_cutoff": {
-          "type": "string"
-        },
-        "max_completion_tokens": {
-          "type": "integer"
-        },
-        "name": {
-          "type": "string"
-        },
-        "output_modalities": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "prompt_price_per_1m": {
-          "type": "number"
-        },
-        "reasoning": {
-          "$ref": "#/definitions/pricing.UpstreamReasoning"
-        },
-        "supported_parameters": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "tiers": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/pricing.PriceTier"
-          }
-        }
-      }
-    },
-    "pricing.UpstreamReasoning": {
-      "type": "object",
-      "properties": {
-        "default_effort": {
-          "type": "string"
-        },
-        "default_enabled": {
-          "type": "boolean"
-        },
-        "mandatory": {
-          "type": "boolean"
-        },
-        "supported_efforts": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         }
       }
     },
