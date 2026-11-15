@@ -8,24 +8,30 @@ export const LANDING_PAGES = [
   { lang: 'zh', path: '/zh/', file: 'zh/index.html', hreflang: 'zh-CN' },
 ];
 
-export const COMPOSE_COMMANDS = [
-  'mkdir -p oh-my-cpa && cd oh-my-cpa',
-  `curl -fsSL ${RELEASES_DOWNLOAD_URL}/compose.full.yml -o compose.yml`,
-  `curl -fsSL ${RELEASES_DOWNLOAD_URL}/cpa.config.example.yaml -o config.yaml`,
-  `printf 'CPA_MANAGEMENT_KEY=%s\\nOMCPA_MASTER_KEY=%s\\n' "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > .env`,
-  'chmod 600 .env',
-  'docker compose up -d',
-];
-
-export function standaloneCommands(keyPlaceholder) {
-  return [
-    'mkdir -p oh-my-cpa && cd oh-my-cpa',
-    `curl -fsSL ${RELEASES_DOWNLOAD_URL}/compose.omc.yml -o compose.yml`,
-    `printf 'OMCPA_CPA_BASE_URL=http://host.docker.internal:8317\\nOMCPA_MASTER_KEY=%s\\n' "$(openssl rand -hex 32)" > .env`,
-    `cat >> .env <<'EOF'\nOMCPA_CPA_MANAGEMENT_KEY='${keyPlaceholder}'\nEOF`,
-    'chmod 600 .env',
-    'docker compose up -d',
-  ];
+/**
+ * The commands behind each install step, keyed by the name a step refers to (`install.tabs`).
+ * Long commands fold with shell line continuations, so they read cleanly in a narrow block and
+ * still paste as they are.
+ */
+export function installCode(keyPlaceholder) {
+  return {
+    files: [
+      'mkdir -p oh-my-cpa && cd oh-my-cpa',
+      `curl -fsSL \\\n  ${RELEASES_DOWNLOAD_URL}/compose.full.yml \\\n  -o compose.yml`,
+      `curl -fsSL \\\n  ${RELEASES_DOWNLOAD_URL}/cpa.config.example.yaml \\\n  -o config.yaml`,
+    ],
+    keys: [
+      `printf 'CPA_MANAGEMENT_KEY=%s\\nOMCPA_MASTER_KEY=%s\\n' \\\n  "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > .env`,
+      'chmod 600 .env',
+    ],
+    start: ['docker compose up -d'],
+    consoleFiles: ['mkdir -p oh-my-cpa && cd oh-my-cpa', `curl -fsSL \\\n  ${RELEASES_DOWNLOAD_URL}/compose.omc.yml \\\n  -o compose.yml`],
+    connect: [
+      `printf 'OMCPA_CPA_BASE_URL=http://host.docker.internal:8317\\nOMCPA_MASTER_KEY=%s\\n' \\\n  "$(openssl rand -hex 32)" > .env`,
+      `cat >> .env <<'EOF'\nOMCPA_CPA_MANAGEMENT_KEY='${keyPlaceholder}'\nEOF`,
+      'chmod 600 .env',
+    ],
+  };
 }
 
 export const COPY = {
@@ -46,7 +52,7 @@ export const COPY = {
       toLight: 'Switch to light theme',
       language: '中文',
       home: 'Oh My CPA home',
-      start: 'Get started',
+      start: 'Quick start',
     },
     starBanner: {
       text: 'Open source under MIT — if Oh My CPA helps you, give it a star on GitHub',
@@ -57,7 +63,7 @@ export const COPY = {
     release: (version) => `<strong data-release-version>v${version}</strong> release notes`,
     hero: {
       lead: 'Centralize APIs, OAuth and routing, observe requests, quota and cost. Open source, self-hosted.',
-      primary: 'Get started',
+      primary: 'Quick start',
       secondary: 'Live demo',
       github: 'GitHub',
     },
@@ -99,23 +105,28 @@ export const COPY = {
         'Clients keep talking straight to CLIProxyAPI, with no extra hop in your inference path. Oh My CPA reads the management API to record every request, latency and cost locally.',
         'Your gateway stays independent either way. Open the console on desktop or mobile to manage providers, OAuth accounts, routing and live usage in one place.',
       ],
+      providersLabel: 'Supported providers and protocols',
       providers: [
         ['claude', 'Claude'],
         ['codex', 'Codex'],
         ['gemini', 'Gemini'],
         ['antigravity', 'Antigravity'],
+        ['kimi', 'Kimi'],
+        ['xai', 'xAI'],
+        ['devin', 'Devin'],
+        ['meta', 'Meta Muse'],
         ['vertex', 'Vertex AI'],
         ['deepseek', 'DeepSeek'],
-        ['kimi', 'Kimi'],
         ['opencode', 'OpenCode'],
         ['openai', 'OpenAI compatible'],
+        ['anthropic', 'Anthropic (Messages)'],
       ],
     },
     map: {
       title: 'See how models route to credentials',
       modelsHead: 'Models called',
       credentialsHead: 'Credentials & providers',
-      reqUnit: 'req',
+      requests: '{count} req',
       clients: [
         ['claude', 'claude-opus-5.5', '418', '0,3'],
         ['openai', 'gpt-6-astra', '512', '1,2'],
@@ -129,9 +140,8 @@ export const COPY = {
         ['antigravity', 'Antigravity', 'ag-pro (OAuth)'],
         ['openai', 'OpenAI compatible', 'relay-de••••••••mary'],
       ],
-      gateway: 'Oh My CPA',
-      stats: ['Requests', 'Success', 'Spent'],
-      caption: 'Model calls enter Oh My CPA and route across OAuth credentials and OpenAI-compatible endpoints, retrying onto another credential when one hits a limit.',
+      stats: ['Requests', 'Spent'],
+      caption: 'Model calls enter Oh My CPA and route across OAuth credentials and OpenAI-compatible endpoints.',
     },
     features: {
       title: 'Everything your gateway does, in plain sight',
@@ -165,37 +175,35 @@ export const COPY = {
         {
           id: 'compose',
           label: 'New stack',
-          lead: 'Everything in one Compose file.',
-          body: 'Runs the gateway, Oh My CPA and the updater together. Then open <code>http://127.0.0.1:8080</code> and sign in with <code>CPA_MANAGEMENT_KEY</code> from <code>.env</code>.',
           link: { href: '/start/quickstart', text: 'Read the quickstart' },
+          steps: [
+            ['Get the files', 'The Compose file and the gateway configuration.', 'files'],
+            ['Make the keys', 'One to sign in, one to encrypt local data.', 'keys'],
+            ['Start', 'Then open <code>http://127.0.0.1:8080</code> and sign in with <code>CPA_MANAGEMENT_KEY</code> from <code>.env</code>.', 'start'],
+          ],
         },
         {
           id: 'agent',
           label: 'Coding agent',
-          lead: 'Hand it to your coding agent.',
-          body: 'Paste one sentence into Claude Code, Codex or Cursor. The agent checks your host, asks before anything it cannot undo, and reports the console address.',
           link: { href: '/start/agent', text: 'What the agent does' },
+          steps: [
+            ['Copy one sentence', 'It points to an install guide written for agents.', 'prompt'],
+            ['Paste it to your agent', 'Claude Code, Codex or Cursor. It reports the console address when done.'],
+          ],
         },
         {
           id: 'standalone',
-          label: 'Existing gateway',
-          lead: 'Add the console to a gateway you run.',
-          body: 'Its configuration, keys and port stay as they are. Native binaries for macOS, Windows, Linux and FreeBSD are on the releases page.',
+          label: 'Existing CPA',
           link: { href: '/install', text: 'Choose an install path' },
+          steps: [
+            ['Get the console', 'The Compose file for Oh My CPA.', 'consoleFiles'],
+            ['Connect CPA', 'Fill in its management key; CPA itself stays as it is.', 'connect'],
+            ['Start', 'Then open <code>http://127.0.0.1:8080</code> and sign in with the CPA management key.', 'start'],
+          ],
         },
       ],
       agentPrompt: `Install Oh My CPA for me by following ${AGENT_GUIDE_URL}`,
       keyPlaceholder: '<CPA management key>',
-      agentSteps: [
-        ['step', 'Read the install guide'],
-        ['step', 'Check Docker and ports 8080 and 8317'],
-        ['step', 'No running gateway found, using a new stack'],
-        ['ask', 'Write compose.yml, config.yaml and .env in ~/oh-my-cpa? <b>y</b>'],
-        ['step', 'docker compose up -d'],
-        ['done', 'Console ready at http://127.0.0.1:8080'],
-      ],
-      ready: 'Console ready at http://127.0.0.1:8080',
-      terminal: 'oh-my-cpa',
       copy: 'Copy',
       copied: 'Copied',
       copyFailed: 'Copy failed',
@@ -245,7 +253,7 @@ export const COPY = {
       toLight: '切换到浅色主题',
       language: 'English',
       home: 'Oh My CPA 首页',
-      start: '开始使用',
+      start: '快速开始',
     },
     starBanner: {
       text: '开源项目需要你的支持 — 觉得好用欢迎去 GitHub 点一颗 Star',
@@ -256,7 +264,7 @@ export const COPY = {
     release: (version) => `<strong data-release-version>v${version}</strong> 版本说明`,
     hero: {
       lead: '集中管理 API、OAuth 与路由，可视化观测请求、配额与成本。开源，自托管。',
-      primary: '开始使用',
+      primary: '快速开始',
       secondary: '在线演示',
       github: 'GitHub 仓库',
     },
@@ -297,23 +305,28 @@ export const COPY = {
         '客户端照常直连你的 CLIProxyAPI 网关，不改接入方式，也不增加转发链路。Oh My CPA 只通过旁路管理接口同步状态，将每一笔请求的明细、耗时与费用沉淀到本地。',
         '网关本身始终独立稳定运行，不受控制台启停影响。打开浏览器，就能在桌面和手机上统一打理提供商、OAuth 账号、路由策略与实时用量。',
       ],
+      providersLabel: '支持的提供商与协议',
       providers: [
         ['claude', 'Claude'],
         ['codex', 'Codex'],
         ['gemini', 'Gemini'],
         ['antigravity', 'Antigravity'],
+        ['kimi', 'Kimi'],
+        ['xai', 'xAI'],
+        ['devin', 'Devin'],
+        ['meta', 'Meta Muse'],
         ['vertex', 'Vertex AI'],
         ['deepseek', 'DeepSeek'],
-        ['kimi', 'Kimi'],
         ['opencode', 'OpenCode'],
         ['openai', 'OpenAI 兼容'],
+        ['anthropic', 'Anthropic (Messages)'],
       ],
     },
     map: {
       title: '看清每次模型调用的实时路由',
       modelsHead: '调用模型',
       credentialsHead: '凭据与提供商',
-      reqUnit: '次',
+      requests: '{count} 次',
       clients: [
         ['claude', 'claude-opus-5.5', '418', '0,3'],
         ['openai', 'gpt-6-astra', '512', '1,2'],
@@ -327,9 +340,8 @@ export const COPY = {
         ['antigravity', 'Antigravity', 'ag-pro (OAuth)'],
         ['openai', 'OpenAI 兼容', 'relay-de••••••••mary'],
       ],
-      gateway: 'Oh My CPA',
-      stats: ['请求', '成功率', '花费'],
-      caption: '模型请求进入 Oh My CPA 后实时分配到对应的 OAuth 凭据或 OpenAI 兼容端点，遇到限流时自动切换至备用凭据。',
+      stats: ['请求', '花费'],
+      caption: '模型请求进入 Oh My CPA 后实时分配到对应的 OAuth 凭据或 OpenAI 兼容端点。',
     },
     features: {
       title: '网关的一切，尽在眼前',
@@ -363,37 +375,35 @@ export const COPY = {
         {
           id: 'compose',
           label: '全新部署',
-          lead: '一个 Compose 文件，全部就绪。',
-          body: '一次运行网关、Oh My CPA 与更新器。随后打开 <code>http://127.0.0.1:8080</code>，用 <code>.env</code> 中的 <code>CPA_MANAGEMENT_KEY</code> 登录。',
           link: { href: '/start/quickstart', text: '阅读快速开始' },
+          steps: [
+            ['取得部署文件', 'Compose 文件与网关配置。', 'files'],
+            ['生成密钥', '一把用于登录，一把加密本地数据。', 'keys'],
+            ['启动', '随后打开 <code>http://127.0.0.1:8080</code>，用 <code>.env</code> 中的 <code>CPA_MANAGEMENT_KEY</code> 登录。', 'start'],
+          ],
         },
         {
           id: 'agent',
           label: 'Agent 安装',
-          lead: '交给你的编码 Agent。',
-          body: '把一句话粘贴给 Claude Code、Codex 或 Cursor。Agent 会先检查主机，在不可撤销的操作前征求同意，完成后告诉你控制台地址。',
           link: { href: '/start/agent', text: 'Agent 会做什么' },
+          steps: [
+            ['复制这句话', '它指向一份写给 Agent 的安装指南。', 'prompt'],
+            ['交给 Agent', '粘贴到 Claude Code、Codex 或 Cursor，完成后它会告诉你控制台地址。'],
+          ],
         },
         {
           id: 'standalone',
-          label: '已有网关',
-          lead: '在已运行的网关旁加装控制台。',
-          body: '网关的配置、密钥与端口保持原样。macOS、Windows、Linux 与 FreeBSD 的原生可执行文件见版本发布页。',
+          label: '已有 CPA',
           link: { href: '/install', text: '选择安装方式' },
+          steps: [
+            ['取得控制台', 'Oh My CPA 的 Compose 文件。', 'consoleFiles'],
+            ['连接 CPA', '填入 CPA 的管理密钥，CPA 本身保持原样。', 'connect'],
+            ['启动', '随后打开 <code>http://127.0.0.1:8080</code>，用 CPA 的管理密钥登录。', 'start'],
+          ],
         },
       ],
       agentPrompt: `请按照 ${AGENT_GUIDE_URL} 为我安装 Oh My CPA`,
       keyPlaceholder: '<CPA 管理密钥>',
-      agentSteps: [
-        ['step', '读取安装指南'],
-        ['step', '检查 Docker 与端口 8080、8317'],
-        ['step', '未发现运行中的网关，采用全新部署'],
-        ['ask', '将在 ~/oh-my-cpa 写入 compose.yml、config.yaml 与 .env，继续吗？<b>y</b>'],
-        ['step', 'docker compose up -d'],
-        ['done', '控制台已就绪：http://127.0.0.1:8080'],
-      ],
-      ready: '控制台已就绪：http://127.0.0.1:8080',
-      terminal: 'oh-my-cpa',
       copy: '复制',
       copied: '已复制',
       copyFailed: '复制失败',
