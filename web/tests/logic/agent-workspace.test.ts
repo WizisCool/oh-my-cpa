@@ -533,4 +533,22 @@ test('agent workspace', async () => {
     assert.ok(phoneRule, 'phone .examples item rule must outrank .example regardless of stylesheet order');
     assert.match(phoneRule[1], /\bbox-shadow:\s*none\s*;/);
   });
+
+  check('agent notices stay column-aligned at the top without colliding with the empty-state hero', () => {
+    const agentTsx = readFileSync(new URL('../../src/pages/agent/AgentPage.tsx', import.meta.url), 'utf8');
+    const agentCss = readFileSync(new URL('../../src/pages/agent/AgentPage.module.css', import.meta.url), 'utf8');
+    const workspaceCss = readFileSync(new URL('../../src/components/workspace/Workspace.module.css', import.meta.url), 'utf8');
+
+    assert.match(agentTsx, /workspace\['notices'\][^>]*>\{notices\}<\/div>/);
+    const noticesRule = /^\.notices\s*\{([^}]*)\}/m.exec(workspaceCss);
+    assert.ok(noticesRule, 'Workspace.module.css must define .notices');
+    assert.match(noticesRule[1], /\bflex-shrink:\s*0\s*;/);
+    assert.match(workspaceCss, /\.notices:empty\s*\{[^}]*\bdisplay:\s*none\s*;/);
+
+    const heroMain = /\.shell\[data-hero\]\s+\.shell-main\s*\{([^}]*)\}/.exec(agentCss);
+    assert.ok(heroMain, 'AgentPage.module.css must define .shell[data-hero] .shell-main');
+    assert.doesNotMatch(heroMain[1], /\bjustify-content:\s*center\b/);
+    assert.match(agentCss, /\.shell\[data-hero\]\s+\.shell-main\s*>\s*\.shell-notices\s*\+\s*\*\s*\{[^}]*\bmargin-top:\s*auto\s*;/);
+    assert.match(agentCss, /\.shell\[data-hero\]\s+\.shell-main\s*>\s*:last-child\s*\{[^}]*\bmargin-bottom:\s*auto\s*;/);
+  });
 });

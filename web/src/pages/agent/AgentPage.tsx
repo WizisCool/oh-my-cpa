@@ -1,5 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
 import React from 'react';
+import { clsx } from 'clsx';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -454,7 +455,7 @@ export function AgentPage() {
         <Notice tone="info" title={t('pg.no_keys')} action={<Link to="/api-keys">{t('pg.manage_keys')}</Link>} />
       )}
       {!!session.data?.omitted && <Notice tone="info" title={t('agent.omitted')} />}
-      {rejection && (
+      {!!rejection && (
         <Notice
           tone="warning"
           data-testid="agent-rejected"
@@ -477,7 +478,7 @@ export function AgentPage() {
           )}
         />
       )}
-      {runError && (
+      {!!runError && (
         <Notice
           tone="error"
           onClose={() => { setLocalError(''); clearError(); }}
@@ -643,7 +644,7 @@ export function AgentPage() {
           <h1 className="sr-only">{t('nav.agent')}</h1>
           {bar}
           <main className={styles['shell-main']}>
-            {notices}
+            <div className={clsx(workspace['notices'], styles['shell-notices'])}>{notices}</div>
             {session.isPending ? (
               <ThreadPlaceholder testId="agent-loading" />
             ) : (
