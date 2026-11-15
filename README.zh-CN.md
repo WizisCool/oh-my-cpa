@@ -52,7 +52,7 @@
 </td>
 <td width="50%" valign="top">
 <img src="docs/images/readme/pricing.zh.webp" alt="按提供商分组的模型价目表">
-<p align="center"><b>费用与用量</b><br />OpenRouter 自动匹配、渠道倍率与自定义阶梯价目表</p>
+<p align="center"><b>模型定价</b><br />OpenRouter 自动匹配、渠道倍率与自定义阶梯价目表</p>
 </td>
 </tr>
 <tr>

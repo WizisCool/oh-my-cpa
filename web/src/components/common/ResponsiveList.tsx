@@ -84,20 +84,30 @@ export function ResponsiveList<T extends object>({
     : tableProps?.components;
 
   if (!isPhone) {
+    // The card holds the rows alone; the pager sits under it, so a short last page never leaves a
+    // band of empty card beside the page numbers.
     const table = (
       <div className="table-scroll data-table" ref={listRef}>
         <DataTable<T>
           {...tableProps}
           components={tableComponents}
           columns={columns}
-          dataSource={dataSource}
+          dataSource={drawn}
           rowKey={rowKey}
-          pagination={pageSize === false ? false : { current: safePage, onChange: changePage, pageSize, showSizeChanger: false, hideOnSinglePage: true }}
           locale={{ ...tableProps?.locale, emptyText: isFirstRead ? <TablePlaceholder rows={5} /> : empty ?? <span /> }}
         />
       </div>
     );
-    return isFilterAnimated ? <FilterTransition itemKeys={drawnKeys}>{table}</FilterTransition> : table;
+    const card = isFilterAnimated ? <FilterTransition itemKeys={drawnKeys}>{table}</FilterTransition> : table;
+    if (pageSize === false || lastPage <= 1) return card;
+    return (
+      <>
+        {card}
+        <div className="list-pager">
+          <Pager page={safePage} pageSize={pageSize} total={dataSource.length} onChange={changePage} />
+        </div>
+      </>
+    );
   }
 
   if (isFirstRead) return <ListLoading />;

@@ -57,7 +57,7 @@ export default {
   'omc.sidebar_hidden_count': '已隐藏 {n} 项',
   'omc.sidebar_all_shown': '全部入口都显示',
   'omc.display_currency': "价格单位",
-  'omc.display_currency_desc': "仪表盘、请求记录和洞察使用此货币显示；费用与用量及记账仍使用美元。",
+  'omc.display_currency_desc': "仪表盘、请求记录和洞察使用此货币显示；模型定价及记账仍使用美元。",
   'omc.exchange_rate': "按 1 USD = {value} 换算（{date} 汇率）",
   'omc.exchange_empty': "更新汇率后可选择其他货币。",
   'omc.exchange_refresh': "更新汇率",

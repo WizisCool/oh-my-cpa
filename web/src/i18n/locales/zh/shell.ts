@@ -121,7 +121,7 @@ export default {
   'nav.logs': '日志查看',
   'nav.audit': '操作审计',
   'nav.usage_events': '请求记录',
-  'nav.pricing': '费用与用量',
+  'nav.pricing': '模型定价',
   'nav.config': '配置面板',
   'nav.omc_settings': 'OMC 设置',
   'nav.plugins': '插件管理',

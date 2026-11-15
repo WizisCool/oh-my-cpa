@@ -57,7 +57,7 @@ audit logging, and automatic pre-write configuration backups.
 </td>
 <td width="50%" valign="top">
 <img src="docs/images/readme/pricing.en.webp" alt="Model price book grouped by provider">
-<p align="center"><b>Cost &amp; usage</b><br />OpenRouter price book matching, channel multipliers, and custom tiers</p>
+<p align="center"><b>Model pricing</b><br />OpenRouter price book matching, channel multipliers, and custom tiers</p>
 </td>
 </tr>
 <tr>

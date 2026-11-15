@@ -67,7 +67,7 @@ export const COPY = {
       nav: [
         ['Operate', [['layout-grid', 'Dashboard'], ['bot', 'Agent'], ['square-terminal', 'Playground'], ['boxes', 'Model Square']]],
         ['Gateway', [['server', 'AI providers'], ['log-in', 'OAuth management'], ['key-round', 'Key management'], ['layers', 'Routing']]],
-        ['Observe', [['chart-line', 'Insights'], ['history', 'Request Events'], ['dollar-sign', 'Cost & Usage'], ['file-text', 'Logs'], ['scroll-text', 'Audit trail']]],
+        ['Observe', [['chart-line', 'Insights'], ['history', 'Request Events'], ['dollar-sign', 'Model Pricing'], ['file-text', 'Logs'], ['scroll-text', 'Audit trail']]],
         ['Plugins', [['puzzle', 'Plugin management'], ['store', 'Plugin store']]],
         ['Control', [['sliders-horizontal', 'Config panel'], ['settings', 'OMC settings'], ['info', 'System info']]],
       ],
@@ -265,7 +265,7 @@ export const COPY = {
       nav: [
         ['运行', [['layout-grid', '仪表盘'], ['bot', '智能体'], ['square-terminal', '操练场'], ['boxes', '模型广场']]],
         ['网关', [['server', 'AI 提供商'], ['log-in', 'OAuth 管理'], ['key-round', '密钥管理'], ['layers', '路由编排']]],
-        ['观测', [['chart-line', '洞察'], ['history', '请求记录'], ['dollar-sign', '费用与用量'], ['file-text', '日志查看'], ['scroll-text', '操作审计']]],
+        ['观测', [['chart-line', '洞察'], ['history', '请求记录'], ['dollar-sign', '模型定价'], ['file-text', '日志查看'], ['scroll-text', '操作审计']]],
         ['插件', [['puzzle', '插件管理'], ['store', '插件商店']]],
         ['控制', [['sliders-horizontal', '配置面板'], ['settings', 'OMC 设置'], ['info', '系统信息']]],
       ],

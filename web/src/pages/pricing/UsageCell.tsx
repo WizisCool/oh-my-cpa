@@ -6,6 +6,8 @@ import type { PricingUsage } from '../../types/pricing';
 import { formatUsd } from '../../types/pricingDisplay';
 import styles from './PricingPage.module.css';
 import { Tooltip } from '../../components/common/Tooltip';
+import { MetaLine } from '../../components/common/MetaLine';
+import { ConfirmAction } from '../../components/common/ConfirmAction';
 
 /** The request-records dimension a row's traffic was grouped on: the model for a price, the provider for a channel. */
 export interface UsageCellScope {
@@ -25,12 +27,20 @@ export function usageRecordsLink(scope: UsageCellScope, unpricedOnly = false): s
   return `/usage/events?${params.toString()}`;
 }
 
+/** Pricing a model's unpriced requests at its current price, offered once the model has one. */
+export interface UsageCellPricing {
+  model: string;
+  isPending: boolean;
+  onConfirm: () => void;
+}
+
 /**
- * A row's traffic and spend over the book's window. Traffic with no price shows a dash for the
- * spend and counts the unpriced requests on their own line: a zero would claim those calls were
- * free, and sharing the request line made the column wrap mid-phrase.
+ * A row's traffic and spend over the book's window, in two lines: the spend, then the requests.
+ * Traffic with no price shows a dash for the spend and counts the unpriced requests beside the
+ * total, since a zero would claim those calls were free. On a model that has a price now, that
+ * count opens the offer to price them.
  */
-export function UsageCell({ usage, scope }: { usage: PricingUsage; scope?: UsageCellScope }) {
+export function UsageCell({ usage, scope, pricing }: { usage: PricingUsage; scope?: UsageCellScope; pricing?: UsageCellPricing }) {
   const t = useT();
   if (usage.requests === 0) return <span className={styles.dimmed}>{t('pricing.usage.none')}</span>;
   const unpriced = usage.requests - usage.priced_requests;
@@ -39,22 +49,45 @@ export function UsageCell({ usage, scope }: { usage: PricingUsage; scope?: Usage
   return (
     <span className={styles.usage}>
       <strong>{usage.cost_usd == null ? '—' : formatUsd(usage.cost_usd)}</strong>
-      {scope ? (
-        <Link className={styles['usage-requests']} to={usageRecordsLink(scope)}>{requests}</Link>
-      ) : (
-        <span className={styles['usage-requests']}>{requests}</span>
-      )}
-      {unpriced > 0 && (
-        <Tooltip title={t('pricing.unpriced_note')}>
-          {scope ? (
-            <Link className={styles['usage-unpriced']} to={usageRecordsLink(scope, true)} data-testid="pricing-usage-unpriced">
+      <MetaLine className={styles['usage-line']}>
+        {scope ? (
+          <Link className={styles['usage-requests']} to={usageRecordsLink(scope)}>{requests}</Link>
+        ) : (
+          <span className={styles['usage-requests']}>{requests}</span>
+        )}
+        {unpriced > 0 && pricing ? (
+          <ConfirmAction
+            title={t('pricing.reprice.confirm', { model: pricing.model })}
+            description={(
+              <>
+                {t('pricing.reprice.confirm_note')}
+                {scope && (
+                  <Link className={styles['usage-records-link']} to={usageRecordsLink(scope, true)}>
+                    {t('pricing.reprice.view')}
+                  </Link>
+                )}
+              </>
+            )}
+            confirmLabel={t('pricing.reprice.action')}
+            isConfirming={pricing.isPending}
+            onConfirm={pricing.onConfirm}
+          >
+            <button type="button" className={styles['usage-unpriced']} data-testid="pricing-usage-unpriced">
               {partial}
-            </Link>
-          ) : (
-            <span className={styles['usage-unpriced']} data-testid="pricing-usage-unpriced">{partial}</span>
-          )}
-        </Tooltip>
-      )}
+            </button>
+          </ConfirmAction>
+        ) : unpriced > 0 && (
+          <Tooltip title={t('pricing.unpriced_note')}>
+            {scope ? (
+              <Link className={styles['usage-unpriced']} to={usageRecordsLink(scope, true)} data-testid="pricing-usage-unpriced">
+                {partial}
+              </Link>
+            ) : (
+              <span className={styles['usage-unpriced']} data-testid="pricing-usage-unpriced">{partial}</span>
+            )}
+          </Tooltip>
+        )}
+      </MetaLine>
     </span>
   );
 }

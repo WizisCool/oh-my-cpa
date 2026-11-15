@@ -1,77 +1,54 @@
-import { ActionMenu } from '../../components/common/ActionMenu';
-import { MetaLine } from '../../components/common/MetaLine';
-import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Select } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
-import dayjs from '../../utils/time';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { EditOutlined, LinkOutlined, SyncOutlined } from '../../components/icons';
+import { ReceiptOutlined, SyncOutlined } from '../../components/icons';
+import { ProviderBrandIcon } from '../../components/LobeIcon';
 import { api, ApiError, describeError } from '../../api/client';
 import { useT, type TFunc } from '../../i18n';
+import dayjs from '../../utils/time';
 import { formatTimeAgo } from '../../utils/format';
-import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { useViewSearchParams } from '../../hooks/useViewSearchParams';
-import { PageHeader } from '../../components/common/PageHeader';
-import { ResponsiveList } from '../../components/common/ResponsiveList';
-import { StatusLabel, type StatusTone } from '../../components/common/StatusLabel';
-import { FactList } from '../../components/common/FactList';
-import type { PricedModel, PricingCandidate, PricingMode, PricingResponse, PricingUsage, UnpricedModel, UpstreamModel } from '../../types/pricing';
-import { formatMultiplier, formatRatePer1M, matchesModelSearch, modeOf } from '../../types/pricingDisplay';
-import { useOpenPriceEditor } from '../../components/pricing/PricingEditorContext';
-import { PRICING_QUERY_KEYS, pricingBookSwr } from '../../components/pricing/pricingQueries';
-import { invalidateSwrScopes, useSwrQuery } from '../../performance/swrContract';
-import { TierBadges } from '../../components/pricing/PricingParts';
-import { ProviderBrandIcon } from '../../components/LobeIcon';
 import { useProviderBranding } from '../../hooks/useProviderBranding';
-import { groupPricingModels, pagePricingGroups } from '../../types/pricingGroups';
-import { pricingModelIdentity, pricingProviderIdentity } from '../../components/pricing/pricingIdentity';
-import { pricingErrorText } from '../../components/pricing/pricingErrors';
-import { ChannelMultipliersPanel } from './ChannelMultipliersPanel';
-import { UsageCell } from './UsageCell';
-import styles from './PricingPage.module.css';
-import { LoadFailure, Notice, useToast } from '../../components/feedback';
+import { ActionMenu } from '../../components/common/ActionMenu';
+import { PageHeader } from '../../components/common/PageHeader';
+import { SummaryStrip } from '../../components/common/SummaryStrip';
+import { FactList } from '../../components/common/FactList';
 import { SearchInput } from '../../components/common/SearchInput';
 import { Toolbar } from '../../components/common/Toolbar';
-import { Pager } from '../../components/common/Pager';
 import { Count } from '../../components/common/Count';
-import { Tooltip } from '../../components/common/Tooltip';
-
-/** One page of the price list, shared by both renderings so a page means the same thing at either width. */
-const PAGE_SIZE = 20;
+import { confirmModal, LoadFailure, Notice, useToast } from '../../components/feedback';
+import { ConfirmAction } from '../../components/common/ConfirmAction';
+import { formatTokensFull } from '../../types/tokenDisplay';
+import { useOpenPriceEditor, useOpenPriceModel } from '../../components/pricing/PricingEditorContext';
+import { PRICING_QUERY_KEYS, pricingBookSwr } from '../../components/pricing/pricingQueries';
+import { channelIdentity } from '../../components/pricing/pricingIdentity';
+import { pricingErrorText } from '../../components/pricing/pricingErrors';
+import { invalidateSwrScopes, useSwrQuery } from '../../performance/swrContract';
+import type { PricingResponse } from '../../types/pricing';
+import {
+  BOOK_FILTERS,
+  buildPriceBook,
+  compareModelNames,
+  filterPriceBook,
+  hasUnbilledRequests,
+  priceBookCounts,
+  type BookFilter,
+  type BookRow,
+} from '../../types/pricingBook';
+import { ChannelMultipliersPanel } from './ChannelMultipliersPanel';
+import { PriceBookList, type AttentionAction } from './PriceBookList';
+import styles from './PricingPage.module.css';
 
 type PricingTab = 'models' | 'channels';
-/** `candidates` narrows to custom and linked models OpenRouter has a new price for. */
-type ModelFilter = 'all' | PricingMode | 'unpriced' | 'candidates';
 
-/** What a row's price state is, in the four words the book names: the pricing modes, plus unpriced. */
-type RowMode = PricingMode | 'unpriced';
-
-/** A row of the book: a priced model, or a current model with no price yet. */
-type BookRow = { channel?: string; channelLabel?: string; targetChannel?: string } & (
-  | (PricedModel & { rowKind: 'priced' })
-  | { rowKind: 'unpriced'; model: string; usage_30d: PricingUsage; suggestions: UpstreamModel[] });
-
-function rowMode(row: BookRow): RowMode {
-  return row.rowKind === 'unpriced' ? 'unpriced' : modeOf(row);
-}
-
-const MODE_TONES: Record<ModelFilter, StatusTone> = {
-  all: 'neutral',
-  auto: 'success',
-  linked: 'success',
-  custom: 'accent',
-  unpriced: 'warn',
-  candidates: 'accent',
-};
-
-function syncTone(data: PricingResponse | undefined): StatusTone {
-  if (!data) return 'neutral';
-  if (data.sync.running) return 'accent';
-  if (data.sync.state.last_error) return 'danger';
-  return data.sync.state.last_success_at_ms ? 'success' : 'warn';
+function syncTone(data: PricingResponse | undefined): 'healthy' | 'attention' | 'meta' {
+  if (!data || data.sync.running) return 'meta';
+  if (data.sync.state.last_error || !data.sync.state.last_success_at_ms) return 'attention';
+  return 'healthy';
 }
 
 function syncSummary(t: TFunc, data: PricingResponse | undefined): string {
@@ -82,56 +59,13 @@ function syncSummary(t: TFunc, data: PricingResponse | undefined): string {
   return success ? t('pricing.sync.synced_ago', { time: formatTimeAgo(success, Date.now(), t) }) : t('pricing.sync.never');
 }
 
-/**
- * The line a custom or linked row carries when OpenRouter has a price the operator has not answered:
- * which model, at what list rate, and the two ways to answer it.
- */
-const CandidateLine: React.FC<{
-  row: PricedModel;
-  candidate: PricingCandidate;
-  pendingAction?: 'adopt' | 'dismiss';
-  onAct: (action: 'adopt' | 'dismiss') => void;
-}> = ({ row, candidate, pendingAction, onAct }) => {
-  const t = useT();
-  const isAutomatic = candidate.kind === 'automatic';
-  const rates = `${formatRatePer1M(candidate.model.prompt_price_per_1m)} / ${formatRatePer1M(candidate.model.completion_price_per_1m)}`;
-  return (
-    <div className={styles.candidate} data-testid="pricing-row-candidate" data-kind={candidate.kind}>
-      <span className={styles['candidate-text']} data-tip={candidate.model.id}>
-        {t(isAutomatic ? 'pricing.candidate.automatic' : 'pricing.candidate.suggested', { id: candidate.model.id, rates })}
-      </span>
-      <span className={styles['candidate-actions']}>
-        <Button
-          size="sm"
-          variant="link"
-          icon={isAutomatic ? <SyncOutlined /> : <LinkOutlined />}
-          loading={pendingAction === 'adopt'}
-          disabled={pendingAction === 'dismiss'}
-          onClick={() => onAct('adopt')}
-          aria-label={`${t(isAutomatic ? 'pricing.candidate.follow' : 'pricing.attention.adopt')}: ${row.model}`}
-          data-testid="pricing-candidate-adopt"
-        >
-          {t(isAutomatic ? 'pricing.candidate.follow' : 'pricing.attention.adopt')}
-        </Button>
-        <Button
-          size="sm"
-          variant="link"
-          loading={pendingAction === 'dismiss'}
-          disabled={pendingAction === 'adopt'}
-          onClick={() => onAct('dismiss')}
-          aria-label={`${t('pricing.candidate.dismiss')}: ${row.model}`}
-          data-testid="pricing-candidate-dismiss"
-        >
-          {t('pricing.candidate.dismiss')}
-        </Button>
-      </span>
-    </div>
-  );
-};
+function isBookFilter(value: string | null): value is BookFilter {
+  return value !== null && (BOOK_FILTERS as readonly string[]).includes(value);
+}
 
 /**
  * The price book. OpenRouter prices every model it can match without the operator doing anything;
- * this page is where the rest is decided - the models that need a price, the ones an operator
+ * this page is where the rest is decided - the models waiting on an answer, the ones an operator
  * pinned or priced by hand, and the multipliers for channels that do not bill list price.
  */
 export const PricingPage: React.FC = () => {
@@ -140,16 +74,14 @@ export const PricingPage: React.FC = () => {
   const toast = useToast();
   const queryClient = useQueryClient();
   const openEditor = useOpenPriceEditor();
+  const openModel = useOpenPriceModel();
+  const branding = useProviderBranding();
   const [searchParams, setSearchParams] = useViewSearchParams();
   const tab: PricingTab = searchParams.get('tab') === 'channels' ? 'channels' : 'models';
+  const filterParam = searchParams.get('filter');
+  const filter: BookFilter = isBookFilter(filterParam) ? filterParam : 'all';
+  const channelFilter = searchParams.get('channel') ?? '';
   const [search, setSearch] = React.useState('');
-  const [filter, setFilter] = React.useState<ModelFilter>('all');
-  const [providerFilter, setProviderFilter] = React.useState('all');
-  const [page, setPage] = React.useState(1);
-  const isPhone = useIsPhoneViewport();
-  const listRef = React.useRef<HTMLElement>(null);
-  const branding = useProviderBranding();
-  React.useEffect(() => { setPage(1); }, [search, filter, providerFilter]);
 
   const result = useSwrQuery(pricingBookSwr, undefined, {
     staleTime: 30_000,
@@ -157,12 +89,23 @@ export const PricingPage: React.FC = () => {
   });
   const data = result.data;
 
+  const setParam = (key: string, value: string, emptyValue: string) => setSearchParams((current) => {
+    const params = new URLSearchParams(current);
+    if (value === emptyValue) params.delete(key);
+    else params.set(key, value);
+    return params;
+  });
+  const selectTab = (next: PricingTab) => setParam('tab', next, 'models');
+  const showChannel = (channel: string) => setSearchParams((current) => {
+    const params = new URLSearchParams(current);
+    params.delete('tab');
+    params.delete('filter');
+    params.set('channel', channel);
+    return params;
+  });
+
   const invalidate = () => {
     void invalidateSwrScopes(queryClient, 'pricing');
-  };
-  const invalidateModel = (model: string) => {
-    invalidate();
-    void queryClient.invalidateQueries({ queryKey: PRICING_QUERY_KEYS.model(model) });
   };
 
   const syncMutation = useMutation({
@@ -190,232 +133,127 @@ export const PricingPage: React.FC = () => {
     onError: (err) => toast.error(describeError(err)),
   });
 
-  // Adopting a suggestion is a link, saved in one click from its model row without opening the editor.
-  const adoptMutation = useMutation({
-    mutationFn: ({ model, upstream }: { model: string; upstream: UpstreamModel }) =>
-      api.updatePricingModel(model, { mode: 'linked', upstream_id: upstream.id }),
-    onSuccess: (_, { model, upstream }) => {
-      toast.success(t('pricing.adopted', { model, id: upstream.id }));
-      invalidate();
-    },
-    onError: (err) => toast.error(t('pricing.save_failed', { msg: pricingErrorText(t, err) })),
-  });
-
-  // A candidate is answered in its row: follow it (auto mode when it is the automatic match, a
-  // link when it only resembles the model), or ignore it until OpenRouter offers a different one.
-  // Either way the operator's channel multiplier carries over.
-  const candidateMutation = useMutation({
-    mutationFn: async ({ row, candidate, action }: { row: PricedModel; candidate: PricingCandidate; action: 'adopt' | 'dismiss' }): Promise<unknown> => {
+  // A pending row is answered in place. An unpriced model links to its suggestion; a custom or
+  // linked model follows its new match (auto mode when it is the automatic one) or ignores it
+  // until OpenRouter offers a different one. The model multiplier carries over either way.
+  const attentionMutation = useMutation({
+    mutationFn: async ({ row, action }: { row: BookRow; action: AttentionAction }): Promise<unknown> => {
+      const attention = row.attention;
+      if (!attention) return null;
+      if (attention.kind === 'suggestion') return api.updatePricingModel(row.model, { mode: 'linked', upstream_id: attention.upstream.id });
+      const { candidate } = attention;
       if (action === 'dismiss') return api.dismissPricingCandidate(row.model, candidate.model.id);
+      const multiplier = row.price?.price_multiplier;
       return candidate.kind === 'automatic'
-        ? api.updatePricingModel(row.model, { mode: 'auto', price_multiplier: row.price_multiplier })
-        : api.updatePricingModel(row.model, { mode: 'linked', upstream_id: candidate.model.id, price_multiplier: row.price_multiplier });
+        ? api.updatePricingModel(row.model, { mode: 'auto', price_multiplier: multiplier })
+        : api.updatePricingModel(row.model, { mode: 'linked', upstream_id: candidate.model.id, price_multiplier: multiplier });
     },
-    onSuccess: (_, { row, candidate, action }) => {
+    onSuccess: (_, { row, action }) => {
+      const attention = row.attention;
       if (action === 'dismiss') toast.info(t('pricing.candidate.dismissed', { model: row.model }));
-      else toast.success(t(candidate.kind === 'automatic' ? 'pricing.candidate.followed' : 'pricing.adopted', { model: row.model, id: candidate.model.id }));
-      invalidateModel(row.model);
+      else if (attention?.kind === 'candidate' && attention.candidate.kind === 'automatic') toast.success(t('pricing.candidate.followed', { model: row.model, id: attention.candidate.model.id }));
+      else if (attention) toast.success(t('pricing.adopted', { model: row.model, id: attention.kind === 'suggestion' ? attention.upstream.id : attention.candidate.model.id }));
+      invalidate();
+      void queryClient.invalidateQueries({ queryKey: PRICING_QUERY_KEYS.model(row.model) });
     },
     onError: (err, { action }) => toast.error(t(action === 'dismiss' ? 'pricing.candidate.dismiss_failed' : 'pricing.save_failed', { msg: pricingErrorText(t, err) })),
   });
 
-  const rows = React.useMemo<BookRow[]>(() => {
-    if (!data) return [];
-    const priced = data.models.map((model): BookRow => ({ ...model, rowKind: 'priced' }));
-    const unpriced = data.unpriced.map((item: UnpricedModel): BookRow => ({ rowKind: 'unpriced', ...item }));
-    return [...priced, ...unpriced];
-  }, [data]);
-
-  const allGroups = React.useMemo(() => groupPricingModels(rows, data?.providers ?? []).map(group => ({
-    ...group,
-    rows: group.rows.map((row): BookRow => {
-      const channel = group.provider?.channel;
-      const override = data?.channel_models?.find(price => price.channel === channel && price.model === row.model);
-      return override
-        ? { ...override, rowKind: 'priced', usage_30d: row.usage_30d, channelLabel: group.provider?.name }
-        : { ...row, targetChannel: channel, channelLabel: group.provider?.name };
-    }),
-  })), [rows, data?.providers, data?.channel_models]);
-
-  const counts = React.useMemo(() => {
-    const scopedRows = allGroups.flatMap(group => group.rows);
-    const result: Record<ModelFilter, number> = { all: scopedRows.length, auto: 0, linked: 0, custom: 0, unpriced: 0, candidates: 0 };
-    scopedRows.forEach((row) => {
-      result[rowMode(row)] += 1;
-      if (row.rowKind === 'priced' && row.candidate) result.candidates += 1;
-    });
-    return result;
-  }, [allGroups]);
-
-  const groups = React.useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return allGroups.map(group => ({ ...group, rows: group.rows.filter((row) => {
-      if (filter === 'candidates') {
-        if (row.rowKind !== 'priced' || !row.candidate) return false;
-      } else if (filter !== 'all' && rowMode(row) !== filter) return false;
-      if (!query) return true;
-      const upstream = row.rowKind === 'priced' ? row.upstream_id : '';
-      return matchesModelSearch(query, row.model, upstream);
-    }) })).filter(group => group.rows.length > 0);
-  }, [allGroups, search, filter]);
-  const filteredGroups = groups.filter((group) => providerFilter === 'all' || group.id === providerFilter);
-  const totalRows = filteredGroups.reduce((total, group) => total + group.rows.length, 0);
-  const safePage = Math.min(page, Math.max(1, Math.ceil(totalRows / PAGE_SIZE)));
-  const pageGroups = pagePricingGroups(filteredGroups, safePage, PAGE_SIZE);
-  const changePage = (nextPage: number) => {
-    setPage(nextPage);
-    if (listRef.current && listRef.current.getBoundingClientRect().top < 0) listRef.current.scrollIntoView({ block: 'start' });
+  const refreshSpend = (model?: string) => {
+    void invalidateSwrScopes(queryClient, ['pricing', 'usage']);
+    void queryClient.invalidateQueries({ queryKey: model ? PRICING_QUERY_KEYS.model(model) : ['pricing'] });
+    void queryClient.invalidateQueries({ queryKey: ['usage-events'] });
   };
 
-
-  const selectTab = (next: PricingTab) => setSearchParams((current) => {
-    const params = new URLSearchParams(current);
-    if (next === 'models') params.delete('tab');
-    else params.set('tab', next);
-    return params;
+  const repriceAllMutation = useMutation({
+    mutationFn: () => api.priceAllUnpricedUsage(),
+    onSuccess: ({ priced }) => {
+      if (priced > 0) toast.success(t('pricing.reprice_all.done', { n: priced }));
+      else toast.info(t('pricing.reprice_all.none'));
+      refreshSpend();
+    },
+    onError: (err) => toast.error(t('pricing.reprice.failed', { msg: pricingErrorText(t, err) })),
   });
 
-  const priceColumns = [
-    {
-      title: t('pricing.col.model'),
-      key: 'model',
-      render: (_: unknown, row: BookRow) => (
-        <div className={styles['model-cell']}>
-          <div className={styles['model-text']}>
-            {row.channel && <span className={styles['model-sub']}>{t('pricing.scope.channel_named', { channel: row.channelLabel || row.channel })}</span>}
-            {row.targetChannel && row.rowKind === 'priced' && <span className={styles['model-sub']}>{t('pricing.scope.inherited')}</span>}
-            <span className={styles['model-name']} data-tip={row.model} data-tip-overflow="">{pricingModelIdentity(row.model).label}</span>
-            {row.rowKind === 'priced' ? (
-              <span className={styles['model-sub']}>
-                {row.upstream_id || (row.source === 'modelsdev' ? t('pricing.source.modelsdev') : t('pricing.source.manual'))}
-              </span>
-            ) : null}
-            {row.rowKind === 'priced' && <TierBadges tiers={row.tiers} />}
-            {row.rowKind === 'priced' && row.candidate && (
-              <CandidateLine
-                row={row}
-                candidate={row.candidate}
-                pendingAction={candidateMutation.isPending && candidateMutation.variables?.row.model === row.model ? candidateMutation.variables.action : undefined}
-                onAct={(action) => row.candidate && candidateMutation.mutate({ row, candidate: row.candidate, action })}
-              />
-            )}
-            {row.rowKind === 'unpriced' && row.suggestions[0] && (
-              <div className={styles['suggestion']}>
-                <span className={styles['model-sub']} data-tip={row.suggestions[0].id}>
-                  {t('pricing.attention.suggestion', { id: row.suggestions[0].id })}
-                </span>
-                <Button
-                  size="sm"
-                  variant="link"
-                  icon={<LinkOutlined />}
-                  loading={adoptMutation.isPending && adoptMutation.variables?.model === row.model}
-                  onClick={() => adoptMutation.mutate({ model: row.model, upstream: row.suggestions[0] })}
-                  data-testid="pricing-row-adopt"
-                >
-                  {t('pricing.attention.adopt')}
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-      ),
+  // Pricing a model's unpriced requests changes recorded spend, so every usage read refreshes.
+  const repriceMutation = useMutation({
+    mutationFn: (model: string) => api.priceUnpricedUsage(model),
+    onSuccess: ({ priced }, model) => {
+      if (priced > 0) toast.success(t('pricing.reprice.done', { model, n: priced }));
+      else toast.info(t('pricing.reprice.none', { model }));
+      refreshSpend(model);
     },
-    {
-      title: t('pricing.col.input'),
-      key: 'input',
-      align: 'right' as const,
-      width: 104,
-      render: (_: unknown, row: BookRow) => (row.rowKind === 'priced'
-        ? <span className={styles.rate}>{formatRatePer1M(row.prompt_price_per_1m)}</span>
-        : <span className={styles.dimmed}>—</span>),
-    },
-    {
-      title: t('pricing.col.output'),
-      key: 'output',
-      align: 'right' as const,
-      width: 104,
-      render: (_: unknown, row: BookRow) => (row.rowKind === 'priced'
-        ? <span className={styles.rate}>{formatRatePer1M(row.completion_price_per_1m)}</span>
-        : <span className={styles.dimmed}>—</span>),
-    },
-    {
-      title: t('pricing.col.cache'),
-      key: 'cache',
-      align: 'right' as const,
-      width: 150,
-      render: (_: unknown, row: BookRow) => (row.rowKind === 'priced' ? (
-        <span className={styles.rate}>
-          {formatRatePer1M(row.cache_read_price_per_1m)}
-          <span className={styles.dimmed}> / </span>
-          {formatRatePer1M(row.cache_write_price_per_1m)}
-        </span>
-      ) : <span className={styles.dimmed}>—</span>),
-    },
-    {
-      title: t('pricing.col.pricing'),
-      key: 'mode',
-      width: 150,
-      render: (_: unknown, row: BookRow) => {
-        const mode = rowMode(row);
-        return (
-          <div className={styles['mode-cell']}>
-            <Tooltip title={mode === 'unpriced' ? t('pricing.unpriced_note') : undefined}>
-            <StatusLabel tone={MODE_TONES[mode]}>
-              {row.rowKind === 'priced' && row.source === 'modelsdev' ? t('pricing.mode.legacy') : t(`pricing.mode.${mode}`)}
-            </StatusLabel>
-            </Tooltip>
-            {row.rowKind === 'priced' && (mode === 'auto' && row.match_kind && row.match_kind !== 'exact' || row.price_multiplier !== 1) && (
-              <MetaLine className={styles['model-sub']}>
-                {mode === 'auto' && row.match_kind && row.match_kind !== 'exact' ? t(`pricing.match.${row.match_kind}`) : ''}
-                {row.price_multiplier !== 1 ? formatMultiplier(row.price_multiplier) : ''}
-              </MetaLine>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      title: t('pricing.col.usage'),
-      key: 'usage',
-      align: 'right' as const,
-      width: 150,
-      render: (_: unknown, row: BookRow) => <UsageCell usage={row.usage_30d} scope={{ key: 'model', value: row.model }} />,
-    },
-    {
-      title: t('common.actions'),
-      key: 'actions',
-      width: 150,
-      align: 'right' as const,
-      render: (_: unknown, row: BookRow) => (
-        <div className="row-actions">
-          <Tooltip title={row.rowKind === 'priced' ? t('pricing.edit') : t('pricing.set_price')}>
-            <Button
-              size="sm"
-              variant="ghost" className="row-action-btn"
-              icon={<EditOutlined />}
-              onClick={() => openEditor?.(row.model, { channel: row.channel, channelLabel: row.channelLabel })}
-              aria-label={`${row.rowKind === 'priced' ? t('pricing.edit') : t('pricing.set_price')}: ${row.model}`}
-              data-testid="pricing-row-edit"
-            />
-          </Tooltip>
-          {row.targetChannel && <Button variant="ghost" size="sm" onClick={() => openEditor?.(row.model, { channel: row.targetChannel, channelLabel: row.channelLabel })} data-testid="pricing-channel-model-edit">
-            {t('pricing.scope.channel')}
-          </Button>}
-          {row.channel && <Button variant="ghost" size="sm" onClick={() => openEditor?.(row.model)} data-testid="pricing-shared-model-edit">
-            {t('pricing.scope.shared')}
-          </Button>}
-        </div>
-      ),
-    },
-  ];
+    onError: (err) => toast.error(t('pricing.reprice.failed', { msg: pricingErrorText(t, err) })),
+  });
 
-  const modelTotal = counts.all;
-  const pricedTotal = counts.all - counts.unpriced;
-  const subtitle = data
-    ? t('pricing.coverage', { priced: pricedTotal, total: modelTotal })
-    : undefined;
+  const book = React.useMemo(() => (data ? buildPriceBook(data) : []), [data]);
+  const counts = React.useMemo(() => priceBookCounts(book), [book]);
+  // A filter with nothing left in it - every unbilled request priced - steps back to all models
+  // rather than holding the operator on an empty list.
+  const isFilterEmpty = Boolean(data) && filter !== 'all' && counts[filter] === 0;
+  const activeFilter: BookFilter = isFilterEmpty ? 'all' : filter;
+  React.useEffect(() => {
+    if (isFilterEmpty) setParam('filter', 'all', 'all');
+  }, [isFilterEmpty]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rows = React.useMemo(() => filterPriceBook(book, { filter: activeFilter, channel: channelFilter, search }), [book, activeFilter, channelFilter, search]);
+  const billable = book.filter((row) => hasUnbilledRequests(row) && (row.price || row.channelPrices.length > 0));
+  const billableRequests = billable.reduce((sum, row) => sum + row.usage.requests - row.usage.priced_requests, 0);
+  const confirmRepriceAll = () => {
+    confirmModal({
+      title: t('pricing.reprice_all.final'),
+      content: t('pricing.reprice_all.final_note'),
+      okText: t('pricing.reprice_all.action'),
+      danger: true,
+      onOk: () => repriceAllMutation.mutate(),
+    });
+  };
+  const channelLabel = React.useCallback((channel: string) => channelIdentity(channel, data?.providers, branding).label, [data?.providers, branding]);
+  const channelOptions = React.useMemo(() => {
+    const channels = new Set(book.flatMap((row) => [...row.channels, ...row.channelPrices.map((price) => price.channel ?? '')]));
+    if (channelFilter) channels.add(channelFilter);
+    channels.delete('');
+    return [...channels]
+      .map((channel) => ({ channel, identity: channelIdentity(channel, data?.providers, branding) }))
+      .sort((left, right) => compareModelNames(left.identity.label, right.identity.label))
+      .map(({ channel, identity }) => ({
+        value: channel,
+        title: identity.label,
+        searchText: identity.label,
+        label: (
+          <span className={styles['channel-option']}>
+            <ProviderBrandIcon mark={identity} size={16} />
+            <span>{identity.label}</span>
+          </span>
+        ),
+      }));
+  }, [book, channelFilter, data?.providers, branding]);
+  const candidates = book.filter((row) => row.attention?.kind === 'candidate').length;
 
-  const syncPopover = (
+  const summary = data && (
+    <SummaryStrip>
+      <SummaryStrip.Total testId="pricing-model-count">{t('pricing.summary.models', { n: counts.all })}</SummaryStrip.Total>
+      <SummaryStrip.Divider />
+      <SummaryStrip.Item tone="healthy">{t('pricing.summary.priced', { n: counts.all - counts.unpriced })}</SummaryStrip.Item>
+      {counts.unpriced > 0 && (
+        <>
+          <SummaryStrip.Divider />
+          <SummaryStrip.Item tone="attention">{t('pricing.summary.unpriced', { n: counts.unpriced })}</SummaryStrip.Item>
+        </>
+      )}
+      {candidates > 0 && (
+        <>
+          <SummaryStrip.Divider />
+          <SummaryStrip.Item tone="attention">{t('pricing.summary.candidates', { n: candidates })}</SummaryStrip.Item>
+        </>
+      )}
+      <SummaryStrip.Divider />
+      <SummaryStrip.Item tone={syncTone(data)} testId="pricing-sync-summary">
+        {t('pricing.sync.source_name')} {syncSummary(t, data)}
+      </SummaryStrip.Item>
+    </SummaryStrip>
+  );
+
+  const syncPanel = (
     <div className={styles['sync-popover']} data-testid="pricing-sync-popover">
       <FactList
         emphasis="quiet"
@@ -463,85 +301,88 @@ export const PricingPage: React.FC = () => {
     </div>
   );
 
+  const tabs = (
+    <Segmented<PricingTab>
+      value={tab}
+      onChange={selectTab}
+      options={[
+        { value: 'models', label: t('pricing.tab.models') },
+        { value: 'channels', label: t('pricing.tab.channels') },
+      ]}
+    />
+  );
+
   return (
     <div className="terminal-page terminal-page-stack" data-testid="pricing-page">
       <PageHeader
         title={t('pricing.title')}
-        subtitle={subtitle}
         mobileActions={(
           <>
-            <Segmented value={tab} onChange={(value) => selectTab(value as PricingTab)} options={[
-              { value: 'models', label: t('pricing.tab.models') }, { value: 'channels', label: t('pricing.tab.channels') },
-            ]} />
-            <ActionMenu>
-              <span className="action-menu-label">{t('pricing.sync.title')}: <StatusLabel tone={syncTone(data)}>{syncSummary(t, data)}</StatusLabel></span>
-              {syncPopover}
+            {tabs}
+            <ActionMenu label={t('pricing.sync.title')}>
+              {syncPanel}
             </ActionMenu>
           </>
         )}
         actions={(
           <>
-            <Segmented
-              value={tab}
-              onChange={(value) => selectTab(value as PricingTab)}
-              options={[
-                { value: 'models', label: t('pricing.tab.models') },
-                { value: 'channels', label: t('pricing.tab.channels') },
-              ]}
-            />
+            {tabs}
             <Popover>
               <PopoverTrigger
-                render={
-                  <Button className={styles['sync-button']} data-testid="pricing-sync-status">
-                    <span className={styles['sync-source']}>{t('pricing.sync.source_name')}</span>
-                    <StatusLabel tone={syncTone(data)}>{syncSummary(t, data)}</StatusLabel>
-                  </Button>
-                }
+                render={(
+                  <Button
+                    icon={<SyncOutlined spin={Boolean(data?.sync.running)} />}
+                    aria-label={t('pricing.sync.title')}
+                    data-testid="pricing-sync-status"
+                  />
+                )}
               />
               <PopoverContent placement="bottomRight">
                 <PopoverTitle className="m-0 mb-2 text-base font-semibold text-foreground">
                   {t('pricing.sync.title')}
                 </PopoverTitle>
-                {syncPopover}
+                {syncPanel}
               </PopoverContent>
             </Popover>
           </>
         )}
-      />
+      >
+        {summary}
+      </PageHeader>
 
       {result.isError && (
         <LoadFailure title={t('pricing.load_error')} error={result.error} onRetry={invalidate} />
       )}
 
       {tab === 'models' ? (
-        <section className={styles.workbench} data-testid="pricing-model-list" ref={listRef}>
-          <Toolbar className={styles.toolbar}>
-            <Segmented<ModelFilter>
-              className="scroll-fade-x"
-              value={filter}
-              onChange={setFilter}
-              options={(['all', 'auto', 'linked', 'custom', 'unpriced', 'candidates'] as const)
-                .filter((value) => value === 'all' || value === filter || counts[value] > 0)
-                .map((value) => ({
-                  value,
-                  label: (
-                    <span className={styles['filter-option']}>
-                      {value === 'all' ? t('common.all') : value === 'candidates' ? t('pricing.candidate.filter') : t(`pricing.mode.${value}`)}
-                      <Count size="small">{counts[value]}</Count>
-                    </span>
-                  ),
-                }))}
-            />
-            <Select
-              className={styles['provider-filter']}
-              value={providerFilter}
-              onChange={setProviderFilter}
-              aria-label={t('pricing.provider.filter')}
-              options={[
-                { value: 'all', label: t('pricing.provider.all') },
-                ...allGroups.map((group) => ({ value: group.id, label: group.provider ? pricingProviderIdentity(group.provider, branding).label : t('pricing.provider.unassigned') })),
-              ]}
-            />
+        <section className={styles.workbench} data-testid="pricing-model-list">
+          <Toolbar
+            end={(
+              <>
+                <span className={styles.unit}>{t('pricing.unit')}</span>
+                <Select
+                  className={styles['channel-filter']}
+                  value={channelFilter}
+                  onChange={(value: string) => setParam('channel', value, '')}
+                  aria-label={t('pricing.channel_filter.label')}
+                  options={[{ value: '', label: t('pricing.channel_filter.all') }, ...channelOptions]}
+                />
+                {activeFilter === 'unbilled' && billable.length > 0 && (
+                  <ConfirmAction
+                    title={t('pricing.reprice_all.confirm', { models: billable.length, n: formatTokensFull(billableRequests) })}
+                    description={t('pricing.reprice_all.confirm_note')}
+                    confirmLabel={t('pricing.reprice_all.action')}
+                    placement="bottomRight"
+                    onConfirm={confirmRepriceAll}
+                  >
+                    <Button icon={<ReceiptOutlined />} loading={repriceAllMutation.isPending} data-testid="pricing-reprice-all">
+                      {t('pricing.reprice_all.action')}
+                    </Button>
+                  </ConfirmAction>
+                )}
+              </>
+            )}
+          >
             <SearchInput
               data-testid="pricing-search"
               className={styles.search}
@@ -549,54 +390,51 @@ export const PricingPage: React.FC = () => {
               value={search}
               onChange={setSearch}
             />
-          </Toolbar>
-          {pageGroups.length === 0 && (
-            <ResponsiveList<BookRow>
-              columns={priceColumns} dataSource={[]} rowKey="model"
-              isLoading={result.isLoading} isBlocked={result.isError && !data}
-              emptyText={rows.length === 0 ? t('pricing.table.empty') : t('pricing.table.empty_filter')}
-              phone={{ identity: 'model', actions: ['actions'] }} tableProps={{ size: 'small' }}
+            <Segmented<BookFilter>
+              className={styles.filters}
+              aria-label={t('pricing.filter.label')}
+              value={activeFilter}
+              onChange={(value) => setParam('filter', value, 'all')}
+              options={BOOK_FILTERS
+                .filter((value) => value === 'all' || counts[value] > 0)
+                .map((value) => ({
+                  value,
+                  label: (
+                    <span className={styles['filter-option']} data-testid={`pricing-filter-${value}`}>
+                      {value === 'all' ? t('common.all') : value === 'unbilled' ? t('pricing.filter.unbilled') : t(`pricing.mode.${value}`)}
+                      <Count size="small">{counts[value]}</Count>
+                    </span>
+                  ),
+                }))}
             />
-          )}
-          {pageGroups.map((group, groupIndex) => {
-            const identity = group.provider ? pricingProviderIdentity(group.provider, branding) : null;
-            return (
-              <section key={group.id} className={styles['provider-group']} data-testid="pricing-provider-group" aria-label={identity?.label ?? t('pricing.provider.unassigned')}>
-                <header className={styles['provider-heading']}>
-                  {group.provider && <ProviderBrandIcon mark={identity!} size={20} />}
-                  <h2>{identity?.label ?? t('pricing.provider.unassigned')}</h2>
-                  {group.provider && (
-                    <MetaLine className={styles.dimmed}>
-                      {group.provider.is_oauth ? t('pricing.provider.oauth') : t('pricing.provider.api')}
-                      {t('omc.priority_value', { n: group.provider.priority })}
-                    </MetaLine>
-                  )}
-                </header>
-                {/* The columns are the same fixed set in every group, so their names are drawn
-                    once, above the first group; repeating them per provider put a header row
-                    beside every one-model group and doubled the page's height. Later groups
-                    keep their header row for assistive technology, visually hidden. */}
-                <ResponsiveList<BookRow>
-                  columns={priceColumns} dataSource={group.rows} rowKey={row => JSON.stringify([row.channel, row.model])}
-                  isLoading={result.isLoading} isBlocked={result.isError && !data}
-                  emptyText={t('pricing.table.empty_filter')}
-                  isFilterAnimated
-                  phone={{ identity: 'model', actions: ['actions'] }} tableProps={{ size: 'small', className: groupIndex === 0 ? undefined : 'data-table-head-hidden' }}
-                />
-              </section>
-            );
-          })}
-          {totalRows > 0 && (
-            <nav className={styles['pagination-bar']} aria-label={t('pricing.pagination.label')} data-testid="pricing-pagination">
-              <span className={styles['pagination-range']} aria-live="polite" aria-atomic="true">
-                {t('pricing.pagination.range', { start: (safePage - 1) * PAGE_SIZE + 1, end: Math.min(safePage * PAGE_SIZE, totalRows), total: totalRows })}
-              </span>
-              <Pager page={safePage} pageSize={PAGE_SIZE} total={totalRows} onChange={changePage} variant={isPhone ? 'stepped' : 'numbered'} />
-            </nav>
-          )}
+          </Toolbar>
+          <PriceBookList
+            rows={rows}
+            isLoading={result.isLoading}
+            isBlocked={result.isError && !data}
+            emptyText={book.length === 0 ? t('pricing.table.empty') : t('pricing.table.empty_filter')}
+            pageResetKey={`${activeFilter}\n${channelFilter}\n${search}`}
+            openModel={openModel}
+            channelLabel={channelLabel}
+            pendingAction={attentionMutation.isPending && attentionMutation.variables
+              ? { model: attentionMutation.variables.row.model, action: attentionMutation.variables.action }
+              : null}
+            pricingModel={repriceMutation.isPending ? repriceMutation.variables ?? null : null}
+            onOpen={(model) => openEditor?.(model)}
+            onAttention={(row, action) => attentionMutation.mutate({ row, action })}
+            onPriceUnpriced={(model) => repriceMutation.mutate(model)}
+          />
         </section>
       ) : (
-        <ChannelMultipliersPanel providers={data?.providers ?? []} branding={branding} channels={data?.channels ?? []} isLoading={result.isLoading} isBlocked={result.isError && !data} />
+        <ChannelMultipliersPanel
+          providers={data?.providers ?? []}
+          branding={branding}
+          channels={data?.channels ?? []}
+          ownPrices={data?.channel_models ?? []}
+          isLoading={result.isLoading}
+          isBlocked={result.isError && !data}
+          onShowModels={showChannel}
+        />
       )}
     </div>
   );

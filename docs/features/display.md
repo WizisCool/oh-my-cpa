@@ -5,7 +5,7 @@
 **OMC Settings → Data display → Display currency** converts
 Dashboard, Request Records and Insights readouts using cached Frankfurter USD-base
 exchange rates (`api.frankfurter.dev`, refreshed daily or on demand and persisted in
-`exchange_rate_cache`). Cost & Usage, price editing and stored accounting remain in USD.
+`exchange_rate_cache`). Model Pricing, price editing and stored accounting remain in USD.
 
 ## TPS calculation
 

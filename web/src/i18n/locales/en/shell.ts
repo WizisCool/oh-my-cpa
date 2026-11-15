@@ -124,7 +124,7 @@ export default {
   'nav.logs': 'Logs',
   'nav.audit': 'Audit trail',
   'nav.usage_events': 'Request Events',
-  'nav.pricing': 'Cost & Usage',
+  'nav.pricing': 'Model Pricing',
   'nav.config': 'Config',
   'nav.omc_settings': 'OMC Settings',
   'nav.plugins': 'Plugin management',

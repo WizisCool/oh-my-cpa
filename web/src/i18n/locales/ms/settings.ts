@@ -60,7 +60,7 @@ export default {
   "omc.sidebar_hidden_count": "{n} disembunyikan",
   "omc.sidebar_all_shown": "Semua entri dipaparkan",
   "omc.display_currency": "Mata wang paparan",
-  "omc.display_currency_desc": "Digunakan pada papan pemuka, rekod permintaan dan Wawasan. Kos & Penggunaan serta perakaunan kekal dalam USD.",
+  "omc.display_currency_desc": "Digunakan pada papan pemuka, rekod permintaan dan Wawasan. Harga Model serta perakaunan kekal dalam USD.",
   "omc.exchange_rate": "Ditukar pada 1 USD = {value} (kadar {date})",
   "omc.exchange_empty": "Kemas kini kadar untuk memilih mata wang lain.",
   "omc.exchange_refresh": "Kemas kini kadar",
