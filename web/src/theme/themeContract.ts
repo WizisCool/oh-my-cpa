@@ -7,7 +7,7 @@ export type LocalizedThemeText = string | Readonly<Record<string, string>>;
 /**
  * Optional override for filled primary action surfaces (`--primary*`).
  *
- * When omitted, `derivePalette` derives `primary` from the accent ladder. When provided as a
+ * When omitted, `derivePalette` fills `primary` with the palette's own ink (`fg`, labelled in `bg`). When provided as a
  * single hex string, `derivePalette` solves hover, active and contrast-safe label ink (>= 4.5:1)
  * from that fill. When provided as an object, explicit states are used and missing states/ink are
  * solved with the same 4.5:1 floor.
@@ -38,7 +38,7 @@ export interface ThemeSemanticOverrides {
  *
  * Designed so external authors never touch OMC internals or locale catalogues: nine `core` hex
  * tokens guarantee a complete 35-token derived palette, while `overrides` lets a theme separate
- * its primary action surface (for example shadcn-style graphite ink buttons) from its signal accent.
+ * its primary action surface from the default ink (for example a brand-coloured fill).
  */
 export interface OMCThemeManifest {
   schemaVersion: 1;

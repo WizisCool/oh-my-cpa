@@ -1074,8 +1074,7 @@
   font-size: var(--text-lg);
 }
 
-/* Send and stop: the one filled shape in the frame, on the fill every primary action uses
-   (`--accent-hover`, the step `colorPrimary` maps to), so each palette colours it. */
+/* Send and stop: the one filled shape in the frame, the same ink key every primary action is. */
 .send-button {
   flex-shrink: 0;
   display: inline-flex;
@@ -1086,7 +1085,8 @@
   padding: 0;
   border: 0;
   border-radius: var(--radius-md);
-  background: var(--primary);
+  background: var(--primary) var(--primary-sheen);
+  box-shadow: var(--shadow-primary);
   color: var(--primary-on);
   font-size: var(--text-lg);
   cursor: pointer;
@@ -1094,7 +1094,7 @@
 }
 
 .send-button:hover {
-  background: var(--primary-hover);
+  background-color: var(--primary-hover);
 }
 
 .send-button:active {

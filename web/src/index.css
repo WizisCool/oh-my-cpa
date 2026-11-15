@@ -90,6 +90,7 @@
   --shadow-float: var(--shadow-float);
   --shadow-overlay: var(--shadow-overlay);
   --shadow-control: var(--shadow-control);
+  --shadow-primary: var(--shadow-primary);
   --shadow-well: var(--shadow-well);
   --shadow-field-hover: var(--shadow-field-hover);
   --shadow-field-focus: var(--shadow-field-focus);
@@ -138,14 +139,11 @@
   --meta: #56565a;
   --border: #2b2b2d;
   --border-soft: #212122;
-  /* Accent ladder, hue 201. The link step is the bright one because it sits on the dark
-     background (6.74:1); the two deeper steps are what white label text can sit on (4.69:1 resting,
-     6.93:1 pressed). Both are measured against the *same* label, which is why the ladder solves them
-     together rather than one at a time. */
-  --primary: #0579bd;
-  --primary-hover: #025e94;
-  --primary-active: #034873;
-  --primary-on: #ffffff;
+  /* The filled action is the palette's ink with the page as its label; the accent stays a signal. */
+  --primary: #e3e3e4;
+  --primary-hover: #cbcbcc;
+  --primary-active: #b9b9ba;
+  --primary-on: #131314;
   --accent: #00a2fb;
   --accent-hover: #0579bd;
   --accent-active: #025e94;
@@ -304,6 +302,15 @@
     inset 0 1px 0 color-mix(in srgb, var(--fg) 6%, transparent),
     0 1px 2px color-mix(in srgb, var(--shade) 30%, transparent);
   --well-drop: inset 0 1px 2px color-mix(in srgb, var(--shade) 28%, transparent);
+  /* The ink button is a solid key: light catches its top lip, its foot sits in its own shadow and it
+     rests on the page with the control drop. White and shade work on either ink, so one recipe holds
+     for a dark face on a light page and a light face on a dark one. The sheen fades out above the
+     label, so it never thins a fill and label pair the palette solved for contrast. */
+  --primary-sheen: linear-gradient(to bottom, rgb(255 255 255 / 0.07), transparent 30%);
+  --shadow-primary:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    inset 0 -1px 0 color-mix(in srgb, var(--shade) 22%, transparent),
+    var(--control-drop);
   /* A chosen thing is picked up, never outlined: it rests at the raised step, its face takes one tone
      toward the light (`--select-surface`), and its edge catches that light at half again the lift
      ring, so a selected card reads as the one surface standing slightly forward rather than as a
@@ -441,13 +448,10 @@
   --fg-2: #525255;
   --muted: #78787c;
   --meta: #9b9b9e;
-  /* The same hue a step darker, because the bright accent cannot be legible on a light page: it
-     reads 2.71:1 there, while this reads 6.57:1 as a link and 7.09:1 under white text. The dark
-     theme's link step is therefore this theme's filled-control step. */
-  --primary: #1c6ba3;
-  --primary-hover: #175e90;
-  --primary-active: #13517d;
-  --primary-on: #ffffff;
+  --primary: #1e1e20;
+  --primary-hover: #303032;
+  --primary-active: #3f3f41;
+  --primary-on: #f7f7f8;
   --accent: #1c6ba3;
   --accent-hover: #015589;
   --accent-active: #02456f;

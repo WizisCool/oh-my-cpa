@@ -627,44 +627,53 @@ function accentLadder(mode: ThemeMode, accent: string): { hover: string; active:
   return { hover: withLightness(accent, end), active: withLightness(accent, end), ink: best.ink };
 }
 
+/** How far a pressed ink surface travels back toward the page, so hover and press read as give. */
+const INK_STEP = { hover: 0.1, active: 0.18 } as const;
+
+type PrimarySurface = { primary: string; primaryHover: string; primaryActive: string; primaryOn: string };
+
+/** Solves states and label for one fill hex, keeping the hex itself when it can hold a label. */
+function solvePrimaryFill(mode: ThemeMode, fill: string): PrimarySurface {
+  const solved = accentLadder(mode, fill);
+  const further = accentLadder(mode, solved.hover);
+  // If the supplied hex itself clears 4.6:1 with one ink alongside its stepped hover/active, keep it as the resting fill.
+  const directStep = oklchLightness(fill) > 0.5
+    ? { hover: withLightness(fill, Math.max(0, oklchLightness(fill) - 0.06)), active: withLightness(fill, Math.max(0, oklchLightness(fill) - 0.12)) }
+    : { hover: withLightness(fill, Math.min(1, oklchLightness(fill) + 0.06)), active: withLightness(fill, Math.min(1, oklchLightness(fill) + 0.12)) };
+  const directInk = bestInkAcross([fill, directStep.hover, directStep.active]);
+  if (directInk.ratio >= LABEL_CONTRAST_TARGET) {
+    return {
+      primary: fill,
+      primaryHover: directStep.hover,
+      primaryActive: directStep.active,
+      primaryOn: directInk.ink,
+    };
+  }
+  return {
+    primary: solved.hover,
+    primaryHover: solved.active,
+    primaryActive: further.active,
+    primaryOn: solved.ink,
+  };
+}
+
 function resolvePrimarySurface(
   mode: ThemeMode,
-  defaultLadder: { hover: string; active: string; ink: string },
+  core: ThemeCore,
   override: string | ThemePrimaryOverride | undefined,
-): { primary: string; primaryHover: string; primaryActive: string; primaryOn: string } {
+): PrimarySurface {
   if (!override) {
-    // Default for 9-token custom palettes: primary buttons use the solved accent ladder.
-    const further = accentLadder(mode, defaultLadder.hover);
-    return {
-      primary: defaultLadder.hover,
-      primaryHover: defaultLadder.active,
-      primaryActive: further.active,
-      primaryOn: defaultLadder.ink,
-    };
-  }
-  if (typeof override === 'string') {
-    const solved = accentLadder(mode, override);
-    const further = accentLadder(mode, solved.hover);
-    // If the supplied hex itself clears 4.6:1 with one ink alongside its stepped hover/active, keep it as the resting fill.
-    const directStep = oklchLightness(override) > 0.5
-      ? { hover: withLightness(override, Math.max(0, oklchLightness(override) - 0.06)), active: withLightness(override, Math.max(0, oklchLightness(override) - 0.12)) }
-      : { hover: withLightness(override, Math.min(1, oklchLightness(override) + 0.06)), active: withLightness(override, Math.min(1, oklchLightness(override) + 0.12)) };
-    const directInk = bestInkAcross([override, directStep.hover, directStep.active]);
-    if (directInk.ratio >= LABEL_CONTRAST_TARGET) {
-      return {
-        primary: override,
-        primaryHover: directStep.hover,
-        primaryActive: directStep.active,
-        primaryOn: directInk.ink,
-      };
+    // The filled action is the palette's own ink with the page as its label: the accent stays a
+    // signal (links, focus, selection) instead of painting the one button that must carry weight.
+    const hover = mixOklch(core.fg, core.bg, INK_STEP.hover);
+    const active = mixOklch(core.fg, core.bg, INK_STEP.active);
+    if ([core.fg, hover, active].every((step) => contrastRatio(core.bg, step) >= LABEL_CONTRAST_TARGET)) {
+      return { primary: core.fg, primaryHover: hover, primaryActive: active, primaryOn: core.bg };
     }
-    return {
-      primary: solved.hover,
-      primaryHover: solved.active,
-      primaryActive: further.active,
-      primaryOn: solved.ink,
-    };
+    // An ink too faint to carry the page as its label on hover and press is solved as a fill.
+    return solvePrimaryFill(mode, core.fg);
   }
+  if (typeof override === 'string') return solvePrimaryFill(mode, override);
   const fillL = oklchLightness(override.fill);
   const hover = override.hover ?? withLightness(override.fill, fillL > 0.5 ? Math.max(0, fillL - 0.06) : Math.min(1, fillL + 0.06));
   const active = override.active ?? withLightness(override.fill, fillL > 0.5 ? Math.max(0, fillL - 0.12) : Math.min(1, fillL + 0.12));
@@ -725,7 +734,7 @@ export function derivePalette(
   const thumbBg = deriveThumbBg(mode, core);
   const borderSoft = standOff(core.bg, mixOklch(core.bg, core.border, blend.borderSoft), core.fg, BORDER_SOFT_FLOOR);
   const ladder = accentLadder(mode, core.accent);
-  const primarySurface = resolvePrimarySurface(mode, ladder, overrides?.primary);
+  const primarySurface = resolvePrimarySurface(mode, core, overrides?.primary);
   const canvasBlend = CANVAS_BLEND[mode];
   const reference = getBuiltInPalette(SIGNAL_REFERENCE[mode]).core;
   const referenceHover = mixOklch(reference.bg, reference.fg, blend.hover);
@@ -834,9 +843,6 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
       border: '#dcdcde',
       accent: '#1c6ba3',
     },
-    overrides: {
-      primary: { fill: '#1c6ba3', hover: '#175e90', active: '#13517d', ink: '#ffffff' },
-    },
   },
   {
     id: 'pewter',
@@ -853,9 +859,6 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
       meta: '#666f7d',
       border: '#363d49',
       accent: '#6ea3f0',
-    },
-    overrides: {
-      primary: { fill: '#355f99', hover: '#3f6fb0', active: '#2b4d7d', ink: '#f5f8fc' },
     },
   },
   {
@@ -874,9 +877,6 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
       border: '#d3dbe3',
       accent: '#245399',
     },
-    overrides: {
-      primary: { fill: '#245399', hover: '#1c427a', active: '#15325e', ink: '#ffffff' },
-    },
   },
   {
     id: 'forest',
@@ -894,9 +894,6 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
       border: '#293a2f',
       accent: '#7bd4a4',
     },
-    overrides: {
-      primary: { fill: '#23593e', hover: '#2b6b4b', active: '#1c4731', ink: '#edf5ef' },
-    },
   },
   {
     id: 'sandstone',
@@ -913,9 +910,6 @@ export const BUILT_IN_PALETTES: readonly BuiltInPalette[] = [
       meta: '#9b8f7d',
       border: '#ded3c0',
       accent: '#0f6d66',
-    },
-    overrides: {
-      primary: { fill: '#135953', hover: '#0e4742', active: '#0a3834', ink: '#fffcf5' },
     },
   },
 ];
