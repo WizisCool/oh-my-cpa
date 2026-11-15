@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -269,5 +270,96 @@ func TestImageModelDoesNotMatchChatImageSibling(t *testing.T) {
 	withoutImage := NewCatalog([]UpstreamModel{chat}, time.Now())
 	if match, ok := withoutImage.MatchModel("gpt-image-2"); ok {
 		t.Fatalf("image generator matched a chat model: %+v", match)
+	}
+}
+
+func TestDecodeOpenRouterMetadataFields(t *testing.T) {
+	body := []byte(`{"data":[
+		{
+			"id":"deepseek/deepseek-r1",
+			"canonical_slug":"deepseek/deepseek-r1-20260101",
+			"name":"DeepSeek R1",
+			"description":"  Reasoning flagship model  ",
+			"context_length":163840,
+			"top_provider":{"max_completion_tokens":32768},
+			"architecture":{"input_modalities":["text","image","text"," "],"output_modalities":["text"]},
+			"supported_parameters":["tools","reasoning","structured_outputs","tools"],
+			"reasoning":{"mandatory":true,"default_enabled":true,"supported_efforts":["low","medium","high"],"default_effort":"high"},
+			"knowledge_cutoff":" 2025-12 ",
+			"hugging_face_id":" deepseek-ai/DeepSeek-R1 ",
+			"pricing":{"prompt":"0.000001","completion":"0.000002"}
+		},
+		{
+			"id":"vendor/plain-model",
+			"name":"Plain Model",
+			"description":null,
+			"context_length":8192,
+			"top_provider":{"max_completion_tokens":-5},
+			"architecture":{"input_modalities":null,"output_modalities":["text"]},
+			"supported_parameters":null,
+			"reasoning":null,
+			"knowledge_cutoff":null,
+			"hugging_face_id":"https://evil.example/redirect",
+			"pricing":{"prompt":"0.000001","completion":"0.000002"}
+		},
+		{
+			"id":"vendor/empty-reasoning",
+			"name":"Empty Reasoning",
+			"context_length":4096,
+			"reasoning":{"mandatory":false,"default_enabled":false,"supported_efforts":[],"default_effort":null},
+			"hugging_face_id":"../etc/passwd",
+			"pricing":{"prompt":"0.000001","completion":"0.000002"}
+		}
+	]}`)
+	models, err := DecodeOpenRouter(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != 3 {
+		t.Fatalf("decoded %d models, want 3", len(models))
+	}
+	r1 := models[0]
+	if r1.Description != "Reasoning flagship model" || r1.ContextLength != 163840 || r1.MaxCompletionTokens != 32768 ||
+		r1.KnowledgeCutoff != "2025-12" || r1.HuggingFaceID != "deepseek-ai/DeepSeek-R1" ||
+		!reflect.DeepEqual(r1.InputModalities, []string{"text", "image"}) ||
+		!reflect.DeepEqual(r1.OutputModalities, []string{"text"}) ||
+		!reflect.DeepEqual(r1.SupportedParameters, []string{"tools", "reasoning", "structured_outputs"}) ||
+		!reflect.DeepEqual(r1.Reasoning, &UpstreamReasoning{
+			Mandatory:        true,
+			DefaultEnabled:   true,
+			SupportedEfforts: []string{"low", "medium", "high"},
+			DefaultEffort:    "high",
+		}) {
+		t.Fatalf("unexpected decoded metadata: %+v", r1)
+	}
+	plain := models[1]
+	if plain.Description != "" || plain.MaxCompletionTokens != 0 || plain.Reasoning != nil ||
+		plain.KnowledgeCutoff != "" || plain.HuggingFaceID != "" ||
+		len(plain.InputModalities) != 0 || len(plain.SupportedParameters) != 0 {
+		t.Fatalf("null/invalid fields not sanitized: %+v", plain)
+	}
+	if models[2].HuggingFaceID != "" || !reflect.DeepEqual(models[2].Reasoning, &UpstreamReasoning{
+		Mandatory:        false,
+		DefaultEnabled:   false,
+		SupportedEfforts: []string{},
+	}) {
+		t.Fatalf("disabled-default reasoning lost or traversal hugging_face_id retained: %+v", models[2])
+	}
+
+	encodedNil, err := EncodeReasoning(nil)
+	if err != nil || encodedNil != "{}" {
+		t.Fatalf("EncodeReasoning(nil) = (%q, %v), want ({}, nil)", encodedNil, err)
+	}
+	if decodedNil, err := DecodeReasoning(encodedNil); err != nil || decodedNil != nil {
+		t.Fatalf("DecodeReasoning({}) = (%+v, %v), want (nil, nil)", decodedNil, err)
+	}
+	optIn := &UpstreamReasoning{Mandatory: false, DefaultEnabled: false}
+	encodedOptIn, err := EncodeReasoning(optIn)
+	if err != nil || encodedOptIn == "{}" {
+		t.Fatalf("EncodeReasoning(optIn) = (%q, %v), want non-empty JSON object", encodedOptIn, err)
+	}
+	decodedOptIn, err := DecodeReasoning(encodedOptIn)
+	if err != nil || !reflect.DeepEqual(decodedOptIn, &UpstreamReasoning{Mandatory: false, DefaultEnabled: false, SupportedEfforts: []string{}}) {
+		t.Fatalf("DecodeReasoning(optIn) = (%+v, %v)", decodedOptIn, err)
 	}
 }

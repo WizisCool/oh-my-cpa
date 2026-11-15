@@ -2078,7 +2078,6 @@ export async function interceptDemoRequest(
           automatic: null,
           candidate: null,
           suggestions: [],
-          reference_prices: [],
           versions: [],
           profile: { samples: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, max_input: 0 },
         } satisfies PricingModelDetail);

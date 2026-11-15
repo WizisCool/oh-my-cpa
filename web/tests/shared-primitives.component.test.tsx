@@ -16,7 +16,7 @@ import { Pager } from '../src/components/common/Pager';
 import { SearchInput } from '../src/components/common/SearchInput';
 import { SectionHeading } from '../src/components/common/SectionHeading';
 import { SelectionBar } from '../src/components/common/SelectionBar';
-import { Tag, ToggleTag } from '../src/components/common/Tag';
+import { EffortTag, Tag, ToggleTag } from '../src/components/common/Tag';
 import { PageHeader } from '../src/components/common/PageHeader';
 import { SummaryStrip } from '../src/components/common/SummaryStrip';
 import { MaskedText } from '../src/components/common/MaskedText';
@@ -180,6 +180,18 @@ describe('Tag', () => {
     fireEvent.click(toggle);
 
     expect(onChange.mock.calls).toEqual([[true]]);
+  });
+
+  it('as an effort spells the parameter and colours only a ranked level that reasons', () => {
+    for (const [effort, label, hue] of [['max', 'Max', 'var(--effort-6)'], ['xhigh', 'xHigh', 'var(--effort-5)'], ['high', 'High', 'var(--effort-4)'], ['low', 'Low', 'var(--effort-2)'], ['none', 'None', ''], ['ultra', 'Ultra', '']]) {
+      const { container, unmount } = render(<EffortTag effort={effort} />);
+      const tag = container.querySelector<HTMLElement>('.effort-tag')!;
+      expect(tag.textContent, effort).toBe(label);
+      expect(tag.classList.contains('is-small'), effort).toBe(true);
+      expect(tag.style.getPropertyValue('--effort-hue'), effort).toBe(hue);
+      unmount();
+    }
+    expect(render(<EffortTag effort="" />).container.innerHTML).toBe('');
   });
 });
 

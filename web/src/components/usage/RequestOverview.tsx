@@ -9,7 +9,7 @@ import { Tooltip } from '../common/Tooltip';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import type { TokenNumberStyle } from '../../types/tokenDisplay';
 import { formatCacheRate } from '../../theme/cacheScale';
-import { effortBadgeName, effortColor, effortStep } from '../../theme/effortScale';
+import { effortBadgeName } from '../../theme/effortScale';
 import type { UsageEventDetail } from '../../types/usageEvents';
 import type { ResolvedProviderInfo } from '../../types/usageEventIdentity';
 import {
@@ -23,7 +23,7 @@ import {
 } from '../../types/usageEventMetrics';
 import { requestFailureCause, tokenComposition, type TokenSegmentKey } from '../../types/requestDetailSummary';
 import './RequestList.css';
-import { Tag } from '../common/Tag';
+import { EffortTag, Tag } from '../common/Tag';
 
 type DetailEvent = UsageEventDetail['event'];
 
@@ -246,8 +246,6 @@ function SettingsCard({ event }: { event: DetailEvent }) {
   const isRouted = Boolean(event.model_alias && event.model && event.model_alias !== event.model);
   const isSubstituted = Boolean(event.model_substituted && event.response_model);
   const transport = requestTransport(event);
-  const effortName = effortBadgeName(event.reasoning_effort);
-  const effortHue = effortColor(effortStep(event.reasoning_effort));
   const isFast = isFastTierEvent(event);
   const tier = event.resolved_service_tier;
   const missing = <span className="terminal-muted">{t('events.not_captured')}</span>;
@@ -286,11 +284,7 @@ function SettingsCard({ event }: { event: DetailEvent }) {
         <div>
           <dt>{t('events.reasoning_effort')}</dt>
           <dd>
-            {effortName ? (
-              <Tag size="small" className="req-effort-badge" style={effortHue ? ({ '--effort-hue': effortHue } as React.CSSProperties) : undefined}>
-                {effortName}
-              </Tag>
-            ) : missing}
+            {effortBadgeName(event.reasoning_effort) ? <EffortTag effort={event.reasoning_effort} /> : missing}
           </dd>
         </div>
         <div>

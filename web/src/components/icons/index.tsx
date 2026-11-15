@@ -8,6 +8,7 @@ import {
   ArrowRight,
   ArrowUp,
   ArrowUpToLine,
+  AudioLines,
   Ban,
   BarChart3,
   Bell,
@@ -41,6 +42,7 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  File,
   FileText,
   Filter,
   Flame,
@@ -112,10 +114,12 @@ import {
   Timer,
   TimerReset,
   Trash2,
+  Type,
   Undo2,
   Upload,
-  Wrench,
+  Video,
   WrapText,
+  Wrench,
   X,
   XCircle,
   Zap,
@@ -165,6 +169,7 @@ export const ArrowDownOutlined = /*#__PURE__*/ createIcon(ArrowDown, 'omc-icon-a
 export const ArrowLeftOutlined = /*#__PURE__*/ createIcon(ArrowLeft, 'omc-icon-arrow-left');
 export const ArrowRightOutlined = /*#__PURE__*/ createIcon(ArrowRight, 'omc-icon-arrow-right');
 export const ArrowUpOutlined = /*#__PURE__*/ createIcon(ArrowUp, 'omc-icon-arrow-up');
+export const AudioOutlined = /*#__PURE__*/ createIcon(AudioLines, 'omc-icon-audio');
 export const AuditOutlined = /*#__PURE__*/ createIcon(ScrollText, 'omc-icon-audit');
 export const BarChartOutlined = /*#__PURE__*/ createIcon(BarChart3, 'omc-icon-bar-chart');
 export const BookOpenOutlined = /*#__PURE__*/ createIcon(BookOpen, 'omc-icon-book-open');
@@ -207,6 +212,7 @@ export const ExperimentOutlined = /*#__PURE__*/ createIcon(FlaskConical, 'omc-ic
 export const EyeInvisibleOutlined = /*#__PURE__*/ createIcon(EyeOff, 'omc-icon-eye-invisible');
 export const EyeOutlined = /*#__PURE__*/ createIcon(Eye, 'omc-icon-eye');
 export const FieldTimeOutlined = /*#__PURE__*/ createIcon(Timer, 'omc-icon-field-time');
+export const FileOutlined = /*#__PURE__*/ createIcon(File, 'omc-icon-file');
 export const FileTextOutlined = /*#__PURE__*/ createIcon(FileText, 'omc-icon-file-text');
 export const FilterOutlined = /*#__PURE__*/ createIcon(Filter, 'omc-icon-filter');
 export const FireOutlined = /*#__PURE__*/ createIcon(Flame, 'omc-icon-fire');
@@ -214,6 +220,8 @@ export const FormatPainterOutlined = /*#__PURE__*/ createIcon(Paintbrush, 'omc-i
 export const FullscreenExitOutlined = /*#__PURE__*/ createIcon(Minimize, 'omc-icon-fullscreen-exit');
 export const FullscreenOutlined = /*#__PURE__*/ createIcon(Maximize, 'omc-icon-fullscreen');
 export const ToolOutlined = /*#__PURE__*/ createIcon(Wrench, 'omc-icon-tool');
+export const TypeOutlined = /*#__PURE__*/ createIcon(Type, 'omc-icon-type');
+export const VideoOutlined = /*#__PURE__*/ createIcon(Video, 'omc-icon-video');
 export const WrapTextOutlined = /*#__PURE__*/ createIcon(WrapText, 'omc-icon-wrap-text');
 export const GlobalOutlined = /*#__PURE__*/ createIcon(Globe, 'omc-icon-global');
 export const HistoryOutlined = /*#__PURE__*/ createIcon(History, 'omc-icon-history');

@@ -651,6 +651,34 @@ func (s *Service) AutomaticMatch(ctx context.Context, model string) (Match, bool
 	return match, found, nil
 }
 
+// MatchMetadata resolves OpenRouter specification metadata for each requested
+// identity from the local OpenRouter cache (memory or SQLite), never making an
+// outbound HTTP request. Before the first OpenRouter sync completes, it returns
+// an empty map so callers degrade cleanly.
+func (s *Service) MatchMetadata(ctx context.Context, identities []string) map[string]UpstreamModel {
+	result := make(map[string]UpstreamModel)
+	if s == nil || s.store == nil || len(identities) == 0 {
+		return result
+	}
+	catalog, ok := s.localCatalog(ctx)
+	if !ok {
+		return result
+	}
+	for _, raw := range identities {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := result[raw]; exists {
+			continue
+		}
+		if matched, found := catalog.MatchMetadata(trimmed); found {
+			result[raw] = matched
+		}
+	}
+	return result
+}
+
 // Suggestions offers the OpenRouter models a CPA model most resembles, from the
 // stored snapshot only. A model that matches automatically needs no suggestion,
 // so its first entry is the automatic match.

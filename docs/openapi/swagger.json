@@ -11625,7 +11625,7 @@
             "CookieAuth": []
           }
         ],
-        "description": "Return current price, version history, token usage profile, automatic match, and reference prices for a model.",
+        "description": "Return current price, version history, token usage profile, and automatic match for a model.",
         "produces": [
           "application/json"
         ],
@@ -15199,12 +15199,6 @@
         },
         "profile": {
           "$ref": "#/definitions/repository.TokenProfile"
-        },
-        "reference_prices": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/api.pricingReferencePriceDTO"
-          }
         },
         "suggestions": {
           "type": "array",
@@ -19167,9 +19161,6 @@
     "api.modelSquareDTO": {
       "type": "object",
       "properties": {
-        "metadata_updated_at": {
-          "type": "string"
-        },
         "model_info": {
           "type": "object",
           "additionalProperties": {
@@ -19198,37 +19189,6 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/api.modelSquareRouteDTO"
-          }
-        }
-      }
-    },
-    "api.modelSquareLimitsDTO": {
-      "type": "object",
-      "properties": {
-        "context": {
-          "type": "integer"
-        },
-        "input": {
-          "type": "integer"
-        },
-        "output": {
-          "type": "integer"
-        }
-      }
-    },
-    "api.modelSquareModalitiesDTO": {
-      "type": "object",
-      "properties": {
-        "input": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "output": {
-          "type": "array",
-          "items": {
-            "type": "string"
           }
         }
       }
@@ -19270,82 +19230,73 @@
         }
       }
     },
+    "api.modelSquareReasoningDTO": {
+      "type": "object",
+      "properties": {
+        "default_effort": {
+          "type": "string"
+        },
+        "default_enabled": {
+          "type": "boolean"
+        },
+        "mandatory": {
+          "type": "boolean"
+        },
+        "supported_efforts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "api.modelSquareReferenceDTO": {
       "type": "object",
       "properties": {
-        "attachment": {
-          "type": "boolean"
+        "author": {
+          "type": "string"
+        },
+        "context_length": {
+          "type": "integer"
         },
         "description": {
           "type": "string"
         },
-        "family": {
+        "hugging_face_id": {
           "type": "string"
         },
         "id": {
           "type": "string"
         },
-        "knowledge": {
-          "type": "string"
-        },
-        "last_updated": {
-          "type": "string"
-        },
-        "license": {
-          "type": "string"
-        },
-        "limit": {
-          "$ref": "#/definitions/api.modelSquareLimitsDTO"
-        },
-        "links": {
+        "input_modalities": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/api.modelSquareReferenceLinkDTO"
+            "type": "string"
           }
         },
-        "modalities": {
-          "$ref": "#/definitions/api.modelSquareModalitiesDTO"
+        "knowledge_cutoff": {
+          "type": "string"
+        },
+        "max_completion_tokens": {
+          "type": "integer"
         },
         "name": {
           "type": "string"
         },
-        "open_weights": {
-          "type": "boolean"
-        },
-        "reasoning": {
-          "type": "boolean"
-        },
-        "release_date": {
-          "type": "string"
-        },
-        "structured_output": {
-          "type": "boolean"
-        },
-        "temperature": {
-          "type": "boolean"
-        },
-        "tool_call": {
-          "type": "boolean"
-        },
-        "weights": {
+        "output_modalities": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/api.modelSquareReferenceLinkDTO"
+            "type": "string"
           }
-        }
-      }
-    },
-    "api.modelSquareReferenceLinkDTO": {
-      "type": "object",
-      "properties": {
-        "label": {
-          "type": "string"
         },
-        "type": {
-          "type": "string"
+        "reasoning": {
+          "$ref": "#/definitions/api.modelSquareReasoningDTO"
         },
-        "url": {
-          "type": "string"
+        "supported_parameters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -19769,35 +19720,6 @@
         },
         "priority": {
           "type": "integer"
-        }
-      }
-    },
-    "api.pricingReferencePriceDTO": {
-      "type": "object",
-      "properties": {
-        "cache_read_price_per_1m": {
-          "type": "number"
-        },
-        "cache_write_price_per_1m": {
-          "type": "number"
-        },
-        "completion_price_per_1m": {
-          "type": "number"
-        },
-        "model": {
-          "type": "string"
-        },
-        "prompt_price_per_1m": {
-          "type": "number"
-        },
-        "providers": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "source": {
-          "type": "string"
         }
       }
     },
@@ -21305,19 +21227,72 @@
         "context_length": {
           "type": "integer"
         },
+        "description": {
+          "type": "string"
+        },
+        "hugging_face_id": {
+          "type": "string"
+        },
         "id": {
           "type": "string"
+        },
+        "input_modalities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "knowledge_cutoff": {
+          "type": "string"
+        },
+        "max_completion_tokens": {
+          "type": "integer"
         },
         "name": {
           "type": "string"
         },
+        "output_modalities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "prompt_price_per_1m": {
           "type": "number"
+        },
+        "reasoning": {
+          "$ref": "#/definitions/pricing.UpstreamReasoning"
+        },
+        "supported_parameters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "tiers": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/pricing.PriceTier"
+          }
+        }
+      }
+    },
+    "pricing.UpstreamReasoning": {
+      "type": "object",
+      "properties": {
+        "default_effort": {
+          "type": "string"
+        },
+        "default_enabled": {
+          "type": "boolean"
+        },
+        "mandatory": {
+          "type": "boolean"
+        },
+        "supported_efforts": {
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         }
       }

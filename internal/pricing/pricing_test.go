@@ -898,3 +898,29 @@ func TestImageCatalogSyncPreservesOperatorPricesAndOffersAutomaticMatch(t *testi
 		})
 	}
 }
+
+func TestServiceMatchMetadataIsLocalAndDegradesGracefully(t *testing.T) {
+	ctx := context.Background()
+	store := newFakeStore("gpt-5.4-mini-high")
+	fetcher := &fakeFetcher{err: errors.New("network must not be called")}
+	svc := NewService(store, fetcher, nil)
+
+	// Cold start before first sync: empty map, zero outbound calls.
+	cold := svc.MatchMetadata(ctx, []string{"gpt-5.4-mini-high", "claude-opus-5.5"})
+	if len(cold) != 0 || fetcher.calls != 0 {
+		t.Fatalf("cold start match = %+v, fetch calls = %d", cold, fetcher.calls)
+	}
+
+	// Populate stored catalog directly (without fetcher); lookup succeeds offline.
+	store.upstream = loadFixtureCatalog(t).Models
+	resolved := svc.MatchMetadata(ctx, []string{"gpt-5.4-mini-high", "gpt-5.4-mini:free", "unknown-model", ""})
+	if fetcher.calls != 0 {
+		t.Fatalf("MatchMetadata triggered %d outbound fetches", fetcher.calls)
+	}
+	if resolved["gpt-5.4-mini-high"].ID != "openai/gpt-5.4-mini" || resolved["gpt-5.4-mini:free"].ID != "openai/gpt-5.4-mini" {
+		t.Fatalf("unexpected resolved metadata: %+v", resolved)
+	}
+	if _, exists := resolved["unknown-model"]; exists {
+		t.Fatalf("unknown model unexpectedly resolved: %+v", resolved)
+	}
+}

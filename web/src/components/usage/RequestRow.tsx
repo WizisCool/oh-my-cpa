@@ -15,7 +15,7 @@ import { copyText } from '../../utils/clipboard';
 import { maskKeyText } from '../../utils/maskKey';
 import { cacheScaleMix, formatCacheRate } from '../../theme/cacheScale';
 import { durationScaleMix } from '../../theme/durationScale';
-import { effortBadgeName, effortColor, effortStep } from '../../theme/effortScale';
+import { effortBadgeName } from '../../theme/effortScale';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
   resolveProviderInfo,
@@ -47,7 +47,7 @@ import { useToast } from '../feedback';
 import { isRangeCheckboxClick, rowClickIntent } from '../../types/rowSelection';
 import './RequestList.css';
 import './requestMarks.css';
-import { Tag } from '../common/Tag';
+import { EffortTag, Tag } from '../common/Tag';
 
 export interface RequestRowProps {
   event: UsageEvent;
@@ -168,9 +168,6 @@ export const RequestRow = React.memo<RequestRowProps>(
           '--duration-from-share': durationScale.fromShare,
         } as React.CSSProperties)
       : undefined;
-    // The level's place on the effort scale, as a token reference; absent for
-    // `none` and for a level the scale does not rank, which keep the neutral badge.
-    const effortHue = effortColor(effortStep(event.reasoning_effort));
     const effortLabel = effortBadgeName(event.reasoning_effort);
     const transport = requestTransport(event);
     const isFastTier = isFastTierEvent(event);
@@ -392,14 +389,11 @@ export const RequestRow = React.memo<RequestRowProps>(
           {event.reasoning_effort || isFastTier || transport === 'websocket' || transport === 'http' ? (
             <div className="req-mode-marks">
               {event.reasoning_effort && (
-                <Tag
-                  size="small"
+                <EffortTag
+                  effort={event.reasoning_effort}
                   className="req-effort-badge"
-                  style={effortHue ? ({ '--effort-hue': effortHue } as React.CSSProperties) : undefined}
                   data-request-tooltip={`${t('events.reasoning_effort')}: ${effortLabel}`}
-                >
-                  {effortLabel}
-                </Tag>
+                />
               )}
               {isFastTier && (
                 <span

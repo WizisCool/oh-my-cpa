@@ -20,7 +20,7 @@ const BOOK: PricingResponse = {
 
 function detail(channel: string | null): PricingModelDetail {
   return {
-    model: 'gpt-5', price: SHARED, automatic: null, suggestions: [], reference_prices: [], candidate: null, versions: [],
+    model: 'gpt-5', price: SHARED, automatic: null, suggestions: [], candidate: null, versions: [],
     profile: { samples: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, max_input: 0 },
     ...(channel ? { channel, is_inherited: true } : {}),
   };

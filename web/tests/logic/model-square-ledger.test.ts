@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { buildModelLedger, modelRequestsLink, MODEL_REQUEST_FACET_QUERY } from '../../src/types/modelSquareLedger.ts';
+import { buildModelLedger, modelRequestsLink, routePricingTarget, MODEL_REQUEST_FACET_QUERY } from '../../src/types/modelSquareLedger.ts';
 import { readEventQuery } from '../../src/types/usageEventQuery.ts';
 import { USAGE_MULTI_FILTER_KEYS, type UsageFacetsResponse } from '../../src/types/usageEvents.ts';
 import type { PricingResponse } from '../../src/types/pricing.ts';
@@ -47,4 +47,26 @@ test('the request link is one the request list itself accepts', () => {
   assert.ok((USAGE_MULTI_FILTER_KEYS as readonly string[]).includes('model_alias'));
   assert.equal(readEventQuery(params).preset, '24h');
   assert.equal(readEventQuery(new URLSearchParams(MODEL_REQUEST_FACET_QUERY)).preset, '24h');
+});
+test('each connection of a name priced apart finds its own channel target and price', () => {
+  const routes = [
+    { provider_id: 'deepseek', upstream_model: 'deepseek-flash', call_point: 'deepseek-v4.1-flash' },
+    { provider_id: 'opencode', upstream_model: 'deepseek-v4.1-flash', call_point: 'deepseek-v4.1-flash' },
+    { provider_id: 'opencode', upstream_model: 'unlisted', call_point: 'deepseek-v4.1-flash' },
+  ];
+  const provider = (id: string, channel: string, models: string[]) => ({ id, family: 'openai-compatibility', name: id, channel, priority: 0, is_oauth: false, models });
+  const pricing = {
+    ...PRICING,
+    providers: [provider('deepseek', 'ds', ['deepseek-flash']), provider('opencode', 'oc', ['deepseek-v4.1-flash'])],
+    channel_models: [{ ...PRICE, model: 'deepseek-v4.1-flash', channel: 'oc', prompt_price_per_1m: 0.3 }],
+  } as unknown as PricingResponse;
+  const { pricingTargets } = buildModelLedger(['deepseek-v4.1-flash'], pricing, undefined, routes).entryFor('deepseek-v4.1-flash');
+  assert.equal(pricingTargets.length, 2);
+  const alias = routePricingTarget(routes[0], pricing, pricingTargets);
+  assert.deepEqual([alias?.channel, alias?.model, alias?.price], ['ds', 'deepseek-flash', undefined]);
+  const direct = routePricingTarget(routes[1], pricing, pricingTargets);
+  assert.deepEqual([direct?.channel, direct?.model, direct?.price?.prompt_price_per_1m], ['oc', 'deepseek-v4.1-flash', 0.3]);
+  // A route its provider does not list, or an unread price book, has no target of its own.
+  assert.equal(routePricingTarget(routes[2], pricing, pricingTargets), undefined);
+  assert.equal(routePricingTarget(routes[1], undefined, pricingTargets), undefined);
 });

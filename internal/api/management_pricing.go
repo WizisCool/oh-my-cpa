@@ -24,6 +24,7 @@ type PricingManager interface {
 	UsedUnpricedModels(ctx context.Context, limit int) ([]string, error)
 	Suggestions(ctx context.Context, model string, limit int) ([]pricing.UpstreamModel, error)
 	AutomaticMatch(ctx context.Context, model string) (pricing.Match, bool, error)
+	MatchMetadata(ctx context.Context, identities []string) map[string]pricing.UpstreamModel
 	Candidates(ctx context.Context, prices []pricing.ModelPrice) (map[string]pricing.Candidate, error)
 	DismissCandidate(ctx context.Context, model, upstreamID string) error
 	StoredCatalog(ctx context.Context) ([]pricing.UpstreamModel, error)
@@ -155,28 +156,6 @@ type pricingUnpricedDTO struct {
 	Suggestions []pricing.UpstreamModel `json:"suggestions"`
 }
 
-// pricingReferencePriceDTO is a models.dev rate offered beside an unmatched model; it is
-// advice the editor can copy into a custom price, never a price itself.
-type pricingReferencePriceDTO struct {
-	Source           string   `json:"source"`
-	Model            string   `json:"model"`
-	Providers        []string `json:"providers"`
-	PromptPricePer1M float64  `json:"prompt_price_per_1m"`
-	CompletionPer1M  float64  `json:"completion_price_per_1m"`
-	CacheReadPer1M   *float64 `json:"cache_read_price_per_1m,omitempty"`
-	CacheWritePer1M  *float64 `json:"cache_write_price_per_1m,omitempty"`
-}
-
-func projectPricingReferences(prices []operations.ReferencePrice) []pricingReferencePriceDTO {
-	projected := make([]pricingReferencePriceDTO, len(prices))
-	for index, price := range prices {
-		projected[index] = pricingReferencePriceDTO{Source: price.Source, Model: price.Model, Providers: price.Providers,
-			PromptPricePer1M: price.PromptPricePer1M, CompletionPer1M: price.CompletionPer1M,
-			CacheReadPer1M: price.CacheReadPer1M, CacheWritePer1M: price.CacheWritePer1M}
-	}
-	return projected
-}
-
 type pricingProviderDTO struct {
 	pricing.CatalogProvider
 	IconID string `json:"icon_id,omitempty"`
@@ -249,16 +228,15 @@ type PricingAutomaticMatchDTO struct {
 
 // PricingModelDetailResponseDTO returns the editor view for a single model or channel override.
 type PricingModelDetailResponseDTO struct {
-	Model           string                     `json:"model"`
-	Price           *pricingModelPriceDTO      `json:"price"`
-	Suggestions     []pricing.UpstreamModel    `json:"suggestions"`
-	Automatic       *PricingAutomaticMatchDTO  `json:"automatic"`
-	ReferencePrices []pricingReferencePriceDTO `json:"reference_prices"`
-	Candidate       *pricing.Candidate         `json:"candidate"`
-	Versions        []pricingPriceVersionDTO   `json:"versions"`
-	Profile         repository.TokenProfile    `json:"profile"`
-	Channel         string                     `json:"channel,omitempty"`
-	IsInherited     *bool                      `json:"is_inherited,omitempty"`
+	Model       string                    `json:"model"`
+	Price       *pricingModelPriceDTO     `json:"price"`
+	Suggestions []pricing.UpstreamModel   `json:"suggestions"`
+	Automatic   *PricingAutomaticMatchDTO `json:"automatic"`
+	Candidate   *pricing.Candidate        `json:"candidate"`
+	Versions    []pricingPriceVersionDTO  `json:"versions"`
+	Profile     repository.TokenProfile   `json:"profile"`
+	Channel     string                    `json:"channel,omitempty"`
+	IsInherited *bool                     `json:"is_inherited,omitempty"`
 }
 
 // PricingModelUpdateResponseDTO wraps the saved model price row.
@@ -558,7 +536,7 @@ func (h *Handler) getPricingCatalog(writer http.ResponseWriter, request *http.Re
 // what a typical recent request looks like, and adoptable candidates.
 //
 // @Summary Get pricing details for a model
-// @Description Return current price, version history, token usage profile, automatic match, and reference prices for a model.
+// @Description Return current price, version history, token usage profile, and automatic match for a model.
 // @Tags Pricing
 // @Produce json
 // @Security CookieAuth
@@ -618,13 +596,10 @@ func (h *Handler) getPricingModel(writer http.ResponseWriter, request *http.Requ
 	// switches: a switch that would find nothing is refused, and the editor says so
 	// up front instead of after a failed save.
 	var automatic *PricingAutomaticMatchDTO
-	references := []pricingReferencePriceDTO{}
 	if match, found, err := h.pricing.AutomaticMatch(ctx, model); err != nil {
 		slog.Warn("pricing automatic match unavailable", "model", model, "error", err)
 	} else if found {
 		automatic = &PricingAutomaticMatchDTO{Model: match.Model, MatchKind: match.Kind}
-	} else {
-		references = projectPricingReferences(operations.ReferencePrices(model))
 	}
 	var candidate *pricing.Candidate
 	if current != nil && channel == "" {
@@ -641,8 +616,8 @@ func (h *Handler) getPricingModel(writer http.ResponseWriter, request *http.Requ
 	}
 	response := PricingModelDetailResponseDTO{
 		Model: model, Price: price, Suggestions: suggestions, Automatic: automatic,
-		ReferencePrices: references, Candidate: candidate,
-		Versions: []pricingPriceVersionDTO{}, Profile: repository.TokenProfile{},
+		Candidate: candidate,
+		Versions:  []pricingPriceVersionDTO{}, Profile: repository.TokenProfile{},
 	}
 	if channel != "" {
 		response.Channel = channel

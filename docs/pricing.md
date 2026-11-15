@@ -20,11 +20,10 @@ automatic match; explicit links and custom prices remain authoritative. Matching
 deterministic; its normalization and precedence belong to
 [`internal/pricing`](../internal/pricing), not a duplicated vendor table here.
 
-A model without an automatic match is offered reference rates from the bundled models.dev
-snapshot ([Playground and models](features/playground.md#model-directory)), resolved only by its exact
-name or an unambiguous models.dev alias. Each distinct rate is listed with the providers that
-publish it, because these are often cloud or reseller listings that disagree. A reference is
-never applied: filling it into the editor and saving creates an ordinary custom price.
+OpenRouter's synced catalog also supplies model specifications, modalities, supported
+parameters, reasoning metadata, knowledge cutoff, and Hugging Face identifiers stored in
+`pricing_upstream_catalog` for Model Square and workspace context readouts; pricing and
+metadata matching stay separate so effort suffixes never alter automatic billing.
 
 A channel-specific custom price overrides the shared model price for that channel.
 Removing an override appends a tombstone so later requests use shared pricing without

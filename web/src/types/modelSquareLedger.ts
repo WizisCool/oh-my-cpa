@@ -47,12 +47,18 @@ export interface ModelPricingTarget {
 
 const UNKNOWN_ENTRY: ModelLedgerEntry = { price: { status: 'unknown' }, pricingTargets: [] };
 
+/** The price book channel a route is priced in, when its provider lists the routed upstream model. */
+function routeChannel(route: ModelSquareRoute, pricing: PricingResponse) {
+  const provider = pricing.providers?.find(provider => provider.id === route.provider_id);
+  return provider?.channel && route.upstream_model && provider.models.includes(route.upstream_model) ? provider : undefined;
+}
+
 export function modelPricingTargets(identity: string, pricing: PricingResponse, routes: readonly ModelSquareRoute[]): ModelPricingTarget[] {
   const targets = new Map<string, ModelPricingTarget>();
   const matching = routes.filter(route => route.call_point === identity);
   for (const route of matching) {
-    const provider = pricing.providers?.find(provider => provider.id === route.provider_id);
-    if (!provider?.channel || !route.upstream_model || !provider.models.includes(route.upstream_model)) continue;
+    const provider = routeChannel(route, pricing);
+    if (!provider?.channel) continue;
     const model = route.upstream_model;
     const channel = provider.channel;
     const price = pricing.channel_models?.find(price => price.channel === channel && price.model === model)
@@ -64,6 +70,12 @@ export function modelPricingTargets(identity: string, pricing: PricingResponse, 
     targets.set(identity, { model: identity, price: pricing.models.find(price => price.model === identity) });
   }
   return [...targets.values()];
+}
+
+/** The pricing target one connection's route edits, among those its call name already has. */
+export function routePricingTarget(route: ModelSquareRoute, pricing: PricingResponse | undefined, targets: readonly ModelPricingTarget[]): ModelPricingTarget | undefined {
+  const channel = pricing && routeChannel(route, pricing)?.channel;
+  return channel ? targets.find(target => target.channel === channel && target.model === route.upstream_model) : undefined;
 }
 
 export function buildModelLedger(identities: readonly string[], pricing?: PricingResponse, facets?: UsageFacetsResponse, routes: readonly ModelSquareRoute[] = []): ModelLedger {

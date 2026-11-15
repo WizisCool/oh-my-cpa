@@ -341,26 +341,96 @@ func TestUpstreamCatalogRoundTrip(t *testing.T) {
 		t.Fatal("an empty snapshot was stored")
 	}
 	models := []pricing.UpstreamModel{
-		{ID: "anthropic/claude-opus-5.5", Author: "anthropic", Name: "Claude Opus 5.5", PromptPricePer1M: 4, CompletionPer1M: 20, CacheReadPer1M: 0.2, CacheWritePer1M: 5,
-			Tiers: []pricing.PriceTier{{MinPromptTokens: 200_000, PromptPricePer1M: float(8)}}},
+		{
+			ID: "anthropic/claude-opus-5.5", Author: "anthropic", Name: "Claude Opus 5.5",
+			Description: "Frontier reasoning model", ContextLength: 1_000_000, MaxCompletionTokens: 64_000,
+			InputModalities: []string{"text", "image"}, OutputModalities: []string{"text"},
+			SupportedParameters: []string{"tools", "reasoning", "structured_outputs"},
+			Reasoning: &pricing.UpstreamReasoning{
+				Mandatory: true, DefaultEnabled: true,
+				SupportedEfforts: []string{"low", "medium", "high"}, DefaultEffort: "high",
+			},
+			KnowledgeCutoff: "2026-08", HuggingFaceID: "anthropic-org/claude-opus-5.5",
+			PromptPricePer1M: 4, CompletionPer1M: 20, CacheReadPer1M: 0.2, CacheWritePer1M: 5,
+			Tiers: []pricing.PriceTier{{MinPromptTokens: 200_000, PromptPricePer1M: float(8)}},
+		},
 		{ID: "z-ai/glm-5.3", Author: "z-ai", PromptPricePer1M: 1.4, CompletionPer1M: 4.4, CacheReadPer1M: 0.26, CacheWritePer1M: 1.4},
+		{
+			ID: "moondream/moondream3.1-9b-a2b", Author: "moondream",
+			Reasoning:        &pricing.UpstreamReasoning{Mandatory: false, DefaultEnabled: false},
+			PromptPricePer1M: 0.2, CompletionPer1M: 0.6, CacheReadPer1M: 0.2, CacheWritePer1M: 0.2,
+		},
 	}
 	if err := r.ReplaceUpstreamCatalog(ctx, models); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.ReplaceUpstreamCatalog(ctx, models[1:]); err != nil {
+	if err := r.ReplaceUpstreamCatalog(ctx, models[1:2]); err != nil {
 		t.Fatal(err)
 	}
 	stored, err := r.ListUpstreamCatalog(ctx)
-	if err != nil || len(stored) != 1 || stored[0].ID != "z-ai/glm-5.3" {
+	if err != nil || len(stored) != 1 || stored[0].ID != "z-ai/glm-5.3" || stored[0].Reasoning != nil || len(stored[0].InputModalities) != 0 {
 		t.Fatalf("snapshot not replaced whole: %+v %v", stored, err)
 	}
 	if err := r.ReplaceUpstreamCatalog(ctx, models); err != nil {
 		t.Fatal(err)
 	}
-	stored, _ = r.ListUpstreamCatalog(ctx)
-	if len(stored[0].Tiers) != 1 || *stored[0].Tiers[0].PromptPricePer1M != 8 {
-		t.Fatalf("tiers lost: %+v", stored[0])
+	stored, err = r.ListUpstreamCatalog(ctx)
+	if err != nil || len(stored) != 3 {
+		t.Fatalf("reload failed: %+v %v", stored, err)
+	}
+	opus := stored[0]
+	if len(opus.Tiers) != 1 || *opus.Tiers[0].PromptPricePer1M != 8 {
+		t.Fatalf("tiers lost: %+v", opus)
+	}
+	if opus.Description != "Frontier reasoning model" || opus.MaxCompletionTokens != 64_000 ||
+		opus.KnowledgeCutoff != "2026-08" || opus.HuggingFaceID != "anthropic-org/claude-opus-5.5" ||
+		len(opus.InputModalities) != 2 || len(opus.OutputModalities) != 1 || len(opus.SupportedParameters) != 3 ||
+		opus.Reasoning == nil || !opus.Reasoning.Mandatory || !opus.Reasoning.DefaultEnabled ||
+		len(opus.Reasoning.SupportedEfforts) != 3 || opus.Reasoning.DefaultEffort != "high" {
+		t.Fatalf("metadata lost in round trip: %+v", opus)
+	}
+	// Present disabled-default reasoning metadata stays distinct from absent (nil) reasoning.
+	var moondream *pricing.UpstreamModel
+	for i := range stored {
+		if stored[i].ID == "moondream/moondream3.1-9b-a2b" {
+			moondream = &stored[i]
+		}
+		if stored[i].ID == "z-ai/glm-5.3" && stored[i].Reasoning != nil {
+			t.Fatalf("absent reasoning should reload as nil: %+v", stored[i].Reasoning)
+		}
+	}
+	if moondream == nil || moondream.Reasoning == nil || moondream.Reasoning.Mandatory || moondream.Reasoning.DefaultEnabled || len(moondream.Reasoning.SupportedEfforts) != 0 {
+		t.Fatalf("disabled-default reasoning lost in round trip: %+v", moondream)
+	}
+}
+
+func TestMigration066UpgradeFrom065(t *testing.T) {
+	ctx := context.Background()
+	name := fmt.Sprintf("file:memdb_upgrade066_%d?mode=memory&cache=shared", usageDSNCounter.Add(1))
+	db, err := Open(ctx, name, withMigrationsUntil(65))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.SQL.ExecContext(ctx, `INSERT INTO pricing_upstream_catalog
+		(id, canonical_slug, name, author, context_length, prompt_price_per_1m, completion_price_per_1m, cache_read_price_per_1m, cache_write_price_per_1m, tiers_json)
+		VALUES ('openai/gpt-5', 'openai/gpt-5', 'GPT-5', 'openai', 400000, 1.25, 10, 0.125, 1.25, '[]')`); err != nil {
+		t.Fatal(err)
+	}
+	repo := New(db)
+	if _, err := repo.ListUpstreamCatalog(ctx); err == nil || !strings.Contains(err.Error(), "migration 66") {
+		t.Fatalf("read gate before migration 66: %v", err)
+	}
+	db.migrateUntil = 0
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := repo.ListUpstreamCatalog(ctx)
+	if err != nil || len(stored) != 1 || stored[0].ID != "openai/gpt-5" || stored[0].ContextLength != 400000 ||
+		stored[0].Description != "" || stored[0].MaxCompletionTokens != 0 || stored[0].Reasoning != nil ||
+		len(stored[0].InputModalities) != 0 || len(stored[0].OutputModalities) != 0 || len(stored[0].SupportedParameters) != 0 ||
+		stored[0].KnowledgeCutoff != "" || stored[0].HuggingFaceID != "" {
+		t.Fatalf("upgraded upstream row mismatch: %+v %v", stored, err)
 	}
 }
 

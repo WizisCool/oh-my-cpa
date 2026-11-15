@@ -19,12 +19,13 @@ import (
 var ErrNotFound = sql.ErrNoRows
 
 type Repository struct {
-	db                   *DB
-	timezone             *timezone.Settings
-	timezoneMu           sync.Mutex
-	pricingSchemaReady   bool
-	pricingReviewReady   bool
-	pricingSchemaCacheMu sync.Mutex
+	db                    *DB
+	timezone              *timezone.Settings
+	timezoneMu            sync.Mutex
+	pricingSchemaReady    bool
+	pricingReviewReady    bool
+	upstreamMetadataReady bool
+	pricingSchemaCacheMu  sync.Mutex
 }
 
 func New(db *DB) *Repository {

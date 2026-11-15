@@ -16,4 +16,4 @@ journal (retained for 15 minutes after completion) rather than resending a model
 
 The `/model-square` page reads CPA's live `/v1/models` using the first configured client
 key (or returns `client_key_required` when none exists) and enriches models from the
-bundled models.dev snapshot.
+locally synced OpenRouter catalog cache (`pricing_upstream_catalog`).

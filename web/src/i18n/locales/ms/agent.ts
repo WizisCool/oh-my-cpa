@@ -465,5 +465,5 @@ export default {
   "agent.capability.quota_auto_refresh_set": "Ubah dasar penyegaran kuota automatik",
   "agent.capability.quota_auto_refresh_set.description": "Tetapkan kekerapan kelayakan dibaca di latar belakang, dan sama ada kuota yang ditetapkan semula dibaca semula.",
   "agent.capability.models_list": "Baca model tersambung",
-  "agent.capability.models_list.description": "Baca model yang disenaraikan CPA dan metadata rujukan models.dev tanpa inferens.",
+  "agent.capability.models_list.description": "Baca model yang disenaraikan CPA dan metadata rujukan OpenRouter tanpa inferens.",
 } satisfies Translation<typeof source>;

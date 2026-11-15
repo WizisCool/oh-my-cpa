@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/gateway"
-	"github.com/oh-my-cpa/oh-my-cpa/internal/modelcatalog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 )
 
 // modelSquareCache retains only projected provenance, never credential material.
@@ -142,12 +142,11 @@ func writeModelSquareError(writer http.ResponseWriter, err error) {
 
 // Keep the HTTP allowlist independent of internal operation and catalog expansion.
 type modelSquareDTO struct {
-	Models            []modelSquareModelDTO              `json:"models"`
-	Providers         []modelSquareProviderDTO           `json:"providers"`
-	Routes            []modelSquareRouteDTO              `json:"routes"`
-	Partial           []string                           `json:"partial"`
-	ModelInfo         map[string]modelSquareReferenceDTO `json:"model_info"`
-	MetadataUpdatedAt string                             `json:"metadata_updated_at"`
+	Models    []modelSquareModelDTO              `json:"models"`
+	Providers []modelSquareProviderDTO           `json:"providers"`
+	Routes    []modelSquareRouteDTO              `json:"routes"`
+	Partial   []string                           `json:"partial"`
+	ModelInfo map[string]modelSquareReferenceDTO `json:"model_info"`
 }
 type modelSquareModelDTO struct {
 	ID        string `json:"id"`
@@ -167,49 +166,34 @@ type modelSquareRouteDTO struct {
 	UpstreamModel string `json:"upstream_model"`
 	CallPoint     string `json:"call_point"`
 }
-type modelSquareReferenceLinkDTO struct {
-	Label string `json:"label"`
-	URL   string `json:"url"`
-	Type  string `json:"type,omitempty"`
-}
-type modelSquareLimitsDTO struct {
-	Context int64 `json:"context,omitempty"`
-	Input   int64 `json:"input,omitempty"`
-	Output  int64 `json:"output,omitempty"`
-}
-type modelSquareModalitiesDTO struct {
-	Input  []string `json:"input"`
-	Output []string `json:"output"`
+type modelSquareReasoningDTO struct {
+	Mandatory        bool     `json:"mandatory"`
+	DefaultEnabled   bool     `json:"default_enabled"`
+	SupportedEfforts []string `json:"supported_efforts"`
+	DefaultEffort    string   `json:"default_effort,omitempty"`
 }
 type modelSquareReferenceDTO struct {
-	ID               string                        `json:"id"`
-	Name             string                        `json:"name"`
-	Description      string                        `json:"description,omitempty"`
-	Family           string                        `json:"family,omitempty"`
-	OpenWeights      *bool                         `json:"open_weights,omitempty"`
-	Reasoning        *bool                         `json:"reasoning,omitempty"`
-	ToolCall         *bool                         `json:"tool_call,omitempty"`
-	StructuredOutput *bool                         `json:"structured_output,omitempty"`
-	Attachment       *bool                         `json:"attachment,omitempty"`
-	Temperature      *bool                         `json:"temperature,omitempty"`
-	Knowledge        string                        `json:"knowledge,omitempty"`
-	ReleaseDate      string                        `json:"release_date,omitempty"`
-	LastUpdated      string                        `json:"last_updated,omitempty"`
-	License          string                        `json:"license,omitempty"`
-	Limit            modelSquareLimitsDTO          `json:"limit"`
-	Modalities       modelSquareModalitiesDTO      `json:"modalities"`
-	Weights          []modelSquareReferenceLinkDTO `json:"weights,omitempty"`
-	Links            []modelSquareReferenceLinkDTO `json:"links,omitempty"`
+	ID                  string                   `json:"id"`
+	Name                string                   `json:"name"`
+	Description         string                   `json:"description,omitempty"`
+	Author              string                   `json:"author,omitempty"`
+	ContextLength       int64                    `json:"context_length,omitempty"`
+	MaxCompletionTokens int64                    `json:"max_completion_tokens,omitempty"`
+	InputModalities     []string                 `json:"input_modalities"`
+	OutputModalities    []string                 `json:"output_modalities"`
+	SupportedParameters []string                 `json:"supported_parameters"`
+	Reasoning           *modelSquareReasoningDTO `json:"reasoning,omitempty"`
+	KnowledgeCutoff     string                   `json:"knowledge_cutoff,omitempty"`
+	HuggingFaceID       string                   `json:"hugging_face_id,omitempty"`
 }
 
 func projectModelSquareDTO(directory operations.ModelSquareDirectory) modelSquareDTO {
 	result := modelSquareDTO{
-		Models:            make([]modelSquareModelDTO, 0, len(directory.Models)),
-		Providers:         make([]modelSquareProviderDTO, 0, len(directory.Providers)),
-		Routes:            make([]modelSquareRouteDTO, 0, len(directory.Routes)),
-		Partial:           append([]string{}, directory.Partial...),
-		ModelInfo:         make(map[string]modelSquareReferenceDTO, len(directory.ModelInfo)),
-		MetadataUpdatedAt: directory.MetadataUpdatedAt,
+		Models:    make([]modelSquareModelDTO, 0, len(directory.Models)),
+		Providers: make([]modelSquareProviderDTO, 0, len(directory.Providers)),
+		Routes:    make([]modelSquareRouteDTO, 0, len(directory.Routes)),
+		Partial:   append([]string{}, directory.Partial...),
+		ModelInfo: make(map[string]modelSquareReferenceDTO, len(directory.ModelInfo)),
 	}
 	for _, model := range directory.Models {
 		result.Models = append(result.Models, modelSquareModelDTO{ID: model.ID, CallPoint: model.CallPoint, Vision: model.Vision})
@@ -221,33 +205,38 @@ func projectModelSquareDTO(directory operations.ModelSquareDirectory) modelSquar
 		result.Routes = append(result.Routes, modelSquareRouteDTO{ProviderID: route.ProviderID, UpstreamModel: route.UpstreamModel, CallPoint: route.CallPoint})
 	}
 	for identity, model := range directory.ModelInfo {
+		var reasoning *modelSquareReasoningDTO
+		if model.Reasoning != nil {
+			reasoning = &modelSquareReasoningDTO{
+				Mandatory:        model.Reasoning.Mandatory,
+				DefaultEnabled:   model.Reasoning.DefaultEnabled,
+				SupportedEfforts: nonNilStrings(model.Reasoning.SupportedEfforts),
+				DefaultEffort:    model.Reasoning.DefaultEffort,
+			}
+		}
 		result.ModelInfo[identity] = modelSquareReferenceDTO{
-			ID:               model.ID,
-			Name:             model.Name,
-			Description:      model.Description,
-			Family:           model.Family,
-			OpenWeights:      model.OpenWeights,
-			Reasoning:        model.Reasoning,
-			ToolCall:         model.ToolCall,
-			StructuredOutput: model.StructuredOutput,
-			Attachment:       model.Attachment,
-			Temperature:      model.Temperature,
-			Knowledge:        model.Knowledge,
-			ReleaseDate:      model.ReleaseDate,
-			LastUpdated:      model.LastUpdated,
-			License:          model.License,
-			Limit:            modelSquareLimitsDTO{Context: model.Limit.Context, Input: model.Limit.Input, Output: model.Limit.Output},
-			Modalities:       modelSquareModalitiesDTO{Input: model.Modalities.Input, Output: model.Modalities.Output},
-			Weights:          projectModelSquareLinks(model.Weights),
-			Links:            projectModelSquareLinks(model.Links),
+			ID:                  model.ID,
+			Name:                model.Name,
+			Description:         model.Description,
+			Author:              model.Author,
+			ContextLength:       model.ContextLength,
+			MaxCompletionTokens: model.MaxCompletionTokens,
+			InputModalities:     nonNilStrings(model.InputModalities),
+			OutputModalities:    nonNilStrings(model.OutputModalities),
+			SupportedParameters: nonNilStrings(model.SupportedParameters),
+			Reasoning:           reasoning,
+			KnowledgeCutoff:     model.KnowledgeCutoff,
+			HuggingFaceID:       pricing.SanitizeHuggingFaceID(model.HuggingFaceID),
 		}
 	}
 	return result
 }
-func projectModelSquareLinks(links []modelcatalog.Link) []modelSquareReferenceLinkDTO {
-	result := make([]modelSquareReferenceLinkDTO, 0, len(links))
-	for _, link := range links {
-		result = append(result, modelSquareReferenceLinkDTO{Label: link.Label, URL: link.URL, Type: link.Type})
+
+func nonNilStrings(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
 	}
-	return result
+	copied := make([]string, len(values))
+	copy(copied, values)
+	return copied
 }

@@ -533,7 +533,7 @@
   },
   {
     "name": "models_list",
-    "description": "List models advertised by CPA /v1/models for an existing client key, with configured route provenance when known. Defaults to the first configured client key. Empty upstream_model or provider_id means unresolved provenance. Includes bundled models.dev reference metadata; it never establishes availability. No inference or credential disclosure.",
+    "description": "List models advertised by CPA /v1/models for an existing client key, with configured route provenance when known. Defaults to the first configured client key. Empty upstream_model or provider_id means unresolved provenance. Enriches model_info from the local OpenRouter cache when available; it never establishes availability. No inference or credential disclosure.",
     "permission": "read",
     "input_schema": {
       "type": "object",
@@ -556,76 +556,55 @@
               "description": {
                 "type": "string"
               },
-              "family": {
+              "author": {
                 "type": "string"
               },
-              "open_weights": {
+              "context_length": {
+                "type": "integer"
+              },
+              "max_completion_tokens": {
+                "type": "integer"
+              },
+              "input_modalities": {
                 "type": [
                   "null",
-                  "boolean"
-                ]
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "output_modalities": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "supported_parameters": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
               },
               "reasoning": {
                 "type": [
                   "null",
-                  "boolean"
-                ]
-              },
-              "tool_call": {
-                "type": [
-                  "null",
-                  "boolean"
-                ]
-              },
-              "structured_output": {
-                "type": [
-                  "null",
-                  "boolean"
-                ]
-              },
-              "attachment": {
-                "type": [
-                  "null",
-                  "boolean"
-                ]
-              },
-              "temperature": {
-                "type": [
-                  "null",
-                  "boolean"
-                ]
-              },
-              "knowledge": {
-                "type": "string"
-              },
-              "release_date": {
-                "type": "string"
-              },
-              "last_updated": {
-                "type": "string"
-              },
-              "license": {
-                "type": "string"
-              },
-              "limit": {
-                "type": "object",
+                  "object"
+                ],
                 "properties": {
-                  "context": {
-                    "type": "integer"
+                  "mandatory": {
+                    "type": "boolean"
                   },
-                  "input": {
-                    "type": "integer"
+                  "default_enabled": {
+                    "type": "boolean"
                   },
-                  "output": {
-                    "type": "integer"
-                  }
-                },
-                "additionalProperties": false
-              },
-              "modalities": {
-                "type": "object",
-                "properties": {
-                  "input": {
+                  "supported_efforts": {
                     "type": [
                       "null",
                       "array"
@@ -634,84 +613,33 @@
                       "type": "string"
                     }
                   },
-                  "output": {
-                    "type": [
-                      "null",
-                      "array"
-                    ],
-                    "items": {
-                      "type": "string"
-                    }
+                  "default_effort": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "input",
-                  "output"
+                  "mandatory",
+                  "default_enabled",
+                  "supported_efforts"
                 ],
                 "additionalProperties": false
               },
-              "weights": {
-                "type": [
-                  "null",
-                  "array"
-                ],
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "label": {
-                      "type": "string"
-                    },
-                    "url": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "label",
-                    "url"
-                  ],
-                  "additionalProperties": false
-                }
+              "knowledge_cutoff": {
+                "type": "string"
               },
-              "links": {
-                "type": [
-                  "null",
-                  "array"
-                ],
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "label": {
-                      "type": "string"
-                    },
-                    "url": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "label",
-                    "url"
-                  ],
-                  "additionalProperties": false
-                }
+              "hugging_face_id": {
+                "type": "string"
               }
             },
             "required": [
               "id",
               "name",
-              "limit",
-              "modalities"
+              "input_modalities",
+              "output_modalities",
+              "supported_parameters"
             ],
             "additionalProperties": false
           }
-        },
-        "metadata_updated_at": {
-          "type": "string"
         },
         "models": {
           "type": [
@@ -813,7 +741,6 @@
       },
       "required": [
         "model_info",
-        "metadata_updated_at",
         "models",
         "providers",
         "routes",
@@ -1411,8 +1338,79 @@
               "author": {
                 "type": "string"
               },
+              "description": {
+                "type": "string"
+              },
               "context_length": {
                 "type": "integer"
+              },
+              "max_completion_tokens": {
+                "type": "integer"
+              },
+              "input_modalities": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "output_modalities": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "supported_parameters": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "reasoning": {
+                "type": [
+                  "null",
+                  "object"
+                ],
+                "properties": {
+                  "mandatory": {
+                    "type": "boolean"
+                  },
+                  "default_enabled": {
+                    "type": "boolean"
+                  },
+                  "supported_efforts": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "default_effort": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mandatory",
+                  "default_enabled",
+                  "supported_efforts"
+                ],
+                "additionalProperties": false
+              },
+              "knowledge_cutoff": {
+                "type": "string"
+              },
+              "hugging_face_id": {
+                "type": "string"
               },
               "prompt_price_per_1m": {
                 "type": "number"
@@ -1622,7 +1620,7 @@
   },
   {
     "name": "pricing_get",
-    "description": "Read everything needed to price one model: its current price (absent when unpriced), what auto mode would match, OpenRouter suggestions, models.dev reference prices when nothing matches automatically (advice only; adopting one means saving it as a custom price), a pending candidate, the channels that serve it, 30-day traffic and the 7-day median request size.",
+    "description": "Read everything needed to price one model: its current price (absent when unpriced), what auto mode would match, OpenRouter suggestions, a pending candidate, the channels that serve it, 30-day traffic and the 7-day median request size.",
     "permission": "read",
     "input_schema": {
       "type": "object",
@@ -1795,8 +1793,79 @@
                 "author": {
                   "type": "string"
                 },
+                "description": {
+                  "type": "string"
+                },
                 "context_length": {
                   "type": "integer"
+                },
+                "max_completion_tokens": {
+                  "type": "integer"
+                },
+                "input_modalities": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "output_modalities": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "supported_parameters": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "reasoning": {
+                  "type": [
+                    "null",
+                    "object"
+                  ],
+                  "properties": {
+                    "mandatory": {
+                      "type": "boolean"
+                    },
+                    "default_enabled": {
+                      "type": "boolean"
+                    },
+                    "supported_efforts": {
+                      "type": [
+                        "null",
+                        "array"
+                      ],
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "default_effort": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "mandatory",
+                    "default_enabled",
+                    "supported_efforts"
+                  ],
+                  "additionalProperties": false
+                },
+                "knowledge_cutoff": {
+                  "type": "string"
+                },
+                "hugging_face_id": {
+                  "type": "string"
                 },
                 "prompt_price_per_1m": {
                   "type": "number"
@@ -1924,8 +1993,79 @@
               "author": {
                 "type": "string"
               },
+              "description": {
+                "type": "string"
+              },
               "context_length": {
                 "type": "integer"
+              },
+              "max_completion_tokens": {
+                "type": "integer"
+              },
+              "input_modalities": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "output_modalities": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "supported_parameters": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "reasoning": {
+                "type": [
+                  "null",
+                  "object"
+                ],
+                "properties": {
+                  "mandatory": {
+                    "type": "boolean"
+                  },
+                  "default_enabled": {
+                    "type": "boolean"
+                  },
+                  "supported_efforts": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "default_effort": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mandatory",
+                  "default_enabled",
+                  "supported_efforts"
+                ],
+                "additionalProperties": false
+              },
+              "knowledge_cutoff": {
+                "type": "string"
+              },
+              "hugging_face_id": {
+                "type": "string"
               },
               "prompt_price_per_1m": {
                 "type": "number"
@@ -2024,58 +2164,6 @@
             "additionalProperties": false
           }
         },
-        "reference_prices": {
-          "type": [
-            "null",
-            "array"
-          ],
-          "items": {
-            "type": "object",
-            "properties": {
-              "source": {
-                "type": "string"
-              },
-              "model": {
-                "type": "string"
-              },
-              "providers": {
-                "type": [
-                  "null",
-                  "array"
-                ],
-                "items": {
-                  "type": "string"
-                }
-              },
-              "prompt_price_per_1m": {
-                "type": "number"
-              },
-              "completion_price_per_1m": {
-                "type": "number"
-              },
-              "cache_read_price_per_1m": {
-                "type": [
-                  "null",
-                  "number"
-                ]
-              },
-              "cache_write_price_per_1m": {
-                "type": [
-                  "null",
-                  "number"
-                ]
-              }
-            },
-            "required": [
-              "source",
-              "model",
-              "providers",
-              "prompt_price_per_1m",
-              "completion_price_per_1m"
-            ],
-            "additionalProperties": false
-          }
-        },
         "candidate": {
           "type": [
             "null",
@@ -2097,8 +2185,79 @@
                 "author": {
                   "type": "string"
                 },
+                "description": {
+                  "type": "string"
+                },
                 "context_length": {
                   "type": "integer"
+                },
+                "max_completion_tokens": {
+                  "type": "integer"
+                },
+                "input_modalities": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "output_modalities": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "supported_parameters": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "reasoning": {
+                  "type": [
+                    "null",
+                    "object"
+                  ],
+                  "properties": {
+                    "mandatory": {
+                      "type": "boolean"
+                    },
+                    "default_enabled": {
+                      "type": "boolean"
+                    },
+                    "supported_efforts": {
+                      "type": [
+                        "null",
+                        "array"
+                      ],
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "default_effort": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "mandatory",
+                    "default_enabled",
+                    "supported_efforts"
+                  ],
+                  "additionalProperties": false
+                },
+                "knowledge_cutoff": {
+                  "type": "string"
+                },
+                "hugging_face_id": {
+                  "type": "string"
                 },
                 "prompt_price_per_1m": {
                   "type": "number"
@@ -2276,7 +2435,6 @@
       "required": [
         "model",
         "suggestions",
-        "reference_prices",
         "channels",
         "usage_30d",
         "profile_7d"
@@ -2511,8 +2669,79 @@
                   "author": {
                     "type": "string"
                   },
+                  "description": {
+                    "type": "string"
+                  },
                   "context_length": {
                     "type": "integer"
+                  },
+                  "max_completion_tokens": {
+                    "type": "integer"
+                  },
+                  "input_modalities": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "output_modalities": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "supported_parameters": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "reasoning": {
+                    "type": [
+                      "null",
+                      "object"
+                    ],
+                    "properties": {
+                      "mandatory": {
+                        "type": "boolean"
+                      },
+                      "default_enabled": {
+                        "type": "boolean"
+                      },
+                      "supported_efforts": {
+                        "type": [
+                          "null",
+                          "array"
+                        ],
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "default_effort": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "mandatory",
+                      "default_enabled",
+                      "supported_efforts"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "knowledge_cutoff": {
+                    "type": "string"
+                  },
+                  "hugging_face_id": {
+                    "type": "string"
                   },
                   "prompt_price_per_1m": {
                     "type": "number"

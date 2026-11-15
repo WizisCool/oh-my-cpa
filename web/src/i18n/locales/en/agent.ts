@@ -465,5 +465,5 @@ export default {
   'agent.capability.quota_auto_refresh_set': 'Change automatic quota refresh policy',
   'agent.capability.quota_auto_refresh_set.description': 'Set how often credentials are read in the background, and whether a reset quota is read again.',
   'agent.capability.models_list': 'Read connected models',
-  'agent.capability.models_list.description': 'Read models advertised by CPA and models.dev reference metadata without inference.',
+  'agent.capability.models_list.description': 'Read models advertised by CPA and OpenRouter reference metadata without inference.',
 } satisfies Translation<typeof source>;
