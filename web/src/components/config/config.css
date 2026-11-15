@@ -512,32 +512,6 @@
   font-size: var(--text-sm);
   margin-left: 4px;
 }
-.config-dirty-bar-actions [data-slot="button"] {
-  height: 32px;
-  padding-inline: 14px;
-  font-size: var(--text-md);
-  border-radius: var(--radius-md);
-}
-.config-dirty-btn-discard {
-  background: transparent !important;
-  border-color: var(--border) !important;
-  color: var(--fg-2) !important;
-}
-.config-dirty-btn-discard:hover {
-  background: var(--hover-inset) !important;
-  border-color: var(--muted) !important;
-  color: var(--fg) !important;
-}
-.config-dirty-btn-save {
-  background: var(--accent) !important;
-  border-color: var(--accent) !important;
-  color: var(--accent-on) !important;
-  font-weight: 500;
-}
-.config-dirty-btn-save:hover {
-  background: var(--accent-hover) !important;
-  border-color: var(--accent-hover) !important;
-}
 .payload-rules-container {
   display: flex;
   flex-direction: column;
