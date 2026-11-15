@@ -108,15 +108,24 @@ func BenchmarkUsageEventWindow(b *testing.B) {
 	}
 }
 
-// BenchmarkUsageFacets tracks a 100k-row window; the strategy benchmark also
-// exercises populated dimensions and high cardinality before accepting query changes.
+// BenchmarkUsageFacets measures realistic 30/90-day windows. The strategy benchmark
+// also exercises high cardinality before accepting query changes.
 func BenchmarkUsageFacets(b *testing.B) {
 	repo := performanceRepository(b, 100000)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if _, err := repo.GetUsageFacets(context.Background(), "default", 1700000000000, 1700100000000); err != nil {
-			b.Fatal(err)
-		}
+	seedFacetDimensions(b, repo, 20)
+	const dayMS = int64(24 * 60 * 60 * 1000)
+	if _, err := repo.SQL().Exec(`UPDATE usage_events SET timestamp_ms = 1700000000000 + ((id - 1) % 90) * ?`, dayMS); err != nil {
+		b.Fatal(err)
+	}
+	for _, days := range []int64{30, 90} {
+		b.Run(fmt.Sprintf("%dd", days), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if _, err := repo.GetUsageFacets(context.Background(), "default", 1700000000000, 1700000000000+days*dayMS-1); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 

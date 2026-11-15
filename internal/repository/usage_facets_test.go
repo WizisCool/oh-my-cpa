@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 // The independent grouped queries are the equivalence oracle for the combined read.
@@ -109,7 +110,11 @@ func TestUsageFacetsEquivalent(t *testing.T) {
 	seedFacetDimensions(t, repo, 257)
 	// Binary ordering, whitespace, empty values, and legacy mask fillers must retain their meanings.
 	_, err := repo.SQL().Exec(`UPDATE usage_events SET model = CASE id % 7
- WHEN 0 THEN '' WHEN 1 THEN ' ' WHEN 2 THEN 'Alpha' WHEN 3 THEN 'alpha' WHEN 4 THEN '中文' ELSE model END`)
+ WHEN 0 THEN '' WHEN 1 THEN ' ' WHEN 2 THEN 'Alpha' WHEN 3 THEN 'alpha' WHEN 4 THEN '中文' ELSE model END,
+ model_alias = CASE WHEN id % 5 = 0 THEN NULL ELSE model_alias END,
+ provider = CASE WHEN id % 3 = 0 THEN 'codex' ELSE provider END,
+ effective_service_tier = CASE WHEN id % 3 = 0 THEN 'auto' ELSE '' END,
+ response_service_tier = CASE WHEN id % 2 = 0 THEN 'default' ELSE ' Priority ' END`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,6 +143,25 @@ func TestUsageFacetsEquivalent(t *testing.T) {
 			}
 			if len(got.AuthIndexes) > 200 {
 				t.Fatal("facet cap exceeded")
+			}
+		})
+	}
+
+	const dayMS = int64(24 * 60 * 60 * 1000)
+	if _, err := repo.SQL().Exec(`UPDATE usage_events SET timestamp_ms = 1700000000000 + ((id - 1) % 90) * ?`, dayMS); err != nil {
+		t.Fatal(err)
+	}
+	for _, days := range []int64{30, 90} {
+		t.Run(fmt.Sprintf("%d days", days), func(t *testing.T) {
+			const from = int64(1700000000000)
+			to := from + days*dayMS - 1
+			want, err := readFacetsIndividually(repo, context.Background(), "default", from, to)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := repo.GetUsageFacets(context.Background(), "default", from, to)
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("long-window facets differ: %v\ngot: %+v\nwant: %+v", err, got, want)
 			}
 		})
 	}
@@ -180,7 +204,7 @@ func BenchmarkUsageFacetsStrategies(b *testing.B) {
 				name string
 				read func(*Repository, context.Context, string, int64, int64) (UsageFacets, error)
 			}{
-				{"grouped", readFacetsIndividually}, {"materialized", (*Repository).GetUsageFacets},
+				{"grouped", readFacetsIndividually}, {"single-pass", (*Repository).GetUsageFacets},
 			} {
 				b.Run(strategy.name, func(b *testing.B) {
 					b.ReportAllocs()
@@ -202,7 +226,7 @@ func BenchmarkUsageFacetsNarrowWindow(b *testing.B) {
 		name string
 		read func(*Repository, context.Context, string, int64, int64) (UsageFacets, error)
 	}{
-		{"grouped", readFacetsIndividually}, {"materialized", (*Repository).GetUsageFacets},
+		{"grouped", readFacetsIndividually}, {"single-pass", (*Repository).GetUsageFacets},
 	} {
 		b.Run(strategy.name, func(b *testing.B) {
 			b.ReportAllocs()

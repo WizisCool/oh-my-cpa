@@ -1,15 +1,18 @@
 package repository
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
@@ -776,67 +779,76 @@ func (r *Repository) GetUsageFacets(ctx context.Context, instanceID string, from
 	if r == nil || r.SQL() == nil {
 		return facets, errors.New("repository is not initialized")
 	}
-	// Materialize only the facet columns once: separate indexed detail-table walks otherwise
-	// hold the single SQLite connection much longer than grouping this narrow window.
-	columns := []struct {
-		column     string
-		maskColumn string
-		target     *[]UsageFacetValue
-	}{
-		{column: "model", target: &facets.Models},
-		{column: "provider", target: &facets.Providers},
-		{column: "api_group_key", maskColumn: "api_key_mask", target: &facets.APIGroupKey},
-		{column: "auth_index", target: &facets.AuthIndexes},
-		{column: "source", target: &facets.Sources},
-		{column: "executor_type", target: &facets.Executors},
-		{column: "model_alias", target: &facets.ModelAliases},
-		{column: "auth_type", target: &facets.AuthTypes},
-		{column: "reasoning_effort", target: &facets.ReasoningEfforts},
-		{column: "service_tier", target: &facets.ServiceTiers},
-		{column: "resolved_service_tier", target: &facets.ResolvedServiceTiers},
-	}
-	var query strings.Builder
-	query.WriteString(`WITH facet_window AS MATERIALIZED (
-		SELECT model, provider, api_group_key, api_key_mask, auth_index, source,
-		       executor_type, model_alias, auth_type, reasoning_effort, service_tier,
-		       ` + RESOLVED_SERVICE_TIER_SQL + ` AS resolved_service_tier
-		FROM usage_events e WHERE instance_id = ? AND timestamp_ms BETWEEN ? AND ?
-	) `)
-	for i, entry := range columns {
-		if i > 0 {
-			query.WriteString(" UNION ALL ")
-		}
-		maskExpression := "''"
-		if entry.maskColumn != "" {
-			maskExpression = `COALESCE(MAX(NULLIF(` + entry.maskColumn + `, '')), '')`
-		}
-		// Each subquery retains its own cap and binary tie ordering before the union.
-		fmt.Fprintf(&query, `SELECT %d AS dimension, value, requests, mask FROM (
-			SELECT %s AS value, COUNT(1) AS requests, %s AS mask
-			FROM facet_window WHERE %s <> '' GROUP BY %s
-			ORDER BY requests DESC, value ASC LIMIT 200
-		)`, i, entry.column, maskExpression, entry.column, entry.column)
-	}
-	query.WriteString(" ORDER BY dimension ASC, requests DESC, value ASC")
-	rows, err := r.SQL().QueryContext(ctx, query.String(), instanceID, fromMS, toMS)
+	// Scan the narrow projection once. Materializing the whole window and sorting it
+	// once per dimension held the shared SQLite connection for seconds on large ranges.
+	// Aggregate in Go so SQLite needs neither temporary tables nor repeated GROUP BYs.
+	rows, err := r.SQL().QueryContext(ctx, `
+		SELECT model, provider, api_group_key, auth_index, source, executor_type,
+		       COALESCE(model_alias, ''), auth_type, reasoning_effort, service_tier,
+		       response_service_tier, effective_service_tier, api_key_mask
+		FROM usage_events WHERE instance_id = ? AND timestamp_ms BETWEEN ? AND ?`, instanceID, fromMS, toMS)
 	if err != nil {
 		return facets, fmt.Errorf("read usage facets: %w", err)
 	}
 	defer rows.Close()
+
+	targets := [...]*[]UsageFacetValue{
+		&facets.Models, &facets.Providers, &facets.APIGroupKey, &facets.AuthIndexes,
+		&facets.Sources, &facets.Executors, &facets.ModelAliases, &facets.AuthTypes,
+		&facets.ReasoningEfforts, &facets.ServiceTiers, &facets.ResolvedServiceTiers,
+	}
+	var counts [len(targets)]map[string]UsageFacetValue
+	for dimension := range counts {
+		counts[dimension] = make(map[string]UsageFacetValue)
+	}
+	var model, provider, apiGroupKey, authIndex, source, executor string
+	var alias, authType, effort, requestedTier, responseTier, effectiveTier, mask string
 	for rows.Next() {
-		var dimension int
-		var value UsageFacetValue
-		if err := rows.Scan(&dimension, &value.Value, &value.Requests, &value.Mask); err != nil {
+		if err := rows.Scan(&model, &provider, &apiGroupKey, &authIndex, &source, &executor,
+			&alias, &authType, &effort, &requestedTier, &responseTier, &effectiveTier, &mask); err != nil {
 			return facets, fmt.Errorf("scan usage facets: %w", err)
 		}
-		value.Mask = security.NormalizeMask(value.Mask)
-		target := columns[dimension].target
-		*target = append(*target, value)
+		resolvedTier, _ := pricing.ResolveServiceTier(provider, executor, responseTier, requestedTier, effectiveTier)
+		values := [...]string{model, provider, apiGroupKey, authIndex, source, executor,
+			alias, authType, effort, requestedTier, resolvedTier}
+		for dimension, value := range values {
+			if value == "" {
+				continue
+			}
+			entry := counts[dimension][value]
+			entry.Value = value
+			entry.Requests++
+			// Compare stored masks before normalization, matching SQLite's binary MAX.
+			if dimension == 2 && mask > entry.Mask {
+				entry.Mask = mask
+			}
+			counts[dimension][value] = entry
+		}
 	}
 	if err := rows.Err(); err != nil {
-		return facets, err
+		return facets, fmt.Errorf("iterate usage facets: %w", err)
 	}
-
+	// Release the connection before ordering the small facet results.
+	if err := rows.Close(); err != nil {
+		return facets, fmt.Errorf("close usage facets: %w", err)
+	}
+	for dimension, entries := range counts {
+		values := make([]UsageFacetValue, 0, len(entries))
+		for _, entry := range entries {
+			values = append(values, entry)
+		}
+		slices.SortFunc(values, func(left, right UsageFacetValue) int {
+			if order := cmp.Compare(right.Requests, left.Requests); order != 0 {
+				return order
+			}
+			return strings.Compare(left.Value, right.Value)
+		})
+		values = values[:min(len(values), 200)]
+		for index := range values {
+			values[index].Mask = security.NormalizeMask(values[index].Mask)
+		}
+		*targets[dimension] = values
+	}
 	return facets, nil
 }
 
