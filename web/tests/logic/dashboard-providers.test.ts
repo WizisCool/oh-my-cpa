@@ -16,6 +16,7 @@ import {
   isOpenCalendarPreset,
   parseDashboardComparisonPreference,
   previousCalendarPreset,
+  resolveCostCaption,
   type DashboardResponse,
   type DashboardTailResponse,
 } from '../../src/types/dashboard';
@@ -1002,5 +1003,79 @@ test('model trend tooltip honors the console token unit style', () => {
       ['folded', '846'],
       ['total', '5,694,578 tokens'],
     ],
+  );
+});
+
+test('dashboard cost tile caption across estimated, partial and placeholder windows', () => {
+  const base: DashboardResponse = {
+    window: { preset: 'today', from: 1_000_000, to: 1_300_000, bucket_ms: 60_000, minutes: 5, complete: true, open_end: true },
+    requests: { total: 5_821, success: 5_623, failed: 198, success_rate: 96.6, series: [] },
+    tokens: { total: 1000, input: 800, output: 200, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, series: [] },
+    metrics: {
+      rpm: 5.19,
+      tpm: 200,
+      cache_rate: 89.7,
+      cost: 51.95,
+      cost_nanos: 51_950_000_000,
+      costed_requests: 5_821,
+      cost_source: 'estimated',
+      cost_note: '',
+      avg_latency_ms: 400,
+      avg_ttft_ms: 100,
+    },
+    coverage: { rollup_requests: 0, detail_requests: 5_821, pending_inbox: 0, has_usage: true },
+    partial_errors: [],
+  };
+
+  // Priced window shows per-request spend even when unrelated catalog models lack prices.
+  const estimated = resolveCostCaption(base, 2);
+  assert.equal(estimated.kind, 'per_request');
+  if (estimated.kind === 'per_request') {
+    assert.ok(Math.abs(estimated.perRequestUsd - 51.95 / 5821) < 1e-9);
+  }
+
+  // Zero-request edge case on an estimated source never divides by zero.
+  assert.deepEqual(
+    resolveCostCaption({ ...base, requests: { ...base.requests, total: 0 } }, 1),
+    { kind: 'placeholder', showUnpricedLink: false },
+  );
+
+  // Partial pricing distinguishes model-linkable gaps from historical-only gaps.
+  assert.deepEqual(
+    resolveCostCaption(
+      { ...base, metrics: { ...base.metrics, cost_source: 'partial', costed_requests: 5_800 } },
+      2,
+    ),
+    { kind: 'partial', pricedRequests: 5_800, totalRequests: 5_821, showUnpricedLink: true },
+  );
+  assert.deepEqual(
+    resolveCostCaption(
+      { ...base, metrics: { ...base.metrics, cost_source: 'partial', costed_requests: 5_800 } },
+      0,
+    ),
+    { kind: 'partial', pricedRequests: 5_800, totalRequests: 5_821, showUnpricedLink: false },
+  );
+  assert.deepEqual(
+    resolveCostCaption(
+      { ...base, metrics: { ...base.metrics, cost_source: 'partial', costed_requests: 0 } },
+      1,
+    ),
+    { kind: 'placeholder', showUnpricedLink: true },
+  );
+
+  // Placeholder and unknown states stay unpriced.
+  assert.deepEqual(
+    resolveCostCaption(
+      { ...base, metrics: { ...base.metrics, cost: 0, cost_nanos: 0, costed_requests: 0, cost_source: 'placeholder' } },
+      1,
+    ),
+    { kind: 'placeholder', showUnpricedLink: true },
+  );
+  assert.deepEqual(
+    resolveCostCaption(
+      { ...base, metrics: { ...base.metrics, cost: 0, cost_nanos: 0, costed_requests: 0, cost_source: 'none' } },
+      0,
+    ),
+    { kind: 'placeholder', showUnpricedLink: false },
   );
 });

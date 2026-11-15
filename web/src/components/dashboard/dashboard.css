@@ -201,6 +201,11 @@
    the widths, and two tiles of one width side by side must read their figures on one line. A
    quarter of the board takes the compact size, anything wider the large one. */
 .kpi-tile { container: kpi-tile / inline-size; }
+/* Every KPI caption reserves at least one line so sparklines start on the same baseline across a row. */
+.kpi-tile .tile-caption { min-height: 1.5em; line-height: 1.5; }
+.tile-caption-note { border-radius: var(--radius-xs); cursor: help; }
+.tile-caption-note.is-partial { text-decoration: underline dotted var(--warn); text-underline-offset: 3px; }
+.tile-caption-note:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tile-value > * { font-size: var(--kpi-figure-size, 1em); line-height: 1; vertical-align: baseline; }
 /* Pace-matched comparison sits on the hero figure's baseline without altering its strut height,
    so tiles with and without a delta start their captions and sparklines on the same horizontal line. */
