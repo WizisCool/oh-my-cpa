@@ -96,7 +96,7 @@ export function Pager({
             aria-current={entry === safePage ? 'page' : undefined}
             onClick={() => go(entry)}
             className={cn(
-              'inline-flex h-7 min-w-7 cursor-pointer items-center justify-center rounded-sm border-0 px-2 text-sm font-medium transition-colors [@media(pointer:coarse)]:min-h-9 [@media(pointer:coarse)]:min-w-9',
+              'inline-flex h-7 min-w-7 cursor-pointer items-center justify-center rounded-sm border-0 px-2 text-md font-medium transition-colors [@media(pointer:coarse)]:min-h-9 [@media(pointer:coarse)]:min-w-9',
               entry === safePage
                 ? 'bg-primary text-primary-foreground shadow-control'
                 : 'bg-secondary text-foreground shadow-control hover:bg-secondary-hover',
@@ -123,7 +123,7 @@ export function Pager({
               setJumpDraft('');
             }
           }}
-          className="ml-1 h-7 w-12 rounded-sm border-0 bg-field px-2 text-center text-sm text-foreground shadow-well outline-none focus-visible:shadow-field-focus"
+          className="ml-1 h-7 w-12 rounded-sm border-0 bg-field px-2 text-center text-md text-foreground shadow-well outline-none focus-visible:shadow-field-focus"
         />
       ) : null}
     </nav>

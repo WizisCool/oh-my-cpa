@@ -36,8 +36,9 @@ const buttonVariants = cva(
         default: 'h-8 px-3 text-base gap-1.5',
         sm: 'h-7 px-2.5 text-md gap-1.5',
         lg: 'h-9 px-4 text-base gap-2',
-        icon: 'size-8 p-0 gap-0',
-        'icon-sm': 'size-7 p-0 gap-0',
+        // A glyph standing alone is drawn a step above the label size it would sit beside.
+        icon: 'size-8 p-0 gap-0 text-lg',
+        'icon-sm': 'size-7 p-0 gap-0 text-lg',
       },
     },
     defaultVariants: {

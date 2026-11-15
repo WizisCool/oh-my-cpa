@@ -506,9 +506,13 @@
   /* Fixed-viewport shell: body itself never scrolls; the sidebar and the main
      content column scroll independently (wheel applies to the hovered region). */
   html, body, #root { height: 100%; }
+  /* Body text sits on the scale's reading step. The root keeps the browser's 16px so rem-based
+     sizes are untouched; anything that does not name its own size, including text in drawers and
+     dialogs portalled to the body, reads at the body step instead of the browser's 16px. */
   body {
     overflow: hidden;
     margin: 0;
+    font-size: var(--text-md);
     min-width: 320px;
     background: var(--bg);
     color: var(--fg);
