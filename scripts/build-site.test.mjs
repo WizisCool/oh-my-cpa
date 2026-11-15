@@ -205,6 +205,18 @@ test('resolveSiteVersion prefers stable GitHub latest release tag and falls back
   assert.equal(
     await resolveSiteVersion({
       repoRoot: ROOT,
+      fetchImpl: async () =>
+        new Response(null, {
+          status: 302,
+          headers: { Location: 'https://github.com/WizisCool/oh-my-cpa/releases/tag/v0.4.3' },
+        }),
+    }),
+    '0.4.3',
+  );
+
+  assert.equal(
+    await resolveSiteVersion({
+      repoRoot: ROOT,
       fetchImpl: async () => new Response(JSON.stringify({ tag_name: 'v0.9.1' }), { status: 200 }),
     }),
     '0.9.1',

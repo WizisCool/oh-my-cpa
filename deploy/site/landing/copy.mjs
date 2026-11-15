@@ -54,7 +54,7 @@ export const COPY = {
       close: 'Dismiss banner',
     },
     docs: '/docs/en',
-    release: (version) => `<strong>v${version}</strong> release notes`,
+    release: (version) => `<strong data-release-version>v${version}</strong> release notes`,
     hero: {
       lead: 'Centralize APIs, OAuth and routing, observe requests, quota and cost. Open source, self-hosted.',
       primary: 'Get started',
@@ -253,7 +253,7 @@ export const COPY = {
       close: '关闭横幅',
     },
     docs: '/docs/zh',
-    release: (version) => `<strong>v${version}</strong> 版本说明`,
+    release: (version) => `<strong data-release-version>v${version}</strong> 版本说明`,
     hero: {
       lead: '集中管理 API、OAuth 与路由，可视化观测请求、配额与成本。开源，自托管。',
       primary: '开始使用',

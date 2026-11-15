@@ -652,7 +652,7 @@ export function renderLanding(lang, { version = '' } = {}) {
     <main id="main">
       <section class="hero">
         <div class="wrap hero-copy">
-          ${version ? `<a class="release" href="${GITHUB_URL}/releases/tag/v${escapeHtml(version)}">${text.release(escapeHtml(version))}${icon('arrow-up-right')}</a>` : ''}
+          ${version ? `<a class="release" data-release-link href="${GITHUB_URL}/releases/tag/v${escapeHtml(version)}">${text.release(escapeHtml(version))}${icon('arrow-up-right')}</a>` : ''}
           <div class="hero-art">${outlineMark()}</div>
           <h1 class="hero-title"><span class="sr-only">Oh My CPA</span>${heroWordmark()}</h1>
           <p class="lead">${escapeHtml(text.hero.lead)}</p>
@@ -717,7 +717,7 @@ export function renderLanding(lang, { version = '' } = {}) {
           ${brand('wordmark', 'wordmark')}
           <div class="footer-meta">
             <span>${escapeHtml(f.license)}</span>
-            ${version ? `<span>v${escapeHtml(version)}</span>` : ''}
+            ${version ? `<span data-release-version>v${escapeHtml(version)}</span>` : ''}
           </div>
         </div>
         <nav class="footer-links" aria-label="${escapeHtml(f.navLabel)}">
