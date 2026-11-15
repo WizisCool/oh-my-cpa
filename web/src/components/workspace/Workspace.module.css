@@ -68,6 +68,7 @@
 }
 
 .notices {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -76,6 +77,11 @@
   margin: 0 auto;
   padding: 16px 24px 0;
   box-sizing: border-box;
+  transform: translateX(calc(var(--workspace-gutter) / -2));
+}
+
+.notices:empty {
+  display: none;
 }
 
 .resizer {

@@ -70,12 +70,29 @@
   padding-top: 52px;
 }
 
+/* Notices stay pinned at the top of the workspace column rather than joining the centred empty state. */
+.shell-notices,
+.shell .shell-notices {
+  padding-bottom: 12px;
+}
+
 /* An empty conversation gathers in the middle of the page, a little above centre, where a
-   reader's eye rests. */
+   reader's eye rests. Safe auto margins keep top notices above the hero and never clip on overflow. */
 .shell[data-hero] .shell-main {
-  justify-content: center;
   padding-bottom: 12vh;
   overflow-y: auto;
+}
+
+.shell[data-hero] .shell-notices {
+  padding-bottom: 24px;
+}
+
+.shell[data-hero] .shell-main > .shell-notices + * {
+  margin-top: auto;
+}
+
+.shell[data-hero] .shell-main > :last-child {
+  margin-bottom: auto;
 }
 
 /* ── empty state ───────────────────────────────────────────────────────────── */
@@ -157,9 +174,30 @@
      little down the page, stands clear of the box, and the starting questions are a quiet list
      under it instead of four more framed boxes beside the composer's own. */
   .shell[data-hero] .shell-main {
-    justify-content: flex-start;
     padding-top: max(48px, 13dvh);
     padding-bottom: 16px;
+  }
+
+  .shell[data-hero]:not([data-keyboard]) .shell-main:has(> .shell-notices:not(:empty)) {
+    padding-top: 48px;
+  }
+
+  .shell .shell-notices {
+    padding-top: 8px;
+    padding-bottom: 12px;
+  }
+
+  .shell[data-hero] .shell-notices {
+    padding-top: 8px;
+    padding-bottom: 24px;
+  }
+
+  .shell[data-hero] .shell-main > .shell-notices + * {
+    margin-top: 0;
+  }
+
+  .shell[data-hero] .shell-main > :last-child {
+    margin-bottom: 0;
   }
 
   .hero {
@@ -201,6 +239,11 @@
 
   .shell[data-keyboard] .shell-main {
     padding-top: 0;
+  }
+
+  .shell[data-keyboard] .shell-notices {
+    padding-top: 12px;
+    padding-bottom: 8px;
   }
 
   .shell[data-hero][data-keyboard] .hero {
