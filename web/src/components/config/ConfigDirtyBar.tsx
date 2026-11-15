@@ -112,11 +112,10 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
         <div className="config-dirty-bar-actions inline-flex items-center gap-2.5">
           {/* Discard needs no confirmation, invoking the rollback directly. */}
           <Button
-            size="sm"
+            variant="ghost"
             icon={<CloseOutlined />}
             disabled={isSaving || isDiscardDisabled}
             onClick={onDiscard}
-            className="config-dirty-btn-discard"
           >
             {t('cfg.dirty_bar_discard')}
           </Button>
@@ -125,14 +124,12 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
               a valid form goes through confirmation. */}
           {hasErrors ? (
             <Button
-              size="sm"
               variant="primary"
               icon={<CheckOutlined />}
               loading={isSaving}
               disabled={isSaving || disabled}
               data-tip={disabled ? disabledReason ?? t('demo.blocked') : undefined}
               onClick={onSave}
-              className="config-dirty-btn-save"
             >
               {t('cfg.dirty_bar_save')}
             </Button>
@@ -153,14 +150,12 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
               placement="topRight"
             >
               <Button
-                size="sm"
                 variant="primary"
                 icon={<CheckOutlined />}
                 loading={isSaving}
                 disabled={isSaving || disabled}
                 data-tip={disabled ? disabledReason ?? t('demo.blocked') : undefined}
                 ref={saveRef}
-                className="config-dirty-btn-save"
               >
                 {t('cfg.dirty_bar_save')}
               </Button>

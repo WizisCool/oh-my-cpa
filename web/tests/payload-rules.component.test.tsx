@@ -69,9 +69,7 @@ it('adding a raw rule updates the actual configuration draft and exposes its sav
     fireEvent.click(panel.querySelector('[data-slot="accordion-panel"] button')!);
     await waitFor(() => expect(screen.getByTestId('payload-draft').textContent).toContain('override-raw'));
     expect(container.querySelectorAll('.payload-rule-card')).toHaveLength(1);
-    const save = document.querySelector<HTMLButtonElement>('.config-dirty-btn-save');
-    expect(save).not.toBeNull();
-    expect(save?.disabled).toBe(false);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save changes' }).disabled).toBe(false);
   } finally { client.clear(); }
 });
 
