@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   keepPreviousData,
   useQuery,
@@ -6,6 +7,7 @@ import {
   type UseQueryOptions,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useIsRouteActive, useIsRoutePollingActive } from './routeContract';
 
 export type SwrPlaceholderStrategy = 'keepPrevious' | 'sameScope' | 'none';
 
@@ -162,7 +164,28 @@ export function useSwrQuery<TParams, TData, TKey extends QueryKey = QueryKey>(
   params: TParams,
   overrides?: SwrQueryRuntimeOverrides<TData, TKey>,
 ): UseQueryResult<TData, Error> {
-  return useQuery(contract.queryOptions(params, overrides));
+  const isRouteActive = useIsRouteActive();
+  const isPollingActive = useIsRoutePollingActive();
+  const effectiveOverrides: SwrQueryRuntimeOverrides<TData, TKey> | undefined = isPollingActive
+    ? overrides
+    : {
+        ...overrides,
+        refetchInterval: false,
+        refetchOnWindowFocus: false,
+      };
+  const result = useQuery(contract.queryOptions(params, effectiveOverrides));
+  const wasRouteActiveRef = React.useRef(isRouteActive);
+  React.useEffect(() => {
+    const becameActive = isRouteActive && !wasRouteActiveRef.current;
+    wasRouteActiveRef.current = isRouteActive;
+    // When a cached hot route resumes after being parked off-screen, revalidate stale data
+    // (including closed calendar presets whose server-resolved bounds advance across midnight)
+    // just as a fresh mount or window focus would.
+    if (becameActive && overrides?.enabled !== false && result.isStale && !result.isFetching) {
+      void result.refetch();
+    }
+  }, [isRouteActive, overrides?.enabled, result.isStale, result.isFetching, result.refetch]);
+  return result;
 }
 
 /**

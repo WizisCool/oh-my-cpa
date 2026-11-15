@@ -1,9 +1,12 @@
+import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { installOmcApi, type OmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 import { AppLayout } from '../src/components/common/AppLayout';
 import { NavSelectionHighlight } from '../src/components/common/NavSelectionHighlight';
+import { useIsRouteActive } from '../src/performance/routeContract';
 import { consoleRouteRegistry } from '../src/routePreload';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { SidebarNavSettings } from '../src/components/settings/SidebarNavSettings';
@@ -260,5 +263,97 @@ describe('sidebar selection highlight', () => {
     expect(layer0?.style.opacity).toBe('0');
     expect(layer1?.style.opacity).toBe('1');
     expect(layer1?.style.transform).toBe('translate3d(0, 136px, 0)');
+  });
+});
+
+describe('hot route slot caching and security boundary', () => {
+  it('preserves Dashboard DOM across intra-session navigations while unmounting non-hot views immediately', async () => {
+    vi.spyOn(consoleRouteRegistry, 'scheduleIdlePrewarm').mockReturnValue(() => undefined);
+    vi.spyOn(consoleRouteRegistry, 'preloadChunk').mockResolvedValue(undefined);
+    vi.spyOn(consoleRouteRegistry, 'warmIntent').mockImplementation(() => undefined);
+    api.on('GET', '/management/system/repository', () => ({ stargazers_count: 0 }));
+    api.on('GET', '/management/system/updates', () => ({ omc_version: { state: 'unchecked' }, cpa_version: { state: 'unchecked' } }));
+
+    let dashboardMounts = 0;
+    let apiKeysMounts = 0;
+    let apiKeysUnmounts = 0;
+
+    function FakeDashboard() {
+      const isRouteActive = useIsRouteActive();
+      const navigate = useNavigate();
+      const [searchParams, setSearchParams] = useSearchParams();
+      React.useEffect(() => {
+        dashboardMounts += 1;
+      }, []);
+      return (
+        <div
+          data-testid="fake-dashboard"
+          data-route-active={String(isRouteActive)}
+          data-filter={searchParams.get('filter') ?? ''}
+        >
+          <button type="button" onClick={() => setSearchParams({ filter: 'gpt-5' })}>Filter gpt-5</button>
+          <button type="button" onClick={() => navigate(-1)}>Go back</button>
+          <button type="button" onClick={() => navigate('/usage/events')}>Drill down</button>
+        </div>
+      );
+    }
+
+    function FakeApiKeys() {
+      React.useEffect(() => {
+        apiKeysMounts += 1;
+        return () => {
+          apiKeysUnmounts += 1;
+        };
+      }, []);
+      return <div data-testid="fake-api-keys">Keys</div>;
+    }
+
+    const surface = renderWithOmc(
+      <ThemeProvider>
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <Routes>
+            <Route element={<AppLayout />}>
+              <Route path="/dashboard" element={<FakeDashboard />} />
+              <Route path="/api-keys" element={<FakeApiKeys />} />
+              <Route path="/usage/events" element={<div data-testid="fake-events">Events</div>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </ThemeProvider>,
+    );
+
+    const dashNode = await screen.findByTestId('fake-dashboard');
+    expect(dashboardMounts).toBe(1);
+    expect(dashNode.getAttribute('data-route-active')).toBe('true');
+
+    // Navigate to secret-bearing /api-keys: Dashboard stays cached and inactive; /api-keys mounts fresh.
+    fireEvent.click(surface.container.querySelector<HTMLElement>('[data-route-path="/api-keys"]')!);
+    await screen.findByTestId('fake-api-keys');
+    expect(apiKeysMounts).toBe(1);
+    const dashSlot = surface.container.querySelector<HTMLElement>('[data-hot-route="/dashboard"]')!;
+    expect(dashSlot.classList.contains('is-inactive')).toBe(true);
+    expect(dashSlot.getAttribute('aria-hidden')).toBe('true');
+    await waitFor(() => expect(dashNode.getAttribute('data-route-active')).toBe('false'));
+
+    // Return to /dashboard: exact same DOM node & mount count preserved, while /api-keys unmounts immediately!
+    fireEvent.click(surface.container.querySelector<HTMLElement>('[data-route-path="/dashboard"]')!);
+    await waitFor(() => expect(dashSlot.classList.contains('is-inactive')).toBe(false));
+    expect(apiKeysUnmounts).toBe(1);
+    expect(screen.queryByTestId('fake-api-keys')).toBeNull();
+    expect(screen.getByTestId('fake-dashboard')).toBe(dashNode);
+    expect(dashboardMounts).toBe(1);
+    await waitFor(() => expect(dashNode.getAttribute('data-route-active')).toBe('true'));
+
+    // Verify search parameter updates and history Back inside the cached slot stay synchronized without remounting.
+    fireEvent.click(screen.getByRole('button', { name: 'Filter gpt-5' }));
+    await waitFor(() => expect(dashNode.getAttribute('data-filter')).toBe('gpt-5'));
+    expect(dashboardMounts).toBe(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    await waitFor(() => expect(dashNode.getAttribute('data-filter')).toBe(''));
+    expect(dashboardMounts).toBe(1);
+
+    // Verify frozen router context inside cached slot still navigates cleanly.
+    fireEvent.click(screen.getByRole('button', { name: 'Drill down' }));
+    await screen.findByTestId('fake-events');
   });
 });

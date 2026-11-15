@@ -1,13 +1,10 @@
-import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { QUERY_KEYS } from '../api/queryKeys';
+import { useIsRouteActive } from '../performance/routeContract';
 import { type PluginOAuthLogos } from '../types/pluginOAuthProviders';
 import {
-  buildMergedMultiPortalKeys,
-  buildMergedPluginLogos,
-  buildMergedPluginOAuthIds,
-  buildMergedPluginTitles,
+  getIdentityDirectoryProjection,
   isPluginOwnedInDirectory,
 } from './useIdentityDirectory';
 
@@ -16,50 +13,65 @@ import {
  * read from the shared `management-identity-directory` query.
  */
 export function usePluginOAuthLogos(): PluginOAuthLogos {
+  const isRouteActive = useIsRouteActive();
   const { data } = useQuery({
     queryKey: QUERY_KEYS.identityDirectory,
     queryFn: ({ signal }) => api.getIdentityDirectory({ signal }),
-    staleTime: 30000,
+    staleTime: 0,
+    refetchOnWindowFocus: isRouteActive,
+    meta: { silent: true },
   });
 
-  return useMemo(() => buildMergedPluginLogos(data), [data]);
+  return getIdentityDirectoryProjection(data).pluginLogos;
 }
 
 /** The titles the installed (and archived) plugins' login cards give their OAuth providers. */
 export function usePluginOAuthTitles(): ReadonlyMap<string, string> {
+  const isRouteActive = useIsRouteActive();
   const { data } = useQuery({
     queryKey: QUERY_KEYS.identityDirectory,
     queryFn: ({ signal }) => api.getIdentityDirectory({ signal }),
-    staleTime: 30000,
+    staleTime: 0,
+    refetchOnWindowFocus: isRouteActive,
+    meta: { silent: true },
   });
 
-  return useMemo(() => buildMergedPluginTitles(data), [data]);
+  return getIdentityDirectoryProjection(data).pluginTitles;
 }
 
 export function usePluginMultiPortalKeys(): ReadonlySet<string> {
+  const isRouteActive = useIsRouteActive();
   const { data } = useQuery({
     queryKey: QUERY_KEYS.identityDirectory,
     queryFn: ({ signal }) => api.getIdentityDirectory({ signal }),
-    staleTime: 30000,
+    staleTime: 0,
+    refetchOnWindowFocus: isRouteActive,
+    meta: { silent: true },
   });
-  return useMemo(() => buildMergedMultiPortalKeys(data), [data]);
+  return getIdentityDirectoryProjection(data).multiPortalKeys;
 }
 
 export function usePluginOAuthIds(): Set<string> {
+  const isRouteActive = useIsRouteActive();
   const { data } = useQuery({
     queryKey: QUERY_KEYS.identityDirectory,
     queryFn: ({ signal }) => api.getIdentityDirectory({ signal }),
-    staleTime: 30000,
+    staleTime: 0,
+    refetchOnWindowFocus: isRouteActive,
+    meta: { silent: true },
   });
-  return useMemo(() => buildMergedPluginOAuthIds(data), [data]);
+  return getIdentityDirectoryProjection(data).pluginOAuthIds;
 }
 
 export function usePluginProviderOwnership(providerKeys: readonly (string | undefined)[], isEnabled: boolean) {
+  const isRouteActive = useIsRouteActive();
   const query = useQuery({
     queryKey: QUERY_KEYS.identityDirectory,
     queryFn: ({ signal }) => api.getIdentityDirectory({ signal }),
-    staleTime: 30000,
+    staleTime: 0,
+    refetchOnWindowFocus: isRouteActive,
     enabled: isEnabled,
+    meta: { silent: true },
   });
   return {
     isOwned: isPluginOwnedInDirectory(query.data, providerKeys),

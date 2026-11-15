@@ -28,6 +28,13 @@ interface FilterMove {
   isMoving: boolean;
   /** The list is short enough to be watched moving; a longer one is drawn as it is. */
   isGliding: boolean;
+  /**
+   * Canonical signature of the ordered keys currently drawn. Passing this as `layoutDependency`
+   * tells Motion's `MeasureLayout` to snapshot `getBoundingClientRect()` BEFORE React updates the
+   * DOM whenever the list's items/order actually change, while completely skipping DOM geometry
+   * reads on unrelated re-renders (hover, selection, polling, route activity pauses).
+   */
+  keysDependency: string;
 }
 
 /**
@@ -38,7 +45,11 @@ interface FilterMove {
  */
 const GLIDING_LIMIT = 80;
 
-const FilterMoveContext = React.createContext<FilterMove>({ isMoving: false, isGliding: false });
+const FilterMoveContext = React.createContext<FilterMove>({
+  isMoving: false,
+  isGliding: false,
+  keysDependency: '',
+});
 
 export interface FilterTransitionProps {
   /**
@@ -64,10 +75,14 @@ export function FilterTransition({ itemKeys, children }: FilterTransitionProps) 
   const drawn = React.useRef<readonly string[]>([]);
   const isGliding = itemKeys.length <= GLIDING_LIMIT;
   const isMoving = isGliding && keepsSomething(drawn.current, itemKeys);
+  const keysDependency = React.useMemo(() => itemKeys.join('\u0000'), [itemKeys]);
   React.useLayoutEffect(() => {
     drawn.current = itemKeys;
   });
-  const move = React.useMemo(() => ({ isMoving, isGliding }), [isMoving, isGliding]);
+  const move = React.useMemo(
+    () => ({ isMoving, isGliding, keysDependency }),
+    [isMoving, isGliding, keysDependency],
+  );
   return (
     <MotionScope features="layout">
       <FilterMoveContext.Provider value={move}>{children}</FilterMoveContext.Provider>
@@ -89,6 +104,7 @@ export interface FilterItemMotionOptions {
 
 export interface FilterItemMotion {
   layout: 'position' | false;
+  layoutDependency: string | undefined;
   initial: typeof ARRIVING | false;
   animate: typeof ARRIVED;
   transition: Transition;
@@ -103,16 +119,17 @@ export interface FilterItemMotion {
  * height, and a table row cannot animate its box anyway.
  */
 export function useFilterItemMotion({ isHeld = false }: FilterItemMotionOptions = {}): FilterItemMotion {
-  const { isMoving, isGliding } = React.useContext(FilterMoveContext);
+  const { isMoving, isGliding, keysDependency } = React.useContext(FilterMoveContext);
   const answer = useSpringTransition('answer');
   return React.useMemo(() => ({
     layout: isGliding && !isHeld ? 'position' : false,
+    layoutDependency: isGliding && !isHeld ? keysDependency : undefined,
     // The first read and a page change have nothing to fade in from; a row that starts to match a
     // search does.
     initial: isMoving ? ARRIVING : false,
     animate: ARRIVED,
     transition: answer,
-  }), [isGliding, isHeld, isMoving, answer]);
+  }), [isGliding, isHeld, isMoving, keysDependency, answer]);
 }
 
 const TAGS = { div: m.div, li: m.li, tr: m.tr, article: m.article, section: m.section } as const;

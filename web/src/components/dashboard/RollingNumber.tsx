@@ -1,8 +1,34 @@
 import React from 'react';
-import NumberFlow from '@number-flow/react';
+import NumberFlow, { NumberFlowGroup } from '@number-flow/react';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
+import { useFrameBudgetMount } from '../../performance/frameScheduler';
+import { useIsRouteActive } from '../../performance/routeContract';
 import { MOTION_ROLL, MOTION_ROLL_PRESENCE } from '../../theme/themeConfig';
 import type { RollingReadout } from '../../types/rollingNumber';
+
+export const RollingNumberGroup: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const isRouteActive = useIsRouteActive();
+  const isGroupFlowMounted = useFrameBudgetMount('p2', { immediate: false, enabled: isRouteActive });
+  return (
+    <RollingGroupHydrationContext.Provider value={isGroupFlowMounted}>
+      <NumberFlowGroup>{children}</NumberFlowGroup>
+    </RollingGroupHydrationContext.Provider>
+  );
+};
+
+const RollingGroupHydrationContext = React.createContext<boolean | null>(null);
+
+const STATIC_FORMATTERS = new Map<string, Intl.NumberFormat>();
+
+function formatReadoutStatic(readout: RollingReadout): string {
+  const key = JSON.stringify(readout.format);
+  let formatter = STATIC_FORMATTERS.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat('en', readout.format);
+    STATIC_FORMATTERS.set(key, formatter);
+  }
+  return `${readout.prefix ?? ''}${formatter.format(readout.number)}${readout.suffix ?? ''}`;
+}
 
 interface RollingNumberProps {
   /** The readout to print; undefined is the console's "no reading" mark. */
@@ -35,6 +61,14 @@ interface RollingNumberProps {
  */
 const RollingNumberView: React.FC<RollingNumberProps> = ({ readout }) => {
   const isReducedMotion = usePrefersReducedMotion();
+  const isRouteActive = useIsRouteActive();
+  const groupHydrated = React.useContext(RollingGroupHydrationContext);
+  const standaloneHydrated = useFrameBudgetMount('p2', {
+    immediate: groupHydrated !== null,
+    enabled: isRouteActive,
+  });
+  const isFlowMounted = groupHydrated ?? standaloneHydrated;
+  const hasHydratedFlowRef = React.useRef(false);
   const unit = `${readout?.prefix ?? ''}\0${readout?.suffix ?? ''}`;
   const previousUnit = React.useRef(unit);
   // The ref is advanced in an effect rather than during render so a StrictMode
@@ -43,12 +77,22 @@ const RollingNumberView: React.FC<RollingNumberProps> = ({ readout }) => {
   React.useEffect(() => {
     previousUnit.current = unit;
   }, [unit]);
+  React.useEffect(() => {
+    if (isFlowMounted) hasHydratedFlowRef.current = true;
+  }, [isFlowMounted]);
 
   if (!readout) {
     // The console's shared "no reading" mark. A missing reading is not a zero reading - "nothing
     // measured" and "measured as nothing" are different claims - which is what the formatting
     // layer's own em dash already says on the surfaces that cannot animate.
     return <>—</>;
+  }
+
+  // Paint the exact formatted text immediately on Frame 1 without Shadow DOM custom-element
+  // construction or forced glyph layout; upgrade silently in a background `p2` slice so subsequent
+  // live-tail or range changes sweep with batched `<NumberFlowGroup>` motion.
+  if (isReducedMotion || !isFlowMounted) {
+    return <>{formatReadoutStatic(readout)}</>;
   }
 
   return (
@@ -58,7 +102,7 @@ const RollingNumberView: React.FC<RollingNumberProps> = ({ readout }) => {
       format={readout.format}
       prefix={readout.prefix}
       suffix={readout.suffix}
-      animated={!isReducedMotion && !unitChanged}
+      animated={hasHydratedFlowRef.current && !unitChanged}
       respectMotionPreference={false}
       transformTiming={MOTION_ROLL}
       spinTiming={MOTION_ROLL}

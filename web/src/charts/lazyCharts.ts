@@ -47,10 +47,7 @@ export const loadInsightsHourChart = createRouteLoader(
 export const LazyInsightsHourChart = lazyRoute<InsightsHourChartProps>(loadInsightsHourChart);
 
 export function preloadDashboardCharts(): Promise<unknown> {
-  return Promise.all([
-    loadDashboardTrendChart(),
-    loadModelTokenTrend(),
-  ]);
+  return loadModelTokenTrend();
 }
 
 export function preloadInsightsCharts(): Promise<unknown> {

@@ -289,3 +289,158 @@ export function useTransitionNavigate(
 
   return { isPending, navigateTo };
 }
+
+/**
+ * Secret-free, read-only observability routes whose DOM and chart subtrees are preserved across
+ * intra-session navigations inside bounded `<React.Activity>` boundaries.
+ *
+ * Configuration, credential-bearing, and mount-hydrated views are intentionally excluded so
+ * plaintext keys never remain in hidden DOM and form drafts always reset cleanly on exit.
+ */
+export const HOT_ACTIVITY_ROUTES: ReadonlySet<string> = new Set(['/dashboard', '/insights']);
+export const PINNED_HOT_ROUTES: ReadonlySet<string> = new Set(['/dashboard']);
+
+/**
+ * Publishes whether the enclosing route container is currently visible (`true`) or cached
+ * off-screen via `content-visibility: hidden` (`false`). Transitions post-paint on every route
+ * switch without a debounce so rapid exit-and-return bounces still observe a clean activation
+ * edge for transient draft cleanup and stale-query revalidation.
+ */
+export const RouteActivityContext = React.createContext<boolean>(true);
+
+/**
+ * Publishes whether background polling/streams inside a cached route should remain active.
+ * Debounces teardown briefly on route exit so rapid back-and-forth switches avoid tearing down
+ * and re-establishing polling intervals and live streams.
+ */
+export const RoutePollingContext = React.createContext<boolean>(true);
+
+export function useIsRouteActive(): boolean {
+  return React.useContext(RouteActivityContext);
+}
+
+export function useIsRoutePollingActive(): boolean {
+  return React.useContext(RoutePollingContext);
+}
+
+export interface HotRouteSlotEntry<TOutlet = React.ReactNode, TLocationContext = unknown> {
+  readonly key: string;
+  readonly outlet: TOutlet;
+  readonly locationContext: TLocationContext;
+  readonly lastActiveStep: number;
+}
+
+export interface ReconcileHotRouteOptions {
+  readonly maxSlots?: number;
+  readonly pinnedKeys?: ReadonlySet<string>;
+}
+
+interface LocationFields {
+  readonly pathname?: string;
+  readonly search?: string;
+  readonly hash?: string;
+  readonly state?: unknown;
+}
+
+interface LocationEnvelopeLike {
+  readonly location?: LocationFields;
+  readonly locationContext?: {
+    readonly location?: LocationFields;
+  };
+}
+
+function extractLocationFields(value: unknown): LocationFields | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const candidate = value as LocationEnvelopeLike;
+  if (candidate.location && typeof candidate.location === 'object') return candidate.location;
+  if (candidate.locationContext?.location && typeof candidate.locationContext.location === 'object') {
+    return candidate.locationContext.location;
+  }
+  return undefined;
+}
+
+function isSameRouteLocation(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  const locA = extractLocationFields(a);
+  const locB = extractLocationFields(b);
+  if (!locA || !locB) return false;
+  return (
+    locA.pathname === locB.pathname &&
+    locA.search === locB.search &&
+    locA.hash === locB.hash &&
+    Object.is(locA.state, locB.state)
+  );
+}
+
+/**
+ * Purely updates a bounded LRU pool of `<React.Activity>` / `content-visibility` route slots while
+ * preserving array order and keeping the original `outlet` element reference (so React bails out of
+ * reconciling thousands of unchanged fibers on warm route return unless URL search/state changed).
+ */
+export function reconcileHotRouteSlots<TOutlet, TLocationContext>(
+  slots: readonly HotRouteSlotEntry<TOutlet, TLocationContext>[],
+  active: { readonly key: string; readonly outlet: TOutlet; readonly locationContext: TLocationContext } | null,
+  options: ReconcileHotRouteOptions = {},
+): readonly HotRouteSlotEntry<TOutlet, TLocationContext>[] {
+  if (!active) return slots;
+  const maxSlots = Math.max(1, options.maxSlots ?? 2);
+  const pinnedKeys = options.pinnedKeys ?? PINNED_HOT_ROUTES;
+  const nextStep = slots.reduce((max, item) => Math.max(max, item.lastActiveStep), 0) + 1;
+
+  const existingIndex = slots.findIndex((item) => item.key === active.key);
+  if (existingIndex >= 0) {
+    const existing = slots[existingIndex]!;
+    const isLatest = existing.lastActiveStep === nextStep - 1;
+    const sameLocation = isSameRouteLocation(existing.locationContext, active.locationContext);
+    if (sameLocation && isLatest) {
+      return slots;
+    }
+    const updated = [...slots];
+    updated[existingIndex] = {
+      key: active.key,
+      // Keep `existing.outlet` element identity so React skips top-down subtree reconciliation on warm return.
+      outlet: existing.outlet,
+      locationContext: sameLocation ? existing.locationContext : active.locationContext,
+      lastActiveStep: isLatest ? existing.lastActiveStep : nextStep,
+    };
+    return updated;
+  }
+
+  const nextEntry: HotRouteSlotEntry<TOutlet, TLocationContext> = {
+    key: active.key,
+    outlet: active.outlet,
+    locationContext: active.locationContext,
+    lastActiveStep: nextStep,
+  };
+
+  if (slots.length < maxSlots) {
+    return [...slots, nextEntry];
+  }
+
+  let evictIndex = -1;
+  let oldestStep = Infinity;
+  for (let i = 0; i < slots.length; i += 1) {
+    const candidate = slots[i]!;
+    if (pinnedKeys.has(candidate.key)) continue;
+    if (candidate.lastActiveStep < oldestStep) {
+      oldestStep = candidate.lastActiveStep;
+      evictIndex = i;
+    }
+  }
+  if (evictIndex < 0) {
+    // Every slot is pinned; replace the oldest slot only if maxSlots must be respected.
+    evictIndex = 0;
+    oldestStep = slots[0]!.lastActiveStep;
+    for (let i = 1; i < slots.length; i += 1) {
+      if (slots[i]!.lastActiveStep < oldestStep) {
+        oldestStep = slots[i]!.lastActiveStep;
+        evictIndex = i;
+      }
+    }
+  }
+
+  const replaced = [...slots];
+  replaced.splice(evictIndex, 1);
+  replaced.push(nextEntry);
+  return replaced;
+}

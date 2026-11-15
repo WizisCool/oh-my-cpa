@@ -24,6 +24,7 @@ import { useRankedSortableList } from '../../hooks/useSortableList';
 import { DASHBOARD_PROVIDER_ORDER_PREFERENCE } from '../../types/dashboardLayout';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { formatMinuteSpan } from '../../utils/dateTimeFormat';
+import { useIsRouteActive, useIsRoutePollingActive } from '../../performance/routeContract';
 import './dashboard.css';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
@@ -78,6 +79,8 @@ export const DashboardProviders = React.memo(function DashboardProviders({
   const navigate = useNavigate();
   const [isExpanded, setIsExpanded] = useState(false);
   const isPhone = useIsPhoneViewport();
+  const isRouteActive = useIsRouteActive();
+  const isPollingActive = useIsRoutePollingActive();
   const sliding = range ? isSlidingRange(range) : true;
 
   const {
@@ -90,14 +93,39 @@ export const DashboardProviders = React.memo(function DashboardProviders({
   } = useProviderBranding();
 
   // Windowed provider traffic controlled by the top time selector
-  const { data: windowProvidersData } = useQuery({
+  const windowProvidersEnabled = Boolean(query && enabled !== false);
+  const windowProvidersQuery = useQuery({
     queryKey: ['dashboard-providers', query],
     queryFn: () => api.getDashboardProviders(query),
-    enabled: Boolean(query && enabled !== false),
-    refetchInterval: sliding ? 30000 : false,
-    staleTime: 5000,
+    enabled: windowProvidersEnabled,
+    refetchInterval: isPollingActive && sliding ? 30000 : false,
+    refetchOnWindowFocus: isPollingActive,
+    staleTime: 15_000,
     placeholderData: keepPreviousData,
   });
+  const windowProvidersData = windowProvidersQuery.data;
+
+  // Revalidate stale windowed provider traffic (including closed calendar presets such as
+  // `yesterday` across midnight) whenever the cached Dashboard route resumes active visibility.
+  const wasRouteActiveRef = React.useRef(isRouteActive);
+  React.useEffect(() => {
+    const becameActive = isRouteActive && !wasRouteActiveRef.current;
+    wasRouteActiveRef.current = isRouteActive;
+    if (
+      becameActive &&
+      windowProvidersEnabled &&
+      windowProvidersQuery.isStale &&
+      !windowProvidersQuery.isFetching
+    ) {
+      void windowProvidersQuery.refetch();
+    }
+  }, [
+    isRouteActive,
+    windowProvidersEnabled,
+    windowProvidersQuery.isStale,
+    windowProvidersQuery.isFetching,
+    windowProvidersQuery.refetch,
+  ]);
 
   const configuredProviders = brandingProviders ?? [];
   const overviewProviders: ManagementOverviewProvider[] = overview.providers || [];

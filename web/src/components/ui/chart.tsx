@@ -2,13 +2,34 @@ import * as React from 'react';
 import * as RechartsPrimitive from 'recharts';
 import { TooltipReadout, type TooltipReadoutRow } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { sharedResizeObserverHub } from '@/performance/resizeObserverHub';
 import { useMotionPreference } from '@/utils/motionPreference';
 
 const THEMES = { dark: ':root', light: ":root[data-theme-mode='light']" } as const;
 const INITIAL_DIMENSION = { width: 320, height: 200 } as const;
 
+function isSyntheticDomEnvironment(): boolean {
+  return (
+    typeof ResizeObserver === 'undefined' ||
+    (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent))
+  );
+}
+
 /** Ensures at most one chart across the page holds an active touch tooltip at any time. */
 let activeTouchChartDismiss: (() => void) | null = null;
+
+export function claimTouchChartDismiss(dismiss: () => void): void {
+  if (activeTouchChartDismiss && activeTouchChartDismiss !== dismiss) {
+    activeTouchChartDismiss();
+  }
+  activeTouchChartDismiss = dismiss;
+}
+
+export function releaseTouchChartDismiss(dismiss: () => void): void {
+  if (activeTouchChartDismiss === dismiss) {
+    activeTouchChartDismiss = null;
+  }
+}
 
 export type ChartConfig = Record<
   string,
@@ -65,6 +86,9 @@ export function ChartContainer({
   const hostRef = React.useRef<HTMLDivElement | null>(null);
   const [isTooltipDismissed, setIsTooltipDismissed] = React.useState(false);
   const [isTouchEngaged, setIsTouchEngaged] = React.useState(false);
+  const [measuredDimension, setMeasuredDimension] = React.useState<{ width: number; height: number } | null>(
+    () => (isSyntheticDomEnvironment() ? initialDimension : null),
+  );
   const lastActiveKeyRef = React.useRef<string>('');
   const touchGestureRef = React.useRef<{
     x: number;
@@ -91,11 +115,37 @@ export function ChartContainer({
 
   React.useEffect(() => {
     return () => {
-      if (activeTouchChartDismiss === dismissTouchTooltip) {
-        activeTouchChartDismiss = null;
-      }
+      releaseTouchChartDismiss(dismissTouchTooltip);
     };
   }, [dismissTouchTooltip]);
+
+  // Subscribe to the shared ResizeObserver hub without reading `clientWidth` inside `useLayoutEffect`:
+  // ResizeObserver delivers the post-layout `contentRect` directly from the browser's normal layout pass
+  // with zero forced synchronous layout, so Recharts mounts once at exact pixel dimensions.
+  // If a caller forgets an explicit height (yielding `h === 0` while `w > 0`), fall back to
+  // `initialDimension.height` so the chart remains visible instead of staying blank.
+  const fallbackHeight = initialDimension.height;
+  React.useEffect(() => {
+    if (!responsive) return undefined;
+    const host = hostRef.current;
+    if (!host) return undefined;
+    return sharedResizeObserverHub.observe(
+      host,
+      ({ width, height }) => {
+        const w = Math.round(width);
+        const h = Math.round(height);
+        if (w <= 0) return;
+        const resolvedHeight = h > 0 ? h : fallbackHeight;
+        if (resolvedHeight <= 0) return;
+        setMeasuredDimension((prev) =>
+          prev && prev.width === w && prev.height === resolvedHeight
+            ? prev
+            : { width: w, height: resolvedHeight },
+        );
+      },
+      { freezeOnTransition: true, epsilonPx: 1, allowZeroHeight: true },
+    );
+  }, [responsive, fallbackHeight]);
 
   React.useEffect(() => {
     if (!isTouchEngaged) return;
@@ -149,10 +199,7 @@ export function ChartContainer({
         data-chart={chartId}
         onPointerDown={(event) => {
           if (event.pointerType === 'touch') {
-            if (activeTouchChartDismiss && activeTouchChartDismiss !== dismissTouchTooltip) {
-              activeTouchChartDismiss();
-            }
-            activeTouchChartDismiss = dismissTouchTooltip;
+            claimTouchChartDismiss(dismissTouchTooltip);
             touchGestureRef.current = {
               x: event.clientX,
               y: event.clientY,
@@ -210,17 +257,14 @@ export function ChartContainer({
         {...props}
       >
         {responsive ? (
-          // The container renders at `initialDimension` until its own observer has measured the
-          // box, so a chart never waits on a synchronous measure of the page or a second pass.
-          <RechartsPrimitive.ResponsiveContainer
-            width="100%"
-            height="100%"
-            minWidth={1}
-            minHeight={1}
-            initialDimension={initialDimension}
-          >
-            {children}
-          </RechartsPrimitive.ResponsiveContainer>
+          measuredDimension ? (
+            <RechartsPrimitive.ResponsiveContainer
+              width={measuredDimension.width}
+              height={measuredDimension.height}
+            >
+              {children}
+            </RechartsPrimitive.ResponsiveContainer>
+          ) : null
         ) : (
           children
         )}

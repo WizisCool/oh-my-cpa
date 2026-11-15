@@ -7,7 +7,7 @@ import {
   MenuUnfoldOutlined,
   RightOutlined,
 } from '../icons';
-import { Outlet, useLocation, useMatches, useNavigate } from 'react-router-dom';
+import { UNSAFE_LocationContext, UNSAFE_RouteContext, useLocation, useMatches, useNavigate, useOutlet } from 'react-router-dom';
 import { HeaderNav } from './HeaderNav';
 import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
@@ -24,7 +24,14 @@ import { useT } from '../../i18n';
 import { PricingEditorProvider } from '../pricing/PricingEditorContext';
 import { useToast } from '../feedback';
 import { consoleRouteRegistry, warmRouteIntent } from '../../routePreload';
-import { useTransitionNavigate } from '../../performance/routeContract';
+import {
+  HOT_ACTIVITY_ROUTES,
+  RouteActivityContext,
+  RoutePollingContext,
+  reconcileHotRouteSlots,
+  useTransitionNavigate,
+  type HotRouteSlotEntry,
+} from '../../performance/routeContract';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { collectPluginPages, PLUGIN_PAGE_ROUTE_PREFIX } from '../plugins/pluginPages';
 import { clearMirroredCPAMCCredential } from '../plugins/pluginHostCredential';
@@ -93,12 +100,163 @@ function parseSidebarCollapsed(raw: unknown): boolean | undefined {
   return typeof raw === 'boolean' ? raw : undefined;
 }
 
+const SUPPORTS_CONTENT_VISIBILITY_HIDDEN =
+  typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('content-visibility', 'hidden');
+
+type RouterLocationContextValue = React.ContextType<typeof UNSAFE_LocationContext>;
+type RouterRouteContextValue = React.ContextType<typeof UNSAFE_RouteContext>;
+
+interface HotRouteContextSnapshot {
+  readonly locationContext: RouterLocationContextValue;
+  readonly routeContext: RouterRouteContextValue;
+}
+
+interface HotRouteSlotProps {
+  readonly routeKey: string;
+  readonly isActive: boolean;
+  readonly outlet: React.ReactElement;
+  readonly routerSnapshot: HotRouteContextSnapshot;
+}
+
+interface HotRoutePollingBoundaryProps {
+  readonly isActive: boolean;
+  readonly outlet: React.ReactElement;
+  readonly routerSnapshot: HotRouteContextSnapshot;
+}
+
+/**
+ * Isolates post-paint `RouteActivityContext` updates inside a dedicated boundary whose `outlet`
+ * element reference stays frozen, so React bails out of reconciling thousands of unchanged fibers
+ * inside cached observability pages while still notifying `useIsRouteActive()` subscribers.
+ *
+ * Also freezes both `UNSAFE_LocationContext` and `UNSAFE_RouteContext` for the slot so hooks inside
+ * cached pages (`useNavigate`, `useSearchParams`, `useLocation`) never re-run when another route
+ * becomes active.
+ */
+const HotRoutePollingBoundary = React.memo<HotRoutePollingBoundaryProps>(function HotRoutePollingBoundary({
+  isActive,
+  outlet,
+  routerSnapshot,
+}) {
+  const [isVisibleActive, setIsVisibleActive] = React.useState(isActive);
+  const [isPollingActive, setIsPollingActive] = React.useState(isActive);
+
+  // Actual route visibility transitions right after the paint frame with zero debounce so leaving
+  // and rapidly returning always produces a true `false -> true` edge for draft cleanup and
+  // stale-query revalidation while keeping the navigation paint frame itself free of child renders.
+  React.useEffect(() => {
+    if (isVisibleActive === isActive) return undefined;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    const frameId = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame(() => {
+          timerId = setTimeout(() => {
+            React.startTransition(() => setIsVisibleActive(isActive));
+          }, 0);
+        })
+      : undefined;
+    if (frameId === undefined) {
+      timerId = setTimeout(() => {
+        React.startTransition(() => setIsVisibleActive(isActive));
+      }, 0);
+    }
+    return () => {
+      if (frameId !== undefined && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(frameId);
+      }
+      if (timerId !== undefined) clearTimeout(timerId);
+    };
+  }, [isActive, isVisibleActive]);
+
+  // Polling teardown alone uses a brief settle delay so rapid back-and-forth switches skip
+  // interval/stream teardown and re-setup.
+  React.useEffect(() => {
+    if (isPollingActive === isActive) return undefined;
+    const settleDelayMs = isActive ? 0 : 180;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    const frameId = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame(() => {
+          timerId = setTimeout(() => {
+            React.startTransition(() => setIsPollingActive(isActive));
+          }, settleDelayMs);
+        })
+      : undefined;
+    if (frameId === undefined) {
+      timerId = setTimeout(() => {
+        React.startTransition(() => setIsPollingActive(isActive));
+      }, settleDelayMs);
+    }
+    return () => {
+      if (frameId !== undefined && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(frameId);
+      }
+      if (timerId !== undefined) clearTimeout(timerId);
+    };
+  }, [isActive, isPollingActive]);
+
+  const body = React.useMemo(
+    () => (
+      <UNSAFE_RouteContext.Provider value={routerSnapshot.routeContext}>
+        <UNSAFE_LocationContext.Provider value={routerSnapshot.locationContext}>
+          <React.Suspense fallback={<RouteLoading />}>
+            {outlet}
+          </React.Suspense>
+        </UNSAFE_LocationContext.Provider>
+      </UNSAFE_RouteContext.Provider>
+    ),
+    [outlet, routerSnapshot],
+  );
+
+  return (
+    <RouteActivityContext.Provider value={isVisibleActive}>
+      <RoutePollingContext.Provider value={isPollingActive}>
+        {body}
+      </RoutePollingContext.Provider>
+    </RouteActivityContext.Provider>
+  );
+});
+
+/**
+ * Keeps a visited hot observability route's DOM, ComputedStyle, and LayoutObject cache intact via
+ * `content-visibility: hidden` (`faster-spa-view-transitions`).
+ *
+ * Crucially:
+ * 1. Where `content-visibility: hidden` is supported, skipped subtrees are already excluded from
+ *    focus, tab order, hit-testing, and assistive trees by the browser without toggling `inert`
+ *    (which in Blink invalidates inherited `ComputedStyle` across thousands of descendants).
+ * 2. Background polling state (`RouteActivityContext`) transitions after the paint frame settles
+ *    so the navigation frame itself performs zero child component re-renders.
+ */
+const HotRouteSlot = React.memo<HotRouteSlotProps>(function HotRouteSlot({
+  routeKey,
+  isActive,
+  outlet,
+  routerSnapshot,
+}) {
+  return (
+    <div
+      data-hot-route={routeKey}
+      aria-hidden={!isActive || undefined}
+      inert={!SUPPORTS_CONTENT_VISIBILITY_HIDDEN && !isActive ? true : undefined}
+      className={clsx('route-transition', 'route-cached-view', !isActive && 'is-inactive')}
+    >
+      <HotRoutePollingBoundary
+        isActive={isActive}
+        outlet={outlet}
+        routerSnapshot={routerSnapshot}
+      />
+    </div>
+  );
+});
+
 export const AppLayout: React.FC = () => {
   const t = useT();
   const toast = useToast();
   const rawNavigate = useNavigate();
   const { navigateTo, isPending: isNavigationPending } = useTransitionNavigate(rawNavigate, consoleRouteRegistry);
   const location = useLocation();
+  const outlet = useOutlet();
+  const locationContext = React.useContext(UNSAFE_LocationContext);
+  const routeContext = React.useContext(UNSAFE_RouteContext);
   const queryClient = useQueryClient();
   const timeZone = useTimeZone();
   const sidebarPreference = usePreference('omc_sidebar_collapsed', false, parseSidebarCollapsed);
@@ -300,6 +458,27 @@ export const AppLayout: React.FC = () => {
 
   const isCpaUnsupported = health?.cpa_management_api === 'unsupported';
   const isCpaManagementDisabled = health?.cpa_management_api === 'disabled';
+  const isGatewayBlocked = isCpaUnsupported || isCpaManagementDisabled;
+  const activeRouteKey = routeViewKey(location.pathname);
+  const isActiveHotRoute = !isGatewayBlocked && outlet !== null && HOT_ACTIVITY_ROUTES.has(activeRouteKey);
+
+  const [hotSlots, setHotSlots] = React.useState<readonly HotRouteSlotEntry<React.ReactElement, HotRouteContextSnapshot>[]>([]);
+  const effectiveHotSlots = isGatewayBlocked
+    ? []
+    : reconcileHotRouteSlots(
+        hotSlots,
+        isActiveHotRoute
+          ? { key: activeRouteKey, outlet, locationContext: { locationContext, routeContext } }
+          : null,
+      );
+
+  React.useLayoutEffect(() => {
+    if (effectiveHotSlots !== hotSlots) {
+      if (effectiveHotSlots.length === 0 && hotSlots.length === 0) return;
+      setHotSlots(effectiveHotSlots);
+    }
+  }, [effectiveHotSlots, hotSlots]);
+
   return (
     <div
       className="app-shell"
@@ -363,21 +542,40 @@ export const AppLayout: React.FC = () => {
         >
           {/* App-wide in-flight indicator, so no page needs its own spinner swap. */}
           <DataProgress />
-          {/* Keyed by pathname so each view cross-fades in instead of hard
-              swapping, and the scroll position resets with the new page. */}
-          <div key={routeViewKey(location.pathname)} className={`route-transition${isWorkspaceRoute(location.pathname) ? ' workspace-route' : ''}`}>
-            <React.Suspense fallback={<RouteLoading />}>
-              {isCpaUnsupported ? (
+          {isCpaUnsupported ? (
+            <div key={activeRouteKey} className={`route-transition${isWorkspaceRoute(location.pathname) ? ' workspace-route' : ''}`}>
+              <React.Suspense fallback={<RouteLoading />}>
                 <CpaUpgradeRequired />
-              ) : isCpaManagementDisabled ? (
+              </React.Suspense>
+            </div>
+          ) : isCpaManagementDisabled ? (
+            <div key={activeRouteKey} className={`route-transition${isWorkspaceRoute(location.pathname) ? ' workspace-route' : ''}`}>
+              <React.Suspense fallback={<RouteLoading />}>
                 <CpaManagementDisabled />
-              ) : (
-                <PricingEditorProvider>
-                  <Outlet />
-                </PricingEditorProvider>
+              </React.Suspense>
+            </div>
+          ) : (
+            <PricingEditorProvider routeKey={activeRouteKey}>
+              {effectiveHotSlots.map((slot) => (
+                <HotRouteSlot
+                  key={slot.key}
+                  routeKey={slot.key}
+                  isActive={isActiveHotRoute && slot.key === activeRouteKey}
+                  outlet={slot.outlet}
+                  routerSnapshot={slot.locationContext}
+                />
+              ))}
+              {/* Non-cached routes keep keyed mount/unmount semantics so secret-bearing views
+                  and draft forms tear down immediately on navigation. */}
+              {!isActiveHotRoute && (
+                <div key={activeRouteKey} className={`route-transition${isWorkspaceRoute(location.pathname) ? ' workspace-route' : ''}`}>
+                  <React.Suspense fallback={<RouteLoading />}>
+                    {outlet}
+                  </React.Suspense>
+                </div>
               )}
-            </React.Suspense>
-          </div>
+            </PricingEditorProvider>
+          )}
         </main>
       </div>
       {isMobile && (

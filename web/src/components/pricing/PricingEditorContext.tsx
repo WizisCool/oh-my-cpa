@@ -33,16 +33,28 @@ interface EditorTarget {
   session: number;
 }
 
-export const PricingEditorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const PricingEditorProvider: React.FC<{ routeKey?: string; children: React.ReactNode }> = ({ routeKey, children }) => {
   const [target, setTarget] = React.useState<EditorTarget | null>(null);
   const [isOpen, setIsOpen] = React.useState(false);
   const sessionRef = React.useRef(0);
+  const lastRouteKeyRef = React.useRef(routeKey);
+  React.useEffect(() => {
+    if (lastRouteKeyRef.current !== routeKey) {
+      lastRouteKeyRef.current = routeKey;
+      setIsOpen(false);
+    }
+  }, [routeKey]);
   const open = React.useCallback<OpenPriceEditor>((model, options = {}) => {
     sessionRef.current += 1;
     setTarget({ model, options, session: sessionRef.current });
     setIsOpen(true);
   }, []);
-  const close = React.useCallback(() => setIsOpen(false), []);
+  const targetSession = target?.session ?? 0;
+  const closeCurrentSession = React.useCallback(() => {
+    if (sessionRef.current === targetSession) {
+      setIsOpen(false);
+    }
+  }, [targetSession]);
   return (
     <PricingEditorContext.Provider value={open}>
       <OpenModelContext.Provider value={isOpen && target ? target.model : null}>
@@ -57,7 +69,7 @@ export const PricingEditorProvider: React.FC<{ children: React.ReactNode }> = ({
             initialMode={target.options.mode}
             initialUpstream={target.options.upstream}
             isOpen={isOpen}
-            onClose={close}
+            onClose={closeCurrentSession}
           />
         </React.Suspense>
       )}

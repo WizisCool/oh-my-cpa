@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { QUERY_KEYS } from '../api/queryKeys';
+import { useIsRouteActive } from '../performance/routeContract';
 import type {
   ArchivedCredentialItem,
   ArchivedProviderItem,
@@ -109,6 +110,123 @@ export function isPluginOwnedInDirectory(
   return false;
 }
 
+export interface IdentityDirectoryProjection {
+  readonly pluginLogos: PluginOAuthLogos;
+  readonly pluginTitles: ReadonlyMap<string, string>;
+  readonly multiPortalKeys: ReadonlySet<string>;
+  readonly pluginOAuthIds: Set<string>;
+  readonly configuredProviders: ProviderItem[] | undefined;
+  readonly providersByID: Map<string, ProviderItem>;
+  readonly credentials: CredentialIndex;
+  readonly archivedCredentialsByIndex: Map<string, ArchivedCredentialItem>;
+  readonly archivedProvidersByKey: Map<string, ArchivedProviderItem>;
+  readonly archivedProviderIcons: Map<string, string>;
+  readonly archive: ProviderResolutionArchive;
+}
+
+const EMPTY_IDENTITY_PROJECTION: IdentityDirectoryProjection = (() => {
+  const archivedCredentialsByIndex = new Map<string, ArchivedCredentialItem>();
+  const archivedProvidersByKey = new Map<string, ArchivedProviderItem>();
+  const archivedProviderIcons = new Map<string, string>();
+  return {
+    pluginLogos: buildMergedPluginLogos(undefined),
+    pluginTitles: buildMergedPluginTitles(undefined),
+    multiPortalKeys: buildMergedMultiPortalKeys(undefined),
+    pluginOAuthIds: buildMergedPluginOAuthIds(undefined),
+    configuredProviders: undefined,
+    providersByID: new Map<string, ProviderItem>(),
+    credentials: indexCredentialFiles([], []),
+    archivedCredentialsByIndex,
+    archivedProvidersByKey,
+    archivedProviderIcons,
+    archive: {
+      archivedCredentials: archivedCredentialsByIndex,
+      archivedProviders: archivedProvidersByKey,
+      archivedProviderIcons,
+    },
+  };
+})();
+
+const PROJECTION_CACHE = new WeakMap<IdentityDirectoryResponse, IdentityDirectoryProjection>();
+
+function computeIdentityProjection(data: IdentityDirectoryResponse): IdentityDirectoryProjection {
+  const pluginLogos = buildMergedPluginLogos(data);
+  const pluginTitles = buildMergedPluginTitles(data);
+  const multiPortalKeys = buildMergedMultiPortalKeys(data);
+  const pluginOAuthIds = buildMergedPluginOAuthIds(data);
+  const configuredProviders: ProviderItem[] = data.providers.map((item) => ({
+    ...item,
+    disable_cooling: false,
+    proxy_configured: false,
+  }));
+  const providersByID = new Map(configuredProviders.map((provider) => [provider.id, provider]));
+  const credentials = indexCredentialFiles(data.credentials ?? [], data.archived_credentials ?? []);
+
+  const archivedCredentialsByIndex = new Map<string, ArchivedCredentialItem>();
+  for (const item of data.archived_credentials ?? []) {
+    const idx = item.auth_index?.trim();
+    if (idx) archivedCredentialsByIndex.set(idx, item);
+  }
+
+  const archivedProvidersByKey = new Map<string, ArchivedProviderItem>();
+  const archivedProviderIcons = new Map<string, string>();
+  const ambiguousKeys = new Set<string>();
+  for (const item of data.archived_providers ?? []) {
+    const key = item.provider_key?.trim().toLowerCase();
+    if (!key) continue;
+    archivedProvidersByKey.set(key, item);
+    if (item.is_ambiguous) {
+      ambiguousKeys.add(key);
+    } else if (item.icon_id?.trim()) {
+      archivedProviderIcons.set(key, item.icon_id.trim());
+    }
+  }
+  for (const item of data.archived_credentials ?? []) {
+    if (item.kind === 'apikey' && !item.is_ambiguous && item.icon_id?.trim() && item.provider_key?.trim()) {
+      const key = item.provider_key.trim().toLowerCase();
+      if (!ambiguousKeys.has(key) && !archivedProviderIcons.has(key)) {
+        archivedProviderIcons.set(key, item.icon_id.trim());
+      }
+    }
+  }
+
+  const archive: ProviderResolutionArchive = {
+    archivedCredentials: archivedCredentialsByIndex,
+    archivedProviders: archivedProvidersByKey,
+    archivedProviderIcons,
+  };
+
+  return {
+    pluginLogos,
+    pluginTitles,
+    multiPortalKeys,
+    pluginOAuthIds,
+    configuredProviders,
+    providersByID,
+    credentials,
+    archivedCredentialsByIndex,
+    archivedProvidersByKey,
+    archivedProviderIcons,
+    archive,
+  };
+}
+
+/**
+ * Memoizes all derived Maps/Sets per `IdentityDirectoryResponse` instance so multiple panels
+ * mounting on the same page share one O(1) lookup instead of repeating 10 collection scans each.
+ */
+export function getIdentityDirectoryProjection(
+  data: IdentityDirectoryResponse | undefined,
+): IdentityDirectoryProjection {
+  if (!data) return EMPTY_IDENTITY_PROJECTION;
+  let cached = PROJECTION_CACHE.get(data);
+  if (!cached) {
+    cached = computeIdentityProjection(data);
+    PROJECTION_CACHE.set(data, cached);
+  }
+  return cached;
+}
+
 /**
  * Shared consolidated identity directory across all console pages.
  *
@@ -117,6 +235,7 @@ export function isPluginOwnedInDirectory(
  * query key (`management-identity-directory`) synchronized via SSE `state_sync`.
  */
 export function useIdentityDirectory() {
+  const isRouteActive = useIsRouteActive();
   // Preferences stay subscribed so optimistic local icon edits reflect in 0ms
   // before the directory query round-trip settles.
   const { data: prefIcons } = useQuery({
@@ -131,128 +250,50 @@ export function useIdentityDirectory() {
     queryKey: QUERY_KEYS.identityDirectory,
     queryFn: ({ signal }) => api.getIdentityDirectory({ signal }),
     staleTime: 0,
+    refetchOnWindowFocus: isRouteActive,
+    meta: { silent: true },
   });
 
-  const { data, isFetching, isError, refetch } = directoryQuery;
+  const { data, isError, refetch } = directoryQuery;
 
   const providerIcons = useMemo(() => {
     if (prefIcons !== undefined) return prefIcons;
     return data?.provider_icons ?? EMPTY_PROVIDER_ICONS;
   }, [data?.provider_icons, prefIcons]);
 
-  const pluginLogos = useMemo(() => buildMergedPluginLogos(data), [data]);
-  const pluginTitles = useMemo(() => buildMergedPluginTitles(data), [data]);
-  const multiPortalKeys = useMemo(() => buildMergedMultiPortalKeys(data), [data]);
-  const pluginOAuthIds = useMemo(() => buildMergedPluginOAuthIds(data), [data]);
-
-  const configuredProviders = useMemo<ProviderItem[] | undefined>(() => {
-    if (!data) return undefined;
-    return data.providers.map((item) => ({
-      ...item,
-      disable_cooling: false,
-      proxy_configured: false,
-    }));
-  }, [data]);
-
-  const providersByID = useMemo(
-    () => new Map((configuredProviders ?? []).map((provider) => [provider.id, provider])),
-    [configuredProviders],
-  );
-
-  const credentials = useMemo<CredentialIndex>(
-    () => indexCredentialFiles(data?.credentials ?? [], data?.archived_credentials ?? []),
-    [data?.credentials, data?.archived_credentials],
-  );
-
-  const archivedCredentialsByIndex = useMemo(() => {
-    const map = new Map<string, ArchivedCredentialItem>();
-    for (const item of data?.archived_credentials ?? []) {
-      const idx = item.auth_index?.trim();
-      if (idx) map.set(idx, item);
-    }
-    return map;
-  }, [data?.archived_credentials]);
-
-  const archivedProvidersByKey = useMemo(() => {
-    const map = new Map<string, ArchivedProviderItem>();
-    for (const item of data?.archived_providers ?? []) {
-      const key = item.provider_key?.trim().toLowerCase();
-      if (key) map.set(key, item);
-    }
-    return map;
-  }, [data?.archived_providers]);
-
-  const archivedProviderIcons = useMemo(() => {
-    const map = new Map<string, string>();
-    const ambiguousKeys = new Set<string>();
-    for (const item of data?.archived_providers ?? []) {
-      const key = item.provider_key.trim().toLowerCase();
-      if (!key) continue;
-      if (item.is_ambiguous) {
-        ambiguousKeys.add(key);
-      } else if (item.icon_id?.trim()) {
-        map.set(key, item.icon_id.trim());
-      }
-    }
-    for (const item of data?.archived_credentials ?? []) {
-      if (item.kind === 'apikey' && !item.is_ambiguous && item.icon_id?.trim() && item.provider_key?.trim()) {
-        const key = item.provider_key.trim().toLowerCase();
-        if (!ambiguousKeys.has(key) && !map.has(key)) {
-          map.set(key, item.icon_id.trim());
-        }
-      }
-    }
-    return map;
-  }, [data?.archived_providers, data?.archived_credentials]);
-
-  const archive = useMemo<ProviderResolutionArchive>(
-    () => ({
-      archivedCredentials: archivedCredentialsByIndex,
-      archivedProviders: archivedProvidersByKey,
-      archivedProviderIcons,
-    }),
-    [archivedCredentialsByIndex, archivedProvidersByKey, archivedProviderIcons],
-  );
+  const projection = getIdentityDirectoryProjection(data);
 
   const isProviderCatalogUnproven = isError || !data || !data.catalog_status.providers_known;
 
   const isCredentialsUnavailable = isError || (data !== undefined && !data.catalog_status.credentials_known);
 
+  // While a cached snapshot already proves the provider catalog (`!isProviderCatalogUnproven`),
+  // background revalidation (`isFetching`) keeps using the proven identities instead of flashing
+  // every badge back to `unresolved` and re-rendering dependent panels twice on navigation.
   return useMemo(() => ({
     directory: data,
     providerIcons,
-    pluginLogos,
-    pluginTitles,
-    multiPortalKeys,
-    pluginOAuthIds,
-    providersByID,
-    configuredProviders,
-    credentials,
+    pluginLogos: projection.pluginLogos,
+    pluginTitles: projection.pluginTitles,
+    multiPortalKeys: projection.multiPortalKeys,
+    pluginOAuthIds: projection.pluginOAuthIds,
+    providersByID: projection.providersByID,
+    configuredProviders: projection.configuredProviders,
+    credentials: projection.credentials,
     isCredentialsUnavailable,
-    archivedCredentialsByIndex,
-    archivedProvidersByKey,
-    archivedProviderIcons,
-    archive,
+    archivedCredentialsByIndex: projection.archivedCredentialsByIndex,
+    archivedProvidersByKey: projection.archivedProvidersByKey,
+    archivedProviderIcons: projection.archivedProviderIcons,
+    archive: projection.archive,
     isProviderCatalogUnproven,
-    isProviderCatalogUnknown: isProviderCatalogUnproven || isFetching,
+    isProviderCatalogUnknown: isProviderCatalogUnproven,
     refetchProviders: refetch,
   }), [
     data,
     providerIcons,
-    pluginLogos,
-    pluginTitles,
-    multiPortalKeys,
-    pluginOAuthIds,
-    providersByID,
-    configuredProviders,
-    credentials,
+    projection,
     isCredentialsUnavailable,
-    archivedCredentialsByIndex,
-    archivedProvidersByKey,
-    archivedProviderIcons,
-    archive,
     isProviderCatalogUnproven,
-    isFetching,
     refetch,
   ]);
 }

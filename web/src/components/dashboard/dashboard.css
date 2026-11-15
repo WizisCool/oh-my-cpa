@@ -606,6 +606,7 @@
   min-width: 0;
 }
 .heatmap-month-track { align-items: start; }
+.heatmap-grid { contain: layout style; }
 .heatmap-month { color: var(--muted); font-size: var(--text-2xs); line-height: 1; white-space: nowrap; }
 /* The final column's label would run off the panel's edge, so it is anchored to its own
    column's right side - the same left-edge anchoring the others get, mirrored. */

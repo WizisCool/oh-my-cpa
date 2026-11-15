@@ -17,6 +17,18 @@ test('formatter cache reuses equivalent options and separates locales, fields an
   assert.notEqual(getDateTimeFormatter('en-US', { hour: '2-digit', timeZone: 'Asia/Kathmandu' }), first);
   assert.throws(() => getDateTimeFormatter('en-US', { timeZone: 'Invalid/Zone' }), RangeError);
   assert.equal(getDateTimeFormatter('en-US', { hour: '2-digit', timeZone: 'UTC' }), first);
+
+  // Mutating a reused non-frozen options object must never return a stale cached formatter.
+  const mutableOptions: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', timeZone: 'UTC', hour12: false };
+  const utcOut = getDateTimeFormatter('en-US', mutableOptions).format(0);
+  mutableOptions.timeZone = 'Asia/Kathmandu';
+  const kathmanduOut = getDateTimeFormatter('en-US', mutableOptions).format(0);
+  assert.notEqual(kathmanduOut, utcOut);
+
+  // Frozen constant options still hit the fast identity cache path.
+  const frozenOptions = Object.freeze({ year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' } as const);
+  const frozenFmt = getDateTimeFormatter('en-US', frozenOptions);
+  assert.equal(getDateTimeFormatter('en-US', frozenOptions), frozenFmt);
 });
 
 test('formatter retention is bounded across timezone choices', () => {
