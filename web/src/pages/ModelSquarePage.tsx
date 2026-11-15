@@ -11,24 +11,25 @@ import { useT } from '../i18n';
 import { resolveProviderMark, type BrandMark, type ProviderBrandSources } from '../types/brandMark';
 import { useProviderBranding } from '../hooks/useProviderBranding';
 import { LobeIcon, ProviderBrandIcon } from '../components/LobeIcon';
-import { BoxOutlined, CheckOutlined, CloseOutlined, CopyOutlined, DownOutlined, ExternalLinkOutlined, LayersOutlined, RightOutlined, SyncOutlined, UpOutlined } from '../components/icons';
+import { AudioOutlined, BoxOutlined, CheckOutlined, CloseOutlined, CopyOutlined, DownOutlined, ExternalLinkOutlined, FileOutlined, FileTextOutlined, LayersOutlined, PictureOutlined, RightOutlined, SyncOutlined, TypeOutlined, UpOutlined, VideoOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
 import { ListLoading } from '../components/common/PageLoading';
 import { CopyButton } from '../components/common/CopyButton';
 import { StatusLabel } from '../components/common/StatusLabel';
+import { EffortTag, Tag } from '../components/common/Tag';
+import { Tooltip } from '../components/common/Tooltip';
 import { providerDisplayName } from '../types/providerMetadata';
 import { LoadFailure, Notice, useToast, type ToastItem } from '../components/feedback';
 import { useOpenPriceEditor } from '../components/pricing/PricingEditorContext';
 import { PRICING_QUERY_KEYS } from '../components/pricing/pricingQueries';
 import { copyText } from '../utils/clipboard';
-import { formatGatewayTimestamp } from '../utils/time';
 import { formatRatePer1M } from '../types/pricingDisplay';
+import type { PricingResponse } from '../types/pricing';
 import { isUsageFacetsResponse } from '../types/usageEvents';
-import { MODEL_REQUEST_FACET_QUERY, buildModelLedger, modelRequestsLink, type ModelLedgerEntry, type ModelPricingTarget } from '../types/modelSquareLedger';
+import { MODEL_REQUEST_FACET_QUERY, buildModelLedger, modelRequestsLink, routePricingTarget, type ModelLedgerEntry, type ModelPricingTarget } from '../types/modelSquareLedger';
 import {
   buildModelReferenceLinks,
   buildModelSquareEntries,
-  classifyModelOpenness,
   countModelManufacturers,
   filterModelSquareEntries,
   isModelCatalogRefreshResult,
@@ -42,6 +43,7 @@ import {
   type ModelReferenceLink,
   type ModelSquareEntry,
   type ModelSquareProvider,
+  type ModelSquareRoute,
 } from '../types/modelSquare';
 import styles from './ModelSquarePage.module.css';
 import selectionStyles from '../components/common/selection.module.css';
@@ -58,7 +60,10 @@ import { Count } from '../components/common/Count';
 const PAGE_SIZE = 120;
 /** How long the check mark stands in for the copy glyph, matching `CopyButton`. */
 const COPIED_MS = 1500;
-const KNOWN_MODALITIES = ['text', 'image', 'audio', 'video', 'pdf'];
+/** The modalities drawn as a glyph; one the catalog adds later reads as its own name. */
+const MODALITY_ICONS: Record<string, React.FC> = {
+  text: TypeOutlined, image: PictureOutlined, audio: AudioOutlined, video: VideoOutlined, file: FileOutlined, pdf: FileTextOutlined,
+};
 
 type Translate = ReturnType<typeof useT>;
 
@@ -189,111 +194,184 @@ const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers
 });
 ModelRow.displayName = 'ModelRow';
 
-const ReferenceLinks: React.FC<{ links: readonly Pick<ModelReferenceLink, 'label' | 'url'>[] }> = ({ links }) => <>
+const ReferenceLinks: React.FC<{ links: readonly ModelReferenceLink[] }> = ({ links }) => <>
   {links.filter(link => isSafeReferenceURL(link.url)).map(link => <a key={link.url} className={styles['reference-link']} href={link.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
     {link.label}<ExternalLinkOutlined />
   </a>)}
 </>;
 
+// OpenRouter names the parameters a model accepts; these two stand for capabilities an operator asks about.
+const TOOL_PARAMETERS = ['tools'];
+const STRUCTURED_OUTPUT_PARAMETERS = ['structured_outputs', 'response_format'];
+const REASONING_PARAMETERS = ['reasoning', 'include_reasoning'];
+
 const ModelProfile: React.FC<{ identity: string; metadata?: ModelReference }> = ({ identity, metadata }) => {
   const t = useT();
   const maker = resolveModelManufacturer(identity, metadata);
   const unknown = <span className={styles['is-absent']}>{t('models.unknown')}</span>;
-  const text = (value?: string) => value || unknown;
   const limit = (value?: number) => value ? value.toLocaleString() : unknown;
-  const modalities = (values?: string[]) => values?.length ? values.map(value => (KNOWN_MODALITIES.includes(value) ? translateOr(t, `models.modality.${value}`, value) : value)).join(' / ') : unknown;
-  const flag = (value?: boolean) => {
-    if (value === undefined) return unknown;
-    return value
-      ? <span className={styles['flag']}><CheckOutlined className={styles['flag-yes']} />{t('models.supported')}</span>
-      : <span className={clsx(styles['flag'], styles['is-absent'])}><CloseOutlined />{t('models.unsupported')}</span>;
-  };
-  const openness = metadata && classifyModelOpenness(metadata);
-  const weightLinks = metadata?.weights?.filter(link => isSafeReferenceURL(link.url)) ?? [];
-  const resourceLinks = metadata?.links?.filter(link => isSafeReferenceURL(link.url)) ?? [];
+  const modalities = (values: readonly string[]) => values.length ? <span className={styles['modality-list']}>
+    {values.map(value => {
+      const Icon = Object.prototype.hasOwnProperty.call(MODALITY_ICONS, value) ? MODALITY_ICONS[value] : undefined;
+      if (!Icon) return <Tag key={value} size="small">{value}</Tag>;
+      const label = translateOr(t, `models.modality.${value}`, value);
+      return <Tooltip key={value} title={label}>
+        <span className={styles['modality-mark']} role="img" aria-label={label} tabIndex={0}><Icon /></span>
+      </Tooltip>;
+    })}
+  </span> : unknown;
+  const flag = (isSupported: boolean, label = t('models.supported')) => isSupported
+    ? <span className={styles['flag']}><CheckOutlined className={styles['flag-yes']} />{label}</span>
+    : <span className={clsx(styles['flag'], styles['is-absent'])}><CloseOutlined />{t('models.unsupported')}</span>;
+
+  if (!metadata) return <section className={styles['model-profile']}>
+    <ProfileHeading identity={identity} maker={maker} />
+    <div className={styles['profile-notice']}><Notice tone="info" title={t('models.metadata_unknown')} /></div>
+    <ExternalLookup identity={identity} />
+  </section>;
+
+  const parameters = metadata.supported_parameters;
+  // Parameters are the catalog's only word on a capability; with none listed it has said nothing.
+  const parameterFlag = (names: readonly string[]) => parameters.length ? flag(names.some(name => parameters.includes(name))) : unknown;
+  const { reasoning } = metadata;
+  const reasoningMode = reasoning && t(reasoning.mandatory ? 'models.reasoning_mandatory' : reasoning.default_enabled ? 'models.reasoning_default_on' : 'models.reasoning_default_off');
+  const weightsURL = metadata.hugging_face_id ? `https://huggingface.co/${metadata.hugging_face_id.split('/').map(encodeURIComponent).join('/')}` : '';
 
   return <section className={styles['model-profile']}>
-    <div className={styles['profile-heading']}>
-      <ManufacturerMark manufacturer={maker} size={32} />
-      <div>
-        <strong>{metadata?.name || identity}</strong>
-        <code>{metadata?.id || identity}</code>
-      </div>
-    </div>
-    {metadata ? <>
-      {metadata.description && <p className={styles['model-description']}>{metadata.description}</p>}
-      <dl className={clsx(styles['stat-tiles'], styles['limit-tiles'])}>
-        <div><dt>{t('models.context_window')}</dt><dd>{limit(metadata.limit.context)}</dd></div>
-        <div><dt>{t('models.output_limit')}</dt><dd>{limit(metadata.limit.output)}</dd></div>
-        <div><dt>{t('models.input_limit')}</dt><dd>{limit(metadata.limit.input)}</dd></div>
-      </dl>
-      <SectionHeading level="label" className={styles['fact-heading']} title={t('models.section_capabilities')} />
-      <dl className={styles['model-facts']}>
-        <div><dt>{t('models.input_modalities')}</dt><dd>{modalities(metadata.modalities.input)}</dd></div>
-        <div><dt>{t('models.output_modalities')}</dt><dd>{modalities(metadata.modalities.output)}</dd></div>
-        <div><dt>{t('models.reasoning')}</dt><dd>{flag(metadata.reasoning)}</dd></div>
-        <div><dt>{t('models.tool_call')}</dt><dd>{flag(metadata.tool_call)}</dd></div>
-        <div><dt>{t('models.structured_output')}</dt><dd>{flag(metadata.structured_output)}</dd></div>
-        <div><dt>{t('models.attachment')}</dt><dd>{flag(metadata.attachment)}</dd></div>
-      </dl>
-      <SectionHeading level="label" className={styles['fact-heading']} title={t('models.section_release')} />
-      <dl className={styles['model-facts']}>
-        <div><dt>{t('models.openness')}</dt><dd>{openness ? t(`models.openness.${openness}`) : unknown}</dd></div>
-        <div><dt>{t('models.license')}</dt><dd>{text(metadata.license)}</dd></div>
-        <div><dt>{t('models.release_date')}</dt><dd>{text(metadata.release_date)}</dd></div>
-        <div><dt>{t('models.knowledge')}</dt><dd>{text(metadata.knowledge)}</dd></div>
-        <div><dt>{t('models.last_updated')}</dt><dd>{text(metadata.last_updated)}</dd></div>
-      </dl>
-      {/* A model the source marks closed has no weights to link to, so only an open or unstated one reports a missing link. */}
-      {(weightLinks.length > 0 || metadata.open_weights !== false) && <div className={styles['link-row']}>
-        <h3>{t('models.weights')}</h3>
-        {weightLinks.length > 0 ? <ReferenceLinks links={weightLinks} /> : <span className={styles['is-absent']}>{t('models.weights_unknown')}</span>}
+    <ProfileHeading identity={identity} maker={maker} metadata={metadata} />
+    {metadata.description && <p className={styles['model-description']}>{metadata.description}</p>}
+    <dl className={clsx(styles['stat-tiles'], styles['limit-tiles'])}>
+      <div><dt>{t('models.context_window')}</dt><dd>{limit(metadata.context_length)}</dd></div>
+      <div><dt>{t('models.output_limit')}</dt><dd>{limit(metadata.max_completion_tokens)}</dd></div>
+    </dl>
+    <SectionHeading level="label" className={styles['fact-heading']} title={t('models.section_capabilities')} />
+    <dl className={styles['model-facts']}>
+      <div><dt>{t('models.input_modalities')}</dt><dd>{modalities(metadata.input_modalities)}</dd></div>
+      <div><dt>{t('models.output_modalities')}</dt><dd>{modalities(metadata.output_modalities)}</dd></div>
+      <div><dt>{t('models.tool_call')}</dt><dd>{parameterFlag(TOOL_PARAMETERS)}</dd></div>
+      <div><dt>{t('models.structured_output')}</dt><dd>{parameterFlag(STRUCTURED_OUTPUT_PARAMETERS)}</dd></div>
+      <div><dt>{t('models.reasoning')}</dt><dd>{reasoningMode ? flag(true, reasoningMode) : parameterFlag(REASONING_PARAMETERS)}</dd></div>
+      {reasoning?.default_effort && <div><dt>{t('models.default_effort')}</dt><dd><EffortTag effort={reasoning.default_effort} /></dd></div>}
+      {reasoning && reasoning.supported_efforts.length > 0 && <div className={styles['fact-wide']}>
+        <dt>{t('models.reasoning_efforts')}</dt>
+        <dd className={styles['tag-list']}>{reasoning.supported_efforts.map(level => <EffortTag key={level} effort={level} />)}</dd>
       </div>}
-      {resourceLinks.length > 0 && <div className={styles['link-row']}><h3>{t('models.resources')}</h3><ReferenceLinks links={resourceLinks} /></div>}
-    </> : <div className={styles['profile-notice']}><Notice tone="info" title={t('models.metadata_unknown')} /></div>}
-    <div className={styles['link-row']} aria-label={t('models.external_resources')}>
-      <h3>{t('models.external_resources')}</h3>
-      <ReferenceLinks links={buildModelReferenceLinks(identity, metadata)} />
-    </div>
+      <div className={styles['fact-wide']}>
+        <dt>{t('models.supported_parameters')}</dt>
+        <dd className={styles['tag-list']}>{parameters.length ? parameters.map(name => <Tag key={name} size="small" className={styles['parameter']}>{name}</Tag>) : unknown}</dd>
+      </div>
+    </dl>
+    <SectionHeading level="label" className={styles['fact-heading']} title={t('models.section_details')} />
+    <dl className={styles['model-facts']}>
+      <div><dt>{t('models.knowledge')}</dt><dd>{metadata.knowledge_cutoff || unknown}</dd></div>
+      {/* Only an open-weight model names a repository; a closed one has nothing to report missing. */}
+      {weightsURL && isSafeReferenceURL(weightsURL) && <div>
+        <dt>{t('models.weights')}</dt>
+        <dd><a className={styles['inline-link']} href={weightsURL} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{metadata.hugging_face_id}<ExternalLinkOutlined /></a></dd>
+      </div>}
+    </dl>
+    <ExternalLookup identity={identity} metadata={metadata} />
   </section>;
 };
 
-interface ModelCostProps {
+const ProfileHeading: React.FC<{ identity: string; maker: ModelManufacturer; metadata?: ModelReference }> = ({ identity, maker, metadata }) => <div className={styles['profile-heading']}>
+  <ManufacturerMark manufacturer={maker} size={32} />
+  <div>
+    <strong>{metadata?.name || identity}</strong>
+    <code>{metadata?.id || identity}</code>
+  </div>
+</div>;
+
+const ExternalLookup: React.FC<{ identity: string; metadata?: ModelReference }> = ({ identity, metadata }) => {
+  const t = useT();
+  return <div className={styles['link-row']} aria-label={t('models.external_resources')}>
+    <h3>{t('models.external_resources')}</h3>
+    <ReferenceLinks links={buildModelReferenceLinks(identity, metadata)} />
+  </div>;
+};
+
+interface ModelConnectionsProps {
   identity: string;
   ledger: ModelLedgerEntry;
+  routes: readonly ModelSquareRoute[];
+  providers: ReadonlyMap<string, ModelSquareProvider>;
+  branding: ProviderBrandSources;
+  pricing?: PricingResponse;
   onSetPrice?: (target: ModelPricingTarget) => void;
 }
 
+const targetKey = (target: ModelPricingTarget) => JSON.stringify([target.channel, target.model]);
+
 /**
- * What calling this model costs and how much it has been called, with the two places to act.
+ * Which connections serve this model, what calling it costs and how much it has been called.
  *
- * The figures are the price book's and the request records' own; this section only shows them
- * and hands off - to the shared price editor, and to the request list on the same window.
+ * One price reads as the model's own. When connections price it apart, each connection states and
+ * edits its own price on its row, so no model-wide figure pretends to cover them all. The figures
+ * are the price book's and the request records' own; this section shows them and hands off - to
+ * the shared price editor, and to the request list on the same window.
  */
-const ModelCost: React.FC<ModelCostProps> = ({ identity, ledger, onSetPrice }) => {
+const ModelConnections: React.FC<ModelConnectionsProps> = ({ identity, ledger, routes, providers, branding, pricing, onSetPrice }) => {
   const t = useT();
-  const { price, recentRequests } = ledger;
+  const { price, recentRequests, pricingTargets } = ledger;
+  const isPricedApart = pricingTargets.length > 1;
   const unknown = <span className={styles['is-absent']}>{t('models.unknown')}</span>;
   const noPrice = price.status === 'unpriced' ? <span className={styles['is-absent']}>{t('models.unpriced')}</span> : unknown;
-  return <section className={styles['cost-section']} data-testid="model-cost">
-    <h3>{t('nav.pricing')}</h3>
-    {price.status === 'unpriced' && <Notice tone="warning" title={t('pricing.unpriced_note')} />}
-    <dl className={clsx(styles['stat-tiles'], styles['cost-tiles'])}>
-      <div><dt>{t('models.input_price')}</dt><dd>{price.status === 'priced' ? formatRatePer1M(price.price.prompt_price_per_1m) : noPrice}</dd></div>
-      <div><dt>{t('models.output_price')}</dt><dd>{price.status === 'priced' ? formatRatePer1M(price.price.completion_price_per_1m) : noPrice}</dd></div>
-      <div><dt>{t('models.requests_24h')}</dt><dd>{recentRequests === undefined ? unknown : recentRequests.toLocaleString()}</dd></div>
-    </dl>
-    <div className={styles['cost-actions']}>
-      {onSetPrice && ledger.pricingTargets.map(target => <Button key={JSON.stringify([target.channel, target.model])} variant={target.price ? 'secondary' : 'primary'} onClick={() => onSetPrice(target)}>
-        {t(target.price ? 'pricing.edit' : 'pricing.set_price')}
-        {ledger.pricingTargets.length > 1 && (
-          <span className={styles['target-scope']}>
-            {target.channelLabel || target.channel ? `${target.channelLabel || target.channel} / ${target.model}` : target.model}
-          </span>
-        )}
-      </Button>)}
-      <Link className={styles['reference-link']} to={modelRequestsLink(identity)}>{t('models.view_requests')}<RightOutlined /></Link>
-    </div>
+  const requestCount = recentRequests === undefined ? unknown : recentRequests.toLocaleString();
+  const requestsLink = <Link className={styles['reference-link']} to={modelRequestsLink(identity)}>{t('models.view_requests')}<RightOutlined /></Link>;
+  const rows = routes.map(route => ({ route, target: isPricedApart ? routePricingTarget(route, pricing, pricingTargets) : undefined }));
+  const onRows = new Set(rows.flatMap(row => row.target ? [targetKey(row.target)] : []));
+  // A target no listed connection carries still needs a way to be priced.
+  const looseTargets = pricingTargets.filter(target => !onRows.has(targetKey(target)));
+  const actions = onSetPrice ? looseTargets.map(target => <Button key={targetKey(target)} variant={target.price ? 'secondary' : 'primary'} onClick={() => onSetPrice(target)}>
+    {t(target.price ? 'pricing.edit' : 'pricing.set_price')}
+    {isPricedApart && <span className={styles['target-scope']}>{target.channelLabel || target.channel ? `${target.channelLabel || target.channel} / ${target.model}` : target.model}</span>}
+  </Button>) : [];
+
+  return <section className={styles['connections-section']} data-testid="model-cost">
+    <SectionHeading level="label" className={styles['fact-heading']} title={t('models.section_connections_pricing')} />
+    {isPricedApart
+      ? <div className={styles['request-strip']}>
+        <span className={styles['request-strip-label']}>{t('models.requests_24h')}</span>
+        <strong>{requestCount}</strong>
+        {requestsLink}
+      </div>
+      : <>
+        {price.status === 'unpriced' && <div className={styles['profile-notice']}><Notice tone="warning" title={t('pricing.unpriced_note')} /></div>}
+        <dl className={clsx(styles['stat-tiles'], styles['cost-tiles'])}>
+          <div><dt>{t('models.input_price')}</dt><dd>{price.status === 'priced' ? formatRatePer1M(price.price.prompt_price_per_1m) : noPrice}</dd></div>
+          <div><dt>{t('models.output_price')}</dt><dd>{price.status === 'priced' ? formatRatePer1M(price.price.completion_price_per_1m) : noPrice}</dd></div>
+          <div><dt>{t('models.requests_24h')}</dt><dd>{requestCount}</dd></div>
+        </dl>
+      </>}
+    {rows.length > 0 && <ul className={styles['connection-list']}>
+      {rows.map(({ route, target }) => {
+        const provider = providers.get(route.provider_id)!;
+        const connection = describeProvider(provider, branding);
+        const isAlias = route.upstream_model !== '' && route.upstream_model !== identity;
+        return <li key={`${route.provider_id}\n${route.upstream_model}`}>
+          <div className={styles['connection-main']}>
+            <span className={styles['connection-name']}>
+              <ProviderBrandIcon mark={connection} size={16} />
+              <span className={styles['served-name']}>{connection.name}</span>
+              <span className={styles['served-kind']}>{provider.is_oauth ? 'OAuth' : provider.endpoint_host}</span>
+            </span>
+            {isAlias && <span className={styles['connection-alias']}>{t('models.upstream_model')}<code>{route.upstream_model}</code></span>}
+          </div>
+          {target && <div className={styles['connection-price']}>
+            <span className={styles['model-price']} data-tip={t('models.price_head')}>
+              {target.price
+                ? <>{formatRatePer1M(target.price.prompt_price_per_1m)} / {formatRatePer1M(target.price.completion_price_per_1m)}</>
+                : <StatusLabel tone="warn">{t('models.unpriced')}</StatusLabel>}
+            </span>
+            {onSetPrice && <Button size="sm" variant="ghost" onClick={() => onSetPrice(target)}>{t(target.price ? 'pricing.edit' : 'pricing.set_price')}</Button>}
+          </div>}
+        </li>;
+      })}
+    </ul>}
+    {(actions.length > 0 || !isPricedApart) && <div className={styles['cost-actions']}>
+      {actions}
+      {!isPricedApart && requestsLink}
+    </div>}
   </section>;
 };
 
@@ -375,11 +453,6 @@ const CatalogRefreshButton: React.FC<{ onReread: () => Promise<unknown> }> = ({ 
     {t('models.refresh_catalogs')}
   </Button>;
 };
-
-/** The snapshot's day: the catalogue names a date, and a full instant reads as its local day. */
-function snapshotDay(value: string): string {
-  return formatGatewayTimestamp(value).slice(0, 10);
-}
 
 export const ModelSquarePage: React.FC = () => {
   const branding = useProviderBranding();
@@ -464,13 +537,13 @@ export const ModelSquarePage: React.FC = () => {
     detailsRef.current?.closest('[data-slot="sheet-body"]')?.scrollTo({ top: 0 });
   };
   const selectedRoutes = selected?.routes.filter(route => providers.has(route.provider_id)) ?? [];
+  const matchedProfiles = selected?.profiles.filter(profile => profile.metadata !== undefined) ?? [];
 
   const errorCode = directory.error instanceof ApiError ? (directory.error.data as { code?: string })?.code : undefined;
   const needsKey = errorCode === 'client_key_required' || errorCode === 'client_key_missing';
   const subtitle = directory.data && t('models.summary_line', {
     models: directory.data.models.length,
     makers: countModelManufacturers(allEntries).length,
-    date: snapshotDay(directory.data.metadata_updated_at),
   });
 
   return <div className={clsx(styles['page'], 'terminal-page', 'model-square-page')}>
@@ -530,27 +603,12 @@ export const ModelSquarePage: React.FC = () => {
       footer={selected && selectedIndex >= 0 && entries.length > 1 && <span className={styles['details-position']}>{selectedIndex + 1} / {entries.length}</span>}
     >
       {selected && <div ref={detailsRef}>
-        <ModelCost identity={selected.identity} ledger={ledger.entryFor(selected.identity)} onSetPrice={priceFromDetails} />
-        {selectedRoutes.length > 0 && <div className={styles['served-by']}>
-          <h3>{t('models.served_by')}</h3>
-          <ul>
-            {selectedRoutes.map(route => {
-              const provider = providers.get(route.provider_id)!;
-              const connection = describeProvider(provider, branding);
-              return <li key={`${route.provider_id}\n${route.upstream_model}`}>
-                <ProviderBrandIcon mark={connection} size={16} />
-                <span className={styles['served-name']}>{connection.name}</span>
-                <span className={styles['served-kind']}>{provider.is_oauth ? 'OAuth' : provider.endpoint_host}</span>
-                {route.upstream_model && route.upstream_model !== selected.identity && <code>{route.upstream_model}</code>}
-              </li>;
-            })}
-          </ul>
-        </div>}
-        {selected.profiles.map(profile => <ModelProfile key={profile.identity} identity={profile.identity} metadata={profile.metadata} />)}
-        <p className={styles['scope-note']}>
-          {t('models.reference_note')}
-          {directory.data?.metadata_updated_at && <> {t('models.snapshot_date', { date: snapshotDay(directory.data.metadata_updated_at) })}</>}
-        </p>
+        {matchedProfiles.length > 0
+          ? matchedProfiles.map(profile => <ModelProfile key={profile.identity} identity={profile.identity} metadata={profile.metadata} />)
+          // Unmatched names say so once; each connection row below names the upstream it routes to.
+          : <ModelProfile identity={selected.profiles.length === 1 ? selected.profiles[0].identity : selected.identity} />}
+        <ModelConnections identity={selected.identity} ledger={ledger.entryFor(selected.identity)} routes={selectedRoutes} providers={providers} branding={branding} pricing={pricing.data} onSetPrice={priceFromDetails} />
+        {matchedProfiles.length > 0 && <p className={styles['scope-note']}>{t('models.reference_note')}</p>}
       </div>}
     </AppDrawer>
   </div>;

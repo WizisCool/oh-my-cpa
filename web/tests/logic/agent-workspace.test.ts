@@ -416,9 +416,9 @@ test('agent workspace', async () => {
   });
 
   check('the context readout needs both a reported input and a listed window, and takes the narrowest route', () => {
-    const reference = (context?: number) => ({ id: 'm', name: 'm', limit: { context }, modalities: {} });
+    const reference = (context?: number) => ({ id: 'm', name: 'm', context_length: context, input_modalities: [], output_modalities: [], supported_parameters: [] });
     const directory: ModelSquareDirectory = {
-      models: [], providers: [], partial: [], metadata_updated_at: '',
+      models: [], providers: [], partial: [],
       routes: [
         { provider_id: 'a', upstream_model: 'wide', call_point: 'alias' },
         { provider_id: 'b', upstream_model: 'narrow', call_point: 'alias' },

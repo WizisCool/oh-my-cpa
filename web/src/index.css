@@ -1429,6 +1429,12 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
   background: color-mix(in srgb, var(--tag-tone) 12%, transparent);
 }
 .tag-icon { display: inline-flex; font-size: var(--text-sm); }
+/* EffortTag (components/common/Tag.tsx): the level's step on the effort scale inks and tints the tag. */
+.effort-tag {
+  --effort-hue: var(--fg-2);
+  --tag-tone: var(--effort-hue);
+  background: color-mix(in srgb, var(--effort-hue) var(--effort-tint), transparent);
+}
 .tag.is-toggle {
   cursor: pointer;
   background: transparent;

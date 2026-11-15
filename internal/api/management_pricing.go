@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -24,6 +25,7 @@ type PricingManager interface {
 	UsedUnpricedModels(ctx context.Context, limit int) ([]string, error)
 	Suggestions(ctx context.Context, model string, limit int) ([]pricing.UpstreamModel, error)
 	AutomaticMatch(ctx context.Context, model string) (pricing.Match, bool, error)
+	MatchMetadata(ctx context.Context, identities []string) map[string]pricing.UpstreamModel
 	Candidates(ctx context.Context, prices []pricing.ModelPrice) (map[string]pricing.Candidate, error)
 	DismissCandidate(ctx context.Context, model, upstreamID string) error
 	StoredCatalog(ctx context.Context) ([]pricing.UpstreamModel, error)
@@ -104,23 +106,83 @@ type pricingModelPriceDTO struct {
 	UpdatedAtMS      int64                 `json:"updated_at_ms"`
 }
 
-func projectPricingModel(row pricing.ModelPrice) pricingModelPriceDTO {
-	var tiers []pricingPriceTierDTO
-	if row.Tiers != nil {
-		tiers = make([]pricingPriceTierDTO, len(row.Tiers))
-		for index, tier := range row.Tiers {
-			tiers[index] = pricingPriceTierDTO{
-				ServiceTiers:    tier.ServiceTiers,
-				MinPromptTokens: tier.MinPromptTokens, UTCStart: tier.UTCStart, UTCEnd: tier.UTCEnd, TimeZone: tier.TimeZone,
-				PromptPricePer1M: tier.PromptPricePer1M, CompletionPer1M: tier.CompletionPer1M,
-				CacheReadPer1M: tier.CacheReadPer1M, CacheWritePer1M: tier.CacheWritePer1M,
-			}
+func projectPricingTiers(src []pricing.PriceTier) []pricingPriceTierDTO {
+	if src == nil {
+		return nil
+	}
+	tiers := make([]pricingPriceTierDTO, len(src))
+	for index, tier := range src {
+		tiers[index] = pricingPriceTierDTO{
+			ServiceTiers:     slices.Clone(tier.ServiceTiers),
+			MinPromptTokens:  tier.MinPromptTokens,
+			UTCStart:         tier.UTCStart,
+			UTCEnd:           tier.UTCEnd,
+			TimeZone:         tier.TimeZone,
+			PromptPricePer1M: tier.PromptPricePer1M,
+			CompletionPer1M:  tier.CompletionPer1M,
+			CacheReadPer1M:   tier.CacheReadPer1M,
+			CacheWritePer1M:  tier.CacheWritePer1M,
 		}
 	}
+	return tiers
+}
+
+// Keep the pricing HTTP allowlist independent of Model Square metadata fields added to pricing.UpstreamModel.
+type pricingUpstreamModelDTO struct {
+	ID               string                `json:"id"`
+	CanonicalSlug    string                `json:"canonical_slug"`
+	Name             string                `json:"name"`
+	Author           string                `json:"author"`
+	ContextLength    int64                 `json:"context_length"`
+	PromptPricePer1M float64               `json:"prompt_price_per_1m"`
+	CompletionPer1M  float64               `json:"completion_price_per_1m"`
+	CacheReadPer1M   float64               `json:"cache_read_price_per_1m"`
+	CacheWritePer1M  float64               `json:"cache_write_price_per_1m"`
+	Tiers            []pricingPriceTierDTO `json:"tiers"`
+}
+
+func projectPricingUpstreamModel(model pricing.UpstreamModel) pricingUpstreamModelDTO {
+	return pricingUpstreamModelDTO{
+		ID:               model.ID,
+		CanonicalSlug:    model.CanonicalSlug,
+		Name:             model.Name,
+		Author:           model.Author,
+		ContextLength:    model.ContextLength,
+		PromptPricePer1M: model.PromptPricePer1M,
+		CompletionPer1M:  model.CompletionPer1M,
+		CacheReadPer1M:   model.CacheReadPer1M,
+		CacheWritePer1M:  model.CacheWritePer1M,
+		Tiers:            projectPricingTiers(model.Tiers),
+	}
+}
+
+func projectPricingUpstreamModels(models []pricing.UpstreamModel) []pricingUpstreamModelDTO {
+	projected := make([]pricingUpstreamModelDTO, len(models))
+	for index, model := range models {
+		projected[index] = projectPricingUpstreamModel(model)
+	}
+	return projected
+}
+
+type pricingCandidateDTO struct {
+	Model     pricingUpstreamModelDTO `json:"model"`
+	Kind      string                  `json:"kind"`
+	MatchKind string                  `json:"match_kind,omitempty"`
+}
+
+func projectPricingCandidate(candidate pricing.Candidate) pricingCandidateDTO {
+	return pricingCandidateDTO{
+		Model:     projectPricingUpstreamModel(candidate.Model),
+		Kind:      candidate.Kind,
+		MatchKind: candidate.MatchKind,
+	}
+}
+
+func projectPricingModel(row pricing.ModelPrice) pricingModelPriceDTO {
 	return pricingModelPriceDTO{
 		Model: row.Model, Channel: row.Channel, PromptPricePer1M: row.PromptPricePer1M, CompletionPer1M: row.CompletionPer1M,
 		CacheReadPer1M: row.CacheReadPer1M, CacheWritePer1M: row.CacheWritePer1M, PriceMultiplier: row.PriceMultiplier,
-		Tiers: tiers, Source: row.Source, UpstreamID: row.UpstreamID, MatchKind: row.MatchKind, Mode: row.Mode,
+		Tiers: projectPricingTiers(row.Tiers), Source: row.Source, UpstreamID: row.UpstreamID, MatchKind: row.MatchKind, Mode: row.Mode,
 		SyncedAtMS: row.SyncedAtMS, UpdatedAtMS: row.UpdatedAtMS,
 	}
 }
@@ -130,7 +192,7 @@ type pricingModelDTO struct {
 	Usage pricingUsageDTO `json:"usage_30d"`
 	// Candidate is an OpenRouter model a custom or linked price could follow
 	// that the operator has not seen yet.
-	Candidate *pricing.Candidate `json:"candidate,omitempty"`
+	Candidate *pricingCandidateDTO `json:"candidate,omitempty"`
 }
 
 // History omits current-row bookkeeping, preserving its existing wire format.
@@ -150,31 +212,9 @@ type pricingPriceVersionDTO struct {
 }
 
 type pricingUnpricedDTO struct {
-	Model       string                  `json:"model"`
-	Usage       pricingUsageDTO         `json:"usage_30d"`
-	Suggestions []pricing.UpstreamModel `json:"suggestions"`
-}
-
-// pricingReferencePriceDTO is a models.dev rate offered beside an unmatched model; it is
-// advice the editor can copy into a custom price, never a price itself.
-type pricingReferencePriceDTO struct {
-	Source           string   `json:"source"`
-	Model            string   `json:"model"`
-	Providers        []string `json:"providers"`
-	PromptPricePer1M float64  `json:"prompt_price_per_1m"`
-	CompletionPer1M  float64  `json:"completion_price_per_1m"`
-	CacheReadPer1M   *float64 `json:"cache_read_price_per_1m,omitempty"`
-	CacheWritePer1M  *float64 `json:"cache_write_price_per_1m,omitempty"`
-}
-
-func projectPricingReferences(prices []operations.ReferencePrice) []pricingReferencePriceDTO {
-	projected := make([]pricingReferencePriceDTO, len(prices))
-	for index, price := range prices {
-		projected[index] = pricingReferencePriceDTO{Source: price.Source, Model: price.Model, Providers: price.Providers,
-			PromptPricePer1M: price.PromptPricePer1M, CompletionPer1M: price.CompletionPer1M,
-			CacheReadPer1M: price.CacheReadPer1M, CacheWritePer1M: price.CacheWritePer1M}
-	}
-	return projected
+	Model       string                    `json:"model"`
+	Usage       pricingUsageDTO           `json:"usage_30d"`
+	Suggestions []pricingUpstreamModelDTO `json:"suggestions"`
 }
 
 type pricingProviderDTO struct {
@@ -238,27 +278,26 @@ type PricingAttentionResponseDTO struct {
 
 // PricingCatalogResponseDTO wraps the stored upstream OpenRouter model catalog.
 type PricingCatalogResponseDTO struct {
-	Models []pricing.UpstreamModel `json:"models"`
+	Models []pricingUpstreamModelDTO `json:"models"`
 }
 
 // PricingAutomaticMatchDTO describes the upstream model selected by automatic matching.
 type PricingAutomaticMatchDTO struct {
-	Model     pricing.UpstreamModel `json:"model"`
-	MatchKind string                `json:"match_kind"`
+	Model     pricingUpstreamModelDTO `json:"model"`
+	MatchKind string                  `json:"match_kind"`
 }
 
 // PricingModelDetailResponseDTO returns the editor view for a single model or channel override.
 type PricingModelDetailResponseDTO struct {
-	Model           string                     `json:"model"`
-	Price           *pricingModelPriceDTO      `json:"price"`
-	Suggestions     []pricing.UpstreamModel    `json:"suggestions"`
-	Automatic       *PricingAutomaticMatchDTO  `json:"automatic"`
-	ReferencePrices []pricingReferencePriceDTO `json:"reference_prices"`
-	Candidate       *pricing.Candidate         `json:"candidate"`
-	Versions        []pricingPriceVersionDTO   `json:"versions"`
-	Profile         repository.TokenProfile    `json:"profile"`
-	Channel         string                     `json:"channel,omitempty"`
-	IsInherited     *bool                      `json:"is_inherited,omitempty"`
+	Model       string                    `json:"model"`
+	Price       *pricingModelPriceDTO     `json:"price"`
+	Suggestions []pricingUpstreamModelDTO `json:"suggestions"`
+	Automatic   *PricingAutomaticMatchDTO `json:"automatic"`
+	Candidate   *pricingCandidateDTO      `json:"candidate"`
+	Versions    []pricingPriceVersionDTO  `json:"versions"`
+	Profile     repository.TokenProfile   `json:"profile"`
+	Channel     string                    `json:"channel,omitempty"`
+	IsInherited *bool                     `json:"is_inherited,omitempty"`
 }
 
 // PricingModelUpdateResponseDTO wraps the saved model price row.
@@ -365,7 +404,8 @@ func (h *Handler) listPricing(writer http.ResponseWriter, request *http.Request)
 	for _, row := range rows {
 		dto := pricingModelDTO{pricingModelPriceDTO: projectPricingModel(row), Usage: projectPricingUsage(modelUsage[row.Model])}
 		if candidate, ok := candidates[row.Model]; ok {
-			dto.Candidate = &candidate
+			projected := projectPricingCandidate(candidate)
+			dto.Candidate = &projected
 		}
 		models = append(models, dto)
 	}
@@ -403,7 +443,11 @@ func (h *Handler) listPricing(writer http.ResponseWriter, request *http.Request)
 		if suggestions == nil {
 			suggestions = []pricing.UpstreamModel{}
 		}
-		attention = append(attention, pricingUnpricedDTO{Model: model, Usage: projectPricingUsage(modelUsage[model]), Suggestions: suggestions})
+		attention = append(attention, pricingUnpricedDTO{
+			Model:       model,
+			Usage:       projectPricingUsage(modelUsage[model]),
+			Suggestions: projectPricingUpstreamModels(suggestions),
+		})
 	}
 	// Sync bookkeeping is auxiliary. Pricing the recorded traffic must not depend
 	// on it, so a state read that still fails degrades to "unknown" with the
@@ -548,17 +592,14 @@ func (h *Handler) getPricingCatalog(writer http.ResponseWriter, request *http.Re
 		writeInternalError(writer, err)
 		return
 	}
-	if models == nil {
-		models = []pricing.UpstreamModel{}
-	}
-	writeJSON(writer, http.StatusOK, PricingCatalogResponseDTO{Models: models})
+	writeJSON(writer, http.StatusOK, PricingCatalogResponseDTO{Models: projectPricingUpstreamModels(models)})
 }
 
 // getPricingModel is the editor's read: the current row, its version history,
 // what a typical recent request looks like, and adoptable candidates.
 //
 // @Summary Get pricing details for a model
-// @Description Return current price, version history, token usage profile, automatic match, and reference prices for a model.
+// @Description Return current price, version history, token usage profile, and automatic match for a model.
 // @Tags Pricing
 // @Produce json
 // @Security CookieAuth
@@ -618,20 +659,18 @@ func (h *Handler) getPricingModel(writer http.ResponseWriter, request *http.Requ
 	// switches: a switch that would find nothing is refused, and the editor says so
 	// up front instead of after a failed save.
 	var automatic *PricingAutomaticMatchDTO
-	references := []pricingReferencePriceDTO{}
 	if match, found, err := h.pricing.AutomaticMatch(ctx, model); err != nil {
 		slog.Warn("pricing automatic match unavailable", "model", model, "error", err)
 	} else if found {
-		automatic = &PricingAutomaticMatchDTO{Model: match.Model, MatchKind: match.Kind}
-	} else {
-		references = projectPricingReferences(operations.ReferencePrices(model))
+		automatic = &PricingAutomaticMatchDTO{Model: projectPricingUpstreamModel(match.Model), MatchKind: match.Kind}
 	}
-	var candidate *pricing.Candidate
+	var candidate *pricingCandidateDTO
 	if current != nil && channel == "" {
 		if found, err := h.pricing.Candidates(ctx, []pricing.ModelPrice{*current}); err != nil {
 			slog.Warn("pricing candidate unavailable", "model", model, "error", err)
 		} else if value, ok := found[model]; ok {
-			candidate = &value
+			projected := projectPricingCandidate(value)
+			candidate = &projected
 		}
 	}
 	var price *pricingModelPriceDTO
@@ -640,9 +679,9 @@ func (h *Handler) getPricingModel(writer http.ResponseWriter, request *http.Requ
 		price = &projected
 	}
 	response := PricingModelDetailResponseDTO{
-		Model: model, Price: price, Suggestions: suggestions, Automatic: automatic,
-		ReferencePrices: references, Candidate: candidate,
-		Versions: []pricingPriceVersionDTO{}, Profile: repository.TokenProfile{},
+		Model: model, Price: price, Suggestions: projectPricingUpstreamModels(suggestions), Automatic: automatic,
+		Candidate: candidate,
+		Versions:  []pricingPriceVersionDTO{}, Profile: repository.TokenProfile{},
 	}
 	if channel != "" {
 		response.Channel = channel

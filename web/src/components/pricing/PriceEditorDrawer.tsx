@@ -17,7 +17,7 @@ import { useT } from '../../i18n';
 import { StatusLabel, type StatusTone } from '../common/StatusLabel';
 import { formatTokens } from '../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import type { ModelPrice, PriceTier, PriceVersion, PricingMode, PricingModelUpdate, ReferencePrice, UpstreamModel } from '../../types/pricing';
+import type { ModelPrice, PriceTier, PriceVersion, PricingMode, PricingModelUpdate, UpstreamModel } from '../../types/pricing';
 import {
   canonicalServiceTiers,
   formatMultiplier,
@@ -84,18 +84,6 @@ function upstreamRates(model: UpstreamModel): RateFields {
   };
 }
 
-/** Reference rates leave an unlisted cache rate empty, so the price inherits it as usual. */
-function referenceDraft(price: ReferencePrice): CustomRatesDraft {
-  return {
-    prompt: String(price.prompt_price_per_1m),
-    completion: String(price.completion_price_per_1m),
-    cacheRead: price.cache_read_price_per_1m === undefined ? '' : String(price.cache_read_price_per_1m),
-    cacheWrite: price.cache_write_price_per_1m === undefined ? '' : String(price.cache_write_price_per_1m),
-  };
-}
-
-const REFERENCE_PROVIDERS_SHOWN = 3;
-
 const MODE_ICONS: Record<PricingMode, React.ReactNode> = {
   auto: <ThunderboltOutlined />,
   linked: <LinkOutlined />,
@@ -144,7 +132,6 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
   const currentMode = current ? modeOf(current) : null;
   const automatic = detail.data?.automatic ?? null;
   const suggestions = React.useMemo(() => detail.data?.suggestions ?? [], [detail.data]);
-  const referencePrices = React.useMemo(() => detail.data?.reference_prices ?? [], [detail.data]);
   const candidate = detail.data?.candidate ?? null;
 
   const [mode, setMode] = React.useState<PricingMode | null>(channel ? null : initialMode ?? null);
@@ -159,16 +146,14 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
   const isReadOnly = isInherited && !isOverriding;
 
   // The first answer decides the starting point: the model's own mode, or for an unpriced model
-  // the cheapest route to a price - automatic when it matches, then reference rates listed for
-  // this exact model (entered as custom rates), then an OpenRouter model that merely resembles
-  // it, hand-set rates otherwise.
+  // the cheapest route to a price - automatic when it matches, then an OpenRouter model that
+  // merely resembles it, hand-set rates otherwise.
   React.useEffect(() => {
     if (!detail.data || isSeeded) return;
     const price = detail.data.price;
     const startMode = (channel ? 'custom' : initialMode)
       ?? (price ? modeOf(price) : detail.data.automatic ? 'auto'
-        : (detail.data.reference_prices ?? []).length > 0 ? 'custom'
-          : detail.data.suggestions.length > 0 ? 'linked' : 'custom');
+        : detail.data.suggestions.length > 0 ? 'linked' : 'custom');
     setMode(startMode);
     if (price) {
       setMultiplier(price.price_multiplier || 1);
@@ -513,39 +498,6 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, cha
                   </Button>
                 )}
               />
-              {referencePrices.length > 0 && (
-                <div className={styles['reference-prices']} data-testid="pricing-reference-prices">
-                  <span className={styles['reference-prices-label']}>
-                    {t('pricing.editor.reference_prices', { source: referencePrices[0].source, model: referencePrices[0].model })}
-                  </span>
-                  <ul>
-                    {referencePrices.map((price, index) => {
-                      const shown = price.providers.slice(0, REFERENCE_PROVIDERS_SHOWN).join(', ');
-                      const hidden = price.providers.length - REFERENCE_PROVIDERS_SHOWN;
-                      // Every rate the Use action copies is shown, so listings that differ only in cache
-                      // writes, or in stating none, are told apart before one is adopted.
-                      const rateText = [price.prompt_price_per_1m, price.completion_price_per_1m, price.cache_read_price_per_1m, price.cache_write_price_per_1m]
-                        .map((value) => (value === undefined ? '—' : formatRatePer1M(value))).join(' / ');
-                      return (
-                        // One provider can list two rates for a model, so its name alone is not unique.
-                        <li key={`${index}:${price.providers.join(',')}`}>
-                          <span className={styles['reference-providers']} data-tip={price.providers.join(', ')}>
-                            {hidden > 0 ? t('pricing.editor.reference_providers_more', { providers: shown, n: hidden }) : shown}
-                          </span>
-                          <span className={styles['reference-rates']}>{rateText}</span>
-                          <Button size="sm" variant="link" onClick={() => {
-                            setRates(referenceDraft(price));
-                            setTierDrafts([]);
-                          }}
-                          >
-                            {t('pricing.editor.reference_fill')}
-                          </Button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
               <div className={styles['rate-inputs']}>
                 {([
                   ['prompt', 'pricing.rate.prompt', 'prompt_price_per_1m', true],

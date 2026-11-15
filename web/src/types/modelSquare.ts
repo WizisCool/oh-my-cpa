@@ -13,26 +13,29 @@ export interface ModelSquareRoute {
   upstream_model: string;
   call_point: string;
 }
-export interface ModelReferenceLink { label: string; url: string; type?: string }
+export interface ModelReferenceLink { label: string; url: string }
+/** How a model reasons, as the OpenRouter catalog describes it. */
+export interface ModelReasoning {
+  /** Reasoning cannot be switched off. */
+  mandatory: boolean;
+  default_enabled: boolean;
+  supported_efforts: string[];
+  default_effort?: string;
+}
+/** A model's specifications from the locally cached OpenRouter catalog. */
 export interface ModelReference {
   id: string;
   name: string;
   description?: string;
-  family?: string;
-  open_weights?: boolean;
-  reasoning?: boolean;
-  tool_call?: boolean;
-  structured_output?: boolean;
-  attachment?: boolean;
-  temperature?: boolean;
-  knowledge?: string;
-  release_date?: string;
-  last_updated?: string;
-  license?: string;
-  limit: { context?: number; input?: number; output?: number };
-  modalities: { input?: string[]; output?: string[] };
-  weights?: ModelReferenceLink[];
-  links?: ModelReferenceLink[];
+  author?: string;
+  context_length?: number;
+  max_completion_tokens?: number;
+  input_modalities: string[];
+  output_modalities: string[];
+  supported_parameters: string[];
+  reasoning?: ModelReasoning;
+  knowledge_cutoff?: string;
+  hugging_face_id?: string;
 }
 export interface ModelSquareDirectory {
   models: GatewayModelItem[];
@@ -40,7 +43,6 @@ export interface ModelSquareDirectory {
   routes: ModelSquareRoute[];
   partial: string[];
   model_info: Record<string, ModelReference>;
-  metadata_updated_at: string;
 }
 /** The three CPA model catalogs, in the order a refresh reports them. */
 export const MODEL_CATALOGS = ['catalog', 'codex-catalog', 'devin-catalog'] as const;
@@ -152,7 +154,7 @@ export function modelMarkIconId(model: string, fallbackModel = '', metadata?: Mo
 
 export function resolveModelManufacturer(identity: string, metadata?: ModelReference): ModelManufacturer {
   if (!identity) return UNKNOWN_MANUFACTURER;
-  const author = (metadata?.id ?? identity).split('/').slice(0, -1).join('/').toLowerCase();
+  const author = (metadata?.author || (metadata?.id ?? identity).split('/').slice(0, -1).join('/')).toLowerCase();
   const slug = identity.split('/').at(-1)?.toLowerCase() ?? '';
   const maker = MODEL_MANUFACTURERS[AUTHOR_ALIASES[author] ?? author] ?? MODEL_MANUFACTURERS[MODEL_FAMILY_RULES.find(([pattern]) => pattern.test(slug))?.[1] ?? ''];
   if (!maker) return metadata && author ? { id: author, name: author } : UNKNOWN_MANUFACTURER;
@@ -171,7 +173,7 @@ export function referenceContextWindow(directory: ModelSquareDirectory | undefin
   if (!directory || !callPoint) return undefined;
   const identities = [callPoint, ...directory.routes.filter(route => route.call_point === callPoint).map(route => route.upstream_model)];
   const windows = identities
-    .map(identity => directory.model_info[identity]?.limit.context)
+    .map(identity => directory.model_info[identity]?.context_length)
     .filter((window): window is number => typeof window === 'number' && window > 0);
   return windows.length > 0 ? Math.min(...windows) : undefined;
 }
@@ -203,10 +205,12 @@ export function buildModelSquareEntries(directory: ModelSquareDirectory, search:
       if (metadata && profiles.some(profile => profile.metadata?.id === metadata.id)) continue;
       profiles.push({ identity, metadata });
     }
+    // A described model leads, so the details and the card caption open on what is known about it.
+    profiles.sort((left, right) => Number(!left.metadata) - Number(!right.metadata));
     const makers = profiles.map(profile => resolveModelManufacturer(profile.identity, profile.metadata));
     const manufacturer = makers.every(maker => maker.id === makers[0].id) ? makers[0] : { id: 'multiple', name: '' };
     return { identity: model.id, manufacturer, routes, profiles };
-  }).filter(entry => !needle || [entry.identity, entry.manufacturer.name, ...entry.profiles.flatMap(profile => [profile.identity, profile.metadata?.name ?? '', profile.metadata?.id ?? '', resolveModelManufacturer(profile.identity, profile.metadata).name, profile.metadata?.family ?? ''])].some(value => value.toLowerCase().includes(needle)))
+  }).filter(entry => !needle || [entry.identity, entry.manufacturer.name, ...entry.profiles.flatMap(profile => [profile.identity, profile.metadata?.name ?? '', profile.metadata?.id ?? '', profile.metadata?.author ?? '', resolveModelManufacturer(profile.identity, profile.metadata).name])].some(value => value.toLowerCase().includes(needle)))
     .sort((left, right) => manufacturerRank(left.manufacturer) - manufacturerRank(right.manufacturer)
       || manufacturerSortName(left.manufacturer).localeCompare(manufacturerSortName(right.manufacturer))
       || left.identity.localeCompare(right.identity));
@@ -253,31 +257,12 @@ export function resolveEntryReference(entry: ModelSquareEntry): ModelReference |
   return rest.every(profile => profile.metadata?.id === first.metadata?.id) ? first.metadata : undefined;
 }
 
-export type ModelOpenness = 'closed' | 'open_weights' | 'open_source';
-
-// Licences that grant use, modification and redistribution without field-of-use limits. A
-// community, research or non-commercial licence publishes weights without making the model open source.
-const OPEN_SOURCE_LICENSES = new Set(['mit', 'apache-2.0', 'bsd-2-clause', 'bsd-3-clause', 'mpl-2.0', 'isc', 'unlicense', 'gpl-3.0', 'lgpl-3.0', 'agpl-3.0']);
-
-/**
- * How open a model is, from the two facts the source states separately.
- *
- * Published weights alone make a model open-weight; it is open source only when its licence is
- * one too. A model whose weights the source does not describe has no classification.
- */
-export function classifyModelOpenness(metadata: Pick<ModelReference, 'open_weights' | 'license'>): ModelOpenness | undefined {
-  if (metadata.open_weights === undefined) return undefined;
-  if (!metadata.open_weights) return 'closed';
-  const license = (metadata.license ?? '').trim().toLowerCase().replace(/\s+license$/, '').replace(/\s+/g, '-');
-  return OPEN_SOURCE_LICENSES.has(license) ? 'open_source' : 'open_weights';
-}
-
-export function buildModelReferenceLinks(identity: string, metadata?: ModelReference): { label: string; url: string }[] {
+/** Where to read more about a model: its own OpenRouter page when the catalog matched it, else a search. */
+export function buildModelReferenceLinks(identity: string, metadata?: ModelReference): ModelReferenceLink[] {
   const canonical = metadata?.id ?? identity;
   const name = canonical.split('/').at(-1) || identity;
   return [
-    { label: 'models.dev', url: metadata ? `https://models.dev/models/${canonical.split('/').map(encodeURIComponent).join('/')}` : 'https://models.dev/' },
-    { label: 'OpenRouter', url: `https://openrouter.ai/models?q=${encodeURIComponent(name)}` },
+    { label: 'OpenRouter', url: metadata ? `https://openrouter.ai/${canonical.split('/').map(encodeURIComponent).join('/')}` : `https://openrouter.ai/models?q=${encodeURIComponent(name)}` },
     { label: 'pi.dev', url: `https://pi.dev/models?name=${encodeURIComponent(name)}` },
   ];
 }

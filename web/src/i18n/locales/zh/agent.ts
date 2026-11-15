@@ -462,5 +462,5 @@ export default {
   'agent.capability.quota_auto_refresh_set': '修改自动刷新额度策略',
   'agent.capability.quota_auto_refresh_set.description': '设置后台用凭证读取额度的间隔，以及额度重置后是否自动刷新。',
   'agent.capability.models_list': '查看已接入模型',
-  'agent.capability.models_list.description': '读取 CPA 公布的模型及 models.dev 参考资料，不执行推理。',
+  'agent.capability.models_list.description': '读取 CPA 公布的模型及 OpenRouter 参考资料，不执行推理。',
 };

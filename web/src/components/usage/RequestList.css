@@ -487,11 +487,6 @@
    and an unranked level pass nothing and keep the neutral step. That step is
    secondary text, not `--muted`: a level nobody ranked is still a reading, and
    the tint and edge are too thin to carry a tertiary grey. */
-.req-effort-badge {
-  --effort-hue: var(--fg-2);
-  --tag-tone: var(--effort-hue);
-  background: color-mix(in srgb, var(--effort-hue) var(--effort-tint), transparent);
-}
 .request-row .req-effort-badge {
   cursor: help;
 }

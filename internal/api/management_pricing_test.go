@@ -56,6 +56,19 @@ func (f *fakePricing) AutomaticMatch(context.Context, string) (pricing.Match, bo
 	}
 	return pricing.Match{Model: f.suggestions[0], Kind: pricing.MatchExact}, true, nil
 }
+func (f *fakePricing) MatchMetadata(_ context.Context, identities []string) map[string]pricing.UpstreamModel {
+	if len(f.catalog) == 0 || len(identities) == 0 {
+		return map[string]pricing.UpstreamModel{}
+	}
+	catalog := pricing.NewCatalog(f.catalog, time.Now())
+	matched := make(map[string]pricing.UpstreamModel, len(identities))
+	for _, identity := range identities {
+		if item, ok := catalog.MatchMetadata(identity); ok {
+			matched[identity] = item
+		}
+	}
+	return matched
+}
 func (f *fakePricing) Candidates(_ context.Context, prices []pricing.ModelPrice) (map[string]pricing.Candidate, error) {
 	result := map[string]pricing.Candidate{}
 	for _, price := range prices {
@@ -299,23 +312,12 @@ func TestPricingModelModeChangesAndRefusals(t *testing.T) {
 	if response.StatusCode != http.StatusOK || !strings.Contains(string(payload), `"model":"openai/gpt-5"`) {
 		t.Fatalf("model detail: %d %s", response.StatusCode, payload)
 	}
-	// Without an automatic OpenRouter match the editor is offered models.dev rates to copy;
-	// with one, those rates are not offered beside it.
-	var detail struct {
-		References []struct {
-			Source    string   `json:"source"`
-			Model     string   `json:"model"`
-			Providers []string `json:"providers"`
-			Prompt    *float64 `json:"prompt_price_per_1m"`
-		} `json:"reference_prices"`
-	}
-	if err := json.Unmarshal(payload, &detail); err != nil || len(detail.References) == 0 || detail.References[0].Source != "models.dev" ||
-		detail.References[0].Model != "openai/gpt-5" || len(detail.References[0].Providers) == 0 || detail.References[0].Prompt == nil {
-		t.Fatalf("reference prices for an unmatched model: %s", payload)
+	if strings.Contains(string(payload), "reference_prices") {
+		t.Fatalf("retired reference_prices field remained in payload: %s", payload)
 	}
 	fake.suggestions = []pricing.UpstreamModel{{ID: "openai/gpt-5", PromptPricePer1M: 1.25}}
-	if _, payload = getJSON(t, client, baseURL+"/omc/api/v1/pricing/models/openai%2Fgpt-5"); !strings.Contains(string(payload), `"reference_prices":[]`) {
-		t.Fatalf("reference prices beside an automatic match: %s", payload)
+	if _, payload = getJSON(t, client, baseURL+"/omc/api/v1/pricing/models/openai%2Fgpt-5"); strings.Contains(string(payload), "reference_prices") {
+		t.Fatalf("retired reference_prices field remained beside automatic match: %s", payload)
 	}
 	fake.suggestions = nil
 	// Sync: 202 on start, 409 while one is already in flight.
@@ -852,5 +854,59 @@ func TestPriceUnpricedUsageRefusesUnauditedWrite(t *testing.T) {
 	var result PricingUnpricedPricedResponseDTO
 	if response.StatusCode != http.StatusOK || json.Unmarshal(payload, &result) != nil || result.Priced != 1 {
 		t.Fatalf("pricing: %d %s", response.StatusCode, payload)
+	}
+}
+
+func TestPricingUpstreamModelProjectionAllowlist(t *testing.T) {
+	richUpstream := pricing.UpstreamModel{
+		ID:                  "vendor/brand-new",
+		CanonicalSlug:       "vendor/brand-new-2026",
+		Name:                "Brand New",
+		Author:              "vendor",
+		Description:         "internal spec text",
+		ContextLength:       128000,
+		MaxCompletionTokens: 16384,
+		InputModalities:     []string{"text", "image"},
+		OutputModalities:    []string{"text"},
+		SupportedParameters: []string{"reasoning", "tools"},
+		Reasoning:           &pricing.UpstreamReasoning{DefaultEnabled: true, SupportedEfforts: []string{"low", "high"}, DefaultEffort: "high"},
+		KnowledgeCutoff:     "2026-01",
+		HuggingFaceID:       "vendor/brand-new-hf",
+		PromptPricePer1M:    3,
+		CompletionPer1M:     6,
+	}
+	fake := &fakePricing{
+		listRows: []pricing.ModelPrice{
+			{Model: "brand-new", PromptPricePer1M: 1, CompletionPer1M: 2, PriceMultiplier: 1, Source: pricing.SourceManual, Mode: pricing.ModeCustom},
+		},
+		unpriced:    []string{"unpriced-model"},
+		suggestions: []pricing.UpstreamModel{richUpstream},
+		catalog:     []pricing.UpstreamModel{richUpstream},
+		candidates:  map[string]pricing.Candidate{"brand-new": {Model: richUpstream, Kind: pricing.CandidateAutomatic, MatchKind: pricing.MatchExact}},
+	}
+	client, baseURL := startPricingTestServer(t, fake)
+
+	disallowed := []string{
+		"description", "max_completion_tokens", "input_modalities", "output_modalities",
+		"supported_parameters", "reasoning", "knowledge_cutoff", "hugging_face_id",
+	}
+	for _, path := range []string{
+		"/omc/api/v1/pricing",
+		"/omc/api/v1/pricing/catalog",
+		"/omc/api/v1/pricing/models/brand-new",
+	} {
+		response, payload := getJSON(t, client, baseURL+path)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("%s status = %d body %s", path, response.StatusCode, payload)
+		}
+		text := string(payload)
+		if !strings.Contains(text, `"id":"vendor/brand-new"`) || !strings.Contains(text, `"context_length":128000`) {
+			t.Fatalf("%s missing projected pricing upstream fields: %s", path, text)
+		}
+		for _, field := range disallowed {
+			if strings.Contains(text, `"`+field+`"`) {
+				t.Fatalf("%s leaked non-allowlisted field %q: %s", path, field, text)
+			}
+		}
 	}
 }

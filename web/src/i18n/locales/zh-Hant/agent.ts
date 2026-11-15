@@ -465,5 +465,5 @@ export default {
   "agent.capability.quota_auto_refresh_set": "修改自動重新整理額度策略",
   "agent.capability.quota_auto_refresh_set.description": "設定背景以憑證讀取額度的間隔，以及額度重設後是否自動重新整理。",
   "agent.capability.models_list": "檢視已接入模型",
-  "agent.capability.models_list.description": "讀取 CPA 公布的模型及 models.dev 參考資料，不執行推理。",
+  "agent.capability.models_list.description": "讀取 CPA 公布的模型及 OpenRouter 參考資料，不執行推理。",
 } satisfies Translation<typeof source>;

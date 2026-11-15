@@ -303,6 +303,112 @@ func demoteToDated(kind string) string {
 	return MatchDateStripped
 }
 
+// metadataVariantSuffixes are request-level reasoning/variant decorations a gateway
+// appends to a base model name. MatchMetadata strips at most one trailing suffix for
+// read-only specification lookup; automatic billing (MatchModel) never strips these.
+var metadataVariantSuffixes = []string{"-thinking", "-minimal", "-low", "-medium", "-high", "-xhigh"}
+
+// MatchMetadata resolves OpenRouter specification metadata for a CPA model identity.
+//
+// Unlike MatchModel (strict billing), MatchMetadata expands the identity only in forms
+// that name the same underlying model: exact form -> strip one reasoning suffix ->
+// strip a router `:tag` (plus one reasoning suffix on the untagged form) -> strip leading
+// route namespaces segment-by-segment. Every candidate still requires an exact, canonical,
+// normalized, or date-stripped MatchModel hit; fuzzy version guessing is never performed.
+func (c Catalog) MatchMetadata(identity string) (UpstreamModel, bool) {
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return UpstreamModel{}, false
+	}
+	forms := metadataCandidateForms(identity)
+	// First resolve exact IDs and non-colon-prefixed forms in candidate order so an
+	// original canonical/normalized match beats a stripped base, and bare router-tagged
+	// identities (gpt-5:online) match their untagged base instead of treating the tag
+	// as a model slug via StripProviderPrefix.
+	for _, form := range forms {
+		if matched, ok := c.lookupWithPrefixes(form); ok {
+			return matched, true
+		}
+		if !strings.Contains(form, ":") {
+			if match, ok := c.MatchModel(form); ok {
+				return match.Model, true
+			}
+		}
+	}
+	// Fall back to CPA provider:model prefixes (openai:gpt-5, relay:gpt-5:online),
+	// preferring single-colon untagged forms first and never passing `author/model:tag`
+	// router tags to MatchModel.
+	for _, wantSingleColon := range []bool{true, false} {
+		for _, form := range forms {
+			slash, colon := strings.LastIndex(form, "/"), strings.LastIndex(form, ":")
+			if colon < 0 || (slash >= 0 && colon > slash) {
+				continue
+			}
+			if wantSingleColon != (strings.Count(form, ":") == 1) {
+				continue
+			}
+			if match, ok := c.MatchModel(form); ok {
+				return match.Model, true
+			}
+		}
+	}
+	return UpstreamModel{}, false
+}
+
+func (c Catalog) lookupWithPrefixes(form string) (UpstreamModel, bool) {
+	if matched, ok := c.Lookup(form); ok {
+		return matched, true
+	}
+	for rest := form; ; {
+		slash := strings.Index(rest, "/")
+		if slash < 0 || slash == len(rest)-1 {
+			break
+		}
+		rest = rest[slash+1:]
+		if matched, ok := c.Lookup(rest); ok {
+			return matched, true
+		}
+	}
+	return UpstreamModel{}, false
+}
+
+func metadataCandidateForms(identity string) []string {
+	forms := make([]string, 0, 4)
+	seen := make(map[string]struct{}, 4)
+	add := func(value string) {
+		if value == "" {
+			return
+		}
+		if _, ok := seen[value]; ok {
+			return
+		}
+		seen[value] = struct{}{}
+		forms = append(forms, value)
+	}
+	add(identity)
+	add(stripOneMetadataReasoningSuffix(identity))
+	if slash, colon := strings.LastIndex(identity, "/"), strings.LastIndex(identity, ":"); colon > slash+1 && colon < len(identity)-1 {
+		untagged := identity[:colon]
+		add(untagged)
+		add(stripOneMetadataReasoningSuffix(untagged))
+	}
+	return forms
+}
+
+func stripOneMetadataReasoningSuffix(value string) string {
+	lower := strings.ToLower(value)
+	for _, suffix := range metadataVariantSuffixes {
+		if strings.HasSuffix(lower, suffix) {
+			base := value[:len(value)-len(suffix)]
+			if base != "" && !strings.HasSuffix(base, "/") && !strings.HasSuffix(base, ":") {
+				return base
+			}
+			return value
+		}
+	}
+	return value
+}
+
 // Suggest ranks upstream models that resemble a model MatchModel could not
 // resolve, such as a reasoning-effort decoration ("gpt-5.4-mini-high"). The
 // console offers them for one-click adoption; they are never applied on their

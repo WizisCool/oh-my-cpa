@@ -30,7 +30,6 @@
     "icons:generate": "node scripts/generate-lucide-icons.mjs",
     "icons:lobe": "node scripts/sync-lobe-icon-catalog.mjs",
     "lint:go": "golangci-lint run ./...",
-    "models:sync": "node scripts/sync-model-metadata.mjs",
     "openapi:generate": "node scripts/generate-openapi.mjs",
     "openui:prompt": "node --import tsx scripts/generate-openui-prompt.ts",
     "readme:screenshots": "node scripts/readme-screenshots.mjs",

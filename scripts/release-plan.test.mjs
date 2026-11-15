@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertModelMetadataCurrent, createReleasePlan, compareReleaseTags } from './release-plan.mjs';
+import { createReleasePlan, compareReleaseTags } from './release-plan.mjs';
 
 const INPUT = {tag: 'v0.1.0', packageVersion: '0.1.0', webVersion: '0.1.0', image: 'wiziscool/oh-my-cpa'};
 
@@ -25,14 +25,5 @@ test('malformed or mismatched release identities never reach Docker or GitHub', 
   assert.throws(() => createReleasePlan({...INPUT, webVersion: '0.2.0'}));
   for (const image of ['WizisCool/omc', 'docker.io/wiziscool/omc', 'wiziscool/omc:latest', 'wiziscool/omc\nkey=bad']) {
     assert.throws(() => createReleasePlan({...INPUT, image}));
-  }
-});
-
-test('a release cannot ship model reference metadata older than its window', () => {
-  assertModelMetadataCurrent('2026-10-06', '2026-11-05');
-  assert.throws(() => assertModelMetadataCurrent('2026-10-05', '2026-11-05'), /pnpm models:sync/);
-  for (const date of ['', undefined, '2026-13-40', '2026-02-30', '2026-11-05T00:00:00Z']) {
-    assert.throws(() => assertModelMetadataCurrent(date, '2026-11-05'), /YYYY-MM-DD/);
-    assert.throws(() => assertModelMetadataCurrent('2026-11-05', date), /YYYY-MM-DD/);
   }
 });

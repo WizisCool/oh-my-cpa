@@ -1,5 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
+import { effortBadgeName, effortColor, effortStep } from '../../theme/effortScale';
 
 /** `neutral` labels a kind; the others pass a verdict and take that verdict's ink. */
 export type TagTone = 'neutral' | 'success' | 'warn' | 'danger' | 'accent';
@@ -30,6 +31,26 @@ export const Tag = React.forwardRef<HTMLSpanElement, TagProps>(function Tag(
     </span>
   );
 });
+
+export interface EffortTagProps extends Omit<TagProps, 'tone' | 'children'> {
+  /** A recorded or catalogued effort level, in any case. */
+  effort: string | null | undefined;
+}
+
+/**
+ * A reasoning effort as its parameter spelling (`xHigh`, `Max`), coloured by its step on the effort
+ * scale. `none` and a level the scale does not rank keep the neutral ink; an empty effort draws nothing.
+ */
+export function EffortTag({ effort, size = 'small', className, style, ...attributes }: EffortTagProps) {
+  const label = effortBadgeName(effort);
+  if (!label) return null;
+  const hue = effortColor(effortStep(effort));
+  return (
+    <Tag {...attributes} size={size} className={clsx('effort-tag', className)} style={hue ? ({ ...style, '--effort-hue': hue } as React.CSSProperties) : style}>
+      {label}
+    </Tag>
+  );
+}
 
 export interface ToggleTagProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onChange'> {
   checked: boolean;

@@ -8,7 +8,7 @@ export interface ModelMarkProps {
   model?: string;
   /** Legacy alias for model. */
   callPoint?: string;
-  /** Optional metadata from model reference / models.dev. */
+  /** Optional specifications from the cached OpenRouter catalog. */
   metadata?: ModelReference;
   /**
    * Fallback model name to try if the primary model produces no manufacturer/brand icon

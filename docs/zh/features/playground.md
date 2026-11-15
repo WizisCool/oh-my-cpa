@@ -6,4 +6,4 @@
 
 ## 模型目录
 
-`/model-square` 页面使用首个已配置的客户端密钥读取 CPA 实时的 `/v1/models`，并叠加内置的 models.dev 元数据快照。
+`/model-square` 页面使用首个已配置的客户端密钥读取 CPA 实时的 `/v1/models`，并从本地同步的 OpenRouter 目录缓存（`pricing_upstream_catalog`）叠加模型规格与推理元数据。

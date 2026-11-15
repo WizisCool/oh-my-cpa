@@ -11,7 +11,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/gateway"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
-	"github.com/oh-my-cpa/oh-my-cpa/internal/modelcatalog"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 )
 
 type ModelSquareRoute struct {
@@ -30,11 +30,67 @@ type ModelSquareProvider struct {
 
 var ErrClientKeyRequired = errors.New("client_key_required")
 
+type ModelReasoning struct {
+	Mandatory        bool     `json:"mandatory"`
+	DefaultEnabled   bool     `json:"default_enabled"`
+	SupportedEfforts []string `json:"supported_efforts"`
+	DefaultEffort    string   `json:"default_effort,omitempty"`
+}
+
+type ModelReference struct {
+	ID                  string          `json:"id"`
+	Name                string          `json:"name"`
+	Description         string          `json:"description,omitempty"`
+	Author              string          `json:"author,omitempty"`
+	ContextLength       int64           `json:"context_length,omitempty"`
+	MaxCompletionTokens int64           `json:"max_completion_tokens,omitempty"`
+	InputModalities     []string        `json:"input_modalities"`
+	OutputModalities    []string        `json:"output_modalities"`
+	SupportedParameters []string        `json:"supported_parameters"`
+	Reasoning           *ModelReasoning `json:"reasoning,omitempty"`
+	KnowledgeCutoff     string          `json:"knowledge_cutoff,omitempty"`
+	HuggingFaceID       string          `json:"hugging_face_id,omitempty"`
+}
+
+func nonNilStrings(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	copied := make([]string, len(values))
+	copy(copied, values)
+	return copied
+}
+
+func projectModelReference(upstream pricing.UpstreamModel) ModelReference {
+	var reasoning *ModelReasoning
+	if upstream.Reasoning != nil {
+		reasoning = &ModelReasoning{
+			Mandatory:        upstream.Reasoning.Mandatory,
+			DefaultEnabled:   upstream.Reasoning.DefaultEnabled,
+			SupportedEfforts: nonNilStrings(upstream.Reasoning.SupportedEfforts),
+			DefaultEffort:    upstream.Reasoning.DefaultEffort,
+		}
+	}
+	return ModelReference{
+		ID:                  upstream.ID,
+		Name:                upstream.Name,
+		Description:         upstream.Description,
+		Author:              upstream.Author,
+		ContextLength:       upstream.ContextLength,
+		MaxCompletionTokens: upstream.MaxCompletionTokens,
+		InputModalities:     nonNilStrings(upstream.InputModalities),
+		OutputModalities:    nonNilStrings(upstream.OutputModalities),
+		SupportedParameters: nonNilStrings(upstream.SupportedParameters),
+		Reasoning:           reasoning,
+		KnowledgeCutoff:     upstream.KnowledgeCutoff,
+		HuggingFaceID:       pricing.SanitizeHuggingFaceID(upstream.HuggingFaceID),
+	}
+}
+
 type ModelSquareQuery struct{}
 type ModelSquareDirectory struct {
-	ModelInfo         map[string]modelcatalog.Model `json:"model_info"`
-	MetadataUpdatedAt string                        `json:"metadata_updated_at"`
-	Models            []gateway.Model               `json:"models"`
+	ModelInfo map[string]ModelReference `json:"model_info"`
+	Models    []gateway.Model           `json:"models"`
 
 	Providers []ModelSquareProvider `json:"providers"`
 	Routes    []ModelSquareRoute    `json:"routes"`
@@ -143,8 +199,12 @@ func (s *Service) ListModelSquare(ctx context.Context, input ModelSquareQuery) (
 		}
 		identities = append(identities, identity)
 	}
-	directory.ModelInfo = modelcatalog.DEFAULT_CATALOG.Select(identities)
-	directory.MetadataUpdatedAt = modelcatalog.DEFAULT_CATALOG.UpdatedAt
+	directory.ModelInfo = map[string]ModelReference{}
+	if s.Pricing != nil {
+		for identity, upstream := range s.Pricing.MatchMetadata(ctx, identities) {
+			directory.ModelInfo[identity] = projectModelReference(upstream)
+		}
+	}
 	if s.Repo != nil {
 		names := map[string]string{}
 		icons := map[string]string{}
@@ -288,7 +348,7 @@ func IsModelExcluded(model string, patterns []string) bool {
 }
 
 func (s *Service) registerModelSquare(registry *capability.Registry) error {
-	return read(registry, "models_list", "List models advertised by CPA /v1/models for an existing client key, with configured route provenance when known. Defaults to the first configured client key. Empty upstream_model or provider_id means unresolved provenance. Includes bundled models.dev reference metadata; it never establishes availability. No inference or credential disclosure.", func(ctx context.Context, input ModelSquareQuery) (ModelSquareDirectory, error) {
+	return read(registry, "models_list", "List models advertised by CPA /v1/models for an existing client key, with configured route provenance when known. Defaults to the first configured client key. Empty upstream_model or provider_id means unresolved provenance. Enriches model_info from the local OpenRouter cache when available; it never establishes availability. No inference or credential disclosure.", func(ctx context.Context, input ModelSquareQuery) (ModelSquareDirectory, error) {
 		directory, err := s.ListModelSquare(ctx, input)
 		if len(directory.Routes) > 2000 {
 			return ModelSquareDirectory{}, errors.New("tool_result_too_large")

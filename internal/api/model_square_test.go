@@ -19,8 +19,8 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/gateway"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
-	"github.com/oh-my-cpa/oh-my-cpa/internal/modelcatalog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 )
 
 func TestModelSquareHTTPUsesDefaultKeyAndSafeProvenance(t *testing.T) {
@@ -67,12 +67,51 @@ func TestModelSquareHTTPUsesDefaultKeyAndSafeProvenance(t *testing.T) {
 	}))
 	defer upstream.Close()
 	pointPlaygroundAt(t, fixture.handler, upstream.URL)
+	fixture.handler.SetPricing(pricing.NewService(fixture.handler.repo, nil, nil))
 	if err := fixture.handler.RefreshModelSquareProvenance(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	hasCachedProvenance.Store(true)
 	path := fixture.baseURL + "/omc/api/v1/management/model-square"
+
+	// Cold start before OpenRouter sync populates pricing_upstream_catalog:
+	// Model Square still succeeds with an empty model_info map and zero outbound calls.
 	response, body := getJSON(t, fixture.client, path)
+	if response.StatusCode != 200 {
+		t.Fatalf("cold-start directory: %d %s", response.StatusCode, body)
+	}
+	var coldDirectory operations.ModelSquareDirectory
+	if err := json.Unmarshal(body, &coldDirectory); err != nil {
+		t.Fatal(err)
+	}
+	if len(coldDirectory.ModelInfo) != 0 || len(coldDirectory.Models) != 2 {
+		t.Fatalf("unexpected cold-start directory: %#v", coldDirectory)
+	}
+
+	if err := fixture.handler.repo.ReplaceUpstreamCatalog(context.Background(), []pricing.UpstreamModel{{
+		ID:                  "openai/gpt-5",
+		CanonicalSlug:       "openai/gpt-5",
+		Name:                "OpenAI: GPT-5",
+		Author:              "openai",
+		Description:         "Flagship model",
+		ContextLength:       400000,
+		MaxCompletionTokens: 128000,
+		InputModalities:     []string{"text", "image"},
+		OutputModalities:    []string{"text"},
+		SupportedParameters: []string{"tools", "reasoning"},
+		Reasoning: &pricing.UpstreamReasoning{
+			DefaultEnabled:   true,
+			SupportedEfforts: []string{"low", "medium", "high"},
+			DefaultEffort:    "medium",
+		},
+		KnowledgeCutoff:  "2026-08",
+		PromptPricePer1M: 1.25,
+		CompletionPer1M:  10,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	response, body = getJSON(t, fixture.client, path)
 	if response.StatusCode != 200 {
 		t.Fatalf("directory: %d %s", response.StatusCode, body)
 	}
@@ -105,8 +144,9 @@ func TestModelSquareHTTPUsesDefaultKeyAndSafeProvenance(t *testing.T) {
 	if selectedAuth != "Bearer directory-fixture-first" {
 		t.Fatal("directory did not use the first configured key")
 	}
-	if directory.ModelInfo["gpt-5"].Limit.Context != 400000 {
-		t.Fatal("missing models.dev information")
+	gptInfo := directory.ModelInfo["gpt-5"]
+	if gptInfo.ContextLength != 400000 || gptInfo.MaxCompletionTokens != 128000 || gptInfo.Reasoning == nil || gptInfo.Reasoning.DefaultEffort != "medium" {
+		t.Fatalf("missing OpenRouter model information: %#v", gptInfo)
 	}
 	mutex.Lock()
 	keys = nil
@@ -415,21 +455,31 @@ func TestModelSquareDoesNotReuseAnotherGatewayCache(t *testing.T) {
 }
 
 func TestModelSquareDTOFieldAllowlists(t *testing.T) {
-	isSupported := true
-	reference := modelcatalog.Model{
-		ID: "research/example", Name: "Example", Description: "Reference description", Family: "example",
-		OpenWeights: &isSupported, Reasoning: &isSupported, ToolCall: &isSupported, StructuredOutput: &isSupported,
-		Attachment: &isSupported, Temperature: &isSupported, Knowledge: "2026-01", ReleaseDate: "2026-02-01",
-		LastUpdated: "2026-03-01", License: "MIT", Limit: modelcatalog.Limits{Context: 1000, Input: 900, Output: 100},
-		Modalities: modelcatalog.Modalities{Input: []string{"text"}, Output: []string{"text"}},
-		Weights:    []modelcatalog.Link{{Label: "Weights", URL: "https://example.test/weights", Type: "weights"}},
-		Links:      []modelcatalog.Link{{Label: "Paper", URL: "https://example.test/paper", Type: "paper"}},
+	reference := operations.ModelReference{
+		ID:                  "research/example",
+		Name:                "Example",
+		Description:         "Reference description",
+		Author:              "research",
+		ContextLength:       1000,
+		MaxCompletionTokens: 100,
+		InputModalities:     []string{"text"},
+		OutputModalities:    []string{"text"},
+		SupportedParameters: []string{"tools", "reasoning"},
+		Reasoning: &operations.ModelReasoning{
+			Mandatory:        true,
+			DefaultEnabled:   true,
+			SupportedEfforts: []string{"low", "high"},
+			DefaultEffort:    "high",
+		},
+		KnowledgeCutoff: "2026-01",
+		HuggingFaceID:   "research/example",
 	}
 	directory := operations.ModelSquareDirectory{
 		Models:    []gateway.Model{{ID: "client-name", CallPoint: "client-name", Vision: "unknown"}},
 		Providers: []operations.ModelSquareProvider{{ID: "relay", Family: "openai-compatibility", Name: "Relay", EndpointHost: "relay.example.test", IconID: "OpenAI"}},
 		Routes:    []operations.ModelSquareRoute{{ProviderID: "relay", UpstreamModel: reference.ID, CallPoint: "client-name"}},
-		Partial:   []string{}, ModelInfo: map[string]modelcatalog.Model{reference.ID: reference}, MetadataUpdatedAt: "2026-03-01",
+		Partial:   []string{},
+		ModelInfo: map[string]operations.ModelReference{reference.ID: reference},
 	}
 	data, err := json.Marshal(projectModelSquareDTO(directory))
 	if err != nil {
@@ -439,7 +489,7 @@ func TestModelSquareDTOFieldAllowlists(t *testing.T) {
 	if err := json.Unmarshal(data, &body); err != nil {
 		t.Fatal(err)
 	}
-	assertModelSquareFields(t, data, "models", "providers", "routes", "partial", "model_info", "metadata_updated_at")
+	assertModelSquareFields(t, data, "models", "providers", "routes", "partial", "model_info")
 	for field, allowed := range map[string][]string{
 		"models":    {"id", "call_point", "vision"},
 		"providers": {"id", "family", "name", "endpoint_host", "is_oauth", "icon_id"},
@@ -459,29 +509,43 @@ func TestModelSquareDTOFieldAllowlists(t *testing.T) {
 		t.Fatal(err)
 	}
 	projected := references[reference.ID]
-	assertModelSquareFields(t, projected, "id", "name", "description", "family", "open_weights", "reasoning", "tool_call", "structured_output", "attachment", "temperature", "knowledge", "release_date", "last_updated", "license", "limit", "modalities", "weights", "links")
+	assertModelSquareFields(t, projected, "id", "name", "description", "author", "context_length", "max_completion_tokens", "input_modalities", "output_modalities", "supported_parameters", "reasoning", "knowledge_cutoff", "hugging_face_id")
 	var metadata map[string]json.RawMessage
 	if err := json.Unmarshal(projected, &metadata); err != nil {
 		t.Fatal(err)
 	}
-	assertModelSquareFields(t, metadata["limit"], "context", "input", "output")
-	assertModelSquareFields(t, metadata["modalities"], "input", "output")
-	for _, field := range []string{"weights", "links"} {
-		var links []json.RawMessage
-		if err := json.Unmarshal(metadata[field], &links); err != nil {
-			t.Fatal(err)
-		}
-		if len(links) != 1 {
-			t.Fatal("missing reference links")
-		}
-		assertModelSquareFields(t, links[0], "label", "url", "type")
-	}
-	var roundTrip modelcatalog.Model
+	assertModelSquareFields(t, metadata["reasoning"], "mandatory", "default_enabled", "supported_efforts", "default_effort")
+	var roundTrip operations.ModelReference
 	if err := json.Unmarshal(projected, &roundTrip); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(roundTrip, reference) {
 		t.Fatalf("reference fields were lost: %#v", roundTrip)
+	}
+	sparse := projectModelSquareDTO(operations.ModelSquareDirectory{
+		ModelInfo: map[string]operations.ModelReference{
+			"sparse": {ID: "vendor/sparse", Name: "Sparse", Reasoning: &operations.ModelReasoning{}},
+		},
+	})
+	sparseBytes, err := json.Marshal(sparse.ModelInfo["sparse"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sparseFields map[string]json.RawMessage
+	if err := json.Unmarshal(sparseBytes, &sparseFields); err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"input_modalities", "output_modalities", "supported_parameters"} {
+		if string(sparseFields[field]) != "[]" {
+			t.Fatalf("sparse %s = %s, want []", field, sparseFields[field])
+		}
+	}
+	var sparseReasoning map[string]json.RawMessage
+	if err := json.Unmarshal(sparseFields["reasoning"], &sparseReasoning); err != nil {
+		t.Fatal(err)
+	}
+	if string(sparseReasoning["supported_efforts"]) != "[]" {
+		t.Fatalf("sparse reasoning.supported_efforts = %s, want []", sparseReasoning["supported_efforts"])
 	}
 }
 
