@@ -165,6 +165,59 @@
     heroDoneAt = 0;
   }
 
+  /*
+   * The hero mark turns a few degrees to face the pointer, and the accent piece slides a
+   * little further than the ring so the two read as separate layers. A damped follow keeps
+   * it calm; it rests flat again when the pointer leaves the window or the hero scrolls away.
+   */
+  var heroArt = document.querySelector('.hero-art');
+  var finePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
+  if (heroArt && isAnimated && finePointer.matches) {
+    var TILT_REACH = 520;
+    var tilt = { x: 0, y: 0 };
+    var tiltTarget = { x: 0, y: 0 };
+    var tiltFrame = 0;
+
+    var stepTilt = function () {
+      tilt.x += (tiltTarget.x - tilt.x) * 0.09;
+      tilt.y += (tiltTarget.y - tilt.y) * 0.09;
+      var isSettled = Math.abs(tiltTarget.x - tilt.x) < 0.001 && Math.abs(tiltTarget.y - tilt.y) < 0.001;
+      if (isSettled) {
+        tilt.x = tiltTarget.x;
+        tilt.y = tiltTarget.y;
+      }
+      heroArt.style.setProperty('--tilt-x', tilt.x.toFixed(4));
+      heroArt.style.setProperty('--tilt-y', tilt.y.toFixed(4));
+      tiltFrame = isSettled ? 0 : requestAnimationFrame(stepTilt);
+    };
+
+    var aimTilt = function (x, y) {
+      tiltTarget.x = x;
+      tiltTarget.y = y;
+      if (!tiltFrame) tiltFrame = requestAnimationFrame(stepTilt);
+    };
+
+    var clampUnit = function (value) {
+      return Math.max(-1, Math.min(1, value));
+    };
+
+    window.addEventListener(
+      'pointermove',
+      function (event) {
+        if (event.pointerType !== 'mouse') return;
+        var box = heroArt.getBoundingClientRect();
+        if (box.bottom < 0) return aimTilt(0, 0);
+        var dx = (event.clientX - (box.left + box.width / 2)) / TILT_REACH;
+        var dy = (event.clientY - (box.top + box.height / 2)) / TILT_REACH;
+        aimTilt(clampUnit(dx), clampUnit(dy));
+      },
+      { passive: true },
+    );
+    document.documentElement.addEventListener('pointerleave', function () {
+      aimTilt(0, 0);
+    });
+  }
+
   /** Calls `onChange(isVisible)` as an element enters and leaves the viewport. */
   function watch(element, onChange, threshold) {
     if (typeof IntersectionObserver !== 'function') {
@@ -182,26 +235,54 @@
     observer.observe(element);
   }
 
-  /** Marks an element `.is-in` the first time enough of it is on screen. */
-  function revealOnce(element, threshold, then) {
+  /**
+   * Marks an element `.is-in` each time enough of it comes on screen, and clears the mark once
+   * it has left entirely, so a story replays whenever the reader scrolls back to it. Leaving
+   * only when fully off screen keeps a block that sits on the edge from flickering.
+   */
+  function revealEach(element, threshold, onEnter, onLeave) {
     if (typeof IntersectionObserver !== 'function') {
       element.classList.add('is-in');
-      if (then) then();
+      if (onEnter) onEnter();
       return;
     }
     var observer = new IntersectionObserver(
       function (entries) {
-        var isVisible = entries.some(function (entry) {
-          return entry.isIntersecting;
-        });
-        if (!isVisible) return;
-        observer.disconnect();
-        element.classList.add('is-in');
-        if (then) then();
+        var entry = entries[entries.length - 1];
+        var isIn = element.classList.contains('is-in');
+        if (!isIn && entry.isIntersecting && entry.intersectionRatio >= threshold) {
+          element.classList.add('is-in');
+          if (onEnter) onEnter();
+        } else if (isIn && !entry.isIntersecting) {
+          element.classList.remove('is-in');
+          if (onLeave) onLeave();
+        }
       },
-      { threshold: threshold },
+      { threshold: [0, threshold] },
     );
     observer.observe(element);
+  }
+
+  // Without scroll timelines (site.css), blocks fade in from whichever edge they enter by.
+  var hasScrollTimeline = Boolean(window.CSS && CSS.supports('(animation-timeline: view()) and (animation-range: entry)'));
+  if (isAnimated && !hasScrollTimeline && typeof IntersectionObserver === 'function') {
+    var seen = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) {
+          var block = entry.target;
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.12) {
+            block.classList.add('is-seen');
+          } else if (!entry.isIntersecting) {
+            block.classList.remove('is-seen');
+            block.setAttribute('data-from', entry.boundingClientRect.top < 0 ? 'top' : 'bottom');
+          }
+        });
+      },
+      { threshold: [0, 0.12] },
+    );
+    document.querySelectorAll('.reveal, .qa, .marquee, .feature, .map-card, .step').forEach(function (block) {
+      seen.observe(block);
+    });
   }
 
   /**
@@ -436,120 +517,263 @@
 
   document.querySelectorAll('[data-story]').forEach(playStory);
 
+  /* ---------------------------------------------------------------- rolling counters */
+
+  /**
+   * Turns an element's text into a counter whose digits roll to each new value, like an
+   * odometer: every digit is a strip of 0-9 that slides to its place. Separators stay put. A
+   * screen reader reads the plain value beside the strips, never the strips themselves.
+   */
+  function rollingCounter(element) {
+    var spoken = document.createElement('span');
+    spoken.className = 'sr-only';
+    var face = document.createElement('span');
+    face.className = 'roll';
+    face.setAttribute('aria-hidden', 'true');
+    var shape = '';
+    var strips = [];
+
+    function build(text) {
+      face.textContent = '';
+      strips = [];
+      text.split('').forEach(function (char) {
+        if (!/\d/.test(char)) {
+          var mark = document.createElement('span');
+          mark.className = 'roll-mark';
+          mark.textContent = char;
+          face.appendChild(mark);
+          return;
+        }
+        var slot = document.createElement('span');
+        slot.className = 'roll-digit';
+        var strip = document.createElement('span');
+        strip.className = 'roll-strip';
+        strip.textContent = '0123456789';
+        slot.appendChild(strip);
+        face.appendChild(slot);
+        strips.push(strip);
+      });
+    }
+
+    function set(text) {
+      spoken.textContent = text;
+      var nextShape = text.replace(/\d/g, '0');
+      if (nextShape !== shape) {
+        shape = nextShape;
+        build(text);
+      }
+      var digits = text.replace(/\D/g, '');
+      strips.forEach(function (strip, index) {
+        strip.style.setProperty('--digit', digits.charAt(index));
+      });
+    }
+
+    var initial = element.textContent;
+    element.textContent = '';
+    element.append(spoken, face);
+    set(initial);
+    return set;
+  }
+
   /* ---------------------------------------------------------------- routing map */
 
-  function playMap(card) {
-    var svg = card.querySelector('svg.map');
-    var layer = card.querySelector('[data-pulses]');
-    var gateway = card.querySelector('.is-gateway');
-    var clientLanes = Array.prototype.slice.call(card.querySelectorAll('[data-lane^="c"]'));
-    var keyLanes = Array.prototype.slice.call(card.querySelectorAll('[data-lane^="k"]'));
-    var stats = {
-      requests: card.querySelector('[data-stat="requests"]'),
-      success: card.querySelector('[data-stat="success"]'),
-      cost: card.querySelector('[data-stat="cost"]'),
-    };
-    var tally = { requests: 1284, ok: 1274, cost: 18.42 };
-    // team-2 (index 2) is nearly out of quota, so it answers rarely and fails more often.
-    var weights = [3, 4, 1, 3, 2];
-    var SEGMENT = 760;
+  // The console's packet player (web/src/components/dashboard/routing/routingPackets.ts) on a
+  // made-up minute of traffic: a stroke of light leaves the model, passes the gateway to a
+  // credential, waits while it answers and comes back green. Everything runs on the map's own
+  // clock, so it freezes off screen.
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  var LANE_HOP_MS = 391;
+  var EDGE_HOP_MS = 460;
+  var GLOW_MS = 1200;
+  var HEAD_PX = 18;
+  var TAIL_PX = 56;
+  var MAX_LIVE = 16;
+  var LIGHT = 'var(--map-light)';
+  var ANSWER = 'var(--success)';
 
-    function node(id) {
-      return svg.querySelector('[data-node="' + id + '"]');
+  function easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  }
+
+  function playMap(card) {
+    var layer = card.querySelector('[data-pulses]');
+    var hub = card.querySelector('[data-hub]');
+    var gateway = card.querySelector('[data-node="gateway"]');
+    var requestsText = card.getAttribute('data-requests-text');
+    var showRequests = rollingCounter(card.querySelector('[data-stat="requests"]'));
+    var showCost = rollingCounter(card.querySelector('[data-stat="cost"]'));
+    var tally = { requests: 1284, cost: 18.42 };
+    var weights = [3, 4, 2, 3, 2];
+
+    function lane(id) {
+      var path = card.querySelector('[data-lane="' + id + '"]');
+      var length = path.getTotalLength();
+      var gap = (length + 2 * TAIL_PX).toFixed(1);
+      return { d: path.getAttribute('d'), length: length, dash: [HEAD_PX + ' ' + gap, TAIL_PX + ' ' + gap] };
     }
 
-    function pickKey(pool, except) {
-      var candidates = pool.filter(function (index) {
-        return index !== except;
+    var models = Array.prototype.map.call(card.querySelectorAll('.route-node.is-model'), function (el, index) {
+      return {
+        el: el,
+        lane: lane('c' + index),
+        count: Number(el.getAttribute('data-requests')),
+        countEl: el.querySelector('[data-count]'),
+        targets: el.getAttribute('data-targets').split(',').map(Number),
+      };
+    });
+    var keys = Array.prototype.map.call(card.querySelectorAll('.route-node.is-credential'), function (el, index) {
+      return { el: el, lane: lane('k' + index) };
+    });
+
+    var timers = [];
+    var flights = [];
+    var packets = new Set();
+    var clock = 0;
+    var inFlight = 0;
+
+    function wait(ms) {
+      return new Promise(function (resolve) {
+        timers.push({ at: clock + ms, run: resolve });
       });
-      if (!candidates.length) candidates = pool;
+    }
+
+    function glow(element, peak) {
+      var from = Number(getComputedStyle(element).opacity) || 0;
+      element.getAnimations().forEach(function (running) {
+        running.cancel();
+      });
+      element.animate(
+        [
+          { opacity: from, easing: 'cubic-bezier(0.2, 0, 0, 1)' },
+          { opacity: Math.max(from, peak), offset: 1 / 6, easing: 'cubic-bezier(0.3, 0, 0.2, 1)' },
+          { opacity: 0 },
+        ],
+        { duration: GLOW_MS },
+      );
+    }
+
+    function acknowledge(node, isAnswer, isWashed) {
+      glow(node.querySelector('.route-halo'), 0.85);
+      if (isWashed === false) return;
+      var wash = node.querySelector('.route-wash');
+      wash.classList.toggle('is-success', isAnswer);
+      glow(wash, 1);
+    }
+
+    function fly(packet, route, color, isBack, duration) {
+      packet.holder.style.setProperty('--packet-color', color);
+      packet.strokes.forEach(function (stroke, index) {
+        stroke.setAttribute('d', route.d);
+        stroke.style.strokeDasharray = route.dash[index];
+      });
+      return new Promise(function (resolve) {
+        flights.push({ packet: packet, route: route, isBack: isBack, elapsed: 0, duration: duration, resolve: resolve });
+      });
+    }
+
+    function pickKey(pool) {
       var total = 0;
-      candidates.forEach(function (index) {
-        total += weights[index] || 1;
+      pool.forEach(function (index) {
+        total += weights[index];
       });
       var roll = Math.random() * total;
-      for (var i = 0; i < candidates.length; i++) {
-        roll -= weights[candidates[i]] || 1;
-        if (roll <= 0) return candidates[i];
+      for (var i = 0; i < pool.length; i++) {
+        roll -= weights[pool[i]];
+        if (roll <= 0) return pool[i];
       }
-      return candidates[0];
+      return pool[0];
     }
 
-    function pulse(lane, kind, isReturn) {
-      var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', lane.getAttribute('d'));
-      path.setAttribute('pathLength', '1');
-      path.setAttribute('class', 'pulse is-' + kind);
-      layer.appendChild(path);
-      var frames = isReturn ? [{ strokeDashoffset: -1 }, { strokeDashoffset: 0.12 }] : [{ strokeDashoffset: 0.12 }, { strokeDashoffset: -1 }];
-      var animation = path.animate(frames, { duration: SEGMENT, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', fill: 'both' });
-      return animation.finished.then(function () {
-        path.remove();
+    function launch() {
+      var holder = document.createElementNS(SVG_NS, 'g');
+      holder.setAttribute('class', 'pulse');
+      var strokes = ['pulse-head', 'pulse-tail'].map(function (name) {
+        var stroke = document.createElementNS(SVG_NS, 'path');
+        stroke.setAttribute('class', name);
+        return stroke;
       });
+      holder.append(strokes[1], strokes[0]);
+      layer.appendChild(holder);
+      packets.add(holder);
+      return { holder: holder, strokes: strokes };
     }
 
-    function hit() {
-      gateway.classList.add('is-hit');
-      setTimeout(function () {
-        gateway.classList.remove('is-hit');
-      }, 120);
-    }
-
-    function flash(element, className, duration) {
-      element.classList.add(className);
-      setTimeout(function () {
-        element.classList.remove(className);
-      }, duration);
-    }
-
-    function render() {
-      stats.requests.textContent = tally.requests.toLocaleString('en-US');
-      stats.success.textContent = ((tally.ok / tally.requests) * 100).toFixed(1) + '%';
-      stats.cost.textContent = '$' + tally.cost.toFixed(2);
-    }
-
-    function attempt(pool, keyIndex, isRetry) {
-      var keyLane = keyLanes[keyIndex];
-      var keyNode = node('k' + keyIndex);
-      return pulse(keyLane, 'out').then(function () {
-        flash(keyNode, 'is-busy', 500);
-        var fails = !isRetry && pool.length > 1 && Math.random() < (keyIndex === 2 ? 0.55 : 0.06);
-        if (fails) flash(keyNode, 'is-failing', 2200);
-        return pulse(keyLane, fails ? 'fail' : 'ok', true).then(function () {
-          hit();
-          return fails ? attempt(pool, pickKey(pool, keyIndex), true) : true;
-        });
-      });
+    function setBusy() {
+      hub.classList.toggle('is-busy', inFlight > 0);
     }
 
     function request() {
-      var clientIndex = Math.floor(Math.random() * clientLanes.length);
-      var clientNode = node('c' + clientIndex);
-      var clientLane = clientLanes[clientIndex];
-      var pool = (clientNode.getAttribute('data-targets') || '0')
-        .split(',')
-        .map(Number);
-      flash(clientNode, 'is-busy', 400);
-      pulse(clientLane, 'out')
+      if (inFlight >= MAX_LIVE) return;
+      var model = models[Math.floor(Math.random() * models.length)];
+      var key = keys[pickKey(model.targets)];
+      var packet = launch();
+      inFlight += 1;
+      setBusy();
+      acknowledge(model.el, false);
+      fly(packet, model.lane, LIGHT, false, LANE_HOP_MS)
         .then(function () {
-          hit();
-          return attempt(pool, pickKey(pool, -1), false);
+          acknowledge(gateway, false);
+          return fly(packet, key.lane, LIGHT, false, EDGE_HOP_MS);
         })
         .then(function () {
-          return pulse(clientLane, 'ok', true);
+          acknowledge(key.el, false, false);
+          return wait(Math.round(120 + Math.random() * 360));
         })
         .then(function () {
+          acknowledge(key.el, true);
+          return fly(packet, key.lane, ANSWER, true, EDGE_HOP_MS);
+        })
+        .then(function () {
+          acknowledge(gateway, true);
+          return fly(packet, model.lane, ANSWER, true, LANE_HOP_MS);
+        })
+        .then(function () {
+          acknowledge(model.el, true);
+          model.count += 1;
+          model.countEl.textContent = requestsText.replace('{count}', model.count.toLocaleString('en-US'));
           tally.requests += 1;
-          tally.ok += 1;
           tally.cost += 0.004 + Math.random() * 0.16;
-          render();
+          showRequests(tally.requests.toLocaleString('en-US'));
+          showCost('$' + tally.cost.toFixed(2));
+          inFlight -= 1;
+          setBusy();
+          packet.holder.remove();
+          packets.delete(packet.holder);
         });
     }
 
-    var untilNext = 600;
+    function advance(delta) {
+      clock += delta;
+      var due = timers.filter(function (timer) {
+        return timer.at <= clock;
+      });
+      timers = timers.filter(function (timer) {
+        return timer.at > clock;
+      });
+      due.forEach(function (timer) {
+        timer.run();
+      });
+      flights = flights.filter(function (flight) {
+        flight.elapsed += delta;
+        var progress = Math.min(1, flight.elapsed / flight.duration);
+        var travelled = easeInOutQuad(progress) * (flight.route.length + TAIL_PX);
+        flight.packet.strokes.forEach(function (stroke, index) {
+          var dash = index === 0 ? HEAD_PX : TAIL_PX;
+          stroke.style.strokeDashoffset = (flight.isBack ? travelled - flight.route.length : dash - travelled).toFixed(1);
+        });
+        if (progress < 1) return true;
+        flight.resolve();
+        return false;
+      });
+    }
+
+    var untilNext = 300;
+    var holdUntil = 0;
     visibleLoop(
       card,
-      function (delta) {
+      function (delta, now) {
+        if (now < holdUntil) return;
+        advance(delta);
         untilNext -= delta;
         if (untilNext > 0) return;
         untilNext = 520 + Math.random() * 520;
@@ -557,16 +781,83 @@
       },
       0.25,
     );
+
+    return {
+      /** Keeps the traffic still while the map assembles. */
+      hold: function (ms) {
+        holdUntil = performance.now() + ms;
+      },
+      /** Clears the map as it leaves, so it comes back empty and assembles again. */
+      clear: function () {
+        packets.forEach(function (holder) {
+          holder.remove();
+        });
+        packets.clear();
+        flights = [];
+        timers = [];
+        inFlight = 0;
+        setBusy();
+        untilNext = 300;
+      },
+    };
   }
 
-  var mapsStarted = false;
-  function startMaps() {
-    if (mapsStarted || !isAnimated || phone.matches || typeof SVGElement.prototype.animate !== 'function') return;
-    mapsStarted = true;
-    document.querySelectorAll('[data-map]').forEach(playMap);
-  }
-  startMaps();
-  if (typeof phone.addEventListener === 'function') phone.addEventListener('change', startMaps);
+  // The map assembles each time it comes into view (site.css), and traffic waits until it has.
+  var MAP_ASSEMBLY_MS = 760;
+  document.querySelectorAll('[data-map]').forEach(function (card) {
+    var canPlay = isAnimated && typeof SVGElement.prototype.animate === 'function';
+    if (!canPlay) {
+      card.classList.add('is-in');
+      return;
+    }
+    var player = null;
+    function start() {
+      if (!player && !phone.matches && card.classList.contains('is-in')) player = playMap(card);
+      if (player) player.hold(MAP_ASSEMBLY_MS);
+    }
+    revealEach(card, 0.35, start, function () {
+      if (player) player.clear();
+    });
+    if (typeof phone.addEventListener === 'function') phone.addEventListener('change', start);
+  });
+
+  /* ---------------------------------------------------------------- providers marquee */
+
+  // A pointer over the strip eases it to rest and away eases it back, rather than the strip
+  // stopping dead under the pointer. It keeps one pace otherwise: tying its speed to the
+  // scroll read as lurching. Without the script, CSS pauses it on hover.
+  document.querySelectorAll('[data-marquee]').forEach(function (marquee) {
+    var track = marquee.querySelector('.marquee-track');
+    if (!isAnimated || typeof track.getAnimations !== 'function') return;
+    var animation = track.getAnimations()[0];
+    if (!animation) return;
+    marquee.classList.add('is-eased');
+    var rate = 1;
+    var target = 1;
+    var frame = 0;
+    var last = 0;
+    function step(now) {
+      var delta = last ? Math.min(now - last, 64) : 16;
+      last = now;
+      rate += (target - rate) * (1 - Math.exp(-delta / 260));
+      if (Math.abs(target - rate) < 0.004) rate = target;
+      animation.playbackRate = rate;
+      frame = rate === target ? 0 : requestAnimationFrame(step);
+    }
+    function ease(to) {
+      target = to;
+      if (!frame) {
+        last = 0;
+        frame = requestAnimationFrame(step);
+      }
+    }
+    marquee.addEventListener('pointerenter', function (event) {
+      if (event.pointerType === 'mouse' || event.pointerType === 'pen') ease(0);
+    });
+    marquee.addEventListener('pointerleave', function () {
+      ease(1);
+    });
+  });
 
   /* ---------------------------------------------------------------- feature cards */
 
@@ -617,7 +908,11 @@
     var prefix = element.getAttribute('data-prefix') || '';
     var start = performance.now();
     var duration = 1400;
+    // A replay takes over from a count still running.
+    var run = (element.countRun || 0) + 1;
+    element.countRun = run;
     function frame(now) {
+      if (element.countRun !== run) return;
       var share = Math.min(1, (now - start) / duration);
       var eased = 1 - Math.pow(1 - share, 4);
       element.textContent = prefix + (target * eased).toFixed(2);
@@ -641,9 +936,12 @@
       card.classList.add('is-in');
       return;
     }
-    revealOnce(card, 0.35, function () {
+    var hasStarted = false;
+    revealEach(card, 0.35, function () {
       var counter = card.querySelector('[data-count]');
       if (counter) countUp(counter);
+      if (hasStarted) return;
+      hasStarted = true;
       var requests = card.querySelector('[data-requests]');
       if (requests) playRequests(requests);
       var warm = card.querySelector('.o-row.is-warm');
@@ -651,111 +949,13 @@
     });
   });
 
-  /* ---------------------------------------------------------------- install terminal */
-
-  var terminal = document.querySelector('[data-terminal]');
-  var typingRun = 0;
-
-  function playTerminal(screen) {
-    var run = ++typingRun;
-    var lines = Array.prototype.slice.call(screen.querySelectorAll('.t-line'));
-    var queue = [];
-    lines.forEach(function (line, lineIndex) {
-      var text = line.querySelector('.t-text');
-      if (line.hasAttribute('data-type')) {
-        if (!text._segments) {
-          text._segments = Array.prototype.map.call(text.childNodes, function (node) {
-            return { cls: node.nodeType === 1 ? node.className : '', text: node.textContent };
-          });
-          text._full = text._segments.map(function (seg) { return seg.text; }).join('');
-        }
-        text.textContent = '';
-        var typed = document.createElement('span');
-        var rest = document.createElement('span');
-        typed.className = 't-typed';
-        rest.className = 't-rest';
-        rest.textContent = text._full;
-        var parts = text._segments.map(function (seg) {
-          var el = document.createElement('span');
-          if (seg.cls) el.className = seg.cls;
-          typed.appendChild(el);
-          return { el: el, text: seg.text };
-        });
-        text.append(typed, rest);
-        queue.push({ line: line, parts: parts, rest: rest, full: text._full });
-      } else {
-        queue.push({ line: line });
-      }
-      line.classList.remove('is-landing', 'is-caret');
-      // Keep the first line mounted so the terminal starts at 1 line and grows line by line.
-      line.classList.toggle('is-waiting', lineIndex > 0);
-    });
-
-    var index = 0;
-    function nextLine() {
-      if (run !== typingRun || index >= queue.length) return;
-      var item = queue[index++];
-      if (item.line.classList.contains('is-waiting')) {
-        item.line.classList.remove('is-waiting');
-        if (item.parts) item.line.classList.add('is-landing');
-      }
-      if (!item.parts) {
-        item.line.classList.add('is-landing');
-        setTimeout(nextLine, 400);
-        return;
-      }
-      item.line.classList.add('is-caret');
-      var start = performance.now();
-      function type(now) {
-        if (run !== typingRun) return;
-        var count = Math.min(item.full.length, Math.round((now - start) * 0.16));
-        var left = count;
-        for (var i = 0; i < item.parts.length; i++) {
-          var seg = item.parts[i];
-          if (left <= 0) {
-            seg.el.textContent = '';
-          } else if (left >= seg.text.length) {
-            seg.el.textContent = seg.text;
-            left -= seg.text.length;
-          } else {
-            seg.el.textContent = seg.text.slice(0, left);
-            left = 0;
-          }
-        }
-        item.rest.textContent = item.full.slice(count);
-        if (count < item.full.length) {
-          requestAnimationFrame(type);
-          return;
-        }
-        setTimeout(function () {
-          item.line.classList.remove('is-caret');
-          nextLine();
-        }, 260);
-      }
-      requestAnimationFrame(type);
-    }
-    setTimeout(nextLine, 260);
-  }
-
-  function activeScreen() {
-    return terminal.querySelector('[data-screen]:not([hidden])');
-  }
-
   var closingMark = document.querySelector('.closing-mark');
-  if (closingMark && isAnimated) revealOnce(closingMark, 0.3);
-
-  var terminalSeen = false;
-  if (terminal && isAnimated) {
-    revealOnce(terminal, 0.4, function () {
-      terminalSeen = true;
-      playTerminal(activeScreen());
-    });
-  }
+  if (closingMark && isAnimated) revealEach(closingMark, 0.3);
 
   /* ---------------------------------------------------------------- install tabs */
 
-  // Inactive text panels are `hidden="until-found"`: find in page can reveal one, and the tab
-  // follows. Terminal screens are plain `hidden`; their commands are also in the docs.
+  // Install paths stay laid out and an unselected one is only made `inert`, so the section
+  // keeps its size and a switch is a crossfade. Their commands are also in the docs.
   var tablist = document.querySelector('.chips[role="tablist"]');
   var thumb = null;
   if (tablist) {
@@ -802,19 +1002,10 @@
       var isSelected = other === tab;
       other.setAttribute('aria-selected', String(isSelected));
       other.tabIndex = isSelected ? 0 : -1;
-      other
-        .getAttribute('aria-controls')
-        .split(' ')
-        .forEach(function (id) {
-          var panel = document.getElementById(id);
-          if (panel.hasAttribute('data-screen')) panel.hidden = !isSelected;
-          else if (isSelected) panel.removeAttribute('hidden');
-          else panel.setAttribute('hidden', 'until-found');
-        });
+      document.getElementById(other.getAttribute('aria-controls')).inert = !isSelected;
     });
     moveThumb(tab, false);
     if (shouldFocus) tab.focus();
-    if (terminalSeen && isAnimated) playTerminal(activeScreen());
   }
   tabs.forEach(function (tab, index) {
     tab.addEventListener('click', function () {
@@ -828,12 +1019,6 @@
       else return;
       event.preventDefault();
     });
-  });
-  document.addEventListener('beforematch', function (event) {
-    var tab = tabs.find(function (candidate) {
-      return candidate.getAttribute('aria-controls').split(' ').indexOf(event.target.id) !== -1;
-    });
-    if (tab) select(tab, false);
   });
   document.documentElement.classList.add('is-ready');
 })();

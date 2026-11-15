@@ -133,6 +133,15 @@ body {
   --hm-ink-foot: var(--fg);
   --hm-edge-opacity: 0.35;
   --gutter: 24px;
+  /* The routing map's light: on a light page the accent is darkened for text, so the map lifts
+     it back to a vivid step of the same hue, kept inside sRGB (a step past it renders lime in
+     shadows). Nothing that carries text uses it. */
+  --map-light: oklch(from var(--accent) calc(l + 0.16) calc(c + 0.03) h);
+  --map-glow: color-mix(in srgb, var(--map-light) 30%, transparent);
+  --map-track-rest: 0.2;
+  --pulse-blur: 2px;
+  --pulse-glow: 70%;
+  --route-tile-shadow: var(--shadow-float);
 }
 
 :root[data-theme='dark'] body {
@@ -210,6 +219,12 @@ body {
   --hm-ink-top: var(--fg);
   --hm-ink-foot: color-mix(in srgb, var(--fg) 86%, var(--bg));
   --hm-edge-opacity: 0.7;
+  --map-light: var(--accent);
+  --map-glow: color-mix(in srgb, var(--map-light) 22%, transparent);
+  --map-track-rest: 0.16;
+  --pulse-blur: 3px;
+  --pulse-glow: 100%;
+  --route-tile-shadow: var(--shadow-raised);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -288,6 +303,12 @@ body {
     --hm-ink-top: var(--fg);
     --hm-ink-foot: color-mix(in srgb, var(--fg) 86%, var(--bg));
     --hm-edge-opacity: 0.7;
+    --map-light: var(--accent);
+    --map-glow: color-mix(in srgb, var(--map-light) 22%, transparent);
+    --map-track-rest: 0.16;
+    --pulse-blur: 3px;
+    --pulse-glow: 100%;
+    --route-tile-shadow: var(--shadow-raised);
   }
 }
 
@@ -934,13 +955,24 @@ h3 {
  * starts and ends.
  */
 .hero-art {
+  --tilt-x: 0;
+  --tilt-y: 0;
+  --tilt-deg: 11deg;
   margin-bottom: 40px;
+  perspective: 720px;
 }
 
 .hero-mark {
   width: 176px;
   height: 176px;
   overflow: visible;
+  transform: rotateX(calc(var(--tilt-y) * var(--tilt-deg) * -1))
+    rotateY(calc(var(--tilt-x) * var(--tilt-deg)));
+}
+
+/* The accent piece sits a layer above the ring (viewBox units, about 3.5px on screen). */
+.m-fill.is-reading {
+  translate: calc(var(--tilt-x) * 1.2px) calc(var(--tilt-y) * 1.2px);
 }
 
 /* Material: a few percent of shade towards each shape's foot and a fine light upper edge. */
@@ -1167,45 +1199,6 @@ h3 {
   background: var(--card);
   box-shadow: var(--shadow-float);
   overflow: hidden;
-}
-
-.window-bar {
-  height: 40px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 14px;
-  box-shadow: inset 0 -1px 0 var(--hairline);
-}
-
-.lights {
-  display: flex;
-  gap: 7px;
-}
-
-.lights i {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #ff5f57;
-  box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.14);
-}
-
-.lights i:nth-child(2) {
-  background: #febc2e;
-}
-
-.lights i:nth-child(3) {
-  background: #28c840;
-}
-
-.window-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: var(--fs-ui);
 }
 
 /* ------------------------------------------------------------------ console replica */
@@ -1864,11 +1857,61 @@ h3 {
   text-wrap: pretty;
 }
 
+/* The providers run past in a seamless loop: the track holds the list twice and slides by
+   exactly one copy. A pointer over the strip brings it to rest (site.js eases the speed; without
+   the script it simply pauses), so a chip can be read and lifted. Reduced motion shows one
+   wrapped list instead. */
+.marquee {
+  --marquee-gap: 8px;
+  margin-top: 72px;
+  /* Room for a lifted chip's shadow, which the clipping would otherwise cut. */
+  padding-block: 8px 12px;
+  margin-block-end: -12px;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, #000 64px, #000 calc(100% - 64px), transparent);
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 56s linear infinite;
+}
+
+.marquee:not(.is-eased):hover .marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes marquee {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
 .providers {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 72px;
+  flex-wrap: nowrap;
+  gap: var(--marquee-gap);
+  /* The gap after the last chip, so both copies are the same width and the seam is invisible. */
+  padding-inline-end: var(--marquee-gap);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee {
+    mask-image: none;
+  }
+
+  .marquee-track {
+    width: auto;
+    animation: none;
+  }
+
+  .providers {
+    flex-wrap: wrap;
+  }
+
+  .providers.is-echo {
+    display: none;
+  }
 }
 
 .providers li {
@@ -1944,145 +1987,261 @@ h3 {
 
 /* ------------------------------------------------------------------ routing map */
 
+/* The console's live routing map (RoutingPanel.module.css), in the same language: tiles facing a
+   gateway tile, hairline lanes of the page's own ink, and each request a short stroke of light.
+   A request sets out in the map's light and comes back green or red; lanes never take a hue.
+   The plane is --w units wide and one unit scales with the card, so the HTML tiles and the SVG
+   lanes (render.mjs) share one set of coordinates. */
 .map-card {
   position: relative;
-  padding: 24px 40px 32px;
+  container-type: inline-size;
+  padding: 28px 40px 32px;
   border-radius: var(--radius-xl);
   background: var(--card);
   box-shadow: var(--shadow-edge);
   overflow: hidden;
 }
 
-.map {
+.map-plane {
+  --u: calc(100cqw / var(--w));
+  position: relative;
+  aspect-ratio: var(--w) / var(--h);
+  isolation: isolate;
+}
+
+/* A faint dot grid gives the lanes a plane to travel on, fading out towards the edges. */
+.map-plane::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  content: '';
+  pointer-events: none;
+  background-image: radial-gradient(color-mix(in srgb, var(--fg) 13%, transparent) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  background-position: center;
+  mask-image: radial-gradient(ellipse 62% 70% at 50% 50%, #000 25%, transparent 100%);
+}
+
+.map-lanes {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: auto;
+  height: 100%;
   overflow: visible;
-  font-family: var(--font-sans);
 }
 
 .lane {
   fill: none;
-  stroke: var(--hairline);
-  stroke-width: 1.5;
-}
-
-.pulse {
-  fill: none;
-  stroke-width: 2;
+  stroke: var(--fg);
+  stroke-width: 1.25;
   stroke-linecap: round;
-  stroke-dasharray: 0.12 1;
+  opacity: var(--map-track-rest);
 }
 
-.pulse.is-out {
-  stroke: var(--accent);
+/* A request: a bright head and a fainter tail on a copy of its lane, coloured per hop. */
+.pulse {
+  filter: drop-shadow(0 0 var(--pulse-blur) color-mix(in srgb, var(--packet-color) var(--pulse-glow), transparent));
 }
 
-.pulse.is-ok {
-  stroke: var(--success);
-}
-
-.pulse.is-fail {
-  stroke: var(--danger);
-}
-
-.map .tile {
-  fill: var(--raised);
-  stroke: var(--edge-ring);
-  stroke-width: 1;
-}
-
-.node-mark {
-  overflow: visible;
-  color: var(--fg-2);
-}
-
-.map-col-head {
-  fill: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-.node-label {
-  fill: var(--fg);
-  font-size: var(--fs-ui);
-  font-weight: 500;
-}
-
-.node-label.is-mono,
-.node-sub.is-mono {
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-}
-
-.node-sub {
-  fill: var(--muted);
-  font-size: var(--fs-ui);
-}
-
-.node-alert {
-  fill: var(--danger);
-  opacity: 0;
-  transition: opacity 240ms var(--ease-out);
-}
-
-.node.is-failing .node-alert {
-  opacity: 1;
-}
-
-.node.is-busy .tile {
-  stroke: color-mix(in srgb, var(--accent) 55%, transparent);
-}
-
-.map .tile {
-  transition: stroke 300ms var(--ease-out);
-}
-
-.orbit {
+.pulse path {
   fill: none;
-  stroke: var(--hairline);
-  stroke-dasharray: 2 6;
+  stroke: var(--packet-color);
+  stroke-linecap: round;
 }
 
-.orbit.is-far {
-  stroke-dasharray: 1 9;
+.pulse-head {
+  stroke-width: 2;
 }
 
-.gateway-glow {
-  fill: var(--glow);
-  filter: blur(16px);
-  opacity: 0.5;
-  transition: opacity 600ms var(--ease-out);
-}
-
-.is-gateway.is-hit .gateway-glow {
-  opacity: 1;
-  transition-duration: 80ms;
-}
-
-.is-gateway-tile {
-  fill: var(--raised);
-  stroke: var(--lift-ring);
-}
-
-.gateway-ring {
-  fill: none;
-  stroke: var(--accent);
+.pulse-tail {
   stroke-width: 1.5;
-  opacity: 0;
-  transition: opacity 600ms var(--ease-out);
+  opacity: 0.35;
 }
 
-.is-gateway.is-hit .gateway-ring {
-  opacity: 0.8;
-  transition-duration: 80ms;
+.route-node,
+.route-hub,
+.route-head {
+  position: absolute;
+  left: calc(var(--x) * var(--u));
+  top: calc(var(--y) * var(--u));
+}
+
+.route-node {
+  width: calc(var(--tile) * var(--u));
+  height: calc(var(--tile) * var(--u));
+  margin: calc(var(--tile) * var(--u) / -2) 0 0 calc(var(--tile) * var(--u) / -2);
+}
+
+.route-head {
+  color: var(--muted);
+  font-size: max(10px, calc(12 * var(--u)));
+  font-weight: 500;
+  white-space: nowrap;
+  translate: 0 -50%;
+}
+
+.route-head.is-model {
+  translate: -100% -50%;
+}
+
+.route-tile {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  color: var(--fg);
+  box-shadow: var(--route-tile-shadow);
+}
+
+.route-mark {
+  position: relative;
+  width: calc(20 * var(--u));
+  height: calc(20 * var(--u));
+}
+
+/* A tile catching the light as a request docks: its top edge lights and a soft pool spreads
+   beneath, so it stays a solid object rather than gaining an outline. site.js drives opacity. */
+.route-halo,
+.route-wash {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.route-halo {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--map-light) 50%, transparent),
+    0 6px 18px -8px color-mix(in srgb, var(--map-light) 55%, transparent);
+}
+
+.route-wash {
+  --wash-color: color-mix(in oklch, var(--map-light) 14%, transparent);
+  background: radial-gradient(closest-side, var(--wash-color), transparent);
+}
+
+.route-wash.is-success {
+  --wash-color: color-mix(in oklch, var(--success) 18%, transparent);
+}
+
+.route-text {
+  position: absolute;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  white-space: nowrap;
+  translate: 0 -50%;
+}
+
+.is-model .route-text {
+  right: calc(100% + 12 * var(--u));
+  align-items: flex-end;
+}
+
+.is-credential .route-text {
+  left: calc(100% + 12 * var(--u));
+}
+
+.route-name {
+  color: var(--fg);
+  font-size: max(11px, calc(13.5 * var(--u)));
+  font-weight: 550;
+}
+
+.route-meta {
+  color: var(--muted);
+  font-size: max(10px, calc(12.5 * var(--u)));
+  font-variant-numeric: tabular-nums;
+}
+
+.route-name.is-mono,
+.route-meta.is-mono {
+  font-family: var(--font-mono);
+  font-weight: 400;
+}
+
+/* The one tile every request passes through: the product's mark on a floating tile, two faint
+   orbits and a soft glow behind it that warms while requests are on the map. */
+.route-hub {
+  width: calc(var(--hub) * var(--u));
+  height: calc(var(--hub) * var(--u));
+  margin: calc(var(--hub) * var(--u) / -2) 0 0 calc(var(--hub) * var(--u) / -2);
+}
+
+.route-orbits {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(184 * var(--u));
+  height: calc(184 * var(--u));
+  max-width: none;
+  overflow: visible;
+  translate: -50% -50%;
+}
+
+.route-orbits circle {
+  fill: none;
+  stroke-width: 1;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+
+.orbit-outer {
+  stroke: color-mix(in srgb, var(--fg) 7%, transparent);
+}
+
+.orbit-inner {
+  stroke: color-mix(in srgb, var(--fg) 12%, transparent);
+  stroke-dasharray: 2 7;
+}
+
+.route-hub-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(150 * var(--u));
+  height: calc(150 * var(--u));
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--map-glow) 0%, transparent 68%);
+  opacity: 0.6;
+  translate: -50% -50%;
+}
+
+.route-hub-glow::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--map-light) 16%, transparent) 0%, transparent 64%);
+  content: '';
+  opacity: 0;
+  transition: opacity 600ms ease-out;
+}
+
+.route-hub.is-busy .route-hub-glow::after {
+  opacity: 1;
+  transition-duration: 200ms;
+}
+
+.route-tile.is-gateway {
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-float);
+}
+
+.route-gateway-mark {
+  position: relative;
+  width: 44%;
+  height: auto;
 }
 
 .map-stats {
   display: flex;
   justify-content: center;
   gap: 56px;
-  margin-top: 16px;
+  margin-top: 8px;
 }
 
 .map-stats div {
@@ -2099,6 +2258,72 @@ h3 {
   font-family: var(--font-mono);
   font-size: var(--fs-lead);
   font-variant-numeric: tabular-nums;
+}
+
+/* A rolling counter (site.js): each digit is a strip of 0-9 that slides to its place behind a
+   one-line window, softened at top and bottom so a digit rolls in rather than cuts in. */
+.roll {
+  display: inline-flex;
+  line-height: 1.25;
+}
+
+.roll-digit {
+  display: inline-block;
+  height: 1.25em;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, transparent, #000 14%, #000 86%, transparent);
+}
+
+.roll-strip {
+  display: block;
+  width: 1ch;
+  text-align: center;
+  word-break: break-all;
+  translate: 0 calc(var(--digit, 0) * -1.25em);
+  transition: translate 720ms var(--ease-settle);
+}
+
+/* The map assembles in the order a request travels it: models, their lanes, the gateway, the
+   credentials' lanes and the credentials, each row drifting in from its own side. */
+@media (prefers-reduced-motion: no-preference) {
+  .orbit-inner {
+    animation: spin 40s linear infinite;
+  }
+
+  .js .route-node {
+    transition:
+      opacity 300ms var(--ease-land),
+      translate 300ms var(--ease-land);
+    transition-delay: calc(var(--i) * 45ms + 120ms);
+  }
+
+  .js .lane {
+    transition: opacity 360ms var(--ease-land);
+    transition-delay: calc(var(--i) * 45ms + 220ms);
+  }
+
+  .js .route-hub,
+  .js .route-head {
+    transition:
+      opacity 360ms var(--ease-land) 300ms,
+      scale 420ms var(--ease-settle) 300ms;
+  }
+
+  .js .map-card:not(.is-in) :is(.route-node, .lane, .route-hub, .route-head) {
+    opacity: 0;
+  }
+
+  .js .map-card:not(.is-in) .route-node.is-model {
+    translate: -12px 0;
+  }
+
+  .js .map-card:not(.is-in) .route-node.is-credential {
+    translate: 12px 0;
+  }
+
+  .js .map-card:not(.is-in) .route-hub {
+    scale: 0.94;
+  }
 }
 
 /* ------------------------------------------------------------------ feature cards */
@@ -2610,18 +2835,12 @@ h3 {
 
 /* ------------------------------------------------------------------ install */
 
-.install-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 56px;
-  align-items: start;
-}
-
-.install-side {
+.install-top {
   display: flex;
-  flex-direction: column;
-  gap: 24px;
-  padding-top: 8px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px 40px;
 }
 
 .chips {
@@ -2698,119 +2917,150 @@ h3 {
   box-shadow: none;
 }
 
-.install-panels {
-  width: 100%;
+/*
+ * Each install path is a short run of numbered steps: a title and a line of explanation, and
+ * beside them the code that step needs, in its own block with its own copy button. The paths
+ * share one grid cell, so the section is as tall as the longest path whichever is selected,
+ * and a switch is a crossfade.
+ */
+.install-paths {
+  display: grid;
+  margin-top: 40px;
 }
 
-.install-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 16px;
-  color: var(--fg-2);
-  font-size: var(--fs-lead);
-  text-wrap: pretty;
+.install-path {
+  grid-area: 1 / 1;
+  min-width: 0;
+  transition:
+    opacity 280ms var(--ease-out) 60ms,
+    translate 460ms var(--ease-settle) 60ms,
+    visibility 0s;
 }
 
-.install-panel[hidden]:not([hidden='until-found']) {
-  display: none;
+.install-path[inert] {
+  visibility: hidden;
+  opacity: 0;
+  translate: 0 8px;
+  transition:
+    opacity 140ms var(--ease-out),
+    translate 140ms var(--ease-out),
+    visibility 0s 140ms;
 }
 
-.install-panel strong {
-  color: var(--fg);
-  font-weight: 600;
-}
-
-.install-panel code {
-  font-size: 0.82em;
-}
-
-.install-panel .text-link {
+.install-link {
+  margin: 28px 0 0 60px;
   font-size: var(--fs-body);
 }
 
-.terminal {
-  position: relative;
-  font-family: var(--font-mono);
-  font-size: var(--fs-ui);
-  line-height: 1.65;
-}
-
-.t-screen {
-  position: relative;
-  padding: 18px 56px 22px 20px;
-}
-
-.t-screen .copy {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-}
-
-.t-screen .copy-button {
-  background: var(--secondary);
-  color: var(--fg-2);
-  box-shadow: var(--shadow-control);
-}
-
-.t-screen .copy-button:hover {
-  background: var(--secondary-hover);
-  color: var(--fg);
-  box-shadow: var(--shadow-control-hover);
-}
-
-.t-screen .copy-button:active {
-  background: var(--secondary-active);
-  box-shadow: var(--shadow-control-active);
-}
-
-.t-lines {
+/* A hairline joins each step's number to the next one's. */
+.steps {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 28px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.t-line {
-  display: flex;
-  gap: 10px;
+.step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 20rem) minmax(0, 1fr);
+  column-gap: 28px;
+  align-items: start;
+}
+
+/* A number is a key of the page's ink, the same as the primary button. */
+.step-num {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--primary-bg);
+  background-image: var(--primary-sheen);
+  color: var(--primary-on);
+  box-shadow: var(--primary-drop);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.step:not(:last-child)::before {
+  position: absolute;
+  top: 40px;
+  bottom: -20px;
+  left: 15.5px;
+  width: 1px;
+  background: color-mix(in srgb, var(--fg) 12%, transparent);
+  content: '';
+}
+
+.step-text {
+  padding-top: 4px;
+}
+
+.step-text h3 {
   color: var(--fg);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
 }
 
-.t-sigil {
-  flex: none;
-  width: 12px;
-  color: var(--accent);
-}
-
-.t-line.is-out,
-.t-line.is-step {
+.step-text p {
+  margin-top: 4px;
   color: var(--fg-2);
+  font-size: var(--fs-body);
+  text-wrap: pretty;
 }
 
-.t-line.is-step .t-sigil {
-  color: var(--accent);
+.step-text code {
+  font-size: 0.85em;
 }
 
-.t-line.is-ask .t-sigil {
-  color: var(--warning);
+.step-code {
+  position: relative;
+  min-width: 0;
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-edge);
 }
 
-.t-line.is-ask b {
-  font-weight: 500;
+.code {
+  margin: 0;
+  padding: 12px 52px 12px 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Long lines scroll sideways on narrow screens; the fade sits inside the padding, so it only
+     touches text that runs past the block's edge. */
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
   color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui);
+  line-height: 1.75;
+  white-space: pre;
 }
 
-.t-line.is-done,
-.t-line.is-done .t-sigil,
-.t-ok,
-.t-line.is-out .t-sigil {
-  color: var(--success);
+.code.is-prose {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
-.t-ok {
-  font-weight: 500;
+/* The copy button sits on the block's first line, concentric with the block's corner. */
+.step-code .copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+.step-code .copy-button {
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+
+.step-code .copy-button:hover {
+  background: var(--secondary);
 }
 
 .tok-cmd {
@@ -2845,31 +3095,8 @@ h3 {
   color: var(--s3);
 }
 
-.tok-op,
-.tok-muted {
+.tok-op {
   color: var(--muted);
-}
-
-/* Typed text keeps its line box stable while characters stream in. */
-.t-rest {
-  color: transparent;
-}
-
-.t-line.is-caret .t-typed::after {
-  content: '';
-  display: inline-block;
-  width: 7px;
-  height: 1.15em;
-  vertical-align: -0.2em;
-  background: var(--accent);
-}
-
-.t-line.is-waiting {
-  display: none;
-}
-
-.t-line.is-landing {
-  animation: land 320ms var(--ease-settle) both;
 }
 
 .copy-button {
@@ -2921,14 +3148,12 @@ h3 {
   .p-tile .pmark,
   .text-link .icon,
   .o-row .c-bar i,
-  .gateway-glow,
-  .gateway-ring {
+  .route-hub-glow::after {
     transition-duration: 0.01ms !important;
   }
 
   .dots i,
-  .icon.is-spin,
-  .orbit {
+  .icon.is-spin {
     animation: none !important;
   }
 }
@@ -3165,44 +3390,132 @@ h3 {
   color: var(--fg);
 }
 
-/* ------------------------------------------------------------------ scroll reveals */
+/* ------------------------------------------------------------------ scroll */
 
+/*
+ * The scroll drives the page, both ways. Where the browser offers scroll timelines, motion is
+ * scrubbed by the scroll position itself: the hero window settles flat as the page starts to
+ * move and its copy drifts away, and each block rises in from below and recedes as it passes
+ * the top. Scrolling back plays all of it in reverse. Elsewhere site.js toggles `.is-seen`, and
+ * a block fades in from the side it enters. The stories inside the blocks (cards, map,
+ * terminal, closing outline) replay each time they come back.
+ */
 @media (prefers-reduced-motion: no-preference) {
   @supports ((animation-timeline: view()) and (animation-range: entry)) {
-    .reveal,
-    .providers li,
-    .feature,
-    .map-card {
-      animation: rise linear both;
-      animation-timeline: view();
-      animation-range: entry 0% entry 70%;
+    .hero-stage {
+      transform-origin: 50% 0;
+      animation: stage-settle linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 520px;
     }
 
-    .providers li {
-      animation-range: entry calc(var(--i) * 3%) entry calc(60% + var(--i) * 3%);
+    .hero-copy {
+      animation: copy-leave linear both;
+      animation-timeline: view();
+      animation-range: exit 0% exit 100%;
+    }
+
+    .reveal,
+    .qa,
+    .step {
+      animation:
+        rise linear both,
+        recede linear both;
+      animation-timeline: view(), view();
+      animation-range:
+        entry 0% entry 90%,
+        exit 30% exit 100%;
+    }
+
+    .marquee,
+    .feature,
+    .map-card {
+      animation:
+        rise-block linear both,
+        recede linear both;
+      animation-timeline: view(), view();
+      animation-range:
+        entry 0% cover 30%,
+        exit 35% exit 100%;
+    }
+
+    /* A step's number lights in the page's ink as the step reaches the reading line, and
+       dims again when the reader scrolls back above it. */
+    .step-num {
+      animation: step-lit linear both;
+      animation-timeline: view();
+      animation-range: entry 100% cover 42%;
     }
 
     .feature:nth-child(even) {
-      animation-range: entry 6% entry 76%;
+      animation-range:
+        entry 8% cover 36%,
+        exit 35% exit 100%;
     }
   }
 
-  .orbit {
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: spin 60s linear infinite;
-  }
+  @supports not ((animation-timeline: view()) and (animation-range: entry)) {
+    .js :is(.reveal, .qa, .marquee, .feature, .map-card, .step) {
+      transition:
+        opacity 600ms var(--ease-out),
+        translate 900ms var(--ease-settle);
+    }
 
-  .orbit.is-far {
-    animation-duration: 90s;
-    animation-direction: reverse;
+    .js :is(.reveal, .qa, .marquee, .feature, .map-card, .step):not(.is-seen) {
+      opacity: 0;
+      translate: 0 40px;
+    }
+
+    .js :is(.reveal, .qa, .marquee, .feature, .map-card, .step)[data-from='top']:not(.is-seen) {
+      translate: 0 -40px;
+    }
+  }
+}
+
+@keyframes stage-settle {
+  from {
+    transform: perspective(1800px) rotateX(9deg) scale(0.95);
+  }
+}
+
+@keyframes copy-leave {
+  to {
+    opacity: 0;
+    translate: 0 -72px;
+    scale: 0.97;
   }
 }
 
 @keyframes rise {
   from {
     opacity: 0;
-    translate: 0 24px;
+    translate: 0 40px;
+  }
+}
+
+@keyframes step-lit {
+  0%,
+  88% {
+    background-color: var(--raised);
+    background-image: none;
+    color: var(--muted);
+    box-shadow: var(--shadow-raised);
+  }
+}
+
+@keyframes rise-block {
+  from {
+    opacity: 0;
+    translate: 0 72px;
+    scale: 0.96;
+  }
+}
+
+@keyframes recede {
+  to {
+    opacity: 0.25;
+    translate: 0 -32px;
+    scale: 0.98;
   }
 }
 
@@ -3218,7 +3531,6 @@ h3 {
   }
 
   .statement,
-  .install-grid,
   .faq-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 28px;
@@ -3226,6 +3538,28 @@ h3 {
 
   .feature-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .map-card {
+    padding: 24px 20px 28px;
+  }
+
+  .step {
+    grid-template-columns: 32px minmax(0, 1fr);
+    column-gap: 18px;
+  }
+
+  .step-code {
+    grid-column: 2;
+    margin-top: 12px;
+  }
+
+  .install-link {
+    margin-left: 50px;
+  }
+
+  .map-stats {
+    gap: 32px;
   }
 
   .console-body {
@@ -3385,9 +3719,9 @@ h3 {
     right: 8px;
   }
 
-  .providers {
-    gap: 8px;
+  .marquee {
     margin-top: 48px;
+    mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
   }
 
   .providers li {
@@ -3400,9 +3734,6 @@ h3 {
     height: 32px;
   }
 
-  .t-screen {
-    min-height: 0;
-  }
 
   .rc-paper {
     padding: 18px 16px 16px;

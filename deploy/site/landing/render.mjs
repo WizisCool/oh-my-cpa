@@ -14,14 +14,13 @@ import { fileURLToPath } from 'node:url';
 import { brandDrawing, brandMarkup } from '../../../web/src/assets/brand/markup.ts';
 import { CPA_URL, GITHUB_URL, SITE_ORIGIN } from '../site-meta.mjs';
 import {
-  COMPOSE_COMMANDS,
   COPY,
   COST_MODELS,
   LANDING_PAGES,
   OAUTH_ROWS,
   RECEIPT_LINES,
   REQUEST_ROWS,
-  standaloneCommands,
+  installCode,
 } from './copy.mjs';
 
 export { LANDING_PAGES, SITE_ORIGIN };
@@ -43,6 +42,10 @@ const PROVIDER_FILES = {
   openrouter: 'openrouter',
   opencode: 'opencode',
   openai: 'openai',
+  xai: 'xai',
+  devin: 'devin-color',
+  meta: 'meta-color',
+  anthropic: 'anthropic',
 };
 
 const lucideCache = new Map();
@@ -202,66 +205,80 @@ function consoleWindow(text) {
 
 /* ------------------------------------------------------------------ routing map */
 
-const MAP = { width: 1000, height: 420, gateway: { x: 500, y: 206 }, clientX: 262, credentialX: 738 };
+/**
+ * The console's live routing map (`web/src/components/dashboard/routing/`), drawn on a fixed
+ * plane so it is complete without the script: model tiles face a gateway tile, credential
+ * tiles face it from the other side, and hairline lanes join each tile to the gateway. The
+ * plane is MAP units wide; CSS scales one unit with the card, so the HTML tiles and the SVG
+ * lanes share coordinates. `site.js` sends requests along the lanes.
+ */
+const MAP = { width: 1000, height: 356, hub: 80, tile: 40, modelX: 290, credentialX: 710, pitch: 60 };
+
+/** The console's lane: a horizontal-tangent curve whose handles reach 55% of the way across. */
+function lanePath(from, to) {
+  const dx = (to.x - from.x) * 0.55;
+  return `M ${from.x} ${from.y} C ${from.x + dx} ${from.y}, ${to.x - dx} ${to.y}, ${to.x} ${to.y}`;
+}
+
+/** Row centres for `count` rows stacked at the map's pitch around its middle. */
+function rowYs(count) {
+  return Array.from({ length: count }, (_, index) => MAP.height / 2 + (index - (count - 1) / 2) * MAP.pitch);
+}
 
 function routingMap(text) {
   const m = text.map;
-  const clientYs = [104, 172, 240, 308];
-  const credentialYs = [74, 140, 206, 272, 338];
-  const g = MAP.gateway;
+  const fill = (template, count) => escapeHtml(template.replace('{count}', count));
+  const mid = MAP.height / 2;
+  const half = MAP.tile / 2;
+  const hubIn = { x: MAP.width / 2 - MAP.hub / 2, y: mid };
+  const hubOut = { x: MAP.width / 2 + MAP.hub / 2, y: mid };
+  const modelYs = rowYs(m.clients.length);
+  const credentialYs = rowYs(m.credentials.length);
   const lanes = [];
-  const clients = m.clients
+  let order = 0;
+  const models = m.clients
     .map(([id, label, count, targets], index) => {
-      const y = clientYs[index];
-      lanes.push(`<path class="lane" data-lane="c${index}" d="M${MAP.clientX + 24} ${y} C ${MAP.clientX + 120} ${y}, ${g.x - 140} ${g.y}, ${g.x - 42} ${g.y}"/>`);
-      return `<g class="node is-client" data-node="c${index}" data-targets="${targets}" transform="translate(${MAP.clientX} ${y})">
-            <rect class="tile" x="-22" y="-22" width="44" height="44" rx="10"/>
-            <g transform="translate(-11 -11)"><svg width="22" height="22" class="node-mark" fill="currentColor"><use href="#pm-${id}"/></svg></g>
-            <text class="node-label is-mono" x="-36" y="-2" text-anchor="end">${escapeHtml(label)}</text>
-            <text class="node-sub" x="-36" y="15" text-anchor="end">${escapeHtml(count)} ${escapeHtml(m.reqUnit)}</text>
-          </g>`;
+      const y = modelYs[index];
+      lanes.push(`<path class="lane" data-lane="c${index}" style="--i: ${index}" d="${lanePath({ x: MAP.modelX + half, y }, hubIn)}"/>`);
+      return `<div class="route-node is-model" data-node="c${index}" data-targets="${targets}" data-requests="${count}" style="--x: ${MAP.modelX}; --y: ${y}; --i: ${order++}">
+              <span class="route-tile"><span class="route-halo"></span><span class="route-wash"></span>${pmark(id, 'route-mark')}</span>
+              <span class="route-text"><span class="route-name is-mono">${escapeHtml(label)}</span><span class="route-meta"><span data-count>${fill(m.requests, count)}</span></span></span>
+            </div>`;
     })
     .join('');
   const credentials = m.credentials
     .map(([id, name, detail], index) => {
       const y = credentialYs[index];
-      lanes.push(`<path class="lane" data-lane="k${index}" d="M${g.x + 42} ${g.y} C ${g.x + 140} ${g.y}, ${MAP.credentialX - 120} ${y}, ${MAP.credentialX - 24} ${y}"/>`);
-      return `<g class="node is-credential" data-node="k${index}" transform="translate(${MAP.credentialX} ${y})">
-            <rect class="tile" x="-22" y="-22" width="44" height="44" rx="10"/>
-            <g transform="translate(-11 -11)"><svg width="22" height="22" class="node-mark" fill="currentColor"><use href="#pm-${id}"/></svg></g>
-            <text class="node-label" x="36" y="-2">${escapeHtml(name)}</text>
-            <text class="node-sub is-mono" x="36" y="15">${escapeHtml(detail)}</text>
-            <circle class="node-alert" cx="30" cy="-18" r="3"/>
-          </g>`;
+      lanes.push(`<path class="lane" data-lane="k${index}" style="--i: ${index + 4}" d="${lanePath(hubOut, { x: MAP.credentialX - half, y })}"/>`);
+      return `<div class="route-node is-credential" data-node="k${index}" style="--x: ${MAP.credentialX}; --y: ${y}; --i: ${order++ + 2}">
+              <span class="route-tile"><span class="route-halo"></span><span class="route-wash"></span>${pmark(id, 'route-mark')}</span>
+              <span class="route-text">
+                <span class="route-name">${escapeHtml(name)}</span>
+                <span class="route-meta is-mono">${escapeHtml(detail)}</span>
+              </span>
+            </div>`;
     })
     .join('');
-  const { viewBox: markBox } = brandDrawing('mark');
-  const markBody = brandMarkup('mark', { ink: '__ink__', accent: '__accent__' })
-    .replace(/ id="[^"]*"/g, '')
-    .replace(/fill="__ink__"/g, 'class="b-ink"')
-    .replace(/fill="__accent__"/g, 'class="b-accent"');
-  return `<div class="map-card" data-map>
-          <svg class="map" viewBox="0 0 ${MAP.width} ${MAP.height}" role="img" aria-label="${escapeHtml(m.caption)}">
-            <text class="map-col-head" x="${MAP.clientX + 22}" y="30" text-anchor="end">${escapeHtml(m.modelsHead)}</text>
-            <text class="map-col-head" x="${MAP.credentialX - 22}" y="30" text-anchor="start">${escapeHtml(m.credentialsHead)}</text>
-            <g class="lanes">${lanes.join('')}</g>
-            <g class="pulses" data-pulses></g>
-            <g class="node is-gateway" transform="translate(${g.x} ${g.y})">
-              <circle class="orbit" r="72"/>
-              <circle class="orbit is-far" r="104"/>
-              <circle class="gateway-glow" r="58"/>
-              <rect class="tile is-gateway-tile" x="-42" y="-42" width="84" height="84" rx="12"/>
-              <rect class="gateway-ring" x="-42" y="-42" width="84" height="84" rx="12" data-gateway-ring/>
-              <svg class="gateway-mark" x="-17" y="-17" width="34" height="34" viewBox="${markBox}" aria-hidden="true">${markBody}</svg>
-              <text class="node-label" y="70" text-anchor="middle">${escapeHtml(m.gateway)}</text>
-            </g>
-            <g class="clients">${clients}</g>
-            <g class="credentials">${credentials}</g>
-          </svg>
+  const orbit = 184;
+  return `<div class="map-card" data-map data-requests-text="${escapeHtml(m.requests)}">
+          <div class="map-plane" role="img" aria-label="${escapeHtml(m.caption)}" style="--w: ${MAP.width}; --h: ${MAP.height}; --tile: ${MAP.tile}; --hub: ${MAP.hub}">
+            <svg class="map-lanes" viewBox="0 0 ${MAP.width} ${MAP.height}" aria-hidden="true">
+              <g class="lanes">${lanes.join('')}</g>
+              <g class="pulses" data-pulses></g>
+            </svg>
+            <div class="route-head is-model" style="--x: ${MAP.modelX + half}; --y: ${modelYs[0] - half - 22}" aria-hidden="true">${escapeHtml(m.modelsHead)}</div>
+            <div class="route-head is-credential" style="--x: ${MAP.credentialX - half}; --y: ${credentialYs[0] - half - 22}" aria-hidden="true">${escapeHtml(m.credentialsHead)}</div>
+            <div class="route-hub" data-hub style="--x: ${MAP.width / 2}; --y: ${mid}" aria-hidden="true">
+              <svg class="route-orbits" viewBox="0 0 ${orbit} ${orbit}"><circle class="orbit-outer" cx="${orbit / 2}" cy="${orbit / 2}" r="${orbit / 2 - 1}"/><circle class="orbit-inner" cx="${orbit / 2}" cy="${orbit / 2}" r="${orbit / 2 - 26}"/></svg>
+              <span class="route-hub-glow"></span>
+              <span class="route-tile is-gateway" data-node="gateway"><span class="route-halo"></span><span class="route-wash"></span>${brand('mark', 'route-gateway-mark')}</span>
+            </div>
+            <div class="route-column" aria-hidden="true">${models}</div>
+            <div class="route-column" aria-hidden="true">${credentials}</div>
+          </div>
           <dl class="map-stats">
             <div><dt>${escapeHtml(m.stats[0])}</dt><dd data-stat="requests">1,284</dd></div>
-            <div><dt>${escapeHtml(m.stats[1])}</dt><dd data-stat="success">99.2%</dd></div>
-            <div><dt>${escapeHtml(m.stats[2])}</dt><dd data-stat="cost">$18.42</dd></div>
+            <div><dt>${escapeHtml(m.stats[1])}</dt><dd data-stat="cost">$18.42</dd></div>
           </dl>
         </div>`;
 }
@@ -457,40 +474,53 @@ function highlightProseLine(html) {
     .replace(/(?<!:)\b(8080|8317)\b/g, (n) => span('tok-num', n));
 }
 
-function terminalScreen(tab, text, index) {
+/** One physical line of a command; a trailing continuation reads as punctuation, not code. */
+function codeLine(line) {
+  const folded = line.endsWith(' \\');
+  const body = folded ? line.slice(0, -2) : line;
+  return `${highlightShell(body)}${folded ? span('tok-op', ' \\') : ''}`;
+}
+
+/** A code block with its own copy button; the block's text is exactly what gets copied. */
+function copyBlock(id, html, text, className) {
   const t = text.install;
-  let lines;
-  let copyText;
-  if (tab.id === 'agent') {
-    copyText = t.agentPrompt;
-    lines = [
-      `<p class="t-line is-prompt" data-type><span class="t-sigil">&gt;</span><span class="t-text">${highlightProseLine(escapeHtml(t.agentPrompt))}</span></p>`,
-      ...t.agentSteps.map(
-        ([kind, line]) =>
-          `<p class="t-line is-${kind}" data-out><span class="t-sigil">${kind === 'ask' ? '?' : kind === 'done' ? '✓' : '●'}</span><span class="t-text">${highlightProseLine(line)}</span></p>`,
-      ),
-    ];
-  } else {
-    const commands = tab.id === 'compose' ? COMPOSE_COMMANDS : standaloneCommands(t.keyPlaceholder);
-    const containers = tab.id === 'compose' ? ['cli-proxy-api', 'oh-my-cpa', 'oh-my-cpa-updater'] : ['oh-my-cpa', 'oh-my-cpa-updater'];
-    copyText = commands.join('\n');
-    lines = [
-      ...commands.map((command) => `<p class="t-line" data-type><span class="t-sigil">$</span><span class="t-text">${highlightShell(command)}</span></p>`),
-      ...containers.map(
-        (name) => `<p class="t-line is-out" data-out><span class="t-sigil">✔</span><span class="t-text"><span class="tok-muted">Container</span> <span class="tok-path">${escapeHtml(name.padEnd(18, ' '))}</span> <span class="t-ok">Started</span></span></p>`,
-      ),
-      `<p class="t-line is-done" data-out><span class="t-sigil">✓</span><span class="t-text">${highlightProseLine(escapeHtml(t.ready))}</span></p>`,
-    ];
-  }
-  const id = `code-${tab.id}`;
-  return `<div class="t-screen" id="term-${tab.id}"${index === 0 ? '' : ' hidden'} data-screen>
-              <span class="copy" data-copied="${escapeHtml(t.copied)}" data-failed="${escapeHtml(t.copyFailed)}">
-                <button class="tool copy-button" type="button" command="--copy" commandfor="${id}" aria-label="${escapeHtml(`${t.copy} ${tab.label}`)}" title="${escapeHtml(t.copy)}">${icon('copy', 'icon icon-copy')}${icon('check', 'icon icon-check')}</button>
-                <span class="copy-tip" role="status"></span>
-              </span>
-              <pre class="sr-only" id="${id}">${escapeHtml(copyText)}</pre>
-              <div class="t-lines" aria-hidden="true">${lines.join('')}</div>
-            </div>`;
+  return `<div class="step-code">
+                    <pre class="${className}" id="${id}">${html}</pre>
+                    <span class="copy" data-copied="${escapeHtml(t.copied)}" data-failed="${escapeHtml(t.copyFailed)}">
+                      <button class="tool copy-button" type="button" command="--copy" commandfor="${id}" aria-label="${escapeHtml(t.copy)}" title="${escapeHtml(t.copy)}">${icon('copy', 'icon icon-copy')}${icon('check', 'icon icon-check')}</button>
+                      <span class="copy-tip" role="status"></span>
+                    </span>
+                  </div>`;
+}
+
+/** What a step shows beside its text: its commands, or the sentence for the agent. */
+function stepCode(code, tab, index, text) {
+  const t = text.install;
+  const id = `code-${tab.id}-${index}`;
+  if (code === 'prompt') return copyBlock(id, highlightProseLine(escapeHtml(t.agentPrompt)), text, 'code is-prose');
+  const lines = installCode(t.keyPlaceholder)[code].join('\n').split('\n').map(codeLine).join('\n');
+  return copyBlock(id, lines, text, 'code');
+}
+
+/**
+ * One install path as numbered steps: a title and a line of explanation, and beside them the
+ * code the step needs. The paths are stacked in one place and only the selected one is shown,
+ * so switching tabs crossfades and nothing below moves.
+ */
+function installPath(tab, text, docs, index) {
+  const steps = tab.steps
+    .map(
+      ([title, body, code], step) => `<li class="step">
+                <span class="step-num">${String(step + 1).padStart(2, '0')}</span>
+                <div class="step-text"><h3>${escapeHtml(title)}</h3><p>${body}</p></div>
+                ${code ? stepCode(code, tab, step, text) : ''}
+              </li>`,
+    )
+    .join('');
+  return `<div class="install-path" role="tabpanel" id="panel-${tab.id}" aria-labelledby="tab-${tab.id}"${index === 0 ? '' : ' inert'} data-path>
+            <ol class="steps">${steps}</ol>
+            <a class="text-link install-link" href="${docs(tab.link.href)}">${escapeHtml(tab.link.text)}${icon('arrow-right')}</a>
+          </div>`;
 }
 
 function installSection(text, docs) {
@@ -498,28 +528,16 @@ function installSection(text, docs) {
   const tabs = t.tabs
     .map(
       (tab, index) =>
-        `<button class="chip" type="button" role="tab" id="tab-${tab.id}" aria-controls="panel-${tab.id} term-${tab.id}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}">${escapeHtml(tab.label)}</button>`,
-    )
-    .join('');
-  const panels = t.tabs
-    .map(
-      (tab, index) => `<div class="install-panel" role="tabpanel" id="panel-${tab.id}" aria-labelledby="tab-${tab.id}"${index === 0 ? '' : ' hidden="until-found"'}>
-              <p><strong>${escapeHtml(tab.lead)}</strong> ${tab.body}</p>
-              <a class="text-link" href="${docs(tab.link.href)}">${escapeHtml(tab.link.text)}${icon('arrow-right')}</a>
-            </div>`,
+        `<button class="chip" type="button" role="tab" id="tab-${tab.id}" aria-controls="panel-${tab.id}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}">${escapeHtml(tab.label)}</button>`,
     )
     .join('');
   return `<section class="section install" id="install" aria-labelledby="install-title">
-        <div class="wrap install-grid">
-          <div class="install-side">
+        <div class="wrap">
+          <div class="install-top">
             <h2 id="install-title" class="reveal">${escapeHtml(t.title)}</h2>
             <div class="chips" role="tablist" aria-label="${escapeHtml(t.title)}">${tabs}</div>
-            <div class="install-panels">${panels}</div>
           </div>
-          <div class="window terminal" data-terminal>
-            <div class="window-bar"><span class="lights"><i></i><i></i><i></i></span><span class="window-title">${icon('square-terminal')}${escapeHtml(t.terminal)}</span></div>
-            ${t.tabs.map((tab, index) => terminalScreen(tab, text, index)).join('')}
-          </div>
+          <div class="install-paths">${t.tabs.map((tab, index) => installPath(tab, text, docs, index)).join('')}</div>
         </div>
       </section>`;
 }
@@ -560,7 +578,7 @@ export function renderLanding(lang, { version = '' } = {}) {
   const alternates = LANDING_PAGES.map((entry) => `<link rel="alternate" hreflang="${entry.hreflang}" href="${SITE_ORIGIN}${entry.path}">`).join('\n    ');
 
   const providers = text.beside.providers
-    .map(([id, label], index) => `<li style="--i: ${index}"><span class="p-tile">${pmark(id)}</span><span class="p-name">${escapeHtml(label)}</span></li>`)
+    .map(([id, label]) => `<li><span class="p-tile">${pmark(id)}</span><span class="p-name">${escapeHtml(label)}</span></li>`)
     .join('');
   const faq = text.faq
     .map(([q, a], index) => `<details class="qa"${index === 0 ? ' open' : ''}><summary>${icon('plus', 'icon qa-icon')}${escapeHtml(q)}</summary><div class="qa-body"><p>${a}</p></div></details>`)
@@ -670,7 +688,14 @@ export function renderLanding(lang, { version = '' } = {}) {
           <h2 id="beside-title" class="reveal">${escapeHtml(text.beside.title)}</h2>
           <div class="statement-body reveal">${text.beside.body.map((line) => `<p>${escapeHtml(line)}</p>`).join('')}</div>
         </div>
-        <div class="wrap"><ul class="providers" aria-label="${lang === 'zh' ? '支持的提供商' : 'Supported providers'}">${providers}</ul></div>
+        <div class="wrap">
+          <div class="marquee" data-marquee>
+            <div class="marquee-track">
+              <ul class="providers" aria-label="${escapeHtml(text.beside.providersLabel)}">${providers}</ul>
+              <ul class="providers is-echo" aria-hidden="true">${providers}</ul>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="section is-showcase" aria-labelledby="map-title">
