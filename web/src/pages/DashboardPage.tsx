@@ -76,7 +76,7 @@ import {
   livePollInterval,
   parseDashboardComparisonPreference,
   parseDashboardRange,
-  costNoteKey,
+  resolveCostCaption,
   type DashboardMetricDelta,
   type DashboardRange,
   type DashboardWindow,
@@ -660,8 +660,9 @@ export const DashboardPage: React.FC = () => {
             />
           </Panel>
         );
-      case 'cost':
+      case 'cost': {
         if (!data) return <DashboardKpiTilePlaceholder id="cost" index={5} />;
+        const costCaption = resolveCostCaption(data, unpricedModels);
         return (
           <Panel className="dashboard-tile kpi-tile">
             <div className="tile-head">
@@ -690,18 +691,50 @@ export const DashboardPage: React.FC = () => {
               <KpiDelta delta={showComparisonBadge ? costDelta : null} formatPrevious={formatTrendCost} testId="dashboard-cost-delta" />
             </div>
             <div className="tile-caption">
-              <span>{costNoteKey(data.metrics.cost_source) ? t(costNoteKey(data.metrics.cost_source)!) : ''}</span>
-              {unpricedModels > 0 && data.metrics.cost_source !== 'estimated' && (
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="tile-caption-link"
-                  onMouseEnter={() => preloadRegisteredRoute('/pricing')}
-                  onClick={() => navigateTo('/pricing')}
-                  data-testid="dashboard-unpriced-link"
-                >
-                  {t('dash.cost_unpriced_models', { n: unpricedModels })}
-                </Button>
+              {costCaption.kind === 'per_request' ? (
+                <span>{t('dash.cost_per_request')} <b>{formatCurrency(costCaption.perRequestUsd, currency)}</b></span>
+              ) : costCaption.kind === 'partial' ? (
+                <>
+                  <Tooltip title={t('dash.cost_partial_note')}>
+                    <span className="tile-caption-note is-partial" tabIndex={0}>
+                      {!costCaption.showUnpricedLink && costCaption.pricedRequests !== null ? (
+                        <>{t('dash.cost_priced_label')} <b>{formatCount(costCaption.pricedRequests)}/{formatCount(costCaption.totalRequests)}</b></>
+                      ) : (
+                        t('dash.cost_partial_short')
+                      )}
+                    </span>
+                  </Tooltip>
+                  {costCaption.showUnpricedLink && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="tile-caption-link"
+                      onMouseEnter={() => preloadRegisteredRoute('/pricing')}
+                      onClick={() => navigateTo('/pricing')}
+                      data-testid="dashboard-unpriced-link"
+                    >
+                      {t('dash.cost_unpriced_models', { n: unpricedModels })}
+                    </Button>
+                  )}
+                </>
+              ) : costCaption.showUnpricedLink ? (
+                <>
+                  <Tooltip title={t('dash.cost_placeholder_note')}>
+                    <span className="tile-caption-note" tabIndex={0}>{t('dash.cost_placeholder_short')}</span>
+                  </Tooltip>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="tile-caption-link"
+                    onMouseEnter={() => preloadRegisteredRoute('/pricing')}
+                    onClick={() => navigateTo('/pricing')}
+                    data-testid="dashboard-unpriced-link"
+                  >
+                    {t('dash.cost_unpriced_models', { n: unpricedModels })}
+                  </Button>
+                </>
+              ) : (
+                <span>{t('dash.cost_placeholder_empty')}</span>
               )}
             </div>
             <DashboardTrendChart
@@ -715,6 +748,7 @@ export const DashboardPage: React.FC = () => {
             />
           </Panel>
         );
+      }
       case 'routing':
         return (
           <DeferredPanel

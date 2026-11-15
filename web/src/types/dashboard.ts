@@ -1,4 +1,3 @@
-import type { MessageKey } from '../i18n/catalog';
 import { CALENDAR_PRESETS, isCalendarPreset, isClosedCalendarPreset, type CalendarPreset } from './calendarPresets';
 import { compareMetric, emptyMeasures, metricValue, type Measures, type MetricComparison } from './insightsCube';
 /** Response shapes for the dashboard, which reads permanent usage facts. */
@@ -81,27 +80,48 @@ export interface DashboardComparison {
   baseline_costed_requests?: number;
 }
 
+export type CostCaptionState =
+  | { kind: 'per_request'; perRequestUsd: number }
+  | { kind: 'partial'; pricedRequests: number | null; totalRequests: number; showUnpricedLink: boolean }
+  | { kind: 'placeholder'; showUnpricedLink: boolean };
+
 /**
- * costNoteKey names the caption the cost tile shows for a window.
+ * resolveCostCaption derives the one-line supporting caption under the cost tile.
  *
- * The server reports three states and they are not interchangeable: a window with no
- * request at all, a window whose requests were partly unpriced, and a window whose
- * requests all locked a price. Only the first two are caveats. Reading the last one as
- * a caveat - which is what a two-branch check does, because "estimated" is not
- * "partial" - labels a complete total as if no price were configured.
- *
- * Returns undefined when the total is complete and needs no caption.
+ * When every request in the window has a price ('estimated'), the tile shows the
+ * per-request average so the card keeps the same supporting-figure rhythm and baseline
+ * as RPM, TPM and Cache rate. Partial and unpriced windows keep concise labels inline
+ * while reserving the full caveat sentence for the tooltip.
  */
-export function costNoteKey(costSource: string): MessageKey | undefined {
-  switch (costSource) {
-    case 'partial':
-      return 'dash.cost_partial_note';
-    case 'estimated':
-      return undefined;
-    default:
-      // 'placeholder' and 'none' both mean nothing in this window was priced.
-      return 'dash.cost_placeholder_note';
+export function resolveCostCaption(data: DashboardResponse, unpricedModels: number): CostCaptionState {
+  const source = data.metrics.cost_source;
+  const totalRequests = data.requests.total;
+  const hasUnpricedModels = unpricedModels > 0;
+  if (source === 'estimated') {
+    if (totalRequests > 0) {
+      const costUsd = data.metrics.cost_nanos != null
+        ? data.metrics.cost_nanos / 1_000_000_000
+        : data.metrics.cost;
+      return { kind: 'per_request', perRequestUsd: costUsd / totalRequests };
+    }
+    return { kind: 'placeholder', showUnpricedLink: false };
   }
+  if (source === 'partial') {
+    const pricedRequests = data.metrics.costed_requests ?? null;
+    if (pricedRequests === 0) {
+      return { kind: 'placeholder', showUnpricedLink: hasUnpricedModels };
+    }
+    return {
+      kind: 'partial',
+      pricedRequests: pricedRequests !== null && pricedRequests > 0 && pricedRequests < totalRequests
+        ? pricedRequests
+        : null,
+      totalRequests,
+      showUnpricedLink: hasUnpricedModels,
+    };
+  }
+  // 'placeholder', 'none', or an unknown state never reads as priced.
+  return { kind: 'placeholder', showUnpricedLink: hasUnpricedModels };
 }
 
 export interface DashboardCoverage {
