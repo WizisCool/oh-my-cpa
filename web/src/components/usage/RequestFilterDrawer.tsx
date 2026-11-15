@@ -586,9 +586,8 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
               onChange={(value) => setDraft((prev) => ({ ...prev, cost: value as UsageCostFilter }))}
               options={[
                 { value: 'all', label: t('events.cost_any') },
-                // "Unpriced" is permanent: no later price backfills the record, so
-                // the option says so rather than letting it read as a transient
-                // state the operator can wait out.
+                // "Unpriced" does not clear by waiting: a record keeps it until an operator
+                // prices it from Model Pricing, so the option's hint names that place.
                 {
                   value: 'priced',
                   label: (
