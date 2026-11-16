@@ -18016,8 +18016,11 @@
     "api.dashboardSeriesPoint": {
       "type": "object",
       "properties": {
+        "cache_rate": {
+          "type": "number"
+        },
         "cache_read": {
-          "description": "CacheReadTokens and CostNanos are per-bucket, so the cache-rate and cost\ntiles can plot their own series instead of repeating the token volume.\nNanos rather than a float keeps the wire value exact; the browser scales it.",
+          "description": "CacheReadTokens, CacheRate and CostNanos are per-bucket, so the cache-rate\nand cost tiles can plot their own series instead of repeating the token volume.\nNanos rather than a float keeps the wire value exact; the browser scales it.\nCacheRate is nil (omitted) when the bucket has no prompt tokens.",
           "type": "integer"
         },
         "cost_nanos": {

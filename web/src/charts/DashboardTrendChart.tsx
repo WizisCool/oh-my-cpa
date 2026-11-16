@@ -19,9 +19,10 @@ import type { DashboardSeriesPoint } from '../types/dashboard';
 export interface DashboardTrendChartProps {
   points: DashboardSeriesPoint[];
   ariaLabel: string;
-  pick: (point: DashboardSeriesPoint) => number;
+  pick: (point: DashboardSeriesPoint) => number | null | undefined;
   tone?: ChartTone;
   height?: number;
+  domainMax?: number;
   label?: (timeMs: number) => string;
   format?: (value: number) => string;
 }
@@ -36,6 +37,7 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
   ariaLabel,
   tone = 'accent',
   height = 46,
+  domainMax,
   label,
   format,
 }) {
@@ -47,10 +49,13 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
 
   const samples = React.useMemo(
     () =>
-      points.map((point) => ({
-        t: point.t,
-        value: Math.max(0, pick(point) ?? 0),
-      })),
+      points.map((point) => {
+        const raw = pick(point);
+        return {
+          t: point.t,
+          value: raw !== null && raw !== undefined && Number.isFinite(raw) ? Math.max(0, raw) : null,
+        };
+      }),
     [points, pick],
   );
 
@@ -108,8 +113,8 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
   // Pure logical coordinate geometry (`viewBox="0 0 240 H"` + `preserveAspectRatio="none"` +
   // `vectorEffect="non-scaling-stroke"`): zero DOM layout reads and zero ResizeObservers on mount.
   const geometry = React.useMemo(
-    () => buildMonotoneSparkline(shown, LOGICAL_WIDTH, height),
-    [shown, height],
+    () => buildMonotoneSparkline(shown, LOGICAL_WIDTH, height, undefined, domainMax),
+    [shown, height, domainMax],
   );
 
   const clampedActiveIndex =
@@ -118,11 +123,13 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
       : null;
 
   const activePoint = clampedActiveIndex !== null ? geometry.points[clampedActiveIndex] ?? null : null;
-  const singlePoint = geometry.isSinglePoint ? geometry.points[0] ?? null : null;
+  const singlePoint = geometry.isSinglePoint && geometry.points[0]?.y !== null ? geometry.points[0] ?? null : null;
   const formatHeading = label ?? ((at: number) => dayjs(at).format('MM-DD HH:mm'));
   const formatValue = (val: number) => format?.(val) ?? PLAIN_NUMBER_FORMAT.format(val);
   const activeHeading = activePoint ? formatHeading(activePoint.t) : '';
-  const activeValueText = activePoint ? formatValue(activePoint.value) : '';
+  const activeValueText = activePoint
+    ? (activePoint.value === null ? '—' : formatValue(activePoint.value))
+    : '';
 
   React.useLayoutEffect(() => {
     if (clampedActiveIndex === null) return;
@@ -180,8 +187,8 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
     ? sparklineViewBoxToHostX(activePoint.x, hostWidth, LOGICAL_WIDTH)
     : hostWidth / 2;
   const activeLeftPct = activePoint ? `${(activePoint.x / LOGICAL_WIDTH) * 100}%` : '50%';
-  const activeTopPct = activePoint ? `${(activePoint.y / height) * 100}%` : '50%';
-  const singleTopPct = singlePoint ? `${(singlePoint.y / height) * 100}%` : '50%';
+  const activeTopPct = activePoint && activePoint.y !== null ? `${(activePoint.y / height) * 100}%` : '50%';
+  const singleTopPct = singlePoint && singlePoint.y !== null ? `${(singlePoint.y / height) * 100}%` : '50%';
   const tooltipX = activePoint
     ? clampSparklineTooltipX(activeCursorPx, hostWidth, tooltipWidth)
     : 0;
@@ -314,7 +321,7 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
                 <stop offset="100%" stopColor={color} stopOpacity={0} />
               </linearGradient>
             </defs>
-            {(geometry.isSinglePoint || !geometry.hasPositiveValue) && (
+            {(geometry.isSinglePoint || !geometry.hasPositiveValue || geometry.hasGaps) && (
               <line
                 x1={geometry.x0}
                 x2={geometry.x1}
@@ -338,7 +345,7 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
                 vectorEffect="non-scaling-stroke"
               />
             )}
-            {!geometry.isSinglePoint && (
+            {!geometry.isSinglePoint && geometry.linePath !== '' && (
               <>
                 {geometry.hasPositiveValue && (
                   <path d={geometry.areaPath} fill={`url(#${gradientId})`} />
@@ -364,6 +371,24 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
               />
             )}
           </svg>
+          {!geometry.isSinglePoint && geometry.isolatedPoints.map((point) => (
+            <span
+              key={point.t}
+              data-slot="sparkline-isolated-dot"
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                left: `${(point.x / LOGICAL_WIDTH) * 100}%`,
+                top: `${(point.y / height) * 100}%`,
+                width: point.value > 0 ? 5 : 4,
+                height: point.value > 0 ? 5 : 4,
+                borderRadius: '50%',
+                background: point.value > 0 ? color : 'var(--muted)',
+                transform: 'translate(-50%, -50%)',
+                pointerEvents: 'none',
+              }}
+            />
+          ))}
           {singlePoint && (
             <span
               aria-hidden="true"
@@ -383,8 +408,9 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
               }}
             />
           )}
-          {activePoint && (
+          {activePoint && activePoint.y !== null && (
             <span
+              data-slot="sparkline-active-dot"
               aria-hidden="true"
               style={{
                 position: 'absolute',
@@ -425,8 +451,9 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
                   heading={activeHeading}
                   rows={[
                     {
-                      color,
+                      color: activePoint.value !== null ? color : undefined,
                       value: activeValueText,
+                      tone: activePoint.value === null ? 'muted' : undefined,
                     },
                   ]}
                 />

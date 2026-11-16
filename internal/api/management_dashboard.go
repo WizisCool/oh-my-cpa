@@ -101,11 +101,13 @@ type dashboardSeriesPoint struct {
 	Requests int64 `json:"v"`
 	Failures int64 `json:"f"`
 	Tokens   int64 `json:"tokens"`
-	// CacheReadTokens and CostNanos are per-bucket, so the cache-rate and cost
-	// tiles can plot their own series instead of repeating the token volume.
+	// CacheReadTokens, CacheRate and CostNanos are per-bucket, so the cache-rate
+	// and cost tiles can plot their own series instead of repeating the token volume.
 	// Nanos rather than a float keeps the wire value exact; the browser scales it.
-	CacheReadTokens int64 `json:"cache_read"`
-	CostNanos       int64 `json:"cost_nanos"`
+	// CacheRate is nil (omitted) when the bucket has no prompt tokens.
+	CacheReadTokens int64    `json:"cache_read"`
+	CacheRate       *float64 `json:"cache_rate,omitempty"`
+	CostNanos       int64    `json:"cost_nanos"`
 }
 
 type dashboardMetrics struct {
@@ -471,15 +473,7 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow, ap
 	// denominator must be input tokens, not total (which also carries output).
 	// And cached_tokens overlaps cache_read_tokens for the same event, so they
 	// are alternatives, never a sum.
-	if numerator, denominator := cacheRateParts(totals.UsageTotals); denominator > 0 {
-		rate := roundPercent(float64(numerator) / float64(denominator))
-		// Presentation policy: the list caps its per-event badge at 99.9%, and
-		// the aggregate follows so the two readings agree.
-		if rate > 99.9 {
-			rate = 99.9
-		}
-		facts.metrics.CacheRate = &rate
-	}
+	facts.metrics.CacheRate = computeCacheRate(totals.UsageTotals)
 	if totals.Requests > 0 {
 		latency := roundTwo(float64(totals.LatencySumMS) / float64(totals.Requests))
 		facts.metrics.AvgLatencyMS = &latency
@@ -518,6 +512,7 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow, ap
 			TimeMS:          point.TimeMS,
 			Tokens:          point.Tokens,
 			CacheReadTokens: point.CacheReadTokens,
+			CacheRate:       point.CacheRate,
 			CostNanos:       point.CostNanos,
 		})
 	}
@@ -1062,6 +1057,22 @@ func cacheRateParts(totals repository.UsageTotals) (int64, int64) {
 	return numerator, denominator
 }
 
+// computeCacheRate computes the bounded cache hit percentage for a bucket or window,
+// returning nil when there are no prompt tokens to measure a hit rate against.
+func computeCacheRate(totals repository.UsageTotals) *float64 {
+	numerator, denominator := cacheRateParts(totals)
+	if denominator <= 0 {
+		return nil
+	}
+	rate := roundPercent(float64(numerator) / float64(denominator))
+	// Presentation policy: the list caps its per-event badge at 99.9%, and
+	// the aggregate follows so the two readings agree.
+	if rate > 99.9 {
+		rate = 99.9
+	}
+	return &rate
+}
+
 // fillDashboardBuckets lays aggregated buckets onto a fixed grid spanning the
 // whole window, emitting zero-valued points where nothing was recorded.
 func fillDashboardBuckets(fromMS, toMS, bucketMS int64, buckets []repository.UsageBucket, costs []repository.UsageCostBucket) []dashboardSeriesPoint {
@@ -1088,6 +1099,7 @@ func fillDashboardBuckets(fromMS, toMS, bucketMS int64, buckets []repository.Usa
 	for position, point := range points {
 		index[point.TimeMS] = position
 	}
+	bucketTotals := make([]repository.UsageTotals, len(points))
 	for _, bucket := range buckets {
 		started := bucket.StartMS - (bucket.StartMS % bucketMS)
 		if bucket.StartMS%bucketMS != 0 {
@@ -1107,6 +1119,14 @@ func fillDashboardBuckets(fromMS, toMS, bucketMS int64, buckets []repository.Usa
 		points[position].Failures += bucket.Failures
 		points[position].Tokens += bucket.TotalTokens
 		points[position].CacheReadTokens += bucket.CacheReadTokens
+		bucketTotals[position].InputTokens += bucket.InputTokens
+		bucketTotals[position].OutputTokens += bucket.OutputTokens
+		bucketTotals[position].CachedTokens += bucket.CachedTokens
+		bucketTotals[position].CacheReadTokens += bucket.CacheReadTokens
+		bucketTotals[position].TotalTokens += bucket.TotalTokens
+	}
+	for position := range points {
+		points[position].CacheRate = computeCacheRate(bucketTotals[position])
 	}
 	// Request costs are immutable per-event snapshots, so they are summed from a
 	// separate query and laid onto the same grid. A bucket with no priced event

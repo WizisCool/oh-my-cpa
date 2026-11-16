@@ -30,6 +30,7 @@ import { DataTable } from '../src/components/ui/table';
 import { I18nProvider, useT, type MessageKey } from '../src/i18n';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { DashboardTrendChart } from '../src/charts/DashboardTrendChart';
+import { formatCacheRate } from '../src/theme/cacheScale';
 import { RoutingPanel } from '../src/components/dashboard/routing/RoutingPanel';
 import { LoadingRegion, Placeholder } from '../src/components/common/Placeholder';
 import { PAGE_SKELETON_REGISTRY, RouteSkeleton, type RouteLoadingBody } from '../src/components/common/PageLoading';
@@ -1240,6 +1241,89 @@ describe('DashboardTrendChart native SVG sparkline', () => {
     expect(screen.getByText('12 reqs')).toBeTruthy();
     fireEvent.keyDown(chart, { key: 'Escape' });
     expect(screen.queryByText('12 reqs')).toBeNull();
+  });
+
+  it('plots cache-rate percentages with null gaps, isolated markers, and dash readouts for empty buckets', () => {
+    const surface = renderWithOmc(
+      <ThemeProvider>
+        <DashboardTrendChart
+          ariaLabel="Cache rate"
+          height={44}
+          domainMax={100}
+          points={[
+            { t: 1_700_000_000_000, tokens: 0, cache_read: 0 },
+            { t: 1_700_000_060_000, tokens: 1000, cache_read: 952, cache_rate: 95.24 },
+            { t: 1_700_000_120_000, tokens: 500, cache_read: 400, cache_rate: 80 },
+            { t: 1_700_000_180_000, tokens: 0, cache_read: 0 },
+            { t: 1_700_000_240_000, tokens: 200, cache_read: 84, cache_rate: 42 },
+            { t: 1_700_000_300_000, tokens: 0, cache_read: 0 },
+            { t: 1_700_000_360_000, tokens: 300, cache_read: 0, cache_rate: 0 },
+          ]}
+          pick={(p) => p.cache_rate ?? null}
+          label={(t) => `bucket-${t}`}
+          format={formatCacheRate}
+        />
+      </ThemeProvider>,
+    );
+
+    const chart = screen.getByRole('img', { name: 'Cache rate' });
+    chart.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 480, bottom: 44, width: 480, height: 44, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    // Isolated non-null buckets (42% and 0%) render dedicated dot markers rather than vanishing.
+    expect(surface.container.querySelectorAll('[data-slot="sparkline-isolated-dot"]')).toHaveLength(2);
+
+    // Pointer hover on index 0 (null bucket at x=12px) shows '—' without an active curve dot.
+    fireEvent.pointerMove(chart, { clientX: 12, clientY: 20, pointerType: 'mouse' });
+    expect(screen.getByText('bucket-1700000000000')).toBeTruthy();
+    expect(screen.getByText('—')).toBeTruthy();
+    expect(surface.container.querySelector('[data-slot="sparkline-active-dot"]')).toBeNull();
+
+    // Pointer hover on index 1 (95.24% at x=88px) renders active dot and percentage readout.
+    fireEvent.pointerMove(chart, { clientX: 88, clientY: 20, pointerType: 'mouse' });
+    expect(screen.getByText('95.2%')).toBeTruthy();
+    expect(surface.container.querySelector('[data-slot="sparkline-active-dot"]')).not.toBeNull();
+
+    fireEvent.pointerLeave(chart, { pointerType: 'mouse' });
+    expect(screen.queryByText('95.2%')).toBeNull();
+
+    // Keyboard Home lands on index 0 (null cache_rate): shows '—' without an active curve dot.
+    fireEvent.keyDown(chart, { key: 'Home' });
+    expect(screen.getByText('bucket-1700000000000')).toBeTruthy();
+    expect(screen.getByText('—')).toBeTruthy();
+    expect(surface.container.querySelector('[data-slot="sparkline-active-dot"]')).toBeNull();
+
+    // Stepping to index 1 (95.24) renders active dot and formats percentage to 95.2%.
+    fireEvent.keyDown(chart, { key: 'ArrowRight' });
+    expect(screen.getByText('95.2%')).toBeTruthy();
+    expect(surface.container.querySelector('[data-slot="sparkline-active-dot"]')).not.toBeNull();
+
+    // Stepping to End (measured 0%) formats as 0% and keeps the active dot.
+    fireEvent.keyDown(chart, { key: 'End' });
+    expect(screen.getByText('0%')).toBeTruthy();
+    expect(surface.container.querySelector('[data-slot="sparkline-active-dot"]')).not.toBeNull();
+    fireEvent.keyDown(chart, { key: 'Escape' });
+
+    // All-null window draws only the baseline (no SVG curve paths) and prints '—' on selection.
+    const emptySurface = renderWithOmc(
+      <ThemeProvider>
+        <DashboardTrendChart
+          ariaLabel="Empty cache rate"
+          height={44}
+          domainMax={100}
+          points={[
+            { t: 1_700_000_000_000, tokens: 0, cache_read: 0 },
+            { t: 1_700_000_060_000, tokens: 0, cache_read: 0 },
+          ]}
+          pick={(p) => p.cache_rate ?? null}
+          label={(t) => `empty-${t}`}
+          format={formatCacheRate}
+        />
+      </ThemeProvider>,
+    );
+    expect(emptySurface.container.querySelectorAll('svg path')).toHaveLength(0);
+    fireEvent.keyDown(screen.getByRole('img', { name: 'Empty cache rate' }), { key: 'Home' });
+    expect(screen.getByText('empty-1700000000000')).toBeTruthy();
+    expect(screen.getByText('—')).toBeTruthy();
   });
 });
 

@@ -751,8 +751,8 @@ test('dashboard adaptive calendar tail healing and pace comparisons', () => {
       cache_read: 900_000,
       cache_creation: 0,
       series: [
-        { t: 1_020_000, tokens: 400_000, cache_read: 360_000, cost_nanos: 120_000_000 },
-        { t: 1_080_000, tokens: 600_000, cache_read: 540_000, cost_nanos: 200_000_000 },
+        { t: 1_020_000, tokens: 400_000, cache_read: 360_000, cache_rate: 90, cost_nanos: 120_000_000 },
+        { t: 1_080_000, tokens: 600_000, cache_read: 540_000, cache_rate: 90, cost_nanos: 200_000_000 },
       ],
     },
     metrics: {
@@ -816,7 +816,14 @@ test('dashboard adaptive calendar tail healing and pace comparisons', () => {
   const sameGridTail: DashboardTailResponse = {
     window: { ...base.window, to: 1_360_000 },
     requests: { ...base.requests, total: 14, success: 14, series: [{ t: 1_080_000, v: 7, f: 0 }, { t: 1_140_000, v: 3, f: 0 }] },
-    tokens: { ...base.tokens, total: 1_200_000, series: [{ t: 1_080_000, tokens: 600_000 }, { t: 1_140_000, tokens: 200_000 }] },
+    tokens: {
+      ...base.tokens,
+      total: 1_200_000,
+      series: [
+        { t: 1_080_000, tokens: 600_000, cache_rate: 0 },
+        { t: 1_140_000, tokens: 0 },
+      ],
+    },
     metrics: { ...base.metrics, cost: 0.4, cost_nanos: 400_000_000, costed_requests: 14 },
     comparison: { ...base.comparison!, requests: 6, tokens: 500_000, cost_nanos: 200_000_000, costed_requests: 6 },
     live: {
@@ -830,6 +837,10 @@ test('dashboard adaptive calendar tail healing and pace comparisons', () => {
   const merged = applyTail(base, sameGridTail);
   assert.equal(merged.broken, false);
   assert.equal(merged.data?.requests.series.length, 3);
+  assert.deepEqual(
+    merged.data?.tokens.series.map((point) => point.cache_rate ?? null),
+    [90, 0, null],
+  );
   assert.equal(merged.data?.comparison?.requests, 6);
 
   // A tail whose comparison is absent clears the stale base comparison rather than
