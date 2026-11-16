@@ -1159,6 +1159,15 @@ h1, h2, h3, h4 { font-family: inherit; }
 }
 .empty-state-action { margin-top: 12px; }
 
+/* A panel stretched by a grid row whose body holds only an EmptyState fills its body and centres
+   the empty state safely instead of stranding it at the top edge. */
+[data-slot="panel"]:has(> [data-slot="panel-body"] > .empty-state:only-child) > [data-slot="panel-body"] {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+}
+
 /* AppDrawer (components/common/AppDrawer.tsx). The footer is two slots: what stands opposite the
    actions, and the actions at the trailing edge. It wraps rather than squeezes, so a phone gets the
    note above a full row of buttons. */
@@ -2482,7 +2491,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   align-items: center;
 }
 
-.settings-field-control > :is([data-slot="input-wrapper"], [data-slot="input"]) {
+.settings-field-control > [data-slot="input"] {
   width: 100%;
   height: 36px;
 }
@@ -2509,8 +2518,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 
 /* Free-form list fields wrap tags across lines across the full column width. */
-.settings-field-control.is-string_list [data-slot="combobox-trigger"],
-.settings-toggle-control.is-string_list [data-slot="combobox-trigger"] {
+.settings-field-control.is-string_list :is([data-slot="combobox-trigger"], [data-slot="combobox-inline-tags"]),
+.settings-toggle-control.is-string_list :is([data-slot="combobox-trigger"], [data-slot="combobox-inline-tags"]) {
   width: 100%;
   max-width: none;
   min-height: 36px;

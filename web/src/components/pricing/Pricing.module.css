@@ -359,7 +359,7 @@
 }
 
 .tier-threshold :global([data-slot='number-input']),
-.tier-threshold :global([data-slot='input-wrapper']),
+.tier-threshold :global([data-slot='input']),
 .tier-threshold :global([data-slot='time-picker']) {
   width: 100%;
   max-width: 280px;
@@ -636,7 +636,7 @@
   }
 
   .tier-threshold :global([data-slot='number-input']),
-  .tier-threshold :global([data-slot='input-wrapper']),
+  .tier-threshold :global([data-slot='input']),
   .tier-threshold :global([data-slot='time-picker']) {
     max-width: none;
   }

@@ -818,8 +818,16 @@ export const DashboardPage: React.FC = () => {
             immediate={isArranging}
             fallback={(
               <Panel className="dashboard-tile credential-quota-panel">
-                <Placeholder width="36%" className="placeholder-line is-meta" />
-                <Placeholder width="100%" height={156} className="tile-placeholder-spark" />
+                <div className="quota-inner">
+                  <div className="quota-head">
+                    <span className="tile-label">{t('dash.quota.title')}</span>
+                  </div>
+                  <LoadingRegion className="quota-skeleton">
+                    {Array.from({ length: 4 }, (_, row) => (
+                      <Placeholder key={row} width="100%" height={18} row={row} className="placeholder-line" />
+                    ))}
+                  </LoadingRegion>
+                </div>
               </Panel>
             )}
           >

@@ -242,7 +242,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 32px;
 }
 .settings-field-switch-header .settings-field-label {
   flex: 1;
@@ -250,12 +249,12 @@
   margin-bottom: 0;
   cursor: pointer;
 }
-/* The shared control rule stretches every control to the row; a switch sits
-   beside its label and must keep only its own width. */
+/* The shared control rule stretches every control to the row and adds a top gap below stacked
+   labels; a switch sits beside its label and must keep only its own width and zero top offset. */
 .settings-field-control.is-switch {
   flex: none;
   width: auto;
-  min-height: 32px;
+  margin-top: 0;
   display: flex;
   align-items: center;
 }
