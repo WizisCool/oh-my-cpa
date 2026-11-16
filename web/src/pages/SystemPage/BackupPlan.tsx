@@ -18,6 +18,7 @@ import {
 import { api, apiErrorCode } from '../../api/client';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
 import { Fold } from '../../components/common/Fold';
+import { ListLoading } from '../../components/common/PageLoading';
 import { SectionHeading } from '../../components/common/SectionHeading';
 import { SettingRow } from '../../components/common/SettingRow';
 import { Switch } from '../../components/common/Switch';
@@ -72,7 +73,7 @@ export function BackupPlan(props: Props) {
     return props.loadError ? (
       <LoadFailure title={t('sys.backup_load_failed')} onRetry={props.loadError} />
     ) : (
-      <p role="status" className={styles['hint']}>{t('sys.backup_auto_loading')}</p>
+      <ListLoading rows={2} label={t('sys.backup_auto_loading')} />
     );
   }
   return (

@@ -12,8 +12,7 @@ import { HeaderNav } from './HeaderNav';
 import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { DataProgress } from './DataProgress';
-import { PageSkeleton, SuspenseFallback, type RouteLoadingHandle } from './PageLoading';
-import { DashboardSkeleton } from '../dashboard/DashboardSkeleton';
+import { RouteSkeleton, SuspenseFallback, type RouteLoadingHandle } from './PageLoading';
 import { CpaUpgradeRequired } from './CpaUpgradeRequired';
 import { CpaManagementDisabled } from './CpaManagementDisabled';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -81,13 +80,19 @@ function flagIcon(icon: React.ReactNode): React.ReactNode {
   );
 }
 
-/** The frame the matched route declared for its module download (`loadingAs` in `App.tsx`). */
+/**
+ * The frame a route declared for its module download: an explicit route `handle` wins if set,
+ * otherwise `consoleRouteRegistry` (`ROUTE_DESCRIPTORS` in `routePreload.ts`) is the single
+ * source of truth shared with `ShellLoading`.
+ */
 function RouteLoading() {
   const matches = useMatches();
-  const loading = (matches.at(-1)?.handle as RouteLoadingHandle | undefined)?.loading ?? 'list';
+  const location = useLocation();
+  const explicit = (matches.at(-1)?.handle as RouteLoadingHandle | undefined)?.loading;
+  const loading = explicit ?? consoleRouteRegistry.resolve(location.pathname)?.loadingBody ?? 'list';
   return (
     <SuspenseFallback>
-      {loading === 'dashboard' ? <DashboardSkeleton /> : <PageSkeleton body={loading} />}
+      <RouteSkeleton body={loading} />
     </SuspenseFallback>
   );
 }

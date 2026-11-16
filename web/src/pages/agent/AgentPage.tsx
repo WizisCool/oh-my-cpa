@@ -646,7 +646,7 @@ export function AgentPage() {
           <main className={styles['shell-main']}>
             <div className={clsx(workspace['notices'], styles['shell-notices'])}>{notices}</div>
             {session.isPending ? (
-              <ThreadPlaceholder testId="agent-loading" />
+              <ThreadPlaceholder testId="agent-loading" hasComposer={false} />
             ) : (
               <AssistantThread
                 // The thread is one render behind the stored conversation, and for that render it

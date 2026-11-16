@@ -56,8 +56,8 @@
   stroke-linecap: round;
   stroke-dasharray: 4 5;
   opacity: var(--map-track-rest);
-  animation: skeleton-wire-breathe 1400ms var(--ease-standard) infinite alternate both;
-  animation-delay: calc(var(--placeholder-epoch, 0ms) + var(--placeholder-row, 0) * var(--motion-base));
+  animation: skeleton-wire-breathe 1600ms ease-in-out infinite alternate both;
+  animation-delay: calc(var(--placeholder-epoch, 0ms) + var(--placeholder-row, 0) * 85ms);
 }
 
 .map-column {
@@ -180,7 +180,7 @@
   background: radial-gradient(circle, var(--map-glow) 0%, transparent 68%);
   transform: translate(-50%, -50%);
   pointer-events: none;
-  animation: skeleton-hub-breathe 1400ms var(--ease-standard) infinite alternate both;
+  animation: skeleton-hub-breathe 1600ms ease-in-out infinite alternate both;
   animation-delay: var(--placeholder-epoch, 0ms);
 }
 

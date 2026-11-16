@@ -33,6 +33,8 @@ import {
 import { LoadFailure } from '../feedback';
 import { formatCalendarDay } from '../../utils/dateTimeFormat';
 import { Panel } from '../common/Panel';
+import { LoadingRegion } from '../common/Placeholder';
+import { HeatmapPlaceholder } from './DashboardSkeleton';
 import './dashboard.css';
 
 const FULL_NUMBER_FORMAT = new Intl.NumberFormat('en');
@@ -609,7 +611,9 @@ export const TokenHeatmap: React.FC = React.memo(function TokenHeatmap() {
       </div>
 
       {!data ? (
-        <div className="heatmap-skeleton" aria-hidden="true" />
+        <LoadingRegion>
+          <HeatmapPlaceholder hasHeader={false} />
+        </LoadingRegion>
       ) : (
         <>
           {/* A refresh that failed, or one still in flight over existing data, is reported

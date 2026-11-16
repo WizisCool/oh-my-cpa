@@ -2,8 +2,13 @@ import React from 'react';
 import { Segmented } from '@/components/ui/segmented';
 import { clsx } from 'clsx';
 import { Layers } from 'lucide-react';
-import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import { EmptyState } from '../common/EmptyState';
+import { LoadingRegion } from '../common/Placeholder';
+import {
+  ModelTrendBarsPlaceholder,
+  ModelTrendPlaceholder,
+  ModelUsagePlaceholder,
+} from './DashboardSkeleton';
 import { ApiError } from '../../api/client';
 import { LazyModelTokenTrend } from '../../charts/lazyCharts';
 import { useSwrQuery } from '../../performance/swrContract';
@@ -84,17 +89,21 @@ function useDashboardModels({ query, range, enabled }: ModelUsagePanelsProps) {
 
 // A shared loading boundary keeps the ranking readable while the chart module arrives; its
 // chart initialization then yields through the common mount queue.
-const chartFallback = <div className="model-chart-skeleton" aria-hidden="true" />;
+const chartFallback = <ModelTrendBarsPlaceholder />;
 
 /**
  * The body both cards share for the states before a ranking exists: a skeleton on the first read,
  * the failure when that read failed, and the stale warning above a ranking a later poll could not
  * refresh.
  */
-const ModelPanelBody: React.FC<{ models: ReturnType<typeof useDashboardModels>; children: React.ReactNode }> = ({ models, children }) => {
+const ModelPanelBody: React.FC<{
+  models: ReturnType<typeof useDashboardModels>;
+  fallback: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ models, fallback, children }) => {
   const t = useT();
   const { data, isError, error, refetch } = models;
-  if (!data && !isError) return <ParagraphPlaceholder rows={4} />;
+  if (!data && !isError) return <LoadingRegion>{fallback}</LoadingRegion>;
   if (isError && !data) {
     return (
       <ModelPanelsError
@@ -237,7 +246,7 @@ export const ModelTrendPanel: React.FC<ModelTrendPanelProps> = React.memo(functi
       title={<span className="tile-label">{t('dash.models.trend_title')}</span>}
       extra={hasViewToggle ? <ModelViewToggle /> : undefined}
     >
-      <ModelPanelBody models={models}>
+      <ModelPanelBody models={models} fallback={<ModelTrendPlaceholder hasHeader={false} />}>
         {groups.length === 0 ? (
           <EmptyState size="compact" title={t('dash.models.empty')} />
         ) : (
@@ -304,7 +313,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelsProps> = React.memo(funct
       }
       extra={<ModelViewToggle />}
     >
-      <ModelPanelBody models={models}>
+      <ModelPanelBody models={models} fallback={<ModelUsagePlaceholder hasHeader={false} />}>
         {groups.length === 0 ? (
           <EmptyState size="compact" title={t('dash.models.empty')} />
         ) : (

@@ -8,7 +8,7 @@ import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import type { MessageKey, TFunc } from '../../i18n/catalog';
 import { PageHeader } from '../../components/common/PageHeader';
-import { PanelsPlaceholder } from '../../components/common/PageLoading';
+import { RoutingSkeleton } from '../../components/common/PageLoading';
 import { SearchSelect } from '../../components/common/SearchSelect';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ConfigDirtyBar } from '../../components/config/ConfigDirtyBar';
@@ -280,11 +280,11 @@ export function RoutingPage() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [shouldProtectDraft]);
 
-  // Until the board is read and its draft seeded, the real head and the board's panels.
+  // Until the board is read and its draft seeded, the real head and the board's workspace.
   const loadingFrame = (
     <div className="terminal-page terminal-page-stack" data-testid="routing-page">
       <PageHeader title={t('orch.title')} />
-      <PanelsPlaceholder />
+      <RoutingSkeleton hasHeader={false} />
     </div>
   );
   if (boardQuery.isPending && !baseline) return loadingFrame;

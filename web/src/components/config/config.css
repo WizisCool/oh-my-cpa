@@ -442,12 +442,12 @@
 }
 .config-monaco-loading {
   min-height: 520px;
-  padding: 24px;
+  padding: 16px;
   background: var(--bg);
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
+  justify-content: flex-start;
+  align-items: stretch;
   color: var(--muted);
   font-size: var(--text-md);
 }

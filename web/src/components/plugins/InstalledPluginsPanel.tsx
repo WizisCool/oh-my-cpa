@@ -9,7 +9,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '../common/Switch';
-import { ListLoading } from '../common/PageLoading';
+import { CardsPlaceholder } from '../common/PageLoading';
+import { LoadingRegion } from '../common/Placeholder';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, ExternalLinkOutlined, GithubOutlined, MoreOutlined, PackageSearchOutlined, SettingOutlined, ShopOutlined, UpgradeOutlined } from '../icons';
 import { api, apiErrorCode, describeError } from '../../api/client';
@@ -167,7 +168,11 @@ export function InstalledPluginsPanel({
   });
 
   if (isLoading) {
-    return <ListLoading className={styles.empty} />;
+    return (
+      <LoadingRegion className={styles.empty}>
+        <CardsPlaceholder count={3} variant="entity" />
+      </LoadingRegion>
+    );
   }
 
   if (plugins.length === 0) {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { useT } from '../../i18n';
-import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
+import { LogLinesPlaceholder } from '../common/ContentPlaceholder';
 import { EmptyState } from '../common/EmptyState';
 import './logs.css';
 
@@ -67,7 +67,7 @@ export function LogList<T>({ items, itemKey, renderItem, isLoading, emptyText, h
       >
         {header}
         {isLoading ? (
-          <ParagraphPlaceholder rows={8} className="log-state" />
+          <LogLinesPlaceholder rows={8} className="log-state" />
         ) : mounted.length === 0 ? (
           <EmptyState size="compact" title={emptyText} />
         ) : (

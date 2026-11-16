@@ -3,8 +3,8 @@ import { MetaLine } from '../components/common/MetaLine';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
-import { ParagraphPlaceholder } from '../components/common/ContentPlaceholder';
-import { SuspenseFallback } from '../components/common/PageLoading';
+import { CodeLinesPlaceholder } from '../components/common/ContentPlaceholder';
+import { SuspenseFallback, WorkbenchSkeleton } from '../components/common/PageLoading';
 import {
   AppstoreOutlined,
   ArrowLeftOutlined,
@@ -47,7 +47,6 @@ import { SearchInput } from '../components/common/SearchInput';
 import { SectionHeading } from '../components/common/SectionHeading';
 import { Tag } from '../components/common/Tag';
 import { ConfirmAction } from '../components/common/ConfirmAction';
-import { Panel } from '../components/common/Panel';
 import { CopyButton } from '../components/common/CopyButton';
 import { ToolButton } from '../components/common/ToolButton';
 import '../components/config/config.css';
@@ -440,9 +439,9 @@ export const ConfigPage: React.FC = () => {
       )}
 
       {configQuery.isPending && !rawYaml ? (
-        <Panel className="config-card config-shell-band">
-          <ParagraphPlaceholder rows={10} />
-        </Panel>
+        <div className="config-shell-band">
+          <WorkbenchSkeleton hasHeader={false} />
+        </div>
       ) : configQuery.isError && !rawYaml ? (
         <LoadFailure
           className="config-shell-band"
@@ -573,7 +572,7 @@ export const ConfigPage: React.FC = () => {
             <React.Suspense
               fallback={
                 <SuspenseFallback>
-                  <ParagraphPlaceholder rows={14} className="config-monaco-loading" />
+                  <CodeLinesPlaceholder rows={14} className="config-monaco-loading" />
                 </SuspenseFallback>
               }
             >

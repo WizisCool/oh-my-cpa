@@ -20,65 +20,54 @@ import {
 } from '../icons';
 import { PLUGIN_PAGE_ROUTE_PREFIX, type PluginPageEntry } from '../plugins/pluginPages';
 import { PluginIcon } from '../plugins/PluginIcon';
-import type { NavEntry, NavGroup } from '../../types/sidebarNav';
+import {
+  PLUGIN_STATIC_NAV_ITEMS,
+  STATIC_NAV_GROUP_SPECS,
+  type NavEntry,
+  type NavEntrySpec,
+  type NavGroup,
+} from '../../types/sidebarNav';
 
 export { PLUGIN_PAGE_ROUTE_PREFIX };
 
+const NAV_ENTRY_ICONS: Readonly<Record<string, React.ReactNode>> = {
+  '/dashboard': <DashboardOutlined />,
+  '/agent': <RobotOutlined />,
+  '/playground': <CodeSandboxOutlined />,
+  '/model-square': <BlockOutlined />,
+  '/ai-providers': <CloudServerOutlined />,
+  '/oauth-management': <LoginOutlined />,
+  '/api-keys': <KeyOutlined />,
+  '/routing': <LayersOutlined />,
+  '/insights': <InsightsOutlined />,
+  '/usage/events': <HistoryOutlined />,
+  '/pricing': <DollarOutlined />,
+  '/logs': <ProfileOutlined />,
+  '/audit': <AuditOutlined />,
+  '/plugins': <PuzzleOutlined />,
+  '/plugins/store': <ShopOutlined />,
+  '/config': <ControlOutlined />,
+  '/omc-settings': <SettingOutlined />,
+  '/system': <InfoCircleOutlined />,
+};
+
+function toNavEntry(spec: NavEntrySpec): NavEntry {
+  return {
+    key: spec.key,
+    labelKey: spec.labelKey,
+    icon: NAV_ENTRY_ICONS[spec.key] ?? <ProfileOutlined />,
+  };
+}
+
 /**
- * The rail's fixed destinations, grouped the way the console reasons about them: what it runs,
- * the gateway in front of those models, what it observed, and how it is controlled.
- *
- * The groups are a leaf model rather than the layout's own data so the settings page can list the
- * same entries the rail draws - the two must agree about what a rail entry is, or one of them
- * would offer a destination the other has never heard of.
+ * The rail's fixed destinations, derived from `STATIC_NAV_GROUP_SPECS` so the live sidebar and
+ * the boot skeleton (`ShellLoading`) share one canonical source of destinations.
  */
-export const STATIC_NAV_GROUPS: readonly NavGroup[] = [
-  {
-    key: 'operate',
-    labelKey: 'nav.group.operate',
-    items: [
-      { key: '/dashboard', labelKey: 'nav.dashboard', icon: <DashboardOutlined /> },
-      { key: '/agent', labelKey: 'nav.agent', icon: <RobotOutlined /> },
-      { key: '/playground', labelKey: 'nav.playground', icon: <CodeSandboxOutlined /> },
-      { key: '/model-square', labelKey: 'nav.model_square', icon: <BlockOutlined /> },
-    ],
-  },
-  {
-    key: 'gateway',
-    labelKey: 'nav.group.gateway',
-    items: [
-      // Upstream credentials first (provider keys, then OAuth accounts), then the keys
-      // clients use to reach this gateway: the group reads in the direction a request
-      // is authorised, rather than interleaving the two sides.
-      { key: '/ai-providers', labelKey: 'nav.providers', icon: <CloudServerOutlined /> },
-      // Authentication, credential management and quota are one credential-centred workspace.
-      { key: '/oauth-management', labelKey: 'nav.auth_files', icon: <LoginOutlined /> },
-      { key: '/api-keys', labelKey: 'nav.api_keys', icon: <KeyOutlined /> },
-      // Then the order the credentials above are tried in.
-      { key: '/routing', labelKey: 'nav.routing', icon: <LayersOutlined /> },
-    ],
-  },
-  {
-    key: 'observe',
-    labelKey: 'nav.group.observe',
-    items: [
-      { key: '/insights', labelKey: 'nav.insights', icon: <InsightsOutlined /> },
-      { key: '/usage/events', labelKey: 'nav.usage_events', icon: <HistoryOutlined /> },
-      { key: '/pricing', labelKey: 'nav.pricing', icon: <DollarOutlined /> },
-      { key: '/logs', labelKey: 'nav.logs', icon: <ProfileOutlined /> },
-      { key: '/audit', labelKey: 'nav.audit', icon: <AuditOutlined /> },
-    ],
-  },
-  {
-    key: 'control',
-    labelKey: 'nav.group.control',
-    items: [
-      { key: '/config', labelKey: 'nav.config', icon: <ControlOutlined /> },
-      { key: '/omc-settings', labelKey: 'nav.omc_settings', icon: <SettingOutlined /> },
-      { key: '/system', labelKey: 'nav.system', icon: <InfoCircleOutlined /> },
-    ],
-  },
-];
+export const STATIC_NAV_GROUPS: readonly NavGroup[] = STATIC_NAV_GROUP_SPECS.map((group) => ({
+  key: group.key,
+  labelKey: group.labelKey,
+  items: group.items.map(toNavEntry),
+}));
 
 /**
  * The full rail model: the console's own groups plus the plugins group.
@@ -93,8 +82,7 @@ export function buildNavGroups(pluginPages: readonly PluginPageEntry[]): NavGrou
     key: 'plugins',
     labelKey: 'nav.group.plugins',
     items: [
-      { key: '/plugins', labelKey: 'nav.plugins', icon: <PuzzleOutlined /> },
-      { key: '/plugins/store', labelKey: 'nav.plugin_store', icon: <ShopOutlined /> },
+      ...PLUGIN_STATIC_NAV_ITEMS.map(toNavEntry),
       ...pluginPages.map((page): NavEntry => ({
         key: page.route,
         labelKey: page.navLabel,

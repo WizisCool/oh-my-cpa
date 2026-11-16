@@ -16,6 +16,7 @@ import { saveBlob } from '../../utils/download';
 import { formatBytes } from '../../utils/format';
 import dayjs from '../../utils/time';
 import { PassphraseFields, isPassphrasePairValid } from './BackupPassphrase';
+import { ListLoading } from '../../components/common/PageLoading';
 import { RUNNING_STATES, STATE_KEYS } from './backupModel';
 import styles from './DatabaseBackups.module.css';
 
@@ -121,7 +122,7 @@ export function BackupHistory({
 }) {
   const t = useT();
   if (loadError) return <LoadFailure title={t('sys.backup_load_failed')} onRetry={loadError} />;
-  if (isLoading) return <p role="status" className={styles['hint']}>{t('sys.backup_auto_loading')}</p>;
+  if (isLoading) return <ListLoading rows={2} label={t('sys.backup_auto_loading')} />;
   if (!jobs.length) return <p className={styles['empty']}>{t('sys.backup_empty')}</p>;
   return (
     <ul className={styles['jobs']}>

@@ -17,6 +17,7 @@ import { databaseBackupErrorKey } from '../../utils/databaseBackupErrors';
 import { formatBytes } from '../../utils/format';
 import dayjs from '../../utils/time';
 import { isPassphraseLongEnough } from './backupModel';
+import { ListLoading } from '../../components/common/PageLoading';
 import styles from './DatabaseBackups.module.css';
 
 /** The local disk is the empty destination id, as the archive API names it. */
@@ -201,7 +202,7 @@ export function BackupRestore({ destinations, jobs, isBusy, onInspected, onSched
           {archives.error && (
             <LoadFailure title={t('sys.backup_load_failed')} onRetry={() => void archives.refetch()} />
           )}
-          {archives.isPending && <p role="status" className={styles['hint']}>{t('sys.backup_auto_loading')}</p>}
+          {archives.isPending && <ListLoading rows={2} label={t('sys.backup_auto_loading')} />}
           {archives.data && !archives.data.items.length && (
             <p className={styles['empty']}>{t('sys.backup_archive_empty')}</p>
           )}

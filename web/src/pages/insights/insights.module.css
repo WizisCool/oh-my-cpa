@@ -303,7 +303,6 @@
   background: color-mix(in oklch, var(--heatmap-quiet) var(--heatmap-quiet-share, 0%), var(--heatmap-busy));
 }
 .rhythm-cell[data-empty] { background: var(--heatmap-zero-unrecorded); }
-.rhythm-skeleton { border: 0; height: 180px; box-shadow: var(--shadow-edge); border-radius: var(--radius-md); }
 
 .drawer-body { display: flex; flex-direction: column; gap: 16px; }
 

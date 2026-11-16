@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ToolApprovalResponse } from '@assistant-ui/react';
 import { BrandArtwork } from '../../components/common/BrandArtwork';
-import { ParagraphPlaceholder } from '../../components/common/ContentPlaceholder';
+import { AuthorizeCardSkeleton } from '../../components/common/PageLoading';
 import { PreferenceMenus } from '../../components/common/PreferenceMenus';
 import { ApiError } from '../../api/client';
 import { LoadFailure, Notice } from '../../components/feedback';
@@ -101,7 +101,7 @@ export function AuthorizePage() {
               data-testid="agent-authorize-failed"
             />
           )}
-          {canRead && operation.isPending && <ParagraphPlaceholder rows={4} />}
+          {canRead && operation.isPending && <AuthorizeCardSkeleton />}
 
           {data && (
             <>

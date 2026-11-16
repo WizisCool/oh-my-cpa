@@ -19,6 +19,7 @@ import { configureMonacoYaml, type MonacoYaml } from 'monaco-yaml';
 import { parseDocument } from 'yaml';
 import type { ResolvedPalette, ThemeMode, ThemePalette } from '../../theme/palette';
 import { contrastRatio, oklchLightness, relativeLuminance, withLightness } from '../../theme/colorMath';
+import { CodeLinesPlaceholder } from '../common/ContentPlaceholder';
 import './config.css';
 
 // ── Configure Local Monaco Environment (Strict Offline / Zero CDN) ───────────
@@ -379,8 +380,8 @@ export const YamlSourceEditor: React.FC<YamlSourceEditorProps> = ({
         onChange={(val) => onChange(val ?? '')}
         onMount={handleMount}
         loading={
-          <div className="config-monaco-loading">
-            <span>{loadingText}</span>
+          <div className="config-monaco-loading" aria-label={loadingText}>
+            <CodeLinesPlaceholder rows={14} />
           </div>
         }
         options={{
