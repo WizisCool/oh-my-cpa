@@ -1365,3 +1365,47 @@ test('antigravityTosPauseWindow sits in grp_antigravity_behavior, preserves omit
   ]);
 });
 
+test('payloadReplaceRules schema registration, searchability, patch emission, and rebase preservation', () => {
+  const replaceField = field('payloadReplaceRules');
+  assert.equal(replaceField.sectionId, 'payload');
+  assert.deepEqual(replaceField.yamlPath, ['requests', 'payload', 'replace']);
+  assert.ok(replaceField.keywords?.includes('replace'));
+
+  const payloadGroup = CONFIG_GROUPS.find((group) => group.id === 'grp_payload_rules');
+  assert.ok(payloadGroup);
+  assert.ok(payloadGroup.fieldIds.includes('payloadReplaceRules'));
+
+  const server = parseDocument(SERVER_YAML);
+  const draft = server.clone();
+  const replaceValue = [
+    {
+      models: [{ name: '*', protocol: 'claude', 'from-protocol': 'openai' }],
+      target: { role: 'user', positions: [1, 2] },
+      replacements: [
+        { 'you are hero': 'you are fool' },
+        { 'remove this phrase': '' },
+      ],
+    },
+  ];
+  writePayloadCategory(draft, 'replace', replaceValue);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['requests', 'payload', 'replace'], value: replaceValue },
+  ]);
+
+  // Concurrent server update outside requests.payload.replace preserves the replace draft.
+  const newer = SERVER_YAML.replace('port: 8317', 'port: 9000');
+  const rebased = parseDocument(rebaseDraft(server, draft, newer) ?? '');
+  assert.equal(rebased.getIn(['server', 'port']), 9000);
+  assert.deepEqual(computeConfigChanges(parseDocument(newer), rebased), [
+    { path: ['requests', 'payload', 'replace'], value: replaceValue },
+  ]);
+
+  // Clearing replace emits removal when server previously held replace rules.
+  const populatedServer = parseDocument(draft.toString());
+  const clearedDraft = populatedServer.clone();
+  writePayloadCategory(clearedDraft, 'replace', []);
+  assert.deepEqual(computeConfigChanges(populatedServer, clearedDraft), [
+    { path: ['requests', 'payload', 'replace'], remove: true },
+  ]);
+});
+

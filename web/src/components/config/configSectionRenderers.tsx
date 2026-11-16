@@ -14,7 +14,7 @@ import {
   NodeIndexOutlined,
   ProfileOutlined,
 } from '../icons';
-import { parseDocument, type Document } from 'yaml';
+import { type Document } from 'yaml';
 
 import { PayloadRulesEditor } from './PayloadRulesEditor';
 import { IceServersEditor } from './IceServersEditor';
@@ -22,7 +22,6 @@ import { PatternRulesEditor } from './PatternRulesEditor';
 import { StringMapEditor } from './StringMapEditor';
 
 import type { useT } from '../../i18n';
-import { isConfigSemanticallyEqual } from './configDirty';
 import {
   ALL_CONFIG_FIELDS,
   type ConfigFieldDefinition,
@@ -374,13 +373,18 @@ export function groupAnchorId(groupId: string): string {
 
 export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDefinition, visibleFieldIds?: string[], context: 'section' | 'search' = 'section') {
   const {
-    setRawYaml,
-    serverYaml,
     docRef,
-    serverDocRef,
     getFieldValue,
     validateTrigger,
-    setPayloadIssues,
+    updatePayloadIssues,
+    updateHasPendingPayloadEdits,
+    unresolvedReplacePending,
+    updateUnresolvedReplacePending,
+    setPayloadEditorMounted,
+    flushPendingPayloadRef,
+    clearPendingPayloadRef,
+    payloadResetVersion,
+    syncDocChanges,
     configuredKeyCount,
     navigate,
     t,
@@ -431,18 +435,15 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
           )}
           <PayloadRulesEditor
             doc={docRef.current}
-            onDocChange={() => {
-              if (docRef.current) {
-                // Check semantic equality with serverDocRef before setting rawYaml
-                if (serverDocRef.current && isConfigSemanticallyEqual(docRef.current, serverDocRef.current, ALL_CONFIG_FIELDS)) {
-                  setRawYaml(serverYaml);
-                  docRef.current = parseDocument(serverYaml);
-                } else {
-                  setRawYaml(docRef.current.toString());
-                }
-              }
-            }}
-            onValidationChange={setPayloadIssues}
+            onDocChange={syncDocChanges}
+            onValidationChange={updatePayloadIssues}
+            onPendingChange={updateHasPendingPayloadEdits}
+            unresolvedPending={unresolvedReplacePending}
+            onUnresolvedPendingChange={updateUnresolvedReplacePending}
+            onMountChange={setPayloadEditorMounted}
+            flushPendingRef={flushPendingPayloadRef}
+            clearPendingRef={clearPendingPayloadRef}
+            resetVersion={payloadResetVersion}
             validateTrigger={validateTrigger}
           />
         </div>

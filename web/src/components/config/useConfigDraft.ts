@@ -10,7 +10,11 @@ import { computeConfigChanges, rebaseDraft } from './configPatch';
 import { describeConfigSaveError } from './configSaveErrors';
 import { ALL_CONFIG_FIELDS, type ConfigFieldDefinition, type ConfigSectionId } from '../../types/configSchema';
 import type { ConfigScalarsResponse } from '../../types/configManagement';
-import type { PayloadValidationIssue } from './payloadRules';
+import {
+  validatePayloadDocument,
+  type PayloadValidationIssue,
+  type UnresolvedReplacePendingEntry,
+} from './payloadRules';
 import {
   formatPatternRulesIssue,
   type PatternRulesDraftState,
@@ -49,8 +53,8 @@ export function useConfigDraft() {
   const editorRef = React.useRef<YamlSourceEditorRef | null>(null);
 
   const [viewMode, setViewMode] = React.useState<'visual' | 'source'>('visual');
-  const [activeSection, setActiveSection] = React.useState<ConfigSectionId>('connectivity');
-  const [searchQuery, setSearchQuery] = React.useState<string>('');
+  const [activeSection, setActiveSectionState] = React.useState<ConfigSectionId>('connectivity');
+  const [searchQuery, setSearchQueryState] = React.useState<string>('');
 
   const configQuery = useQuery<ConfigScalarsResponse>({
     queryKey: ['management-config'],
@@ -66,15 +70,37 @@ export function useConfigDraft() {
   const [stringMapIssues, setStringMapIssues] = React.useState<Record<string, StringMapValidationIssue>>({});
   const [patternRulesDrafts, setPatternRulesDrafts] = React.useState<Record<string, PatternRulesDraftState>>({});
   const [patternRulesIssues, setPatternRulesIssues] = React.useState<Record<string, PatternRulesValidationIssue>>({});
+  const [hasPendingPayloadEdits, setHasPendingPayloadEdits] = React.useState(false);
+  const [unresolvedReplacePending, setUnresolvedReplacePending] = React.useState<UnresolvedReplacePendingEntry[]>([]);
+  const [payloadResetVersion, setPayloadResetVersion] = React.useState(0);
 
   const docRef = React.useRef<Document | null>(null);
   const serverDocRef = React.useRef<Document | null>(null);
   const rawYamlRef = React.useRef('');
   const serverYamlRef = React.useRef('');
+  const serverRevisionRef = React.useRef('');
   const stringMapIssuesRef = React.useRef<Record<string, StringMapValidationIssue>>({});
   const patternRulesIssuesRef = React.useRef<Record<string, PatternRulesValidationIssue>>({});
+  const hasLivePendingPositionsRef = React.useRef(false);
+  const unresolvedReplacePendingRef = React.useRef<UnresolvedReplacePendingEntry[]>([]);
+  const hasPendingPayloadEditsRef = React.useRef(false);
+  const payloadEditorMountedRef = React.useRef(false);
+  const flushPendingPayloadRef = React.useRef<(() => boolean) | null>(null);
+  const clearPendingPayloadRef = React.useRef<(() => void) | null>(null);
+  const payloadIssuesRef = React.useRef<PayloadValidationIssue[]>([]);
+  const firstFieldErrorMessageRef = React.useRef<string | undefined>(undefined);
   /** Guards against a second save starting before isPending propagates. */
   const saveInFlightRef = React.useRef(false);
+
+  const setActiveSection = React.useCallback((next: React.SetStateAction<ConfigSectionId>) => {
+    flushPendingPayloadRef.current?.();
+    setActiveSectionState(next);
+  }, []);
+
+  const setSearchQuery = React.useCallback((next: React.SetStateAction<string>) => {
+    flushPendingPayloadRef.current?.();
+    setSearchQueryState(next);
+  }, []);
 
   React.useEffect(() => {
     stringMapIssuesRef.current = stringMapIssues;
@@ -183,12 +209,28 @@ export function useConfigDraft() {
    * rebaseDraft) instead of being replaced; `draftBase` is the document those
    * edits were made against.
    */
+  const syncPendingPayloadFlag = React.useCallback(() => {
+    const next = hasLivePendingPositionsRef.current || unresolvedReplacePendingRef.current.length > 0;
+    hasPendingPayloadEditsRef.current = next;
+    setHasPendingPayloadEdits(next);
+  }, []);
+
+  const clearPendingPayloadState = React.useCallback(() => {
+    clearPendingPayloadRef.current?.();
+    hasLivePendingPositionsRef.current = false;
+    unresolvedReplacePendingRef.current = [];
+    setUnresolvedReplacePending([]);
+    hasPendingPayloadEditsRef.current = false;
+    setHasPendingPayloadEdits(false);
+  }, []);
+
   const adoptBaseline = React.useCallback(
-    (yaml: string, revision: string, draftBase: Document | null, hasLocalEdits: boolean) => {
+    (yaml: string, revision: string, draftBase: Document | null, hasLocalEdits: boolean): boolean => {
       const previousYaml = serverYamlRef.current;
       setServerYaml(yaml);
       serverYamlRef.current = yaml;
       setServerRevision(revision);
+      serverRevisionRef.current = revision;
       try {
         serverDocRef.current = parseDocument(yaml);
       } catch {
@@ -197,16 +239,26 @@ export function useConfigDraft() {
       if (!hasLocalEdits) {
         clearStringMapState();
         clearPatternRulesState();
+        clearPendingPayloadState();
         replaceDraft(yaml);
-        return;
+        return true;
       }
       // The source view's draft is the operator's own text, comments included,
       // which a structural carry-over would re-render; it is left as typed.
-      if (yaml === previousYaml || !docRef.current || viewModeRef.current === 'source') return;
+      if (yaml === previousYaml || !docRef.current || viewModeRef.current === 'source') return false;
       const rebased = rebaseDraft(draftBase, docRef.current, yaml);
-      if (rebased !== null) replaceDraft(rebased);
+      if (rebased !== null) {
+        replaceDraft(rebased);
+        if (!payloadEditorMountedRef.current) {
+          const recomputed = validatePayloadDocument(docRef.current, unresolvedReplacePendingRef.current);
+          payloadIssuesRef.current = recomputed;
+          setPayloadIssues(recomputed);
+        }
+        return true;
+      }
+      return false;
     },
-    [clearPatternRulesState, clearStringMapState, replaceDraft],
+    [clearPatternRulesState, clearPendingPayloadState, clearStringMapState, replaceDraft],
   );
 
   React.useEffect(() => {
@@ -220,7 +272,8 @@ export function useConfigDraft() {
       serverDocRef.current,
       rawYamlRef.current !== serverYamlRef.current
         || Object.keys(stringMapIssuesRef.current).length > 0
-        || Object.keys(patternRulesIssuesRef.current).length > 0,
+        || Object.keys(patternRulesIssuesRef.current).length > 0
+        || hasPendingPayloadEditsRef.current,
     );
   }, [configQuery.data?.safe_yaml, configQuery.data?.revision, viewMode, adoptBaseline]);
 
@@ -228,6 +281,7 @@ export function useConfigDraft() {
   // values without being re-created on every keystroke.
   rawYamlRef.current = rawYaml;
   serverYamlRef.current = serverYaml;
+  serverRevisionRef.current = serverRevision;
 
   const hasStringMapIssues = Object.keys(stringMapIssues).length > 0;
   const hasPatternRulesIssues = Object.keys(patternRulesIssues).length > 0;
@@ -241,15 +295,29 @@ export function useConfigDraft() {
     return first ? formatPatternRulesIssue(first, t) : undefined;
   }, [patternRulesIssues, t]);
   const firstFieldErrorMessage = firstStringMapErrorMessage ?? firstPatternRulesErrorMessage;
+  firstFieldErrorMessageRef.current = firstFieldErrorMessage;
 
-  const isDirty = rawYaml !== serverYaml || hasFieldIssues;
+  const isDirty = rawYaml !== serverYaml || hasFieldIssues || hasPendingPayloadEdits;
+
+  const syncDocChanges = React.useCallback(() => {
+    if (!docRef.current) return;
+    if (serverDocRef.current && isConfigSemanticallyEqual(docRef.current, serverDocRef.current, ALL_CONFIG_FIELDS)) {
+      rawYamlRef.current = serverYamlRef.current;
+      setRawYaml(serverYamlRef.current);
+      docRef.current = parseDocument(serverYamlRef.current);
+    } else {
+      const nextYaml = docRef.current.toString();
+      rawYamlRef.current = nextYaml;
+      setRawYaml(nextYaml);
+    }
+  }, []);
 
   const updateFieldInDoc = React.useCallback(
     (field: ConfigFieldDefinition, value: unknown) => {
       let currentDoc = docRef.current;
       if (!currentDoc) {
         try {
-          currentDoc = parseDocument(rawYaml || '');
+          currentDoc = parseDocument(rawYamlRef.current || '');
           docRef.current = currentDoc;
         } catch {
           toast.error(t('cfg.yaml_syntax_error'));
@@ -262,14 +330,16 @@ export function useConfigDraft() {
       // If after update, currentDoc is semantically identical to serverDoc across all fields and payload,
       // revert rawYaml completely back to serverYaml so no formatting artifacts trigger dirty!
       if (serverDocRef.current && isConfigSemanticallyEqual(currentDoc, serverDocRef.current, ALL_CONFIG_FIELDS)) {
-        setRawYaml(serverYaml);
-        docRef.current = parseDocument(serverYaml);
+        rawYamlRef.current = serverYamlRef.current;
+        setRawYaml(serverYamlRef.current);
+        docRef.current = parseDocument(serverYamlRef.current);
       } else {
         const nextYaml = currentDoc.toString();
+        rawYamlRef.current = nextYaml;
         setRawYaml(nextYaml);
       }
     },
-    [rawYaml, serverYaml, toast, t],
+    [toast, t],
   );
 
   const getFieldValue = React.useCallback(
@@ -310,19 +380,21 @@ export function useConfigDraft() {
       const hasNewerDraft =
         rawYamlRef.current !== variables.yamlToSave
         || Object.keys(stringMapIssuesRef.current).length > 0
-        || Object.keys(patternRulesIssuesRef.current).length > 0;
+        || Object.keys(patternRulesIssuesRef.current).length > 0
+        || hasPendingPayloadEditsRef.current;
       let savedDraft: Document | null = null;
       try {
         savedDraft = parseDocument(variables.yamlToSave);
       } catch {
         // A malformed document is expected here: the newer draft is then kept as it is.
       }
+      let didRebase = false;
       if (saved.yaml !== undefined && saved.revision) {
-        adoptBaseline(saved.yaml, saved.revision, savedDraft, hasNewerDraft);
+        didRebase = adoptBaseline(saved.yaml, saved.revision, savedDraft, hasNewerDraft);
       } else {
         // The write landed but CPA could not be re-read, so the stored document is
         // unknown: the sent text stands in until a reload replaces it.
-        adoptBaseline(variables.yamlToSave, '', savedDraft, hasNewerDraft);
+        didRebase = adoptBaseline(variables.yamlToSave, '', savedDraft, hasNewerDraft);
         if (viewMode === 'source') {
           void api.getConfigSource().then(
             (source) => adoptBaseline(source.yaml, source.revision, serverDocRef.current, rawYamlRef.current !== serverYamlRef.current),
@@ -330,10 +402,18 @@ export function useConfigDraft() {
           );
         }
       }
-      setPayloadIssues([]);
-      if (!hasNewerDraft) {
-        clearStringMapState();
-        clearPatternRulesState();
+      if (!hasNewerDraft || viewModeRef.current === 'source') {
+        payloadIssuesRef.current = [];
+        setPayloadIssues([]);
+        if (!hasNewerDraft) {
+          clearStringMapState();
+          clearPatternRulesState();
+          clearPendingPayloadState();
+        }
+      } else if (!payloadEditorMountedRef.current || didRebase) {
+        const recomputed = validatePayloadDocument(docRef.current, unresolvedReplacePendingRef.current);
+        payloadIssuesRef.current = recomputed;
+        setPayloadIssues(recomputed);
       }
       setShowErrorFeedback(false);
       setValidateTrigger(0);
@@ -355,21 +435,72 @@ export function useConfigDraft() {
   const [showErrorFeedback, setShowErrorFeedback] = React.useState(false);
 
   const handleDiscardChanges = React.useCallback(() => {
-    setRawYaml(serverYaml);
+    clearPendingPayloadState();
+    rawYamlRef.current = serverYamlRef.current;
+    setRawYaml(serverYamlRef.current);
     try {
-      docRef.current = parseDocument(serverYaml);
-      serverDocRef.current = parseDocument(serverYaml);
+      docRef.current = parseDocument(serverYamlRef.current);
+      serverDocRef.current = parseDocument(serverYamlRef.current);
     } catch {
       // A malformed document is expected here: the previous baseline stays in place.
     }
+    payloadIssuesRef.current = [];
     setPayloadIssues([]);
     clearStringMapState();
     clearPatternRulesState();
+    setPayloadResetVersion((v) => v + 1);
     setShowErrorFeedback(false);
     setValidateTrigger(0);
-  }, [clearPatternRulesState, clearStringMapState, serverYaml]);
+  }, [clearPatternRulesState, clearPendingPayloadState, clearStringMapState]);
 
   const [payloadIssues, setPayloadIssues] = React.useState<PayloadValidationIssue[]>([]);
+
+  const updatePayloadIssues = React.useCallback((next: PayloadValidationIssue[]) => {
+    payloadIssuesRef.current = next;
+    setPayloadIssues(next);
+  }, []);
+
+  const updateHasPendingPayloadEdits = React.useCallback((hasLivePending: boolean) => {
+    hasLivePendingPositionsRef.current = hasLivePending;
+    syncPendingPayloadFlag();
+  }, [syncPendingPayloadFlag]);
+
+  const updateUnresolvedReplacePending = React.useCallback(
+    (next: React.SetStateAction<UnresolvedReplacePendingEntry[]>) => {
+      const resolved = typeof next === 'function' ? next(unresolvedReplacePendingRef.current) : next;
+      unresolvedReplacePendingRef.current = resolved;
+      setUnresolvedReplacePending(resolved);
+      syncPendingPayloadFlag();
+      if (!payloadEditorMountedRef.current) {
+        const recomputed = validatePayloadDocument(docRef.current, resolved);
+        payloadIssuesRef.current = recomputed;
+        setPayloadIssues(recomputed);
+      }
+    },
+    [syncPendingPayloadFlag],
+  );
+
+  const setPayloadEditorMounted = React.useCallback((mounted: boolean) => {
+    payloadEditorMountedRef.current = mounted;
+  }, []);
+
+  const hasYamlErrorsNow = React.useCallback(() => {
+    try {
+      const parsed = parseDocument(rawYamlRef.current);
+      return Boolean(parsed.errors && parsed.errors.length > 0);
+    } catch {
+      return true;
+    }
+  }, []);
+
+  const isDirtyNow = React.useCallback(
+    () =>
+      rawYamlRef.current !== serverYamlRef.current
+      || Object.keys(stringMapIssuesRef.current).length > 0
+      || Object.keys(patternRulesIssuesRef.current).length > 0
+      || hasPendingPayloadEditsRef.current,
+    [],
+  );
 
   const hasYamlErrors = React.useMemo(() => {
     try {
@@ -395,23 +526,24 @@ export function useConfigDraft() {
    */
 
   const saveConfig = React.useCallback(() => {
-    if (!isDirty || configQuery.isError) return Promise.resolve();
+    flushPendingPayloadRef.current?.();
+    if (!isDirtyNow() || configQuery.isError) return Promise.resolve();
     // isPending lags a render, so a second activation in the same tick (a double
     // click, or Ctrl+S bubbling out of the editor) would start a second mutation
     // against the same revision and race the first one to the conflict check.
     if (saveInFlightRef.current || saveMutation.isPending) return Promise.resolve();
-    if (hasYamlErrors) {
+    if (hasYamlErrorsNow()) {
       setShowErrorFeedback(true);
       toast.error(t('cfg.dirty_bar_yaml_error'));
       return Promise.resolve();
     }
-    if (payloadIssues.length > 0) {
+    if (viewModeRef.current === 'visual' && payloadIssuesRef.current.length > 0) {
       setValidateTrigger((v) => v + 1);
       setShowErrorFeedback(true);
-      toast.warning(t('cfg.dirty_bar_payload_issues', { n: payloadIssues.length }));
+      toast.warning(t('cfg.dirty_bar_payload_issues', { n: payloadIssuesRef.current.length }));
       return Promise.resolve();
     }
-    if (firstFieldErrorMessage) {
+    if (firstFieldErrorMessageRef.current) {
       setShowErrorFeedback(true);
       return Promise.resolve();
     }
@@ -420,23 +552,22 @@ export function useConfigDraft() {
     // it is settled here rather than left to the caller: a keyboard handler has
     // nobody to catch a rejection, and the mutation's onError already reports it.
     return saveMutation
-      .mutateAsync({ yamlToSave: rawYaml, revision: serverRevision })
+      .mutateAsync({ yamlToSave: rawYamlRef.current, revision: serverRevisionRef.current })
       .catch(() => undefined)
       .finally(() => {
         saveInFlightRef.current = false;
       });
   }, [
-    isDirty,
-    saveMutation,
-    hasYamlErrors,
-    payloadIssues.length,
-    firstFieldErrorMessage,
     configQuery.isError,
-    rawYaml,
-    serverRevision,
+    hasYamlErrorsNow,
+    isDirtyNow,
+    saveMutation,
     toast,
     t,
   ]);
+
+  const saveConfigRef = React.useRef(saveConfig);
+  saveConfigRef.current = saveConfig;
 
   /**
    * requestSaveConfirmation is for entry points that have no confirmation UI of
@@ -444,9 +575,18 @@ export function useConfigDraft() {
    * calls the same saveConfig, so the keyboard cannot drift from the buttons.
    */
   const requestSaveConfirmation = React.useCallback(() => {
-    if (!isDirty || saveMutation.isPending) return;
-    if (hasYamlErrors || payloadIssues.length > 0 || hasFieldIssues || configQuery.isError) {
-      saveConfig();
+    flushPendingPayloadRef.current?.();
+    if (!isDirtyNow() || saveMutation.isPending) return;
+    const hasCurrentFieldIssues =
+      Object.keys(stringMapIssuesRef.current).length > 0
+      || Object.keys(patternRulesIssuesRef.current).length > 0;
+    if (
+      hasYamlErrorsNow()
+      || (viewModeRef.current === 'visual' && payloadIssuesRef.current.length > 0)
+      || hasCurrentFieldIssues
+      || configQuery.isError
+    ) {
+      void saveConfigRef.current();
       return;
     }
     modal.confirm({
@@ -457,10 +597,10 @@ export function useConfigDraft() {
       onOk: () => {
         // Returning the promise keeps the confirm dialog open until the save
         // settles, so a failure cannot look like it already succeeded.
-        return saveConfig();
+        return saveConfigRef.current();
       },
     });
-  }, [configQuery.isError, hasFieldIssues, hasYamlErrors, isDirty, modal, payloadIssues.length, saveMutation.isPending, saveConfig, t]);
+  }, [configQuery.isError, hasYamlErrorsNow, isDirtyNow, modal, saveMutation.isPending, t]);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -488,6 +628,7 @@ export function useConfigDraft() {
           rawYamlRef.current !== serverYamlRef.current
           || Object.keys(stringMapIssuesRef.current).length > 0
           || Object.keys(patternRulesIssuesRef.current).length > 0
+          || hasPendingPayloadEditsRef.current
         )) {
           resolve(true);
           return;
@@ -513,6 +654,14 @@ export function useConfigDraft() {
       // the audit and no-store boundary. A failure here is a real read failure.
       try {
         const src = await api.getConfigSource();
+        clearPendingPayloadState();
+        payloadIssuesRef.current = [];
+        setPayloadIssues([]);
+        setShowErrorFeedback(false);
+        setValidateTrigger(0);
+        rawYamlRef.current = src.yaml;
+        serverYamlRef.current = src.yaml;
+        serverRevisionRef.current = src.revision;
         setRawYaml(src.yaml);
         setServerYaml(src.yaml);
         setServerRevision(src.revision);
@@ -530,6 +679,10 @@ export function useConfigDraft() {
         toast.error(t('cfg.source_load_failed', { msg }));
       }
     } else {
+      payloadIssuesRef.current = [];
+      setPayloadIssues([]);
+      setShowErrorFeedback(false);
+      setValidateTrigger(0);
       setViewMode('visual');
       queryClient.removeQueries({ queryKey: ['management-config-source'] });
       void configQuery.refetch();
@@ -590,6 +743,7 @@ export function useConfigDraft() {
     rawYamlRef,
     serverYamlRef,
     isDirty,
+    syncDocChanges,
     updateFieldInDoc,
     getFieldValue,
     saveMutation,
@@ -600,6 +754,15 @@ export function useConfigDraft() {
     handleDiscardChanges,
     payloadIssues,
     setPayloadIssues,
+    updatePayloadIssues,
+    hasPendingPayloadEdits,
+    updateHasPendingPayloadEdits,
+    unresolvedReplacePending,
+    updateUnresolvedReplacePending,
+    setPayloadEditorMounted,
+    flushPendingPayloadRef,
+    clearPendingPayloadRef,
+    payloadResetVersion,
     stringMapDrafts,
     setStringMapDraft,
     stringMapIssues,
