@@ -674,8 +674,8 @@ func TestFillDashboardBucketsFoldsEdgeBuckets(t *testing.T) {
 	from := bucket*10 + 500 // unaligned start
 	to := bucket * 14
 	buckets := []repository.UsageBucket{
-		{StartMS: bucket * 9, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{Requests: 3, TotalTokens: 30, CacheReadTokens: 7}}},
-		{StartMS: bucket * 12, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{Requests: 5, TotalTokens: 50, CacheReadTokens: 11}}},
+		{StartMS: bucket * 9, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{Requests: 3, InputTokens: 20, TotalTokens: 30, CacheReadTokens: 5}}},
+		{StartMS: bucket * 12, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{Requests: 5, InputTokens: 40, TotalTokens: 50, CacheReadTokens: 10}}},
 	}
 	costs := []repository.UsageCostBucket{
 		{StartMS: bucket * 9, CostNanos: 2_000_000_000},
@@ -685,11 +685,10 @@ func TestFillDashboardBucketsFoldsEdgeBuckets(t *testing.T) {
 	if len(points) < 2 {
 		t.Fatalf("expected a filled grid, got %d points", len(points))
 	}
-	var requests, tokens, cacheRead, costNanos int64
+	var requests, tokens, costNanos int64
 	for _, point := range points {
 		requests += point.Requests
 		tokens += point.Tokens
-		cacheRead += point.CacheReadTokens
 		costNanos += point.CostNanos
 		if point.TimeMS%bucket != 0 {
 			t.Fatalf("bucket start %d is not grid aligned", point.TimeMS)
@@ -701,8 +700,8 @@ func TestFillDashboardBucketsFoldsEdgeBuckets(t *testing.T) {
 	}
 	// Cache and cost ride the same folding, so the tiles cannot disagree about
 	// which bucket an edge event belongs to.
-	if cacheRead != 18 {
-		t.Fatalf("cache reads lost on fold: got %d, want 18", cacheRead)
+	if rate := points[0].CacheRate; rate == nil || *rate != 25 {
+		t.Fatalf("folded edge bucket cache rate = %v, want 25", rate)
 	}
 	if costNanos != 5_000_000_000 {
 		t.Fatalf("cost lost on fold: got %d, want 5000000000", costNanos)
@@ -717,7 +716,7 @@ func TestFillDashboardBucketsFoldsEdgeBuckets(t *testing.T) {
 }
 
 // TestDashboardSeriesCarriesPerBucketCacheAndCost pins the properties the four
-// right-hand tiles depend on: each bucket must state its own cache reads and its
+// right-hand tiles depend on: each bucket must state its own cache rate and its
 // own cost, so the cache-rate and cost tiles stop plotting token volume.
 func TestDashboardSeriesCarriesPerBucketCacheAndCost(t *testing.T) {
 	const bucket = int64(60_000)
@@ -739,17 +738,21 @@ func TestDashboardSeriesCarriesPerBucketCacheAndCost(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected a point at %d, got %d points", bucket*11, len(points))
 	}
-	if populated.CacheReadTokens != 60 {
-		t.Fatalf("cache reads not carried per bucket: got %d, want 60", populated.CacheReadTokens)
+	if populated.CacheRate == nil || *populated.CacheRate != 60 {
+		t.Fatalf("cache rate not carried per bucket: got %v, want 60", populated.CacheRate)
 	}
 	if populated.CostNanos != 1_500_000_000 {
 		t.Fatalf("cost not carried per bucket: got %d, want 1500000000", populated.CostNanos)
 	}
 	// A bucket with no priced event must not borrow its neighbour's cost: a
 	// fabricated cost would overstate spend in exactly the window it must not.
+	// An idle bucket has no cache rate; a 0% would read as every prompt missing the cache.
 	empty := byTime[bucket*12]
-	if empty.CostNanos != 0 || empty.CacheReadTokens != 0 {
-		t.Fatalf("empty bucket fabricated data: cost=%d cacheRead=%d", empty.CostNanos, empty.CacheReadTokens)
+	if empty.CostNanos != 0 {
+		t.Fatalf("empty bucket fabricated cost: %d", empty.CostNanos)
+	}
+	if empty.CacheRate != nil {
+		t.Fatalf("empty bucket fabricated cache rate: %v", *empty.CacheRate)
 	}
 }
 

@@ -21,8 +21,8 @@ export interface DashboardSeriesPoint {
   /** Failed requests in the bucket. */
   f?: number;
   tokens?: number;
-  /** Cache reads in the bucket, so the cache-rate tile can plot its own shape. */
-  cache_read?: number;
+  /** The bucket's cache rate in percent; absent when the bucket carried no prompt tokens. */
+  cache_rate?: number;
   /** Request cost in nanos. Exact on the wire; the browser scales it. */
   cost_nanos?: number;
 }

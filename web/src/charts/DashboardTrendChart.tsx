@@ -8,6 +8,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { sharedResizeObserverHub } from '../performance/resizeObserverHub';
 import { sparkColor, type ChartTone } from './chartTheme';
 import {
+  bridgeSparklineGaps,
   buildMonotoneSparkline,
   clampSparklineTooltipX,
   resolveSparklineIndex,
@@ -19,7 +20,8 @@ import type { DashboardSeriesPoint } from '../types/dashboard';
 export interface DashboardTrendChartProps {
   points: DashboardSeriesPoint[];
   ariaLabel: string;
-  pick: (point: DashboardSeriesPoint) => number;
+  /** A bucket's value; null when the bucket has no reading, as a ratio over an idle bucket. */
+  pick: (point: DashboardSeriesPoint) => number | null;
   tone?: ChartTone;
   height?: number;
   label?: (timeMs: number) => string;
@@ -45,14 +47,15 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
   const gradientId = React.useId().replace(/:/g, '');
   const color = sparkColor(theme.palette, tone);
 
-  const samples = React.useMemo(
-    () =>
-      points.map((point) => ({
-        t: point.t,
-        value: Math.max(0, pick(point) ?? 0),
-      })),
-    [points, pick],
-  );
+  // A bucket without a reading is bridged for the line but keeps its dash in the readout.
+  const samples = React.useMemo(() => {
+    const readings = points.map((point) => {
+      const value = pick(point);
+      return value === null ? null : Math.max(0, value);
+    });
+    const drawn = bridgeSparklineGaps(readings);
+    return points.map((point, index) => ({ t: point.t, value: drawn[index]!, hasReading: readings[index] !== null }));
+  }, [points, pick]);
 
   const { shown, scopeRef } = useChartMorph(samples);
 
@@ -122,7 +125,9 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
   const formatHeading = label ?? ((at: number) => dayjs(at).format('MM-DD HH:mm'));
   const formatValue = (val: number) => format?.(val) ?? PLAIN_NUMBER_FORMAT.format(val);
   const activeHeading = activePoint ? formatHeading(activePoint.t) : '';
-  const activeValueText = activePoint ? formatValue(activePoint.value) : '';
+  const activeValueText = activePoint && clampedActiveIndex !== null
+    ? shown[clampedActiveIndex]?.hasReading === false ? '—' : formatValue(activePoint.value)
+    : '';
 
   React.useLayoutEffect(() => {
     if (clampedActiveIndex === null) return;

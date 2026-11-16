@@ -24,7 +24,7 @@ import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
 import { type ChartTone } from '../charts/chartTheme';
 import { DashboardTrendChart } from '../charts/DashboardTrendChart';
 import { maskKeyText } from '../utils/maskKey';
-import { resolveCacheRateReadout } from '../theme/cacheScale';
+import { formatCacheRate, resolveCacheRateReadout } from '../theme/cacheScale';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 import {
   formatTokenRate,
@@ -116,7 +116,7 @@ function formatRate(value: number | null | undefined): string {
 
 function pickRequests(point: DashboardSeriesPoint): number { return point.v ?? 0; }
 function pickTokens(point: DashboardSeriesPoint): number { return point.tokens ?? 0; }
-function pickCacheReads(point: DashboardSeriesPoint): number { return point.cache_read ?? 0; }
+function pickCacheRate(point: DashboardSeriesPoint): number | null { return point.cache_rate ?? null; }
 /** The receipt reads the Insights cube and embeds fonts to export; none of it is paid for until it is opened. */
 const loadReceiptShowcase = () => import('../components/dashboard/receipt/ReceiptShowcase');
 const preloadReceiptShowcase = () => void loadReceiptShowcase();
@@ -652,11 +652,11 @@ export const DashboardPage: React.FC = () => {
             <DashboardTrendChart
               ariaLabel={t('dash.cache_rate')}
               points={data.tokens.series}
-              pick={pickCacheReads}
+              pick={pickCacheRate}
               tone="neutral"
               height={44}
               label={formatTrendTime}
-              format={formatTokens}
+              format={formatCacheRate}
             />
           </Panel>
         );

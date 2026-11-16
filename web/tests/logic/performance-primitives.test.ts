@@ -28,6 +28,7 @@ import {
   type ObservedBoxSize,
 } from '../../src/performance/index.ts';
 import {
+  bridgeSparklineGaps,
   buildMonotoneSparkline,
   resolveSparklineIndex,
   sparklineViewBoxToHostX,
@@ -999,6 +1000,12 @@ test('buildMonotoneSparkline produces overshoot-free monotone paths and maps poi
   assert.equal(resolveSparklineIndex(12, 480, 73), 0);
   assert.equal(sparklineViewBoxToHostX(6, 480, 240), 12);
   assert.equal(sparklineViewBoxToHostX(234, 480, 240), 468);
+});
+
+test('bridgeSparklineGaps connects readings across idle buckets and holds the edges', () => {
+  assert.deepEqual(bridgeSparklineGaps([null, 90, null, null, 60, null]), [90, 90, 80, 70, 60, 60]);
+  assert.deepEqual(bridgeSparklineGaps([null, null]), [0, 0]);
+  assert.deepEqual(bridgeSparklineGaps([]), []);
 });
 
 test('getIdentityDirectoryProjection caches derived Maps and Sets per response object via WeakMap', () => {

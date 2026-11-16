@@ -57,6 +57,28 @@ function fmt(n: number): string {
 }
 
 /**
+ * Fills the buckets that have no reading so a ratio series draws as one line: a gap takes the
+ * straight line between the readings around it, and the edges hold the nearest reading. A
+ * series with no reading at all lies flat at zero.
+ */
+export function bridgeSparklineGaps(values: ReadonlyArray<number | null>): number[] {
+  const filled = new Array<number>(values.length).fill(0);
+  let previous = -1;
+  for (let i = 0; i < values.length; i += 1) {
+    const value = values[i];
+    if (value === null || value === undefined) continue;
+    const from = previous < 0 ? value : values[previous]!;
+    for (let gap = previous + 1; gap < i; gap += 1) {
+      filled[gap] = from + ((value - from) * (gap - previous)) / (i - previous);
+    }
+    filled[i] = value;
+    previous = i;
+  }
+  if (previous >= 0) filled.fill(values[previous]!, previous + 1);
+  return filled;
+}
+
+/**
  * Builds monotone cubic Hermite SVG line and closed area paths (`curveMonotoneX`) without
  * pulling in Recharts or d3-shape, preserving non-negativity and local extrema with zero overshoot.
  */
