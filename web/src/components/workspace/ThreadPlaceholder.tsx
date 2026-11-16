@@ -21,7 +21,11 @@ export function ThreadPlaceholder({
   hasComposer?: boolean;
 }) {
   return (
-    <div className={clsx('thread-placeholder-shell', hasHeader && 'has-header')} data-testid={testId}>
+    <LoadingRegion
+      isImmediate={isImmediate}
+      testId={testId}
+      className={clsx('thread-placeholder-shell', hasHeader && 'has-header')}
+    >
       {hasHeader && (
         <div className="thread-placeholder-head" aria-hidden="true">
           <Placeholder width={112} className="placeholder-title" />
@@ -32,7 +36,7 @@ export function ThreadPlaceholder({
           </div>
         </div>
       )}
-      <LoadingRegion isImmediate={isImmediate} className="thread-placeholder">
+      <div className="thread-placeholder">
         <div className="thread-placeholder-column">
           <Placeholder width="36%" height={36} className="thread-placeholder-question is-surface" />
           <div className="thread-placeholder-reply">
@@ -57,7 +61,7 @@ export function ThreadPlaceholder({
             </div>
           </div>
         )}
-      </LoadingRegion>
-    </div>
+      </div>
+    </LoadingRegion>
   );
 }

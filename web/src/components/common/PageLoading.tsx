@@ -224,7 +224,11 @@ export function ChartLinesPlaceholder({
   }
   if (kind === 'rhythm') {
     return (
-      <div className="placeholder-chart-rhythm" aria-hidden="true">
+      <div
+        className="placeholder-chart-rhythm"
+        style={height !== undefined ? { maxHeight: height, overflow: 'hidden' } : undefined}
+        aria-hidden="true"
+      >
         {Array.from({ length: 24 * 7 }, (_, cell) => {
           const col = cell % 24;
           const isMid = (cell * 3 + col) % 5 === 0;

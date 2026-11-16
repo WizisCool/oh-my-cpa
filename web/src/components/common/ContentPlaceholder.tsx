@@ -91,7 +91,7 @@ export function LogLinesPlaceholder({ rows = 8, className }: { rows?: number; cl
             <Placeholder width={68} row={row} className="placeholder-line is-meta" />
             <Placeholder width={shape.level} height={18} row={row} className="is-pill" />
             <Placeholder width={shape.method} row={row} className="placeholder-line is-meta" />
-            <Placeholder width={shape.message} row={row} className="placeholder-line" />
+            <Placeholder width={shape.message} row={row} className="placeholder-line placeholder-log-message" />
           </div>
         );
       })}

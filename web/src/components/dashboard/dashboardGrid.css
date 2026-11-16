@@ -199,6 +199,8 @@
 .dash-skeleton-heatmap-cell {
   aspect-ratio: 1;
   width: 100%;
+  max-width: var(--heatmap-cell-max);
+  justify-self: center;
   border-radius: var(--radius-xs);
   background: color-mix(in oklab, var(--fg) 5.5%, transparent);
   animation: placeholder-breathe 1600ms ease-in-out infinite alternate both;
@@ -310,4 +312,17 @@
   .dash-skeleton-quota-meters { grid-column: 1 / -1; }
   .dash-skeleton-heatmap-grid { grid-template-columns: repeat(14, minmax(0, 1fr)); }
   .dash-skeleton-heatmap-cell:nth-child(n+99) { display: none; }
+}
+@media (forced-colors: active) {
+  .dash-skeleton-bar-col,
+  .dash-skeleton-usage-seg,
+  .dash-skeleton-heatmap-cell,
+  .dash-skeleton-provider-strip > span {
+    background: transparent;
+    outline: 1px solid GrayText;
+    outline-offset: -1px;
+  }
+  .chart-placeholder-area { fill: transparent; }
+  .chart-placeholder-line,
+  .chart-placeholder-base { stroke: GrayText; }
 }

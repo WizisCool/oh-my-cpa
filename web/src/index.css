@@ -2375,9 +2375,14 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   grid-template-columns: repeat(24, minmax(0, 1fr));
   gap: 4px;
   padding: 6px 0;
+  align-content: center;
 }
 .placeholder-rhythm-cell {
   aspect-ratio: 1;
+  width: 100%;
+  max-width: 22px;
+  max-height: 22px;
+  justify-self: center;
   border-radius: var(--radius-xs);
   background: color-mix(in oklab, var(--fg) 5.5%, transparent);
   animation: placeholder-breathe 1600ms ease-in-out infinite alternate both;
@@ -2429,6 +2434,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   padding: 6px 2px;
 }
 .placeholder-log-row + .placeholder-log-row { border-top: 1px solid var(--border-soft); }
+.placeholder-log-message { flex-shrink: 1; min-width: 0; }
 .placeholder-code-lines { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
 .placeholder-code-row { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .placeholder-code-body { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; }

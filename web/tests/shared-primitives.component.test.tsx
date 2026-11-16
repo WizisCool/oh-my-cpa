@@ -34,6 +34,7 @@ import { RoutingPanel } from '../src/components/dashboard/routing/RoutingPanel';
 import { LoadingRegion, Placeholder } from '../src/components/common/Placeholder';
 import { PAGE_SKELETON_REGISTRY, RouteSkeleton, type RouteLoadingBody } from '../src/components/common/PageLoading';
 import { ShellLoading } from '../src/components/common/ShellLoading';
+import { ThreadPlaceholder } from '../src/components/workspace/ThreadPlaceholder';
 import { createTestQueryClient, renderWithOmc } from './support/render';
 import { installOmcApi, json } from './support/omcApi';
 
@@ -1376,6 +1377,77 @@ describe('ShellLoading and LoadingRegion continuity', () => {
       expect(container.querySelector('.placeholder-insights-rankings')).not.toBeNull();
     } finally {
       window.history.replaceState(null, '', originalPath);
+    }
+  });
+
+  it('hands over parent-to-child LoadingRegion without remounting and keeps ThreadPlaceholder header inside status', () => {
+    let clock = 8_000_000;
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    try {
+      const view = render(
+        <I18nProvider>
+          <LoadingRegion isLoading>
+            <LoadingRegion testId="child-region" isLoading>
+              <Placeholder width={120} />
+            </LoadingRegion>
+          </LoadingRegion>
+        </I18nProvider>,
+      );
+
+      const childBefore = screen.getByTestId('child-region');
+      expect(screen.getAllByRole('status')).toHaveLength(1);
+      expect(childBefore.getAttribute('role')).toBeNull();
+
+      clock += 50;
+      view.rerender(
+        <I18nProvider>
+          <LoadingRegion isLoading={false}>
+            <LoadingRegion testId="child-region" isLoading>
+              <Placeholder width={120} />
+            </LoadingRegion>
+          </LoadingRegion>
+        </I18nProvider>,
+      );
+
+      const childAfter = screen.getByTestId('child-region');
+      expect(childAfter).toBe(childBefore);
+      expect(childAfter.getAttribute('role')).toBe('status');
+      expect(childAfter.getAttribute('aria-busy')).toBe('true');
+      expect(childAfter.getAttribute('data-handover')).toBe('true');
+      view.unmount();
+
+      clock += 1_000;
+      const standalone = render(
+        <I18nProvider>
+          <LoadingRegion testId="late-region" isLoading={false}>
+            <Placeholder width={120} />
+          </LoadingRegion>
+        </I18nProvider>,
+      );
+      expect(screen.queryByRole('status')).toBeNull();
+      standalone.rerender(
+        <I18nProvider>
+          <LoadingRegion testId="late-region" isLoading>
+            <Placeholder width={120} />
+          </LoadingRegion>
+        </I18nProvider>,
+      );
+      expect(screen.getByTestId('late-region').getAttribute('data-handover')).toBeNull();
+      standalone.unmount();
+
+      clock += 1_000;
+      const thread = render(
+        <I18nProvider>
+          <ThreadPlaceholder hasHeader testId="thread-skel" />
+        </I18nProvider>,
+      );
+      const threadStatus = screen.getByTestId('thread-skel');
+      expect(threadStatus.getAttribute('role')).toBe('status');
+      expect(threadStatus.getAttribute('data-handover')).toBeNull();
+      expect(threadStatus.querySelector('.thread-placeholder-head')).not.toBeNull();
+      thread.unmount();
+    } finally {
+      nowSpy.mockRestore();
     }
   });
 });

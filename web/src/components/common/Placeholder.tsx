@@ -31,6 +31,7 @@ export interface LoadingRegionProps {
   children: React.ReactNode;
   className?: string;
   label?: string;
+  testId?: string;
   /**
    * Keeps the wrapper element mounted at one React fiber position across `true -> false`
    * transitions so child panels preserve stateful interactions while the outer status role clears.
@@ -51,6 +52,15 @@ function nowMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
+function createMountState(isImmediate: boolean): { epoch: string; isHandover: boolean } {
+  const tNow = nowMs();
+  const elapsed = tNow - lastRegionEndedAt;
+  return {
+    epoch: `${-(tNow % BREATH_PERIOD_MS)}ms`,
+    isHandover: isImmediate || activeLoadingRegions > 0 || (elapsed >= 0 && elapsed < HANDOVER_WINDOW_MS),
+  };
+}
+
 const IsInLoadingRegion = React.createContext(false);
 
 /**
@@ -62,19 +72,25 @@ const IsInLoadingRegion = React.createContext(false);
  * cycle: a lazy route's frame hands over to the page's own first-load frame mid-breath, and a
  * restarted cycle would make the blocks blink at the seam.
  */
-export function LoadingRegion({ children, className, label, isLoading = true, isImmediate = false }: LoadingRegionProps) {
+export function LoadingRegion({ children, className, label, testId, isLoading = true, isImmediate = false }: LoadingRegionProps) {
   const t = useT();
   const isNested = React.useContext(IsInLoadingRegion);
-  const [mountState] = React.useState(() => {
-    const tNow = nowMs();
-    const elapsed = tNow - lastRegionEndedAt;
-    const isHandover = isImmediate || activeLoadingRegions > 0 || (elapsed >= 0 && elapsed < HANDOVER_WINDOW_MS);
-    return {
-      epoch: `${-(tNow % BREATH_PERIOD_MS)}ms`,
-      isHandover,
-    };
-  });
   const isActive = isLoading && !isNested;
+  const [regionState, setRegionState] = React.useState<{
+    isActive: boolean;
+    epoch: string;
+    isHandover: boolean;
+  }>(() => ({
+    isActive,
+    ...(isActive ? createMountState(isImmediate) : { epoch: '0ms', isHandover: false }),
+  }));
+
+  if (isActive !== regionState.isActive || (isActive && isImmediate && !regionState.isHandover)) {
+    setRegionState({
+      isActive,
+      ...(isActive ? createMountState(isImmediate) : { epoch: '0ms', isHandover: false }),
+    });
+  }
 
   React.useLayoutEffect(() => {
     if (!isActive) return undefined;
@@ -88,8 +104,9 @@ export function LoadingRegion({ children, className, label, isLoading = true, is
   return (
     <div
       className={clsx('loading-region', className)}
-      style={isActive ? ({ '--placeholder-epoch': mountState.epoch } as React.CSSProperties) : undefined}
-      data-handover={isActive && mountState.isHandover ? 'true' : undefined}
+      data-testid={testId}
+      style={isActive ? ({ '--placeholder-epoch': regionState.epoch } as React.CSSProperties) : undefined}
+      data-handover={isActive && regionState.isHandover ? 'true' : undefined}
       role={isActive ? 'status' : undefined}
       aria-busy={isActive ? 'true' : undefined}
       aria-label={isActive ? (label ?? t('common.loading')) : undefined}
