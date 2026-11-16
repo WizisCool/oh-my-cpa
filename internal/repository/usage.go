@@ -670,11 +670,12 @@ func boolPtrInt(value *bool) any {
 // fields: the list projection omits them, while the protected detail view can
 // show the exact peer and proxy chain.
 func (r *Repository) sanitizeUsageEvent(event usage.Event) usage.Event {
+	rawEndpoint := event.Endpoint
 	event.InstanceID = persistedText(event.InstanceID, 256)
 	event.EventKey = persistedText(event.EventKey, 256)
 	event.RequestID = persistedText(event.RequestID, 256)
 	event.Provider = persistedText(event.Provider, 256)
-	event.Endpoint = security.PublicEndpoint(event.Endpoint)
+	event.Endpoint = security.PublicEndpoint(rawEndpoint)
 	event.AuthType = persistedText(event.AuthType, 128)
 	event.AuthIndex = persistedText(event.AuthIndex, 256)
 	event.AccessProvider = persistedText(event.AccessProvider, 256)
@@ -711,7 +712,7 @@ func (r *Repository) sanitizeUsageEvent(event usage.Event) usage.Event {
 	event.ClientIP = persistedPointerWith(event.ClientIP, security.NormalizeClientIP)
 	event.XForwardedFor = persistedPointerWith(event.XForwardedFor, security.NormalizeForwardedFor)
 	event.UserAgent = security.MinimizeUserAgent(rawUserAgent)
-	event.ClientAgent = usage.PersistedClientAgent(event.ClientAgent, rawUserAgent, event.Endpoint)
+	event.ClientAgent = usage.PersistedClientAgent(event.ClientAgent, rawUserAgent, rawEndpoint)
 	event.LatencyMS = nonNegative(event.LatencyMS)
 	event.TTFTMS = nonNegativePointer(event.TTFTMS)
 	event.InputTokens = nonNegative(event.InputTokens)

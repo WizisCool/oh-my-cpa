@@ -962,7 +962,7 @@ func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 	}{
 		{"e.model", filter.Models},
 		{`COALESCE(NULLIF(TRIM(COALESCE(e.model_alias, '')), ''), e.model)`, filter.ModelAliases},
-		{"e.provider", filter.Providers},
+		{`COALESCE(NULLIF(TRIM(e.provider), ''), 'unknown')`, filter.Providers},
 		{"e.api_group_key", filter.APIGroupKeys},
 		{"e.auth_index", filter.AuthIndexes},
 		{"e.source", filter.Sources},

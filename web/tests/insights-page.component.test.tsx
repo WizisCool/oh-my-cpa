@@ -256,6 +256,49 @@ describe('insights page', () => {
     });
   });
 
+  it('offers no filter or request list for a value with a blank identity', async () => {
+    // Records that named no model are one group in the ranking, with nothing a filter could hold.
+    api.on('GET', '/management/insights/cube', () => ({ ...CUBE, dims: { ...CUBE.dims, call_points: ['gpt-5', ''], models: ['gpt-5', ''] } }));
+    mount('/insights');
+    const models = await screen.findByTestId('insights-ranking-model');
+    const opens = within(models).getAllByRole('button', { name: 'Open details' });
+    fireEvent.click(opens[opens.length - 1]!);
+    const drawer = await screen.findByTestId('insights-entity-drawer');
+    expect(drawer.getAttribute('data-dimension')).toMatch(/call_point|model/);
+    expect((screen.getByRole('button', { name: 'Filter to this' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'View requests ›' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('keeps the composition views and their order on a phone', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(max-width: 640px)', media: query, onchange: null, addListener() {}, removeListener() {},
+      addEventListener() {}, removeEventListener() {}, dispatchEvent() { return true; },
+    }));
+    // Sonnet is the slower model, so ordering by latency puts it above the busier GPT-5.
+    const slow = row(1, 0, 1, 10, 1000);
+    slow[15] = 10 * 900;
+    api.on('GET', '/management/insights/cube', () => ({ ...CUBE, rows: [row(0, 0, 0, 30, 3000), slow, row(1, 1, 0, 5, 500)] }));
+    mount('/insights');
+    const panel = await screen.findByTestId('insights-matrix');
+    const order = () => {
+      const text = panel.textContent ?? '';
+      return text.indexOf('sonnet') < text.indexOf('gpt-5') ? ['sonnet', 'gpt-5'] : ['gpt-5', 'sonnet'];
+    };
+    await waitFor(() => expect(order()).toEqual(['gpt-5', 'sonnet']));
+    // The view switch's options are icons, named by their tip.
+    const viewOption = (name: string) => panel.querySelector<HTMLElement>(`[data-slot="segmented-item"][data-tip="${name}"]`);
+    expect(viewOption('Chart')).toBeNull();
+
+    fireEvent.mouseDown(within(panel).getByRole('combobox', { name: 'Sort by' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Avg latency' }));
+    await waitFor(() => expect(order()).toEqual(['sonnet', 'gpt-5']));
+
+    fireEvent.click(viewOption('Table')!);
+    await waitFor(() => expect(within(panel).queryByRole('combobox', { name: 'Sort by' })).toBeNull());
+    fireEvent.click(viewOption('Model load profile')!);
+    await waitFor(() => expect(within(panel).getByRole('combobox', { name: 'Sort by' })).toBeTruthy());
+  });
+
   it('keeps the page frame and displays error details when the cube fails to load', async () => {
     api.on('GET', '/management/insights/cube', () => json({ error: 'hour buckets cover at most 14 days' }, 400));
     mount();

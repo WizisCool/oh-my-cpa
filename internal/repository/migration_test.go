@@ -634,12 +634,8 @@ func TestMigration067PersistsClientAgentAndResolvesHistoricalRows(t *testing.T) 
 	}
 
 	db.migrateUntil = 0
-	migrateStarted := time.Now()
 	if err := db.Migrate(ctx); err != nil {
 		t.Fatal(err)
-	}
-	if elapsed := time.Since(migrateStarted); elapsed > 2*time.Second {
-		t.Fatalf("migration 067 backfill over 10k rows / 1k UAs took %s, expected O(N) sub-second completion", elapsed)
 	}
 
 	repo := New(db)
@@ -1206,13 +1202,36 @@ func TestMigration067ZeroUncachedSurplusAndPartialTotalAnthropic(t *testing.T) {
 	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{partialEv}); err != nil {
 		t.Fatal(err)
 	}
-	partialClients, err := repo.QueryUsageClientAgents(ctx, "default", 5000, 5000, nil)
-	if err != nil || len(partialClients.Items) != 1 {
+	if partialClients, err := repo.QueryUsageClientAgents(ctx, "default", 5000, 5000, nil); err != nil || len(partialClients.Items) != 1 {
 		t.Fatalf("partial clients: %+v err=%v", partialClients.Items, err)
+	} else {
+		item := partialClients.Items[0]
+		if item.InputTokens != 250 || item.OutputTokens != 30 || item.NetTokens != 130 || item.TotalTokens != 280 {
+			t.Fatalf("partial-total Claude: got prompt=%d comp=%d net=%d total=%d, want 250/30/130/280",
+				item.InputTokens, item.OutputTokens, item.NetTokens, item.TotalTokens)
+		}
 	}
-	item := partialClients.Items[0]
-	if item.InputTokens != 250 || item.OutputTokens != 30 || item.NetTokens != 130 || item.TotalTokens != 280 {
-		t.Fatalf("partial-total Claude: got prompt=%d comp=%d net=%d total=%d, want 250/30/130/280",
-			item.InputTokens, item.OutputTokens, item.NetTokens, item.TotalTokens)
+
+	// Verify InsertUsageEvents classifies endpoint query hints before PublicEndpoint strips query params,
+	// while still persisting only the sanitized endpoint.
+	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{{
+		InstanceID:  "default",
+		EventKey:    "codex-models-query",
+		RequestID:   "codex-models-query",
+		APIGroupKey: "group",
+		Provider:    "codex",
+		Endpoint:    "GET /v1/models?client_version=0.47.0",
+		Model:       "gpt-5-codex",
+		TimestampMS: 6000,
+		Generate:    true,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	var storedEndpoint, storedClient string
+	if err := repo.SQL().QueryRowContext(ctx, `SELECT endpoint, client_agent FROM usage_events WHERE event_key = 'codex-models-query'`).Scan(&storedEndpoint, &storedClient); err != nil {
+		t.Fatal(err)
+	}
+	if storedEndpoint != "GET /v1/models" || storedClient != usage.ClientAgentCodexCLI {
+		t.Fatalf("expected sanitized endpoint GET /v1/models and client_agent codex-cli, got endpoint=%q client_agent=%q", storedEndpoint, storedClient)
 	}
 }

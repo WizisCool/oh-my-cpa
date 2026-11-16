@@ -284,6 +284,7 @@
 /* ── Key table ──────────────────────────────────────────────────────────── */
 .table-panel :global([data-slot="panel-body"]) { display: flex; flex-direction: column; gap: 8px; }
 .key-table :global(td) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.profile-sort { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 .key-name {
   display: inline-flex;
   flex-direction: column;

@@ -8,8 +8,10 @@
 
 import {
   anatomyCacheRate,
+  filterRows,
   measuresAvgTtftMs,
   metricValue,
+  rowValue,
   type InsightsCube,
   type InsightsFilters,
   type Measures,
@@ -40,29 +42,44 @@ export function usageEventsHref(
   if (!window.open_end) params.set('to', String(window.to));
   // A chosen key stays chosen even where this window never saw it: the list then opens empty, as
   // the page reads zero, rather than dropping the filter and listing everyone.
-  for (const id of keyGroups(filters)) params.append('api_key', id);
-  for (const value of filters.call_point ?? []) params.append('model_alias', value);
-  for (const value of filters.model ?? []) params.append('model', value);
-  const request = requestFilterValues(cube, filters);
-  for (const value of request.provider) params.append('provider', value);
-  for (const value of request.credential) params.append('auth_index', value);
+  for (const [name, values] of drillFilters(cube, filters)) {
+    for (const value of values) params.append(name, value);
+  }
   const client = clientAgent?.trim();
   if (client && client !== 'other') params.append('client_agent', client);
   return `/usage/events?${params.toString()}`;
 }
 
-function keyGroups(filters: InsightsFilters): string[] {
-  return [...new Set((filters.key ?? []).map((id) => id.trim()).filter(Boolean))];
+/** A filter's values as the request list reads them: trimmed, each once, none blank. */
+export function cleanValues(values: readonly string[] | undefined): string[] {
+  return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
+}
+
+/** The request list's multi-value filters for a view, in its vocabulary. */
+function drillFilters(cube: InsightsCube, filters: InsightsFilters): Array<readonly [string, string[]]> {
+  const request = requestFilterValues(cube, filters);
+  return [
+    ['api_key', cleanValues(filters.key)],
+    ['model_alias', cleanValues(filters.call_point)],
+    ['model', cleanValues(filters.model)],
+    ['provider', cleanValues(request.provider)],
+    ['auth_index', cleanValues(request.credential)],
+  ];
 }
 
 /**
- * Whether the request list can open on a view: every filter it would carry fits the server's ceiling.
- * Past it the link is withheld rather than cut short, so it never opens on a wider list than the page.
+ * Whether the request list can open on exactly the page's records. It cannot past the server's
+ * ceiling on one filter, and it cannot when a connection became the credentials that served it while
+ * the view also holds its traffic that named no credential: the list has no "these credentials or
+ * none" filter. Such a link is withheld rather than opened on fewer records than the page sums.
  */
 export function canDrillUsageEvents(cube: InsightsCube, filters: InsightsFilters): boolean {
-  const request = requestFilterValues(cube, filters);
-  return [keyGroups(filters), filters.call_point ?? [], filters.model ?? [], request.provider, request.credential]
-    .every((values) => values.length <= MAX_USAGE_EVENT_FILTER_VALUES);
+  const drill = drillFilters(cube, filters);
+  if (drill.some(([, values]) => values.length > MAX_USAGE_EVENT_FILTER_VALUES)) return false;
+  const isConvertedConnection = cleanValues(filters.provider).length > 0
+    && cleanValues(filters.credential).length === 0
+    && cleanValues(requestFilterValues(cube, filters).provider).length === 0;
+  return !isConvertedConnection || filterRows(cube, cube.rows, filters).every((row) => rowValue(cube, row, 'credential') !== '');
 }
 
 /** One exported line: a key or a model, named as the page names it. */

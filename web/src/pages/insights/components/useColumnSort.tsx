@@ -15,7 +15,16 @@ type Sort = { key: React.Key; order: 'ascending' | 'descending' } | null;
  * by the column - largest first, then smallest, then back to the page's ranking - and only the
  * column in force carries `aria-sort`.
  */
-export function useColumnSort<T>(columns: readonly SortableColumn<T>[], data: readonly T[]): { columns: ColumnsType<T>; data: readonly T[] } {
+export interface ColumnSort<T> {
+  columns: ColumnsType<T>;
+  data: readonly T[];
+  /** The column in force, for a surface without headers to click (a phone's rows). */
+  sortKey: React.Key | null;
+  /** Orders by a column, largest first. */
+  sortBy: (key: React.Key) => void;
+}
+
+export function useColumnSort<T>(columns: readonly SortableColumn<T>[], data: readonly T[]): ColumnSort<T> {
   const [sort, setSort] = React.useState<Sort>(null);
   const active = sort ? columns.find((column) => column.key === sort.key && column.sortValue) : undefined;
   const sorted = React.useMemo(() => {
@@ -47,5 +56,6 @@ export function useColumnSort<T>(columns: readonly SortableColumn<T>[], data: re
       ),
     };
   });
-  return { columns: headed, data: sorted };
+  const sortBy = React.useCallback((key: React.Key) => setSort({ key, order: 'descending' }), []);
+  return { columns: headed, data: sorted, sortKey: active ? sort!.key : null, sortBy };
 }

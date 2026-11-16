@@ -84,6 +84,9 @@ export const EntityDetailDrawer: React.FC<EntityDetailDrawerProps> = ({
   onClose, onFilter, onViewRequests, canViewRequests,
 }) => {
   const t = useT();
+  // A blank identity (traffic that named no credential) is no filter value: neither the page nor the
+  // request list would narrow to it, so neither action is offered.
+  const hasRepresentableId = Boolean(entity?.id.trim());
   const { style } = useTokenDisplayStyle();
   const { formatMetric } = useInsightsFormat();
   const entityFilters = React.useMemo(
@@ -122,8 +125,14 @@ export const EntityDetailDrawer: React.FC<EntityDetailDrawerProps> = ({
       ) : undefined}
       footer={entity ? (
         <>
-          <Button variant="secondary" disabled={canViewRequests ? !canViewRequests(entity) : false} onClick={() => onViewRequests(entity)}>{t('insights.view_requests_link')}</Button>
-          <Button variant="primary" onClick={() => onFilter(entity)}>{t('insights.filter_to_entity')}</Button>
+          <Button
+            variant="secondary"
+            disabled={!hasRepresentableId || (canViewRequests ? !canViewRequests(entity) : false)}
+            onClick={() => onViewRequests(entity)}
+          >
+            {t('insights.view_requests_link')}
+          </Button>
+          <Button variant="primary" disabled={!hasRepresentableId} onClick={() => onFilter(entity)}>{t('insights.filter_to_entity')}</Button>
         </>
       ) : undefined}
     >

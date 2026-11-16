@@ -122,6 +122,7 @@ export default {
   "insights.requests_with_failures": "{n} ({failed} gagal)",
   "insights.col.ttft": "TTFT",
   "insights.view_profile": "Profil beban model",
+  "insights.sort_label": "Isih mengikut",
   "insights.profile.net_input": "Input bersih setiap panggilan",
   "insights.profile.output": "Output setiap panggilan",
   "insights.export_csv": "Eksport CSV",

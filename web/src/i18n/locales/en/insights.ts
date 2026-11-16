@@ -122,6 +122,7 @@ export default {
   'insights.requests_with_failures': '{n} ({failed} failed)',
   'insights.col.ttft': 'TTFT',
   'insights.view_profile': 'Model load profile',
+  'insights.sort_label': 'Sort by',
   'insights.profile.net_input': 'Net input per call',
   'insights.profile.output': 'Output per call',
   'insights.export_csv': 'Export CSV',

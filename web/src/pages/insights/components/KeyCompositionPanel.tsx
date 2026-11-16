@@ -1,5 +1,6 @@
 import React from 'react';
 import { Segmented } from '@/components/ui/segmented';
+import { Select } from '@/components/ui/select';
 import { Panel } from '../../../components/common/Panel';
 import { PanelTitle } from '../../../components/common/PanelTitle';
 import { EmptyState } from '../../../components/common/EmptyState';
@@ -39,7 +40,7 @@ interface KeyCompositionPanelProps {
   labels: InsightsLabels;
   /** The page's filters; the load profile reads every one but the column dimension's. */
   filters: InsightsFilters;
-  /** A phone has no width for a bar per key, so it gets the load profile alone. */
+  /** A phone has no width for a bar per key, so it offers the table and the load profile. */
   isPhone?: boolean;
   /** The keys and column values the page is narrowed to; the figure keeps the rest, stepped back. */
   selectedKeys: readonly string[];
@@ -67,7 +68,7 @@ export const KeyCompositionPanel: React.FC<KeyCompositionPanelProps> = ({
   const t = useT();
   const { theme } = useTheme();
   const [chosenView, setView] = React.useState<CompositionView>('chart');
-  const view: CompositionView = isPhone ? 'profile' : chosenView;
+  const view: CompositionView = isPhone && chosenView === 'chart' ? 'profile' : chosenView;
   const partMetric = rankingMetric(metric);
 
   const chartMatrix = React.useMemo(
@@ -116,7 +117,7 @@ export const KeyCompositionPanel: React.FC<KeyCompositionPanelProps> = ({
       data-testid="insights-matrix"
       title={(
         <PanelTitle
-          extra={isPhone ? undefined : (
+          extra={(
             <>
               <PanelNarrowing
                 count={selectedKeys.length + selectedColumns.length}
@@ -129,7 +130,7 @@ export const KeyCompositionPanel: React.FC<KeyCompositionPanelProps> = ({
                 onChange={(next) => setView(next as CompositionView)}
                 aria-label={t('insights.view_label')}
                 options={[
-                  { value: 'chart', icon: <BarChartOutlined />, title: t('insights.view_chart') },
+                  ...(isPhone ? [] : [{ value: 'chart', icon: <BarChartOutlined />, title: t('insights.view_chart') }]),
                   { value: 'table', icon: <TableOutlined />, title: t('insights.view_table') },
                   { value: 'profile', icon: <DashboardOutlined />, title: t('insights.view_profile') },
                 ]}
@@ -137,7 +138,7 @@ export const KeyCompositionPanel: React.FC<KeyCompositionPanelProps> = ({
             </>
           )}
         >
-          {t(isPhone ? 'insights.view_profile' : 'insights.composition_title')}
+          {t('insights.composition_title')}
         </PanelTitle>
       )}
     >
@@ -229,17 +230,35 @@ function ModelProfileTable({ profiles, dimension, labels, isPhone }: {
     ];
   }, [dimension, formatMetric, labels, style, t]);
   const sorted = useColumnSort(columns, profiles);
+  const sortOptions = React.useMemo(
+    () => columns.filter((column) => column.sortValue).map((column) => ({ value: String(column.key), label: column.title as string })),
+    [columns],
+  );
   return (
-    <ResponsiveList<EntityProfile>
-      // A phone row names each field by its header, which stays plain text there rather than a sort control.
-      columns={isPhone ? columns : sorted.columns}
-      dataSource={isPhone ? profiles : sorted.data}
-      rowKey="id"
-      isLoading={false}
-      emptyText={t('insights.no_usage')}
-      pageSize={20}
-      phone={{ identity: 'name' }}
-      tableProps={{ size: 'small', className: styles['key-table'] }}
-    />
+    <>
+      {isPhone && (
+        // A phone row has no header to click, so the order is chosen here; it is the order the table keeps.
+        <div className={styles['profile-sort']}>
+          <Select
+            size="sm"
+            aria-label={t('insights.sort_label')}
+            value={sorted.sortKey === null ? 'requests' : String(sorted.sortKey)}
+            options={sortOptions}
+            onChange={(key: string) => sorted.sortBy(key)}
+          />
+        </div>
+      )}
+      <ResponsiveList<EntityProfile>
+        // A phone row names each field by its header, which stays plain text there rather than a sort control.
+        columns={isPhone ? columns : sorted.columns}
+        dataSource={sorted.data}
+        rowKey="id"
+        isLoading={false}
+        emptyText={t('insights.no_usage')}
+        pageSize={20}
+        phone={{ identity: 'name' }}
+        tableProps={{ size: 'small', className: styles['key-table'] }}
+      />
+    </>
   );
 }

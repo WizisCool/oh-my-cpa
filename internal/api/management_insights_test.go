@@ -739,13 +739,16 @@ func TestInsightsClientsCubeAndRhythmPreserveAdditiveTotalAcrossBucketGrains(t *
 		t.Fatal(err)
 	}
 
-	windowQuery := "from=" + jsonNumber(at.UnixMilli()-1) + "&to=" + jsonNumber(at.Add(3*time.Minute).UnixMilli())
+	windowQuery := "from=" + jsonNumber(at.Add(-time.Hour).UnixMilli()) + "&to=" + jsonNumber(at.Add(time.Hour).UnixMilli())
 	sumCubeTotal := func(bucket string) int64 {
 		t.Helper()
 		_, raw := getJSON(t, client, baseURL+"/omc/api/v1/management/insights/cube?"+windowQuery+"&bucket="+bucket)
 		var cube insightsCubeResponse
 		if err := json.Unmarshal(raw, &cube); err != nil {
 			t.Fatal(err)
+		}
+		if cube.Coverage.FactRequests != 2 {
+			t.Fatalf("bucket=%s expected 2 folded fact requests, got coverage=%+v", bucket, cube.Coverage)
 		}
 		col := -1
 		for idx, name := range cube.Columns {

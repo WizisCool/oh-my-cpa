@@ -331,7 +331,8 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
     if (models.size > 0 && !models.has(item.model)) return false;
     const callModel = String(item.model_alias ?? '').trim() || String(item.model ?? '');
     if (modelAliases.size > 0 && !modelAliases.has(callModel)) return false;
-    if (providers.size > 0 && !providers.has(item.provider)) return false;
+    const providerLabel = String(item.provider ?? '').trim() || 'unknown';
+    if (providers.size > 0 && !providers.has(providerLabel)) return false;
     if (authIndexes.size > 0 && !authIndexes.has(item.auth_index ?? '')) return false;
     if (authTypes.size > 0 && !authTypes.has(item.auth_type ?? '')) return false;
     if (apiKeys.size > 0 && !apiKeys.has(item.api_group_key ?? '')) return false;

@@ -544,6 +544,38 @@ func TestListUsageEventsRejectsInvalidFilters(t *testing.T) {
 		t.Fatalf("oversized dimension err = %v, want ErrUsageFilterInvalid", err)
 	}
 
+	// An empty provider must still match the synthetic 'unknown' group emitted by the Insights cube.
+	if _, err := repo.InsertUsageEvents(context.Background(), []usage.Event{{
+		InstanceID:  "default",
+		EventKey:    "empty-prov",
+		RequestID:   "empty-prov",
+		APIGroupKey: "group",
+		Provider:    "",
+		Model:       "gpt-5",
+		TimestampMS: 1000,
+		Generate:    true,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	page, err := repo.ListUsageEvents(context.Background(), UsageEventFilter{
+		InstanceID: "default",
+		Providers:  []string{"unknown"},
+		Limit:      50,
+	})
+	if err != nil {
+		t.Fatalf("provider=unknown err = %v", err)
+	}
+	foundEmptyProv := false
+	for _, item := range page.Items {
+		if item.RequestID == "empty-prov" {
+			foundEmptyProv = true
+			break
+		}
+	}
+	if !foundEmptyProv {
+		t.Fatalf("expected provider=unknown to match empty-provider event, got %d items", len(page.Items))
+	}
+
 	// A reversed range returns no qualifying record, so it is a filter error and
 	// not an empty page: the console shows it next to the field.
 	filter = filterTestFilter()

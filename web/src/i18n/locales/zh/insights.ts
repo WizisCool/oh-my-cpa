@@ -119,6 +119,7 @@ export default {
   'insights.requests_with_failures': '{n}（失败 {failed}）',
   'insights.col.ttft': '首字耗时',
   'insights.view_profile': '模型负载特征',
+  'insights.sort_label': '排序依据',
   'insights.profile.net_input': '单次净输入',
   'insights.profile.output': '单次输出',
   'insights.export_csv': '导出 CSV',

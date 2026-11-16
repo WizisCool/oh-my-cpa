@@ -30,7 +30,7 @@ import {
   trendSeries,
   type Measures,
 } from '../../src/types/insightsCube.ts';
-import { canDrillUsageEvents, csvCell, insightsCsv, usageEventsHref } from '../../src/pages/insights/insightsDrill.ts';
+import { canDrillUsageEvents, cleanValues, csvCell, insightsCsv, usageEventsHref } from '../../src/pages/insights/insightsDrill.ts';
 import { MAX_USAGE_EVENT_FILTER_VALUES } from '../../src/types/usageEvents.ts';
 import { clientCoverageShare, clientIconId, clientMeasures, clientProductName } from '../../src/types/clientAgents.ts';
 import { readEventQuery } from '../../src/types/usageEventQuery.ts';
@@ -263,6 +263,19 @@ test('insights cube', () => {
   });
   assert.deepEqual(requestFilterValues(keyless, { provider: ['relay'] }), { provider: ['relay'], credential: [] });
   assert.deepEqual(requestFilterValues(undefined, { provider: ['relay'] }), { provider: ['relay'], credential: [] }, 'a cube that has not arrived leaves the filter as it was');
+  // The request list opens on exactly the page's records, or not at all: a connection whose traffic
+  // partly named no credential cannot be spelled as its credentials, which would drop the rest.
+  assert.equal(canDrillUsageEvents(keyless, { provider: ['relay'] }), true, 'a label alone selects keyless traffic exactly');
+  assert.equal(canDrillUsageEvents(attributed, { provider: ['claude'] }), true, 'every record named a credential');
+  const mixedCredentials = decodeInsightsCube({
+    ...response,
+    dims: { ...response.dims, providers: ['relay'], credentials: [{ auth_index: 'relay-key', auth_type: 'apikey' }, { auth_index: '', auth_type: 'apikey' }] },
+    rows: [row(0, 0, 0, 0, 0, 0, 2, 0, 200, 0), row(0, 0, 0, 0, 0, 1, 1, 0, 100, 0)],
+    previous_rows: [],
+  });
+  assert.equal(canDrillUsageEvents(mixedCredentials, { provider: ['relay'] }), false);
+  assert.equal(canDrillUsageEvents(mixedCredentials, { provider: ['relay'], credential: ['relay-key'] }), true, 'a chosen credential already leaves the keyless traffic out of the page');
+  assert.deepEqual(cleanValues([' gpt-5 ', 'gpt-5', '', '  ', 'sonnet']), ['gpt-5', 'sonnet']);
 
   // ── the stored window ─────────────────────────────────────────────────────────
 
@@ -834,6 +847,11 @@ test('insights token anatomy, net scope, request drill-down and export', () => {
   assert.deepEqual([query.from, query.to], [1_000, 9_999]);
   assert.deepEqual(query.filters, { model: ['gpt-5'], model_alias: ['fast'], api_key: ['hmac:a', 'claude', 'hmac:gone'], client_agent: ['claude-code'] });
   assert.deepEqual(new URLSearchParams(usageEventsHref(cube, { key: ['hmac:absent'] }).split('?')[1]).getAll('api_key'), ['hmac:absent']);
+  assert.deepEqual(
+    new URLSearchParams(usageEventsHref(cube, { call_point: [' fast ', 'fast'], model: ['gpt-5', ''] }).split('?')[1]).toString(),
+    'from=1000&to=9999&model_alias=fast&model=gpt-5',
+    'the link carries the values the check counted: trimmed, each once, none blank',
+  );
   // The client ranking passes the window its own read was answered for.
   const clientWindow = { ...cube.window, from: 2_000, to: 3_000 };
   const windowed = new URLSearchParams(usageEventsHref(cube, {}, 'claude-code', clientWindow).split('?')[1]);
