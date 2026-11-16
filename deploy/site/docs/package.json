@@ -1,7 +1,7 @@
 {
   "name": "oh-my-cpa-docs",
   "private": true,
-  "version": "0.4.5",
+  "version": "0.4.6",
   "type": "module",
   "scripts": {
     "dev": "node ../../../scripts/sync-docs-site.mjs && fumadocs-mdx && next dev",
