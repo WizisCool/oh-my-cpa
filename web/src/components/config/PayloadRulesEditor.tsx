@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useEffect, useState } from 'react';
 
 import { Collapse } from '@/components/ui/accordion';
@@ -13,10 +14,12 @@ import {
   type PayloadKVCondition,
   type PayloadModelItem,
   type PayloadValidationIssue,
+  type UnresolvedReplacePendingEntry,
 } from './payloadRules';
 import {
   renderFilterCategoryContent,
   renderRawCategoryContent,
+  renderReplaceCategoryContent,
   renderTypedCategoryContent,
 } from './payloadRuleSections';
 import { usePayloadRulesDraft } from './usePayloadRulesDraft';
@@ -31,6 +34,13 @@ export interface PayloadRulesEditorProps {
   doc: Document | null;
   onDocChange: () => void;
   onValidationChange?: (issues: PayloadValidationIssue[]) => void;
+  onPendingChange?: (hasPending: boolean) => void;
+  unresolvedPending?: UnresolvedReplacePendingEntry[];
+  onUnresolvedPendingChange?: React.Dispatch<React.SetStateAction<UnresolvedReplacePendingEntry[]>>;
+  onMountChange?: (mounted: boolean) => void;
+  flushPendingRef?: React.MutableRefObject<(() => boolean) | null>;
+  clearPendingRef?: React.MutableRefObject<(() => void) | null>;
+  resetVersion?: number;
   validateTrigger?: number;
 }
 
@@ -38,11 +48,30 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
   doc,
   onDocChange,
   onValidationChange,
+  onPendingChange,
+  unresolvedPending,
+  onUnresolvedPendingChange,
+  onMountChange,
+  flushPendingRef,
+  clearPendingRef,
+  resetVersion,
   validateTrigger,
 }) => {
   // The draft is where every panel's state and every mutation lives; the panels
   // themselves are rendered by `payloadRuleSections`, each given this draft.
-  const draft = usePayloadRulesDraft({ doc, onDocChange, onValidationChange, validateTrigger });
+  const draft = usePayloadRulesDraft({
+    doc,
+    onDocChange,
+    onValidationChange,
+    onPendingChange,
+    unresolvedPending,
+    onUnresolvedPendingChange,
+    onMountChange,
+    flushPendingRef,
+    clearPendingRef,
+    resetVersion,
+    validateTrigger,
+  });
   const {
     activePanels,
     setActivePanels,
@@ -50,10 +79,11 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
     defaultRawRules,
     overrideRules,
     overrideRawRules,
+    replaceRules,
     filterRules,
     advModalState,
     setAdvModalState,
-    updateModelInRule,
+    updateModelById,
     t,
   } = draft;
 
@@ -119,6 +149,21 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
       children: renderRawCategoryContent(draft, 'override-raw'),
     },
     {
+      key: 'replace',
+      label: (
+        <div className="payload-panel-header">
+          <div className="payload-panel-title-wrap">
+            <span className="payload-panel-title">{t('cfg.payload_cat_replace')}</span>
+            <span className="payload-panel-desc">{t('cfg.payload_cat_replace_desc')}</span>
+          </div>
+          {replaceRules.length > 0 && (
+            <Tag>{replaceRules.length}</Tag>
+          )}
+        </div>
+      ),
+      children: renderReplaceCategoryContent(draft),
+    },
+    {
       key: 'filter',
       label: (
         <div className="payload-panel-header">
@@ -148,10 +193,10 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
 
   const handleSaveAdvanced = () => {
     if (!advModalState || !advDraft) return;
-    updateModelInRule(
+    updateModelById(
       advModalState.category,
-      advModalState.ruleIndex,
-      advModalState.modelIndex,
+      advModalState.ruleId,
+      advModalState.modelId,
       advDraft
     );
     setAdvModalState(null);

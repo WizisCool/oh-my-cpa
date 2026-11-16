@@ -10,10 +10,15 @@ import {
   serializeRawRules,
   parseFilterRules,
   serializeFilterRules,
+  parseReplaceRules,
+  serializeReplaceRules,
+  appendReplacePositionTokens,
+  reconcileReplaceRules,
   readPayloadCategory,
   writePayloadCategory,
   isValidJson,
   validateAllPayloadRules,
+  validatePayloadDocument,
 } from '../../src/components/config/payloadRules.ts';
 
 // CPA's payload-rule engine matches `models[].protocol` against each executor's protocol identifier
@@ -335,4 +340,389 @@ test('two categories coexist in a payload map created by the first write', () =>
   writePayloadCategory(doc, 'override-raw', [{ models: [{ name: 'b' }], params: {} }]);
   assert.ok(Array.isArray(readPayloadCategory(doc, 'default')));
   assert.ok(Array.isArray(readPayloadCategory(doc, 'override-raw')));
+});
+
+test('Payload Replace Rules preserve order, duplicates, empty deletions, pinned user role, and extra fields', () => {
+  const original = [
+    {
+      models: [
+        {
+          name: '*',
+          protocol: 'claude',
+          'from-protocol': 'openai',
+          headers: { 'X-Client': 'web' },
+          match: [{ 'metadata.env': 'prod' }],
+        },
+      ],
+      target: {
+        role: 'user',
+        positions: [2, 1],
+        extra_target_flag: 'keep',
+      },
+      replacements: [
+        { 'you are hero': 'you are fool' },
+        { 'remove this phrase': '' },
+        { 'you are hero': 'override again' },
+        { ' spaced ': ' kept ' },
+      ],
+      extra_rule_flag: 42,
+    },
+    {
+      models: [{ name: 'muse-*', protocol: 'meta' }],
+      target: {
+        role: 'user',
+        all: true,
+      },
+      replacements: [JSON.parse('{"__proto__":"safe"}') as Record<string, unknown>],
+    },
+  ];
+
+  const parsed = parseReplaceRules(original, 'replace');
+  assert.equal(parsed.length, 2);
+  assert.equal(parsed[0].models[0].protocol, 'claude');
+  assert.equal(parsed[0].models[0].fromProtocol, 'openai');
+  assert.deepEqual(parsed[0].target.positions, [2, 1]);
+  assert.equal(parsed[0].target.all, false);
+  assert.equal(parsed[0].replacements.length, 4);
+  assert.equal(parsed[0].replacements[1].from, 'remove this phrase');
+  assert.equal(parsed[0].replacements[1].to, '');
+
+  assert.equal(parsed[1].models[0].protocol, 'meta');
+  assert.equal(parsed[1].target.all, true);
+  assert.deepEqual(parsed[1].target.positions, []);
+
+  const serialized = serializeReplaceRules(parsed);
+  assert.equal((serialized[0] as Record<string, unknown>).extra_rule_flag, 42);
+  assert.deepEqual((serialized[0] as Record<string, unknown>).target, {
+    extra_target_flag: 'keep',
+    role: 'user',
+    positions: [2, 1],
+  });
+  assert.deepEqual((serialized[0] as Record<string, unknown>).replacements, [
+    { 'you are hero': 'you are fool' },
+    { 'remove this phrase': '' },
+    { 'you are hero': 'override again' },
+    { ' spaced ': ' kept ' },
+  ]);
+  assert.deepEqual((serialized[1] as Record<string, unknown>).target, {
+    role: 'user',
+    all: true,
+  });
+  const protoReplacement = ((serialized[1] as Record<string, unknown>).replacements as Record<string, string>[])[0];
+  assert.equal(Object.prototype.hasOwnProperty.call(protoReplacement, '__proto__'), true);
+  assert.equal(protoReplacement['__proto__'], 'safe');
+
+  // Empty destination "" is emitted verbatim in YAML and survives readback.
+  const doc = parseDocument('host: 127.0.0.1\n');
+  writePayloadCategory(doc, 'replace', serialized);
+  const yamlText = doc.toString();
+  assert.ok(yamlText.includes('remove this phrase: ""'), `expected verbatim empty string in YAML:\n${yamlText}`);
+  const roundTripped = parseReplaceRules(readPayloadCategory(parseDocument(yamlText), 'replace'), 'replace');
+  assert.equal(roundTripped[0].replacements[1].to, '');
+  assert.deepEqual(roundTripped[0].target.positions, [2, 1]);
+});
+
+test('validateAllPayloadRules validates replace target mutual exclusivity, positions >= 1, and replacement pairs', () => {
+  // Valid positions-targeted rule with duplicate source keys and empty deletion destination: 0 issues.
+  const validPosRule = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'user', positions: [1, 2] },
+      replacements: [{ a: 'b' }, { a: '' }],
+    },
+  ]);
+  assert.deepEqual(validateAllPayloadRules([], [], [], [], [], validPosRule), []);
+
+  // Valid all-targeted rule: 0 issues.
+  const validAllRule = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'user', all: true },
+      replacements: [{ a: '' }],
+    },
+  ]);
+  assert.deepEqual(validateAllPayloadRules([], [], [], [], [], validAllRule), []);
+
+  // Both all and positions set -> conflict.
+  const conflictRule = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'user', all: true, positions: [1] },
+      replacements: [{ a: 'b' }],
+    },
+  ]);
+  const conflictIssues = validateAllPayloadRules([], [], [], [], [], conflictRule);
+  assert.equal(conflictIssues.length, 1);
+  assert.equal(conflictIssues[0].category, 'replace');
+  assert.equal(conflictIssues[0].field, 'target');
+  assert.equal(conflictIssues[0].messageKey, 'cfg.payload_replace_target_conflict');
+
+  // Neither all nor positions -> required.
+  const emptyTargetRule = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'user', positions: [] },
+      replacements: [{ a: 'b' }],
+    },
+  ]);
+  assert.equal(
+    validateAllPayloadRules([], [], [], [], [], emptyTargetRule)[0]?.messageKey,
+    'cfg.payload_replace_positions_required',
+  );
+
+  // Non-positive, fractional, or non-numeric positions -> invalid.
+  for (const badPositions of [[0], [-1], [1.5], ['abc']]) {
+    const badPosRule = parseReplaceRules([
+      {
+        models: [{ name: '*' }],
+        target: { role: 'user', positions: badPositions },
+        replacements: [{ a: 'b' }],
+      },
+    ]);
+    assert.equal(
+      validateAllPayloadRules([], [], [], [], [], badPosRule)[0]?.messageKey,
+      'cfg.payload_replace_positions_invalid',
+    );
+  }
+
+  // Missing models, blank model name, empty replacements, empty source, multi-key or non-string replacement entries.
+  const missingParts = parseReplaceRules([
+    {
+      models: [],
+      target: { role: 'user', all: true },
+      replacements: [],
+    },
+  ]);
+  assert.deepEqual(
+    validateAllPayloadRules([], [], [], [], [], missingParts).map((i) => i.messageKey),
+    ['cfg.payload_rule_need_model', 'cfg.payload_replace_need_replacement'],
+  );
+
+  const badEntries = parseReplaceRules([
+    {
+      models: [{ name: '   ' }],
+      target: { role: 'user', all: true },
+      replacements: [{ '': 'x' }, { a: '1', b: '2' }, { c: null }],
+    },
+  ]);
+  assert.deepEqual(
+    validateAllPayloadRules([], [], [], [], [], badEntries).map((i) => i.messageKey),
+    [
+      'cfg.payload_model_name_empty',
+      'cfg.payload_replace_source_empty',
+      'cfg.payload_replace_entry_invalid',
+      'cfg.payload_replace_dest_invalid',
+    ],
+  );
+
+  // Non-empty whitespace-only literal sources (`" "`, `"\t"`) are valid in CPA v8.0.75.
+  const whitespaceSourceRule = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'user', all: true },
+      replacements: [{ ' ': '' }, { '\t': '_' }],
+    },
+  ]);
+  assert.deepEqual(validateAllPayloadRules([], [], [], [], [], whitespaceSourceRule), []);
+});
+
+test('reconcileReplaceRules preserves rule identity when concurrent baseline changes shift indices', () => {
+  const previous = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'user', positions: [1] },
+      replacements: [{ hero: 'fool' }],
+    },
+  ]);
+  previous[0].id = 'custom_rule_id';
+
+  const incoming = parseReplaceRules([
+    {
+      models: [{ name: 'claude-*' }],
+      target: { role: 'user', all: true },
+      replacements: [{ a: 'b' }],
+    },
+    {
+      models: [{ name: '*' }],
+      target: { role: 'user', positions: [1] },
+      replacements: [{ hero: 'fool' }],
+    },
+  ]);
+
+  const reconciled = reconcileReplaceRules(incoming, previous);
+  assert.equal(reconciled.length, 2);
+  assert.equal(reconciled[1].id, 'custom_rule_id');
+  assert.notEqual(reconciled[0].id, reconciled[1].id);
+
+  // Replacing a rule with a different rule that shares the same `models: [*]` list must NOT reuse
+  // the removed rule's ID, so pending position text cannot transplant onto the replacement rule.
+  const prevSameModels = parseReplaceRules([
+    { models: [{ name: '*' }], target: { role: 'user', positions: [1] }, replacements: [{ A: 'B' }] },
+  ]);
+  const nextSameModels = parseReplaceRules([
+    { models: [{ name: '*' }], target: { role: 'user', positions: [5] }, replacements: [{ X: 'Y' }] },
+  ]);
+  const reconciledSameModels = reconcileReplaceRules(nextSameModels, prevSameModels);
+  assert.notEqual(reconciledSameModels[0].id, prevSameModels[0].id);
+  assert.notEqual(reconciledSameModels[0].models[0].id, prevSameModels[0].models[0].id);
+  assert.notEqual(reconciledSameModels[0].replacements[0].id, prevSameModels[0].replacements[0].id);
+
+  // Ambiguous duplicate models lists remain isolated from removed rules too.
+  const prevAmbiguous = parseReplaceRules([
+    { models: [{ name: '*' }], target: { role: 'user', positions: [1] }, replacements: [{ a: '1' }] },
+  ]);
+  const nextAmbiguous = parseReplaceRules([
+    { models: [{ name: '*' }], target: { role: 'user', all: true }, replacements: [{ c: '3' }] },
+    { models: [{ name: '*' }], target: { role: 'user', positions: [1] }, replacements: [{ a: 'updated' }] },
+  ]);
+  const reconciledAmbiguous = reconcileReplaceRules(nextAmbiguous, prevAmbiguous);
+  assert.notEqual(reconciledAmbiguous[0].id, prevAmbiguous[0].id);
+  assert.notEqual(reconciledAmbiguous[1].id, prevAmbiguous[0].id);
+
+  // Map key order (e.g. headers) is order-independent, while replacement array order remains significant.
+  const prevHeaderOrder = parseReplaceRules([
+    {
+      models: [{ name: '*', headers: { A: '1', B: '2' } }],
+      target: { role: 'user', positions: [1] },
+      replacements: [{ first: 'one' }, { second: 'two' }],
+    },
+  ]);
+  prevHeaderOrder[0].id = 'header_order_rule';
+  const nextReorderedHeaders = parseReplaceRules([
+    {
+      models: [{ name: '*', headers: { B: '2', A: '1' } }],
+      target: { role: 'user', positions: [1] },
+      replacements: [{ first: 'one' }, { second: 'two' }],
+    },
+  ]);
+  assert.equal(reconcileReplaceRules(nextReorderedHeaders, prevHeaderOrder)[0].id, 'header_order_rule');
+
+  const nextReorderedReplacements = parseReplaceRules([
+    {
+      models: [{ name: '*', headers: { B: '2', A: '1' } }],
+      target: { role: 'user', positions: [1] },
+      replacements: [{ second: 'two' }, { first: 'one' }],
+    },
+  ]);
+  assert.notEqual(reconcileReplaceRules(nextReorderedReplacements, prevHeaderOrder)[0].id, 'header_order_rule');
+});
+
+test('serializeReplaceRules and appendReplacePositionTokens preserve invalid position tokens in serialized drafts', () => {
+  const initial = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'user', positions: [1] },
+      replacements: [{ hello: 'world' }],
+    },
+  ]);
+
+  const parsed = appendReplacePositionTokens('bad, 2', initial[0].target.positions, initial[0].target.invalidPositions);
+  assert.equal(parsed.changed, true);
+  assert.deepEqual(parsed.positions, [1, 2]);
+  assert.deepEqual(parsed.invalidPositions, ['bad']);
+
+  initial[0].target.positions = [1];
+  initial[0].target.invalidPositions = ['bad'];
+
+  const serialized = serializeReplaceRules(initial);
+  assert.deepEqual((serialized[0] as Record<string, unknown>).target, {
+    role: 'user',
+    positions: [1, 'bad'],
+  });
+  const reparsed = parseReplaceRules(serialized);
+  assert.deepEqual(reparsed[0].target.positions, [1]);
+  assert.deepEqual(reparsed[0].target.invalidPositions, ['bad']);
+});
+
+test('replace target preserves unsupported or missing YAML roles instead of silently retargeting to user', () => {
+  const parsedAssistant = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'assistant', positions: [1] },
+      replacements: [{ old: 'new' }],
+    },
+  ]);
+  assert.deepEqual(parsedAssistant[0].target.invalidRole, { present: true, value: 'assistant' });
+  assert.deepEqual(
+    validateAllPayloadRules([], [], [], [], [], parsedAssistant).map((i) => i.messageKey),
+    ['cfg.payload_replace_role_invalid'],
+  );
+
+  // Editing an unrelated field (replacement destination) preserves role: assistant rather than rewriting to user.
+  parsedAssistant[0].replacements[0].to = 'edited';
+  assert.deepEqual((serializeReplaceRules(parsedAssistant)[0] as Record<string, unknown>).target, {
+    role: 'assistant',
+    positions: [1],
+  });
+
+  // Missing target.role is also flagged and never invented on serialization.
+  const parsedMissingRole = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { positions: [1] },
+      replacements: [{ old: 'new' }],
+    },
+  ]);
+  assert.deepEqual(parsedMissingRole[0].target.invalidRole, { present: false });
+  assert.deepEqual(
+    validateAllPayloadRules([], [], [], [], [], parsedMissingRole).map((i) => i.messageKey),
+    ['cfg.payload_replace_role_invalid'],
+  );
+  assert.deepEqual((serializeReplaceRules(parsedMissingRole)[0] as Record<string, unknown>).target, {
+    positions: [1],
+  });
+
+  // Non-object target preserves raw value and fails validation.
+  const parsedScalarTarget = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: 'assistant',
+      replacements: [{ old: 'new' }],
+    },
+  ]);
+  assert.equal((serializeReplaceRules(parsedScalarTarget)[0] as Record<string, unknown>).target, 'assistant');
+  assert.equal(
+    validateAllPayloadRules([], [], [], [], [], parsedScalarTarget).some((i) => i.messageKey === 'cfg.payload_replace_role_invalid'),
+    true,
+  );
+
+  // validatePayloadDocument inspects the YAML document and unresolved pending entries directly.
+  const invalidDoc = parseDocument(`requests:
+  payload:
+    replace:
+      - models: [{ name: "*" }]
+        target: { role: assistant, positions: [1] }
+        replacements: [{ a: b }]
+`);
+  assert.deepEqual(
+    validatePayloadDocument(invalidDoc, [{ id: 'u1', ruleNumber: 1, text: '2' }]).map((i) => i.messageKey),
+    ['cfg.payload_replace_role_invalid', 'cfg.payload_replace_pending_unresolved'],
+  );
+
+  // Scalar, null, and array malformed replacement entries keep their original raw values until edited.
+  const malformedEntries = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'user', all: true },
+      replacements: [42, null, ['x'], { a: 'b' }],
+    },
+  ]);
+  malformedEntries[0].replacements[3].to = 'edited';
+  assert.deepEqual((serializeReplaceRules(malformedEntries)[0] as Record<string, unknown>).replacements, [
+    42,
+    null,
+    ['x'],
+    { a: 'edited' },
+  ]);
+  malformedEntries[0].replacements[0] = {
+    id: malformedEntries[0].replacements[0].id,
+    from: 'fixed',
+    to: 'ok',
+  };
+  assert.deepEqual((serializeReplaceRules(malformedEntries)[0] as Record<string, unknown>).replacements, [
+    { fixed: 'ok' },
+    null,
+    ['x'],
+    { a: 'edited' },
+  ]);
 });
