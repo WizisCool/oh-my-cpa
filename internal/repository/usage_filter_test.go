@@ -566,6 +566,9 @@ func TestListUsageEventsEveryDimensionNarrows(t *testing.T) {
 	}{
 		{"model", func(f *UsageEventFilter) { f.Models = []string{"claude-sonnet-4-5"} }, []string{"beta"}},
 		{"model alias", func(f *UsageEventFilter) { f.ModelAliases = []string{"fast-alias"} }, []string{"alpha"}},
+		{"call point fallback without alias", func(f *UsageEventFilter) { f.ModelAliases = []string{"gpt-5"} }, []string{"gamma"}},
+		{"client agent", func(f *UsageEventFilter) { f.ClientAgents = []string{usage.ClientAgentCodexCLI} }, []string{"alpha"}},
+		{"client agent unknown", func(f *UsageEventFilter) { f.ClientAgents = []string{usage.ClientAgentUnknown} }, []string{"beta", "gamma", "literal-wildcards"}},
 		{"provider", func(f *UsageEventFilter) { f.Providers = []string{"claude"} }, []string{"beta"}},
 		{"auth index", func(f *UsageEventFilter) { f.AuthIndexes = []string{"auth-b"} }, []string{"beta"}},
 		{"auth type", func(f *UsageEventFilter) { f.AuthTypes = []string{"apikey"} }, []string{"beta"}},

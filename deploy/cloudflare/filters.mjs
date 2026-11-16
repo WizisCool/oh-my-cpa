@@ -150,6 +150,8 @@ export function filterUsageEvents(decoded, url, { deltaMs = 0 } = {}) {
   // so default unfiltered reads remain identical to the backend's capture.
   const hasFilter = Boolean(
     params.get('q') ||
+    params.get('ua') ||
+    params.get('client_agent') ||
     (params.get('result') && params.get('result') !== 'all') ||
     params.get('model') ||
     params.get('model_alias') ||
@@ -290,6 +292,7 @@ function presetWindowBounds(baseWindow, params, deltaMs, items = []) {
 
 function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
   const q = (params.get('q') ?? '').trim().toLowerCase();
+  const ua = (params.get('ua') ?? '').trim().toLowerCase();
   const result = (params.get('result') ?? 'all').toLowerCase();
   const models = new Set(params.getAll('model').filter(Boolean));
   const modelAliases = new Set(params.getAll('model_alias').filter(Boolean));
@@ -302,6 +305,7 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
   const reasoning = new Set(params.getAll('reasoning').filter(Boolean));
   const serviceTiers = new Set(params.getAll('service_tier').filter(Boolean));
   const resolvedTiers = new Set(params.getAll('resolved_service_tier').filter(Boolean));
+  const clientAgents = new Set(params.getAll('client_agent').filter(Boolean));
   const cost = (params.get('cost') ?? 'all').toLowerCase();
   const transport = (params.get('transport') ?? 'all').toLowerCase();
   const minLatency = params.has('min_latency_ms') ? Number(params.get('min_latency_ms')) : null;
@@ -325,7 +329,8 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
     if (result === 'success' && item.failed) return false;
     if (result === 'failed' && !item.failed) return false;
     if (models.size > 0 && !models.has(item.model)) return false;
-    if (modelAliases.size > 0 && !modelAliases.has(item.model_alias ?? '')) return false;
+    const callModel = String(item.model_alias ?? '').trim() || String(item.model ?? '');
+    if (modelAliases.size > 0 && !modelAliases.has(callModel)) return false;
     if (providers.size > 0 && !providers.has(item.provider)) return false;
     if (authIndexes.size > 0 && !authIndexes.has(item.auth_index ?? '')) return false;
     if (authTypes.size > 0 && !authTypes.has(item.auth_type ?? '')) return false;
@@ -335,6 +340,8 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
     if (reasoning.size > 0 && !reasoning.has(item.reasoning_effort ?? '')) return false;
     if (serviceTiers.size > 0 && !serviceTiers.has(item.service_tier ?? '')) return false;
     if (resolvedTiers.size > 0 && !resolvedTiers.has(item.resolved_service_tier ?? '')) return false;
+    if (clientAgents.size > 0 && !clientAgents.has(item.client_agent || 'unknown')) return false;
+    if (ua && !String(item.user_agent ?? '').toLowerCase().includes(ua)) return false;
     if (cost === 'priced' && item.pricing_status !== 'priced') return false;
     if (cost === 'unpriced' && item.pricing_status === 'priced') return false;
     if (transport === 'stream' && item.stream !== true) return false;
@@ -347,11 +354,15 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
         item.model_alias,
         item.response_model,
         item.provider,
+        item.executor_type,
         item.request_id,
+        item.api_group_key,
         item.api_key_alias,
         item.api_key_mask,
         item.source,
         item.auth_index,
+        item.user_agent,
+        item.client_agent || 'unknown',
       ].map((v) => String(v ?? '').toLowerCase()).join(' ');
       if (!hay.includes(q)) return false;
     }

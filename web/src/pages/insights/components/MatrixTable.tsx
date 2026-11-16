@@ -6,7 +6,7 @@ import { EmptyState } from '../../../components/common/EmptyState';
 import { useT } from '../../../i18n';
 import { heatmapRampMix, heatmapRampPosition } from '../../../theme/heatmapRamp';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import { matrixCellKey, metricValue, type InsightsDimension, type InsightsMatrix, type InsightsMetric } from '../../../types/insightsCube';
+import { matrixCellKey, metricValue, type InsightsDimension, type InsightsMatrix, type CubeMetric } from '../../../types/insightsCube';
 
 import type { InsightsLabels } from '../../../hooks/useInsightsLabels';
 import { InsightsValue } from './InsightsValue';
@@ -16,7 +16,7 @@ interface MatrixTableProps {
   matrix: InsightsMatrix;
   rowDimension: InsightsDimension;
   columnDimension: InsightsDimension;
-  metric: InsightsMetric;
+  metric: CubeMetric;
   labels: InsightsLabels;
   /** Steps back the cells outside the page's narrowing. */
   isDimmed?: (rowId: string, columnId: string) => boolean;
@@ -39,7 +39,7 @@ export const MatrixTable: React.FC<MatrixTableProps> = ({ matrix, rowDimension, 
   const t = useT();
   const { style } = useTokenDisplayStyle();
   const { formatMetric, formatMetricExact } = useInsightsFormat();
-  const shadeMetric: InsightsMetric = metric === 'cost' || metric === 'tokens' || metric === 'requests' ? metric : 'requests';
+  const shadeMetric: CubeMetric = metric === 'latency' ? 'requests' : metric;
   const shadeMax = React.useMemo(() => {
     let max = 0;
     for (const cell of matrix.cells.values()) max = Math.max(max, metricValue(cell.measures, shadeMetric) ?? 0);

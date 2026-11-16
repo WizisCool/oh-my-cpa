@@ -58,6 +58,8 @@ export interface UsageEvent {
   provider_key_mask?: string;
   /** Client product label, redacted and shortened on the persistence path. */
   user_agent?: string | null;
+  /** The client program normalised from the User-Agent at ingestion (`claude-code`, `python-httpx`, …). */
+  client_agent?: string;
   source?: string;
   model: string;
   model_alias?: string;
@@ -314,6 +316,7 @@ export const USAGE_MULTI_FILTER_KEYS = [
   'reasoning',
   'service_tier',
   'resolved_service_tier',
+  'client_agent',
 ] as const;
 export type UsageMultiFilterKey = (typeof USAGE_MULTI_FILTER_KEYS)[number];
 
@@ -339,6 +342,9 @@ export type UsageRegexField = (typeof USAGE_REGEX_FIELDS)[number];
 
 /** The server's ceiling on a pattern, mirrored so the panel can say so before a round trip. */
 export const USAGE_REGEX_MAX_LENGTH = 256;
+
+/** The server's ceiling on the values of one multi-value filter; a link past it would be refused. */
+export const MAX_USAGE_EVENT_FILTER_VALUES = 256;
 
 /**
  * The pattern filter travels as one `field:pattern` value, so a field and a

@@ -6,6 +6,7 @@
   "AuthType": "apikey",
   "CacheCreationTokens": 3,
   "CacheReadTokens": 8,
+  "ClientAgent": "codex-cli",
   "ClientIP": "10.0.0.5",
   "EventKey": "req-123",
   "ExecutorType": "GeminiExecutor",

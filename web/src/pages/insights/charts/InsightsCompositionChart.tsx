@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/chart';
 import { STACK_CAP_KEY, stackCapOf, stackCapShape } from '../../../charts/stackCap';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import type { InsightsMetric } from '../../../types/insightsCube';
+import type { CubeMetric } from '../../../types/insightsCube';
 import { formatShare } from '../../../types/insightsFormat';
 import { useInsightsFormat } from '../useInsightsFormat';
 
@@ -23,7 +23,7 @@ export interface InsightsCompositionChartProps {
   rows: ReadonlyArray<{ id: string; name: string }>;
   segments: readonly CompositionSegment[];
   values: ReadonlyArray<readonly number[]>;
-  metric: InsightsMetric;
+  metric: CubeMetric;
   totalLabel: string;
   label: string;
   isDimmed?: (rowId: string, segmentId: string | null) => boolean;

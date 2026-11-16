@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -404,5 +405,417 @@ func BenchmarkInsightsCubeHandler(b *testing.B) {
 		if rec.Code != http.StatusOK {
 			b.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 		}
+	}
+}
+
+func TestInsightsClientsAggregatesAgentsFiltersAndRetentionCoverage(t *testing.T) {
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 21, 14, 30, 0, 0, shanghai)
+	client, baseURL, repo := startDashboardTestServer(t, nil, func(handler *Handler) {
+		handler.nowFn = func() time.Time { return now }
+	})
+	repo.Timezone().Apply(shanghai)
+
+	makeEvent := func(id, key, model, provider, endpoint, ua string, at time.Time, input, cacheRead, output, reasoning int64, ttft *int64, generate bool) usage.Event {
+		ev := eventFor(id, at, usage.TokenStats{
+			InputTokens:     input,
+			CacheReadTokens: cacheRead,
+			CachedTokens:    cacheRead,
+			OutputTokens:    output,
+			ReasoningTokens: reasoning,
+			TotalTokens:     input + output,
+		}, false)
+		ev.APIGroupKey = key
+		ev.APIKeyMask = security.MaskSecret(key)
+		ev.Model = model
+		ev.Provider = provider
+		ev.Endpoint = endpoint
+		ev.Generate = generate
+		ev.TTFTMS = ttft
+		if ua != "" {
+			ev.UserAgent = &ua
+		}
+		return ev
+	}
+
+	ttftFast := int64(120)
+	ttftSlow := int64(360)
+	today := time.Date(2026, 10, 21, 10, 0, 0, 0, shanghai)
+	seedEvents(t, repo, now, []repository.UsageDecoded{
+		{Event: makeEvent("c1", "sk-alpha-secret-0001", "claude-sonnet-4-5", "claude", "POST /v1/messages", "claude-cli/2.1.3 (external, cli)", today, 1000, 800, 200, 50, &ttftFast, true)},
+		{Event: makeEvent("c2", "sk-alpha-secret-0001", "claude-sonnet-4-5", "claude", "POST /v1/messages", "claude-cli/2.0.14", today.Add(time.Minute), 500, 300, 100, 20, &ttftSlow, true)},
+		// Qwen Code disguising as claude-cli/0.x on /v1/messages must stay separate from Claude Code.
+		{Event: makeEvent("q1", "sk-beta-secret-00002", "qwen-coder-plus", "openai", "POST /v1/messages", "claude-cli/0.1.5", today.Add(2*time.Minute), 400, 0, 150, 0, nil, true)},
+		{Event: makeEvent("o1", "sk-beta-secret-00002", "gpt-5", "codex", "POST /v1/responses", "opencode/latest/1.19.5/cli", today.Add(3*time.Minute), 600, 200, 120, 40, &ttftFast, true)},
+		{Event: makeEvent("u1", "sk-beta-secret-00002", "gpt-5", "codex", "POST /v1/chat/completions", "", today.Add(4*time.Minute), 100, 0, 50, 0, nil, true)},
+		// Non-generating warmup record is excluded from client request attribution.
+		{Event: makeEvent("w1", "sk-alpha-secret-0001", "gpt-5", "codex", "GET /v1/realtime", "codex_cli_rs/0.47.0", today.Add(5*time.Minute), 0, 0, 0, 0, nil, false)},
+	})
+
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/insights/clients?preset=today")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status %d: %s", response.StatusCode, payload)
+	}
+	if response.Header.Get("Cache-Control") != "no-store" {
+		t.Fatal("clients endpoint must set Cache-Control: no-store")
+	}
+	for _, secret := range []string{"sk-alpha-secret", "sk-beta-secret"} {
+		if strings.Contains(string(payload), secret) {
+			t.Fatalf("clients response leaked secret %q: %s", secret, payload)
+		}
+	}
+
+	var all insightsClientsResponse
+	if err := json.Unmarshal(payload, &all); err != nil {
+		t.Fatal(err)
+	}
+	if all.Coverage.RetainedRequests != 6 || all.Coverage.TotalRequests != 6 {
+		t.Fatalf("coverage = %+v, want exact 6/6 retained requests including warmup", all.Coverage)
+	}
+	if len(all.Clients) != 4 {
+		t.Fatalf("clients = %+v, want 4 distinct groups", all.Clients)
+	}
+	if all.Clients[0].ID != usage.ClientAgentClaudeCode || all.Clients[0].Requests != 2 ||
+		all.Clients[0].CacheReadTokens != 1100 || all.Clients[0].ReasoningTokens != 70 ||
+		all.Clients[0].TTFTSumMS != 480 || all.Clients[0].TTFTCount != 2 ||
+		all.Clients[0].RawPrefix != "claude-cli/2." {
+		t.Fatalf("top client = %+v", all.Clients[0])
+	}
+
+	byID := map[string]insightsClientItem{}
+	for _, item := range all.Clients {
+		byID[item.ID] = item
+	}
+	if byID[usage.ClientAgentQwenCode].Requests != 1 || byID[usage.ClientAgentQwenCode].RawPrefix != "claude-cli/0." {
+		t.Fatalf("qwen-code group = %+v", byID[usage.ClientAgentQwenCode])
+	}
+	if byID[usage.ClientAgentOpenCode].Requests != 1 || byID[usage.ClientAgentOpenCode].RawPrefix != "opencode" {
+		t.Fatalf("opencode group = %+v", byID[usage.ClientAgentOpenCode])
+	}
+	if byID[usage.ClientAgentUnknown].Requests != 1 || byID[usage.ClientAgentUnknown].RawPrefix != "" {
+		t.Fatalf("unknown group = %+v", byID[usage.ClientAgentUnknown])
+	}
+
+	// Cross-dimensional filtering narrows to matching model/provider records.
+	response, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/insights/clients?preset=today&model=gpt-5")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("filtered status %d: %s", response.StatusCode, payload)
+	}
+	var filtered insightsClientsResponse
+	if err := json.Unmarshal(payload, &filtered); err != nil {
+		t.Fatal(err)
+	}
+	if filtered.Coverage.RetainedRequests != 3 || filtered.Coverage.TotalRequests != 3 || len(filtered.Clients) != 2 {
+		t.Fatalf("filtered clients = %+v", filtered)
+	}
+
+	// Detail retention pruning leaves permanent usage_facts intact while lowering retained_requests honestly.
+	if _, err := repo.AggregateUsageFacts(context.Background(), 100); err != nil {
+		t.Fatal(err)
+	}
+	oldDay := now.Add(-40 * 24 * time.Hour)
+	seedEvents(t, repo, now, []repository.UsageDecoded{
+		{Event: makeEvent("old-1", "sk-alpha-secret-0001", "gpt-5", "codex", "POST /v1/responses", "codex_cli_rs/0.47.0", oldDay, 300, 100, 80, 0, nil, true)},
+	})
+	if _, err := repo.AggregateUsageFacts(context.Background(), 100); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.SQL().Exec(`DELETE FROM usage_events WHERE event_key = 'old-1'`); err != nil {
+		t.Fatal(err)
+	}
+	response, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/insights/clients?preset=90d")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("90d status %d: %s", response.StatusCode, payload)
+	}
+	var retention insightsClientsResponse
+	if err := json.Unmarshal(payload, &retention); err != nil {
+		t.Fatal(err)
+	}
+	if retention.Coverage.RetainedRequests != 6 || retention.Coverage.TotalRequests != 7 {
+		t.Fatalf("retention coverage = %+v, want exact retained=6 and total=7", retention.Coverage)
+	}
+
+	// Empty window returns empty slice rather than null.
+	emptyFrom := now.Add(-10 * 24 * time.Hour).UnixMilli()
+	emptyTo := now.Add(-9 * 24 * time.Hour).UnixMilli()
+	response, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/insights/clients?from="+url.QueryEscape(strings.TrimSpace(jsonNumber(emptyFrom)))+"&to="+url.QueryEscape(strings.TrimSpace(jsonNumber(emptyTo))))
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("empty window status %d: %s", response.StatusCode, payload)
+	}
+	if !strings.Contains(string(payload), `"clients":[]`) {
+		t.Fatalf("empty window must encode clients as []: %s", payload)
+	}
+}
+
+func TestInsightsAdditiveTokenPartitionsAcrossMixedLegacyAndCanonicalDialects(t *testing.T) {
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 21, 14, 30, 0, 0, shanghai)
+	client, baseURL, repo := startDashboardTestServer(t, nil, func(handler *Handler) {
+		handler.nowFn = func() time.Time { return now }
+	})
+	repo.Timezone().Apply(shanghai)
+
+	slot := time.Date(2026, 10, 21, 10, 1, 0, 0, shanghai)
+	ua := "hindsight/1.2.0"
+	stamp := func(ev *usage.Event) {
+		// Force every record into the exact same 15m bucket AND identical Cube tuple
+		// (key, call_point, model, provider, credential, auth_type) so post-SUM
+		// heuristic reconstruction would fail if partitions were not folded per event.
+		ev.APIGroupKey = "sk-shared-secret-0001"
+		ev.APIKeyMask = security.MaskSecret(ev.APIGroupKey)
+		ev.Model = "claude-sonnet-4-5"
+		ev.Provider = "claude"
+		ev.Endpoint = "POST /v1/messages"
+		ev.AuthIndex = "auth-shared"
+		ev.AuthType = "oauth"
+		ev.UserAgent = &ua
+	}
+
+	// Row A: legacy inclusive cached_tokens only (900 cached inside 1000 input + 100 output -> prompt 1000, net 200).
+	legacyInclusive := eventFor("mix-a", slot, usage.TokenStats{
+		InputTokens:  1000,
+		CachedTokens: 900,
+		OutputTokens: 100,
+		TotalTokens:  1100,
+	}, false)
+	stamp(&legacyInclusive)
+
+	// Row B: canonical v2 breakdown in the same 15m bucket (900 cache_read & cached inside 1000 input + 100 output -> prompt 1000, net 200).
+	canonical := eventFor("mix-b", slot.Add(time.Minute), usage.TokenStats{
+		InputTokens:     1000,
+		CachedTokens:    900,
+		CacheReadTokens: 900,
+		OutputTokens:    100,
+		TotalTokens:     1100,
+	}, false)
+	stamp(&canonical)
+	canonical.Accounting = &usage.TokenAccounting{
+		Version: 2,
+		Status:  "complete",
+		Breakdown: &usage.TokenBreakdown{
+			SchemaVersion: 2,
+			Quality:       "complete",
+			TotalTokens:   1100,
+			Input:         usage.TokenInputBreakdown{TotalTokens: 1000, UncachedTokens: 100, CacheReadTokens: 900},
+			Output:        usage.TokenOutputBreakdown{TotalTokens: 100, NonReasoningTokens: 100},
+		},
+	}
+
+	// Row C: legacy Anthropic disjoint prompt with uncached < cache and full total (50 + 900 + 100 + 20 = 1070 -> prompt 1050, net 70).
+	legacyDisjointSmall := eventFor("mix-c", slot.Add(2*time.Minute), usage.TokenStats{
+		InputTokens:         50,
+		CacheReadTokens:     900,
+		CacheCreationTokens: 100,
+		OutputTokens:        20,
+		TotalTokens:         1070,
+	}, false)
+	stamp(&legacyDisjointSmall)
+
+	// Row D: legacy Anthropic disjoint prompt with uncached > cache and fallback total=input+output (1000 + 100 read + 20 out, total=1020 -> prompt 1100, net 1020).
+	legacyDisjointLarge := eventFor("mix-d", slot.Add(3*time.Minute), usage.TokenStats{
+		InputTokens:     1000,
+		CacheReadTokens: 100,
+		OutputTokens:    20,
+		TotalTokens:     1020,
+	}, false)
+	stamp(&legacyDisjointLarge)
+
+	// Row E: legacy Anthropic disjoint prompt with uncached == cache and missing total=0 (200 + 200 read + 30 out -> prompt 400, net 230).
+	legacyDisjointEqual := eventFor("mix-e", slot.Add(4*time.Minute), usage.TokenStats{
+		InputTokens:     200,
+		CacheReadTokens: 200,
+		OutputTokens:    30,
+		TotalTokens:     0,
+	}, false)
+	stamp(&legacyDisjointEqual)
+
+	// Row F: legacy inclusive thinking under Claude semantics (100 input + 30 output containing 10 thinking -> completion 30, net 130).
+	legacyClaudeThinking := eventFor("mix-f", slot.Add(5*time.Minute), usage.TokenStats{
+		InputTokens:     100,
+		OutputTokens:    30,
+		ReasoningTokens: 10,
+		TotalTokens:     130,
+	}, false)
+	stamp(&legacyClaudeThinking)
+
+	seedEvents(t, repo, now, []repository.UsageDecoded{
+		{Event: legacyInclusive},
+		{Event: canonical},
+		{Event: legacyDisjointSmall},
+		{Event: legacyDisjointLarge},
+		{Event: legacyDisjointEqual},
+		{Event: legacyClaudeThinking},
+	})
+
+	// Expected additive totals across all 6 events:
+	// PromptTotal     = 1000 + 1000 + 1050 + 1100 + 400 + 100 = 4650
+	// CacheRead       =  900 +  900 +  900 +  100 + 200 +   0 = 3000
+	// CacheWrite      =    0 +    0 +  100 +    0 +   0 +   0 =  100
+	// CompletionTotal =  100 +  100 +   20 +   20 +  30 +  30 =  300
+	// UncachedInput   = 4650 - 3000 -  100                    = 1550
+	// NetTokens       =  200 +  200 +   70 + 1020 + 230 + 130 = 1850
+	// TotalTokens     = 4650 +  300                           = 4950
+	assertSnapshot := func(stage, preset string) {
+		t.Helper()
+		_, clientsPayload := getJSON(t, client, baseURL+"/omc/api/v1/management/insights/clients?preset="+preset)
+		var clientsBody insightsClientsResponse
+		if err := json.Unmarshal(clientsPayload, &clientsBody); err != nil {
+			t.Fatal(err)
+		}
+		if len(clientsBody.Clients) != 1 || clientsBody.Clients[0].ID != usage.ClientAgentHindsight {
+			t.Fatalf("%s/%s clients = %+v", stage, preset, clientsBody.Clients)
+		}
+		gotClient := clientsBody.Clients[0]
+		if gotClient.InputTokens != 4650 || gotClient.OutputTokens != 300 || gotClient.CacheReadTokens != 3000 ||
+			gotClient.CacheCreationTokens != 100 || gotClient.TotalTokens != 4950 || gotClient.NetTokens != 1850 {
+			t.Fatalf("%s/%s client measures = %+v", stage, preset, gotClient)
+		}
+
+		_, cubePayload := getJSON(t, client, baseURL+"/omc/api/v1/management/insights/cube?preset="+preset)
+		var cubeBody insightsCubeResponse
+		if err := json.Unmarshal(cubePayload, &cubeBody); err != nil {
+			t.Fatal(err)
+		}
+		if len(cubeBody.Rows) != 1 {
+			t.Fatalf("%s/%s expected all 6 events merged into 1 cube tuple, got %d rows", stage, preset, len(cubeBody.Rows))
+		}
+		col := map[string]int{}
+		for idx, name := range cubeBody.Columns {
+			col[name] = idx
+		}
+		r := cubeBody.Rows[0]
+		if r[col["input_tokens"]] != 4650 || r[col["output_tokens"]] != 300 || r[col["cache_read_tokens"]] != 3000 ||
+			r[col["cache_creation_tokens"]] != 100 || r[col["total_tokens"]] != 4950 || r[col["net_tokens"]] != 1850 {
+			t.Fatalf("%s/%s cube row = %v", stage, preset, r)
+		}
+
+		_, rhythmPayload := getJSON(t, client, baseURL+"/omc/api/v1/management/insights/rhythm?preset="+preset)
+		var rhythmBody insightsRhythmResponse
+		if err := json.Unmarshal(rhythmPayload, &rhythmBody); err != nil {
+			t.Fatal(err)
+		}
+		var rhythmTotal, rhythmNet int64
+		for _, cell := range rhythmBody.Cells {
+			rhythmTotal += cell.TotalTokens
+			rhythmNet += cell.NetTokens
+		}
+		if rhythmTotal != 4950 || rhythmNet != 1850 {
+			t.Fatalf("%s/%s rhythm total=%d net=%d, want 4950 and 1850", stage, preset, rhythmTotal, rhythmNet)
+		}
+	}
+
+	assertSnapshot("unfolded", "today")
+	if _, err := repo.AggregateUsageFacts(context.Background(), 100); err != nil {
+		t.Fatal(err)
+	}
+	assertSnapshot("folded", "today")
+	assertSnapshot("folded", "7d")
+}
+
+func TestInsightsClientsCubeAndRhythmPreserveAdditiveTotalAcrossBucketGrains(t *testing.T) {
+	now := time.Date(2026, 10, 21, 14, 30, 0, 0, time.UTC)
+	client, baseURL, repo := startDashboardTestServer(t, nil, func(handler *Handler) {
+		handler.nowFn = func() time.Time { return now }
+	})
+
+	at := time.Date(2026, 10, 21, 12, 59, 0, 0, time.UTC)
+	// Event A at 12:59 carries an unclassified total surplus (rawTotal=1000 > 120).
+	evA := eventFor("total-a", at, usage.TokenStats{InputTokens: 100, OutputTokens: 20, TotalTokens: 1000}, false)
+	// Event B at 13:01 carries disjoint Anthropic cache omitted from fallback rawTotal=120 (effectiveTotal=220).
+	evB := eventFor("total-b", at.Add(2*time.Minute), usage.TokenStats{InputTokens: 100, OutputTokens: 20, CacheReadTokens: 100, TotalTokens: 120}, false)
+	for _, ev := range []*usage.Event{&evA, &evB} {
+		ev.Provider = "claude"
+		ev.Model = "claude-sonnet"
+		ev.Endpoint = "POST /v1/messages"
+	}
+	seedEvents(t, repo, now, []repository.UsageDecoded{{Event: evA}, {Event: evB}})
+	if _, err := repo.AggregateUsageFacts(context.Background(), 100); err != nil {
+		t.Fatal(err)
+	}
+
+	windowQuery := "from=" + jsonNumber(at.UnixMilli()-1) + "&to=" + jsonNumber(at.Add(3*time.Minute).UnixMilli())
+	sumCubeTotal := func(bucket string) int64 {
+		t.Helper()
+		_, raw := getJSON(t, client, baseURL+"/omc/api/v1/management/insights/cube?"+windowQuery+"&bucket="+bucket)
+		var cube insightsCubeResponse
+		if err := json.Unmarshal(raw, &cube); err != nil {
+			t.Fatal(err)
+		}
+		col := -1
+		for idx, name := range cube.Columns {
+			if name == "total_tokens" {
+				col = idx
+			}
+		}
+		var sum int64
+		for _, row := range cube.Rows {
+			sum += row[col]
+		}
+		return sum
+	}
+
+	hourlyTotal := sumCubeTotal("hour")
+	dailyTotal := sumCubeTotal("day")
+
+	_, clientsRaw := getJSON(t, client, baseURL+"/omc/api/v1/management/insights/clients?"+windowQuery)
+	var clientsBody insightsClientsResponse
+	if err := json.Unmarshal(clientsRaw, &clientsBody); err != nil {
+		t.Fatal(err)
+	}
+	var clientTotal int64
+	for _, item := range clientsBody.Clients {
+		clientTotal += item.TotalTokens
+	}
+
+	_, rhythmRaw := getJSON(t, client, baseURL+"/omc/api/v1/management/insights/rhythm?"+windowQuery)
+	var rhythmBody insightsRhythmResponse
+	if err := json.Unmarshal(rhythmRaw, &rhythmBody); err != nil {
+		t.Fatal(err)
+	}
+	var rhythmTotal int64
+	for _, cell := range rhythmBody.Cells {
+		rhythmTotal += cell.TotalTokens
+	}
+
+	if hourlyTotal != 1220 || dailyTotal != 1220 || clientTotal != 1220 || rhythmTotal != 1220 {
+		t.Fatalf("expected additive total 1220 across all views/grains, got hourly=%d daily=%d clients=%d rhythm=%d",
+			hourlyTotal, dailyTotal, clientTotal, rhythmTotal)
+	}
+}
+
+func TestUsageEventsAcceptsLargeProviderCredentialDrillDownUpToCap(t *testing.T) {
+	now := time.Date(2026, 10, 21, 14, 30, 0, 0, time.UTC)
+	client, baseURL, _ := startDashboardTestServer(t, nil, func(handler *Handler) {
+		handler.nowFn = func() time.Time { return now }
+	})
+
+	for _, count := range []int{64, 65, repository.MaxUsageEventFilterValues} {
+		q := url.Values{
+			"from":         []string{jsonNumber(now.Add(-time.Hour).UnixMilli())},
+			"to":           []string{jsonNumber(now.UnixMilli())},
+			"client_agent": []string{"claude-code"},
+		}
+		for idx := 0; idx < count; idx++ {
+			q.Add("auth_index", fmt.Sprintf("auth-%d", idx))
+		}
+		res, body := getJSON(t, client, baseURL+"/omc/api/v1/usage/events?"+q.Encode())
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("count=%d: expected 200 OK, got %d body=%s", count, res.StatusCode, body)
+		}
+	}
+
+	over := url.Values{"from": []string{"0"}, "to": []string{"1000"}}
+	for idx := 0; idx <= repository.MaxUsageEventFilterValues; idx++ {
+		over.Add("auth_index", fmt.Sprintf("auth-%d", idx))
+	}
+	res, _ := getJSON(t, client, baseURL+"/omc/api/v1/usage/events?"+over.Encode())
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 past cap %d, got %d", repository.MaxUsageEventFilterValues, res.StatusCode)
 	}
 }

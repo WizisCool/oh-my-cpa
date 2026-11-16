@@ -10,7 +10,7 @@ import {
 import { COLUMN_CAP } from '../../../charts/stackCap';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import type { InsightsMetric } from '../../../types/insightsCube';
+import type { CubeMetric } from '../../../types/insightsCube';
 import { formatShare } from '../../../types/insightsFormat';
 import { useInsightsFormat } from '../useInsightsFormat';
 
@@ -18,7 +18,7 @@ export interface InsightsHourChartProps {
   values: readonly number[];
   peakHours: ReadonlySet<number>;
   peakLabel: string;
-  metric: InsightsMetric;
+  metric: CubeMetric;
   label: string;
 }
 

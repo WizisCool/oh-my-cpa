@@ -454,7 +454,7 @@ func (r *Repository) PendingUsageInboxCount(ctx context.Context) (int64, error) 
 const usageEventInsertPrefix = `
 		INSERT INTO usage_events (
 			instance_id, event_key, api_group_key, api_group_label, api_key_mask, provider, endpoint, auth_type, request_id,
-			client_ip, x_forwarded_for, user_agent, model, model_alias, reasoning_effort,
+			client_ip, x_forwarded_for, user_agent, client_agent, model, model_alias, reasoning_effort,
 			service_tier, effective_service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
@@ -464,11 +464,11 @@ const usageEventInsertPrefix = `
 			billed_service_tier, billed_service_tier_source, token_accounting, structured_usage
 		) VALUES `
 
-const usageEventColumnCount = 52
+const usageEventColumnCount = 53
 
 var usageEventPlaceholders = "(" + strings.TrimSuffix(strings.Repeat("?, ", usageEventColumnCount), ", ") + ")"
 
-// 8 rows * 52 columns = 416 bind parameters, dividing the 200-row inbox batch evenly.
+// 8 rows * 53 columns = 424 bind parameters, dividing the 200-row inbox batch evenly.
 const usageEventInsertChunkRows = 8
 
 func appendUsageEventValues(dst []any, event usage.Event, locked lockedPrice, createdMS int64) []any {
@@ -483,7 +483,7 @@ func appendUsageEventValues(dst []any, event usage.Event, locked lockedPrice, cr
 	return append(dst,
 		event.InstanceID, event.EventKey, event.APIGroupKey, event.APIGroupLabel, event.APIKeyMask,
 		event.Provider, event.Endpoint,
-		event.AuthType, event.RequestID, event.ClientIP, event.XForwardedFor, event.UserAgent,
+		event.AuthType, event.RequestID, event.ClientIP, event.XForwardedFor, event.UserAgent, event.ClientAgent,
 		event.Model, event.ModelAlias, event.ReasoningEffort, event.ServiceTier, event.EffectiveServiceTier,
 		event.ResponseServiceTier, event.ExecutorType, event.TimestampMS, event.Source,
 		event.AuthIndex, boolInt(event.Failed), boolInt(event.Generate), event.LatencyMS,
@@ -707,9 +707,11 @@ func (r *Repository) sanitizeUsageEvent(event usage.Event) usage.Event {
 	// persistedText/RedactText: those match the "sk-..." shape and would replace
 	// the label with the redaction marker.
 	event.APIKeyMask = boundedMask(event.APIKeyMask)
+	rawUserAgent := pointerValue(event.UserAgent)
 	event.ClientIP = persistedPointerWith(event.ClientIP, security.NormalizeClientIP)
 	event.XForwardedFor = persistedPointerWith(event.XForwardedFor, security.NormalizeForwardedFor)
-	event.UserAgent = security.MinimizeUserAgent(pointerValue(event.UserAgent))
+	event.UserAgent = security.MinimizeUserAgent(rawUserAgent)
+	event.ClientAgent = usage.PersistedClientAgent(event.ClientAgent, rawUserAgent, event.Endpoint)
 	event.LatencyMS = nonNegative(event.LatencyMS)
 	event.TTFTMS = nonNegativePointer(event.TTFTMS)
 	event.InputTokens = nonNegative(event.InputTokens)

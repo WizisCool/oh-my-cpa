@@ -10,11 +10,13 @@ import { INSIGHTS_BUCKETS, type InsightsBucketChoice } from '../../types/insight
 import {
   INSIGHTS_DIMENSIONS,
   INSIGHTS_METRICS,
+  TOKEN_SCOPES,
   rowValue,
   type InsightsCube,
   type InsightsDimension,
   type InsightsFilters,
   type InsightsMetric,
+  type TokenScope,
 } from '../../types/insightsCube';
 
 /** What the trend stacks by; `none` draws the whole selection as one series. */
@@ -26,11 +28,13 @@ export interface InsightsViewState {
   grouping: InsightsGrouping;
   bucket: InsightsBucketChoice;
   isComparing: boolean;
+  /** Whether the token metric counts cache traffic. */
+  tokenScope: TokenScope;
   filters: InsightsFilters;
 }
 
 export const DEFAULT_INSIGHTS_VIEW: InsightsViewState = {
-  metric: 'tokens', grouping: 'model', bucket: 'auto', isComparing: true, filters: {},
+  metric: 'tokens', grouping: 'model', bucket: 'auto', isComparing: true, tokenScope: 'all', filters: {},
 };
 
 function oneOf<T extends string>(values: readonly T[], raw: string | null, fallback: T): T {
@@ -48,6 +52,7 @@ export function readInsightsView(search: URLSearchParams): InsightsViewState {
     grouping: oneOf(INSIGHTS_GROUPINGS, search.get('group'), DEFAULT_INSIGHTS_VIEW.grouping),
     bucket: oneOf(INSIGHTS_BUCKETS, search.get('bucket'), DEFAULT_INSIGHTS_VIEW.bucket),
     isComparing: search.get('compare') !== 'off',
+    tokenScope: oneOf(TOKEN_SCOPES, search.get('scope'), DEFAULT_INSIGHTS_VIEW.tokenScope),
     filters,
   };
 }
@@ -59,6 +64,7 @@ export function writeInsightsView(view: InsightsViewState): URLSearchParams {
   if (view.grouping !== DEFAULT_INSIGHTS_VIEW.grouping) search.set('group', view.grouping);
   if (view.bucket !== DEFAULT_INSIGHTS_VIEW.bucket) search.set('bucket', view.bucket);
   if (!view.isComparing) search.set('compare', 'off');
+  if (view.tokenScope !== DEFAULT_INSIGHTS_VIEW.tokenScope) search.set('scope', view.tokenScope);
   for (const dimension of INSIGHTS_DIMENSIONS) {
     for (const value of view.filters[dimension] ?? []) search.append(dimension, value);
   }

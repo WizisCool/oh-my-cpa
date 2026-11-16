@@ -23,7 +23,7 @@ import { useT } from '../../../i18n';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { InsightsBucket } from '../../../types/insights';
-import { isAdditiveMetric, type InsightsMetric, type TrendGroup } from '../../../types/insightsCube';
+import { isAdditiveMetric, type CubeMetric, type TrendGroup } from '../../../types/insightsCube';
 import { formatShare } from '../../../types/insightsFormat';
 import { useInsightsFormat } from '../useInsightsFormat';
 
@@ -36,7 +36,7 @@ export interface InsightsTrendChartProps {
   totalSamples: readonly number[];
   colorOf: (id: string) => string;
   labelOf: (id: string) => string;
-  metric: InsightsMetric;
+  metric: CubeMetric;
   showTotal: boolean;
   onSelectGroup: (id: string | null) => void;
   totalLabel: string;

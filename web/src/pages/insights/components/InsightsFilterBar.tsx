@@ -20,8 +20,12 @@ interface InsightsFilterBarProps {
   /** The model dimension the console names models by: the call point or the served model. */
   modelDimension: 'call_point' | 'model';
   onChange: (filters: InsightsFilters) => void;
-  /** Opens a key's detail from its chip. */
-  onOpenKey?: (id: string) => void;
+  /** Opens a value's detail from its chip. */
+  onOpen?: (dimension: InsightsDimension, id: string) => void;
+  /** The request list behind the narrowed view. */
+  onViewRequests?: () => void;
+  /** False when the request list could not carry every filter. */
+  canViewRequests?: boolean;
 }
 
 /**
@@ -32,7 +36,7 @@ interface InsightsFilterBarProps {
  * While anything is chosen the bar holds to the top of the scroll, so a narrowing made from a ranking
  * far down the page stays in sight, and a new chip settles in with a short entrance.
  */
-export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filters, labels, modelDimension, onChange, onOpenKey }) => {
+export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filters, labels, modelDimension, onChange, onOpen, onViewRequests, canViewRequests = true }) => {
   const t = useT();
   const [isOpen, setIsOpen] = React.useState(false);
   const [dimension, setDimension] = React.useState<InsightsDimension | null>(null);
@@ -98,13 +102,13 @@ export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filt
         <span key={`${chip.dimension}:${chip.value}`} className={styles['filter-chip']}>
           <span className={styles['filter-chip-dim']}>{t(`insights.dim.${chip.dimension}`)}</span>
           <InsightsValue dimension={chip.dimension} id={chip.value} labels={labels} className={styles['filter-chip-value']} />
-          {chip.dimension === 'key' && onOpenKey && !labels.isNonKey(chip.value) && (
+          {onOpen && !(chip.dimension === 'key' && labels.isNonKey(chip.value)) && (
             <button
               type="button"
               className={styles['filter-chip-action']}
               aria-label={t('insights.open_detail')}
               data-tip={t('insights.open_detail')}
-              onClick={() => onOpenKey(chip.value)}
+              onClick={() => onOpen(chip.dimension, chip.value)}
             >
               <RightOutlined />
             </button>
@@ -134,6 +138,11 @@ export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filt
       {hasFilters(filters) && (
         <Button size="sm" variant="link" className={styles['filter-clear']} onClick={() => onChange({})}>
           {t('insights.filter_clear')}
+        </Button>
+      )}
+      {hasFilters(filters) && onViewRequests && (
+        <Button size="sm" variant="link" className={styles['filter-requests']} onClick={onViewRequests} disabled={!canViewRequests} data-testid="insights-filter-requests">
+          {t('insights.view_requests_link')}
         </Button>
       )}
     </div>

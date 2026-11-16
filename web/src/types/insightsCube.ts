@@ -12,6 +12,7 @@
  */
 
 import type { InsightsCompareWindow, InsightsCubeResponse, InsightsKey, InsightsWindow } from './insights';
+import { MAX_CACHE_RATE } from '../theme/cacheScale';
 
 export const INSIGHTS_DIMENSIONS = ['key', 'call_point', 'model', 'provider', 'credential'] as const;
 export type InsightsDimension = (typeof INSIGHTS_DIMENSIONS)[number];
@@ -19,9 +20,23 @@ export type InsightsDimension = (typeof INSIGHTS_DIMENSIONS)[number];
 export const INSIGHTS_METRICS = ['tokens', 'cost', 'requests', 'latency'] as const;
 export type InsightsMetric = (typeof INSIGHTS_METRICS)[number];
 
+/**
+ * What the cube projections measure: a reader's metric, with the token metric read in its scope.
+ * `net_tokens` is the token metric with the cache traffic left out; it is never a tile of its own.
+ */
+export type CubeMetric = InsightsMetric | 'net_tokens';
+
+/** Which tokens the token metric counts: every token, or only those outside the cache. */
+export type TokenScope = 'all' | 'net';
+export const TOKEN_SCOPES: readonly TokenScope[] = ['all', 'net'];
+
+export function cubeMetric(metric: InsightsMetric, scope: TokenScope): CubeMetric {
+  return metric === 'tokens' && scope === 'net' ? 'net_tokens' : metric;
+}
+
 /** Metrics that add up across groups, and so can be stacked and shared out. */
-export function isAdditiveMetric(metric: InsightsMetric): boolean {
-  return metric === 'cost' || metric === 'tokens' || metric === 'requests';
+export function isAdditiveMetric(metric: CubeMetric): boolean {
+  return metric !== 'latency';
 }
 
 /** Selected values per dimension. A dimension absent or empty is no constraint. */
@@ -33,7 +48,19 @@ export interface Measures {
   inputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
+  /** The OpenAI-style cached prompt count; `cacheReadTokens` supersedes it when both are known. */
+  cachedTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
   totalTokens: number;
+  /** The prompt and completion outside the cache traffic; additive once rows are normalised. */
+  netTokens: number;
+  /**
+   * The token columns are already one accounting - input the whole prompt, output the whole
+   * completion, one cache read - so they cut by plain arithmetic. Absent on a raw record, whose
+   * provider's own way of counting still has to be read from it.
+   */
+  isNormalized?: boolean;
   latencySumMs: number;
   ttftSumMs: number;
   ttftCount: number;
@@ -45,18 +72,31 @@ export interface Measures {
 export function emptyMeasures(): Measures {
   return {
     requests: 0, failures: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0,
-    totalTokens: 0, latencySumMs: 0, ttftSumMs: 0, ttftCount: 0,
+    cachedTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 0, netTokens: 0, latencySumMs: 0, ttftSumMs: 0, ttftCount: 0,
     costNanos: 0, pricedRequests: 0, costedRequests: 0,
   };
 }
 
+function isBlank(measures: Measures): boolean {
+  return measures.requests === 0 && measures.inputTokens === 0 && measures.outputTokens === 0
+    && measures.totalTokens === 0 && measures.cacheReadTokens === 0 && measures.cacheCreationTokens === 0
+    && measures.cachedTokens === 0 && measures.netTokens === 0;
+}
+
 function addInto(target: Measures, source: Measures): void {
+  // A sum is one accounting only while every part was: one raw record makes the whole raw.
+  const isNormalized = (isBlank(target) ? true : Boolean(target.isNormalized)) && Boolean(source.isNormalized);
+  target.isNormalized = isNormalized;
   target.requests += source.requests;
   target.failures += source.failures;
   target.inputTokens += source.inputTokens;
   target.outputTokens += source.outputTokens;
   target.reasoningTokens += source.reasoningTokens;
+  target.cachedTokens += source.cachedTokens;
+  target.cacheReadTokens += source.cacheReadTokens;
+  target.cacheCreationTokens += source.cacheCreationTokens;
   target.totalTokens += source.totalTokens;
+  target.netTokens += source.netTokens;
   target.latencySumMs += source.latencySumMs;
   target.ttftSumMs += source.ttftSumMs;
   target.ttftCount += source.ttftCount;
@@ -101,12 +141,20 @@ export function decodeInsightsCube(response: InsightsCubeResponse): InsightsCube
     if (index === undefined) throw new Error(`insights cube is missing the ${name} column`);
     return index;
   };
+  // The cache columns joined the cube later; a response without them reads as uncached.
+  const optional = (name: string) => position.get(name) ?? -1;
+  // A server that sends `net_tokens` has already partitioned every token column; older fixtures are
+  // raw records and are normalised here, once.
+  const cNet = optional('net_tokens');
   const [d0, d1, d2, d3, d4] = INSIGHTS_DIMENSIONS.map(require);
   const cRequests = require('requests');
   const cFailures = require('failures');
   const cInput = require('input_tokens');
   const cOutput = require('output_tokens');
   const cReasoning = require('reasoning_tokens');
+  const cCached = optional('cached_tokens');
+  const cCacheRead = optional('cache_read_tokens');
+  const cCacheCreation = optional('cache_creation_tokens');
   const cTotal = require('total_tokens');
   const cLatency = require('latency_sum_ms');
   const cTtftSum = require('ttft_sum_ms');
@@ -115,6 +163,7 @@ export function decodeInsightsCube(response: InsightsCubeResponse): InsightsCube
   const cPriced = require('priced_requests');
   const cCosted = require('costed_requests');
   const bucketColumn = require('bucket');
+  const cell = (cells: readonly number[], column: number, offset: number) => (column < 0 ? 0 : cells[column - offset] ?? 0);
   const decode = (cells: readonly number[], offset: number, bucket: number): CubeRow => ({
     bucket,
     dims: [
@@ -124,12 +173,16 @@ export function decodeInsightsCube(response: InsightsCubeResponse): InsightsCube
       cells[d3 - offset] ?? 0,
       cells[d4 - offset] ?? 0,
     ],
-    measures: {
+    // A raw record is read by the protocol of the provider that served it.
+    measures: decodeMeasures(response.dims.providers[cells[d3 - offset] ?? 0] ?? '', {
       requests: cells[cRequests - offset] ?? 0,
       failures: cells[cFailures - offset] ?? 0,
       inputTokens: cells[cInput - offset] ?? 0,
       outputTokens: cells[cOutput - offset] ?? 0,
       reasoningTokens: cells[cReasoning - offset] ?? 0,
+      cachedTokens: cell(cells, cCached, offset),
+      cacheReadTokens: cell(cells, cCacheRead, offset),
+      cacheCreationTokens: cell(cells, cCacheCreation, offset),
       totalTokens: cells[cTotal - offset] ?? 0,
       latencySumMs: cells[cLatency - offset] ?? 0,
       ttftSumMs: cells[cTtftSum - offset] ?? 0,
@@ -137,8 +190,11 @@ export function decodeInsightsCube(response: InsightsCubeResponse): InsightsCube
       costNanos: cells[cCost - offset] ?? 0,
       pricedRequests: cells[cPriced - offset] ?? 0,
       costedRequests: cells[cCosted - offset] ?? 0,
-    },
+      netTokens: cNet < 0 ? 0 : cell(cells, cNet, offset),
+      isNormalized: cNet >= 0,
+    }),
   });
+  const decodeMeasures = (provider: string, measures: Measures) => (measures.isNormalized ? measures : normalizeMeasures(measures, provider));
   const hasPreviousBucket = response.previous_rows.length > 0 && response.previous_rows[0].length >= response.columns.length;
   return {
     window: response.window,
@@ -358,7 +414,11 @@ function baselineFromBucketMeasures(
   baseline.inputTokens = robustBucketSum(buckets.map((b) => b.inputTokens)) * scale;
   baseline.outputTokens = robustBucketSum(buckets.map((b) => b.outputTokens)) * scale;
   baseline.reasoningTokens = robustBucketSum(buckets.map((b) => b.reasoningTokens)) * scale;
+  baseline.cachedTokens = robustBucketSum(buckets.map((b) => b.cachedTokens)) * scale;
+  baseline.cacheReadTokens = robustBucketSum(buckets.map((b) => b.cacheReadTokens)) * scale;
+  baseline.cacheCreationTokens = robustBucketSum(buckets.map((b) => b.cacheCreationTokens)) * scale;
   baseline.totalTokens = robustBucketSum(buckets.map((b) => b.totalTokens)) * scale;
+  baseline.netTokens = robustBucketSum(buckets.map((b) => b.netTokens)) * scale;
   baseline.costNanos = robustBucketSum(buckets.map((b) => b.costNanos)) * scale;
   baseline.pricedRequests = robustBucketSum(buckets.map((b) => b.pricedRequests)) * scale;
   baseline.costedRequests = robustBucketSum(buckets.map((b) => b.costedRequests)) * scale;
@@ -418,17 +478,224 @@ export function baselineMeasures(
  * One metric of a set of measures, or null where it has no value: a spend with nothing priced, an
  * average over no requests. Null is not zero - "unpriced" and "free" are different readings.
  */
-export function metricValue(measures: Measures, metric: InsightsMetric): number | null {
+export function metricValue(measures: Measures, metric: CubeMetric): number | null {
   switch (metric) {
     case 'cost':
       return measures.costedRequests > 0 ? measures.costNanos / 1e9 : null;
     case 'tokens':
       return measures.totalTokens;
+    case 'net_tokens':
+      return measures.netTokens;
     case 'requests':
       return measures.requests;
     case 'latency':
       return measures.requests > 0 ? measures.latencySumMs / measures.requests : null;
   }
+}
+
+/**
+ * One set of measures' tokens cut into five parts that never overlap: what the prompt read from
+ * cache, what it wrote to cache, the rest of the prompt, the plain completion and the reasoning.
+ *
+ * Providers report the same request differently - one counts cached prompt tokens inside
+ * `input_tokens`, another beside it; one reports a cache read as `cached_tokens`, another as
+ * `cache_read_tokens` - so the prompt is the larger of what was reported and what the cache parts
+ * alone add up to, and a cache read is counted once whichever field carried it.
+ */
+export interface TokenAnatomy {
+  cacheRead: number;
+  cacheWrite: number;
+  uncachedInput: number;
+  regularOutput: number;
+  reasoningOutput: number;
+  promptTotal: number;
+  completionTotal: number;
+  /** The prompt and completion the request itself paid for: everything but the cache traffic. */
+  netTokens: number;
+}
+
+export function emptyAnatomy(): TokenAnatomy {
+  return {
+    cacheRead: 0, cacheWrite: 0, uncachedInput: 0, regularOutput: 0, reasoningOutput: 0,
+    promptTotal: 0, completionTotal: 0, netTokens: 0,
+  };
+}
+
+/**
+ * A normalised set of measures cut by arithmetic alone; a raw record read the way its provider
+ * counted it (`decodeRawAnatomy`). The two never mix: a normalised sum's total spans many rows and
+ * says nothing about how any one of them counted its cache.
+ */
+export function tokenAnatomy(measures: Measures, provider = ''): TokenAnatomy {
+  if (!measures.isNormalized) return decodeRawAnatomy(measures, provider);
+  const cacheRead = Math.max(0, measures.cacheReadTokens);
+  const cacheWrite = Math.max(0, measures.cacheCreationTokens);
+  const promptTotal = Math.max(0, measures.inputTokens, cacheRead + cacheWrite);
+  const uncachedInput = Math.max(0, promptTotal - cacheRead - cacheWrite);
+  const reasoningOutput = Math.max(0, measures.reasoningTokens);
+  const completionTotal = Math.max(0, measures.outputTokens, reasoningOutput);
+  return {
+    cacheRead, cacheWrite, uncachedInput, regularOutput: Math.max(0, completionTotal - reasoningOutput), reasoningOutput,
+    promptTotal, completionTotal, netTokens: uncachedInput + completionTotal,
+  };
+}
+
+const GEMINI_FAMILY = ['gemini', 'aistudio', 'antigravity', 'vertex', 'interaction'];
+const OPENAI_SUBSET = ['openai', 'codex', 'xai', 'grok', 'kimi', 'qwen', 'deepseek', 'openrouter'];
+
+type ProviderSemantics = 'subset' | 'independent' | 'separate_reasoning' | 'unknown';
+
+/**
+ * How a provider counts its tokens, in CPA's order: the first match wins, so one provider never
+ * carries two readings. `subset` counts the cache inside the input; `independent` (Anthropic) reports
+ * the input apart from the cache and the thinking inside the output; `separate_reasoning` (Gemini)
+ * counts the cache inside the input and the thinking beside the output.
+ */
+function resolveProviderSemantics(provider: string): ProviderSemantics {
+  const name = provider.trim().toLowerCase();
+  if (!name || name === 'unknown') return 'unknown';
+  if (name === 'openai-compatibility' || name.startsWith('openai-compatible-')) return 'subset';
+  if (name.includes('claude') || name.includes('anthropic')) return 'independent';
+  if (GEMINI_FAMILY.some((marker) => name.includes(marker))) return 'separate_reasoning';
+  if (OPENAI_SUBSET.some((marker) => name.includes(marker))) return 'subset';
+  return 'unknown';
+}
+
+/**
+ * One raw record's tokens, read by its provider's semantics. A provider of unknown protocol is read
+ * as disjoint only when its total balances exactly, so slack in a total is never guessed into tokens.
+ */
+function decodeRawAnatomy(measures: Measures, provider = ''): TokenAnatomy {
+  const semantics = resolveProviderSemantics(provider);
+  const cacheRead = measures.cacheReadTokens > 0 ? measures.cacheReadTokens : Math.max(0, measures.cachedTokens);
+  const cacheWrite = Math.max(0, measures.cacheCreationTokens);
+  const cacheTotal = cacheRead + cacheWrite;
+  const rawInput = Math.max(0, measures.inputTokens);
+  const rawOutput = Math.max(0, measures.outputTokens);
+  const total = Math.max(0, measures.totalTokens);
+  const reasoningOutput = Math.max(0, measures.reasoningTokens);
+  const minCompletion = Math.max(rawOutput, reasoningOutput, 0);
+  const separateCompletion = rawOutput + reasoningOutput;
+  // The prompt is settled first, so room the cache leaves in the total is never read as reasoning.
+  // Anthropic's explicit cache columns always sit beside the input, whatever its total says. An unknown
+  // protocol's input does so when smaller than the cache under a total that never counted the cache,
+  // or when the total is exactly input, cache and completion.
+  const hasExplicitAnthropicCache = measures.cacheReadTokens > 0 || measures.cacheCreationTokens > 0;
+  const isDisjointInput = cacheTotal > 0
+    && rawInput > 0
+    && ((semantics === 'independent' && hasExplicitAnthropicCache)
+      || (semantics === 'unknown'
+        && ((rawInput < cacheTotal && total <= rawInput + minCompletion)
+          || (measures.cachedTokens <= 0
+            && ((reasoningOutput === 0 && total === rawInput + cacheTotal + minCompletion)
+              || (reasoningOutput > 0 && total === rawInput + cacheTotal + separateCompletion))))));
+  const promptBase = isDisjointInput ? rawInput + cacheTotal : Math.max(rawInput, cacheTotal);
+  // Reasoning beside the output: Gemini always; an unknown protocol only when the total says so exactly.
+  const completionTotal = reasoningOutput > 0
+    && rawOutput > 0
+    && (semantics === 'separate_reasoning' || (semantics === 'unknown' && total === promptBase + separateCompletion))
+    ? separateCompletion
+    : minCompletion;
+  const regularOutput = Math.max(0, completionTotal - reasoningOutput);
+  // Only a record of unknown protocol with no prompt detail at all reads its prompt off the total; a
+  // known protocol's, or one with cache columns, is its columns, so unclassified slack stays unclassified.
+  const promptTotal = semantics === 'unknown' && rawInput === 0 && cacheTotal === 0 && measures.cachedTokens <= 0 && total > completionTotal
+    ? total - completionTotal
+    : promptBase;
+  const uncachedInput = Math.max(0, promptTotal - cacheTotal);
+  return {
+    cacheRead, cacheWrite, uncachedInput, regularOutput, reasoningOutput,
+    promptTotal, completionTotal, netTokens: uncachedInput + completionTotal,
+  };
+}
+
+function addAnatomy(target: TokenAnatomy, source: TokenAnatomy): void {
+  target.cacheRead += source.cacheRead;
+  target.cacheWrite += source.cacheWrite;
+  target.uncachedInput += source.uncachedInput;
+  target.regularOutput += source.regularOutput;
+  target.reasoningOutput += source.reasoningOutput;
+  target.promptTotal += source.promptTotal;
+  target.completionTotal += source.completionTotal;
+  target.netTokens += source.netTokens;
+}
+
+/**
+ * One row's measures in a single accounting: the input is the whole prompt, the output the whole
+ * completion, and both cache fields carry the one cache read. Providers that count the cache
+ * differently then add up column by column, so a sum over any rows - a group, a bucket, a window -
+ * cuts into the same parts as its rows cut one by one, and `netTokens` is a plain sum.
+ */
+export function normalizeMeasures(measures: Measures, provider = ''): Measures {
+  if (measures.isNormalized) return measures;
+  const anatomy = decodeRawAnatomy(measures, provider);
+  return {
+    ...measures,
+    inputTokens: anatomy.promptTotal,
+    outputTokens: anatomy.completionTotal,
+    reasoningTokens: anatomy.reasoningOutput,
+    cachedTokens: anatomy.cacheRead,
+    cacheReadTokens: anatomy.cacheRead,
+    cacheCreationTokens: anatomy.cacheWrite,
+    totalTokens: Math.max(Math.max(0, measures.totalTokens), anatomy.promptTotal + anatomy.completionTotal),
+    netTokens: anatomy.netTokens,
+    isNormalized: true,
+  };
+}
+
+/** The anatomy of many rows, cut row by row and then added; equal to the anatomy of their sum once decoded. */
+export function sumAnatomy(rows: readonly CubeRow[]): TokenAnatomy {
+  const total = emptyAnatomy();
+  for (const row of rows) addAnatomy(total, tokenAnatomy(row.measures));
+  return total;
+}
+
+/** The share of the prompt read from cache, in percent, capped like every cache rate; null without a prompt. */
+export function anatomyCacheRate(anatomy: TokenAnatomy): number | null {
+  if (anatomy.promptTotal <= 0) return null;
+  return Math.min(MAX_CACHE_RATE, (anatomy.cacheRead / anatomy.promptTotal) * 100);
+}
+
+/** The share of the completion spent reasoning, in percent; null without a completion. */
+export function anatomyReasoningShare(anatomy: TokenAnatomy): number | null {
+  if (anatomy.completionTotal <= 0) return null;
+  return (anatomy.reasoningOutput / anatomy.completionTotal) * 100;
+}
+
+export function measuresCacheRate(measures: Measures): number | null {
+  return anatomyCacheRate(tokenAnatomy(measures));
+}
+
+export function measuresReasoningShare(measures: Measures): number | null {
+  return anatomyReasoningShare(tokenAnatomy(measures));
+}
+
+export function measuresAvgTtftMs(measures: Measures): number | null {
+  return measures.ttftCount > 0 ? measures.ttftSumMs / measures.ttftCount : null;
+}
+
+/**
+ * The cube with every row's token total replaced by its net tokens. The page does not use it - every
+ * projection reads the `net_tokens` metric on the sums it already makes, without a second copy of the
+ * rows - but it states what that metric means, and the tests hold the two equal.
+ */
+export function scopeTokens(cube: InsightsCube, scope: TokenScope): InsightsCube {
+  if (scope === 'all') return cube;
+  const rescope = (rows: readonly CubeRow[]) => rows.map((row) => ({ ...row, measures: { ...row.measures, totalTokens: row.measures.netTokens } }));
+  return { ...cube, rows: rescope(cube.rows), previous: rescope(cube.previous) };
+}
+
+/** Each value's measures and token anatomy, busiest first: the model load profile. */
+export interface EntityProfile {
+  id: string;
+  measures: Measures;
+  anatomy: TokenAnatomy;
+}
+
+export function entityProfiles(cube: InsightsCube, rows: readonly CubeRow[], dimension: InsightsDimension): EntityProfile[] {
+  return [...groupTotals(cube, rows, dimension).entries()]
+    .map(([id, measures]) => ({ id, measures, anatomy: tokenAnatomy(measures) }))
+    .sort((left, right) => right.measures.requests - left.measures.requests || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
 }
 
 /** The two-sided 95% normal quantile: how far a reading may wander by chance alone. */
@@ -464,7 +731,7 @@ export const NO_COMPARISON: MetricComparison = { kind: 'none' };
 export function compareMetric(
   current: Measures,
   previous: Measures,
-  metric: InsightsMetric,
+  metric: CubeMetric,
   evidencePrevious: Measures = previous,
 ): MetricComparison {
   const now = metricValue(current, metric);
@@ -579,7 +846,7 @@ export function groupBaselines(
  * The value a ranking orders by. A non-additive measure is ordered by the requests behind it rather
  * than by its own value, so only additive metrics rank by themselves.
  */
-export function rankingMetric(metric: InsightsMetric): InsightsMetric {
+export function rankingMetric(metric: CubeMetric): CubeMetric {
   return isAdditiveMetric(metric) ? metric : 'requests';
 }
 
@@ -597,7 +864,7 @@ export interface RankedGroup {
 
 export function rankGroups(
   totals: Map<string, Measures>,
-  metric: InsightsMetric,
+  metric: CubeMetric,
   previous?: Map<string, Measures>,
   previousRaw?: Map<string, Measures>,
 ): RankedGroup[] {
@@ -646,7 +913,7 @@ export interface TrendGroup {
 export function trendSeries(
   cube: InsightsCube,
   rows: readonly CubeRow[],
-  metric: InsightsMetric,
+  metric: CubeMetric,
   dimension: InsightsDimension | null,
   topIds: readonly string[],
 ): TrendGroup[] {
@@ -697,7 +964,7 @@ export function groupSparklines(
   cube: InsightsCube,
   rows: readonly CubeRow[],
   dimension: InsightsDimension,
-  metric: InsightsMetric,
+  metric: CubeMetric,
 ): Map<string, number[]> {
   const ranking = rankingMetric(metric);
   const bucketCount = cube.bucketStarts.length;
@@ -797,7 +1064,7 @@ export function buildMatrix(
   rows: readonly CubeRow[],
   rowDimension: InsightsDimension,
   columnDimension: InsightsDimension,
-  metric: InsightsMetric,
+  metric: CubeMetric,
   rowLimit: number,
   columnLimit: number,
 ): InsightsMatrix {
@@ -877,7 +1144,7 @@ export function buildFlow(
   cube: InsightsCube,
   rows: readonly CubeRow[],
   levels: readonly InsightsDimension[],
-  metric: InsightsMetric,
+  metric: CubeMetric,
   limitPerLevel: number,
 ): { nodes: FlowNode[]; links: FlowLink[] } {
   const levelCount = levels.length;

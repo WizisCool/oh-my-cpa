@@ -158,6 +158,8 @@ const EVENT_IDENTITY_FIELDS = [
   'api_key_alias',
   'provider_key_mask',
   'source',
+  'user_agent',
+  'client_agent',
   'stream',
   'latency_ms',
   'ttft_ms',
@@ -222,7 +224,8 @@ function serve(entry, nowMs, url) {
       { status: 404, headers: JSON_HEADERS },
     );
   }
-  if (url.pathname === `${INSIGHTS_PATH_PREFIX}rhythm` && RHYTHM_FILTERS.some((name) => url.searchParams.has(name))) {
+  if ((url.pathname === `${INSIGHTS_PATH_PREFIX}rhythm` || url.pathname === `${INSIGHTS_PATH_PREFIX}clients`)
+    && RHYTHM_FILTERS.some((name) => url.searchParams.has(name))) {
     return new Response(
       JSON.stringify({ error: 'the demonstration holds this view for the whole deployment only', code: UNCAPTURED_CODE }),
       { status: 404, headers: JSON_HEADERS },

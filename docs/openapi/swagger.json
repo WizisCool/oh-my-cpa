@@ -4940,6 +4940,119 @@
         }
       }
     },
+    "/v1/management/insights/clients": {
+      "get": {
+        "security": [
+          {
+            "CookieAuth": []
+          }
+        ],
+        "description": "Aggregate retained request records in the Insights window by normalized client agent or SDK family under optional Insights dimension filters.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "Insights"
+        ],
+        "summary": "Query client and agent attribution for Insights",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Insights time preset (today, yesterday, this_week, last_week, this_month, last_month, 24h, 7d, 30d, 90d, all)",
+            "name": "preset",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "description": "Custom window start timestamp in Unix milliseconds",
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "description": "Custom window end timestamp in Unix milliseconds",
+            "name": "to",
+            "in": "query"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "collectionFormat": "multi",
+            "description": "Client API key or hmac fingerprint filters",
+            "name": "api_key",
+            "in": "query"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "collectionFormat": "multi",
+            "description": "Upstream model filters",
+            "name": "model",
+            "in": "query"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "collectionFormat": "multi",
+            "description": "Call point filters",
+            "name": "model_alias",
+            "in": "query"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "collectionFormat": "multi",
+            "description": "Provider filters",
+            "name": "provider",
+            "in": "query"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "collectionFormat": "multi",
+            "description": "Credential auth_index filters",
+            "name": "auth_index",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/api.insightsClientsResponse"
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          }
+        }
+      }
+    },
     "/v1/management/insights/cube": {
       "get": {
         "security": [
@@ -12323,6 +12436,16 @@
             "description": "Credential auth_index filters",
             "name": "auth_index",
             "in": "query"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "collectionFormat": "multi",
+            "description": "Normalized client agent or SDK family filters",
+            "name": "client_agent",
+            "in": "query"
           }
         ],
         "responses": {
@@ -17010,6 +17133,9 @@
         "auth_type": {
           "type": "string"
         },
+        "client_agent": {
+          "type": "string"
+        },
         "client_ip": {
           "type": "string"
         },
@@ -18322,6 +18448,96 @@
         "insightsBucketMonth"
       ]
     },
+    "api.insightsClientItem": {
+      "type": "object",
+      "properties": {
+        "cache_creation_tokens": {
+          "type": "integer"
+        },
+        "cache_read_tokens": {
+          "type": "integer"
+        },
+        "cached_tokens": {
+          "type": "integer"
+        },
+        "category": {
+          "type": "string"
+        },
+        "cost_nanos": {
+          "type": "integer"
+        },
+        "costed_requests": {
+          "type": "integer"
+        },
+        "failures": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "input_tokens": {
+          "type": "integer"
+        },
+        "latency_sum_ms": {
+          "type": "integer"
+        },
+        "net_tokens": {
+          "type": "integer"
+        },
+        "output_tokens": {
+          "type": "integer"
+        },
+        "priced_requests": {
+          "type": "integer"
+        },
+        "raw_prefix": {
+          "type": "string"
+        },
+        "reasoning_tokens": {
+          "type": "integer"
+        },
+        "requests": {
+          "type": "integer"
+        },
+        "total_tokens": {
+          "type": "integer"
+        },
+        "ttft_count": {
+          "type": "integer"
+        },
+        "ttft_sum_ms": {
+          "type": "integer"
+        }
+      }
+    },
+    "api.insightsClientsCoverage": {
+      "type": "object",
+      "properties": {
+        "retained_requests": {
+          "type": "integer"
+        },
+        "total_requests": {
+          "type": "integer"
+        }
+      }
+    },
+    "api.insightsClientsResponse": {
+      "type": "object",
+      "properties": {
+        "clients": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/api.insightsClientItem"
+          }
+        },
+        "coverage": {
+          "$ref": "#/definitions/api.insightsClientsCoverage"
+        },
+        "window": {
+          "$ref": "#/definitions/api.insightsWindow"
+        }
+      }
+    },
     "api.insightsCompareWindow": {
       "type": "object",
       "properties": {
@@ -18470,6 +18686,9 @@
           "type": "integer"
         },
         "hour": {
+          "type": "integer"
+        },
+        "net_tokens": {
           "type": "integer"
         },
         "requests": {
@@ -20539,6 +20758,9 @@
         "auth_type": {
           "type": "string"
         },
+        "client_agent": {
+          "type": "string"
+        },
         "cost_usd": {
           "type": "number"
         },
@@ -22050,6 +22272,18 @@
       "type": "object",
       "properties": {
         "canonical_requests": {
+          "type": "integer"
+        },
+        "completion_tokens": {
+          "type": "integer"
+        },
+        "effective_cache_read_tokens": {
+          "type": "integer"
+        },
+        "effective_total_tokens": {
+          "type": "integer"
+        },
+        "prompt_tokens": {
           "type": "integer"
         },
         "raw_input_tokens": {

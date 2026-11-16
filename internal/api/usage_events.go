@@ -62,6 +62,7 @@ type usageEventResponse struct {
 	ProviderKeyMask           string `json:"provider_key_mask,omitempty"`
 	Source                    string `json:"source,omitempty"`
 	UserAgent                 string `json:"user_agent,omitempty"`
+	ClientAgent               string `json:"client_agent,omitempty"`
 	Model                     string `json:"model"`
 	ModelAlias                string `json:"model_alias,omitempty"`
 	ReasoningEffort           string `json:"reasoning_effort,omitempty"`
@@ -123,6 +124,7 @@ func projectUsageEvent(row repository.UsageEventRow) usageEventResponse {
 	if row.UserAgent != nil {
 		item.UserAgent = *row.UserAgent
 	}
+	item.ClientAgent = row.ClientAgent
 	item.Model = row.Model
 	item.ReasoningEffort = row.ReasoningEffort
 	item.ServiceTier = row.ServiceTier
@@ -351,6 +353,7 @@ func usageEventFilterFromRequest(request *http.Request, window dashboardWindow) 
 		{"reasoning", &filter.ReasoningEfforts},
 		{"service_tier", &filter.ServiceTiers},
 		{"resolved_service_tier", &filter.ResolvedServiceTiers},
+		{"client_agent", &filter.ClientAgents},
 	}
 	for _, dimension := range multi {
 		values, err := usageEventMultiParams(query, dimension.key)
@@ -505,6 +508,7 @@ type UsageFacetsResponseDTO struct {
 // @Param provider query []string false "Provider filters" collectionFormat(multi)
 // @Param api_key query []string false "Client API key fingerprint filters" collectionFormat(multi)
 // @Param auth_index query []string false "Credential auth_index filters" collectionFormat(multi)
+// @Param client_agent query []string false "Normalized client agent or SDK family filters" collectionFormat(multi)
 // @Success 200 {object} UsageEventListResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
@@ -754,6 +758,9 @@ func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask strin
 		"client_ip":                    row.ClientIP,
 		"x_forwarded_for":              row.XForwardedFor,
 		"user_agent":                   row.UserAgent,
+	}
+	if item.ClientAgent != "" {
+		detail["client_agent"] = item.ClientAgent
 	}
 	if code := usage.NormalizeFailureCode(row.FailCode); row.Failed && code != "" {
 		detail["fail_code"] = code

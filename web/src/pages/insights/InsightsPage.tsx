@@ -1,5 +1,6 @@
 import React from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Select } from '@/components/ui/select';
 import { api, apiErrorCode } from '../../api/client';
 import { useT } from '../../i18n';
@@ -22,6 +23,7 @@ import {
   parseInsightsRange,
   type InsightsBucketChoice,
   type InsightsRange,
+  type InsightsWindow,
 } from '../../types/insights';
 import { PageHeader } from '../../components/common/PageHeader';
 import { Panel } from '../../components/common/Panel';
@@ -30,7 +32,9 @@ import { EmptyState } from '../../components/common/EmptyState';
 import { ToolButton } from '../../components/common/ToolButton';
 import { ActionMenu } from '../../components/common/ActionMenu';
 import { ChartLinesPlaceholder, InsightsSkeleton } from '../../components/common/PageLoading';
-import { SwapOutlined } from '../../components/icons';
+import { DownloadOutlined, SwapOutlined } from '../../components/icons';
+import { saveBlob } from '../../utils/download';
+import { exportFileName } from '../../agent/export';
 import { LoadFailure } from '../../components/feedback';
 import {
   FOLDED_ID,
@@ -38,6 +42,7 @@ import {
   baselineMeasures,
   buildFlow,
   comparisonScale,
+  cubeMetric,
   decodeInsightsCube,
   filterRows,
   groupBaselines,
@@ -48,6 +53,7 @@ import {
   lastActiveBuckets,
   rankGroups,
   sumMeasures,
+  tokenAnatomy,
   trendSeries,
   type CubeRow,
   type FlowNode,
@@ -78,7 +84,10 @@ import { DeferredPanel } from '../../components/common/DeferredPanel';
 import { useIsRouteActive, useIsRoutePollingActive } from '../../performance/routeContract';
 import { PanelNarrowing } from './components/PanelNarrowing';
 import { RhythmGrid } from './components/RhythmGrid';
-import { KeyDetailDrawer } from './components/KeyDetailDrawer';
+import { EntityDetailDrawer, type InsightsEntity } from './components/EntityDetailDrawer';
+import { TokenAnatomyStrip } from './components/TokenAnatomyStrip';
+import { ClientAttributionPanel } from './components/ClientAttributionPanel';
+import { canDrillUsageEvents, insightsCsv, usageEventsHref, type ExportEntity } from './insightsDrill';
 import {
   LazyInsightsFlowChart as InsightsFlowChart,
   LazyInsightsTrendChart as InsightsTrendChart,
@@ -193,11 +202,13 @@ export const InsightsPage: React.FC = () => {
   }, [cubeQuery.data, servingProvider]);
   const labels = useInsightsLabels(cube);
   const formatCompareWindow = useCompareWindowLabel();
+  const navigate = useNavigate();
 
-  const [openKey, setOpenKey] = React.useState<string | null>(null);
+  const [openEntity, setOpenEntity] = React.useState<InsightsEntity | null>(null);
   React.useEffect(() => {
-    if (!isRouteActive) setOpenKey((current) => (current !== null ? null : current));
+    if (!isRouteActive) setOpenEntity((current) => (current !== null ? null : current));
   }, [isRouteActive]);
+  const openDetail = React.useCallback((dimension: InsightsDimension, id: string) => setOpenEntity({ dimension, id }), []);
   // The rhythm read filters request records, where a connection is the credentials that served it;
   // the page's provider filter names the connection.
   const requestFilters = React.useMemo(() => requestFilterValues(cube, view.filters), [cube, view.filters]);
@@ -209,14 +220,31 @@ export const InsightsPage: React.FC = () => {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     refetchOnWindowFocus: isPollingActive,
+    refetchInterval: (query) => (isPollingActive ? insightsPollInterval(query.state.data?.window) : false),
     retry: (count, error) => apiErrorCode(error) !== 'demo_uncaptured' && count < 2,
     meta: { silent: true },
   });
-  const drawerRhythmString = openKey ? rhythmParams(range, { ...view.filters, key: [openKey] }, requestFilters) : '';
+  // Client attribution takes the rhythm read's parameters: both read request records.
+  const clientsQuery = useQuery({
+    queryKey: ['insights-clients', rhythmQueryString],
+    queryFn: () => api.getInsightsClients(rhythmQueryString),
+    enabled: isRangeReady,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+    refetchOnWindowFocus: isPollingActive,
+    refetchInterval: (query) => (isPollingActive ? insightsPollInterval(query.state.data?.window) : false),
+    retry: (count, error) => apiErrorCode(error) !== 'demo_uncaptured' && count < 2,
+    meta: { silent: true },
+  });
+  const drawerFilters = React.useMemo(
+    () => (openEntity ? { ...view.filters, [openEntity.dimension]: [openEntity.id] } : null),
+    [openEntity, view.filters],
+  );
+  const drawerRhythmString = drawerFilters ? rhythmParams(range, drawerFilters, requestFilterValues(cube, drawerFilters)) : '';
   const drawerRhythmQuery = useQuery({
     queryKey: ['insights-rhythm', drawerRhythmString],
     queryFn: () => api.getInsightsRhythm(drawerRhythmString),
-    enabled: isRouteActive && isRangeReady && openKey !== null,
+    enabled: isRouteActive && isRangeReady && openEntity !== null,
     staleTime: 60_000,
     retry: (count, error) => apiErrorCode(error) !== 'demo_uncaptured' && count < 2,
     meta: { silent: true },
@@ -236,6 +264,9 @@ export const InsightsPage: React.FC = () => {
     if (rhythmQuery.isStale && !rhythmQuery.isFetching) {
       void rhythmQuery.refetch();
     }
+    if (clientsQuery.isStale && !clientsQuery.isFetching) {
+      void clientsQuery.refetch();
+    }
   }, [
     isRouteActive,
     isRangeReady,
@@ -245,15 +276,20 @@ export const InsightsPage: React.FC = () => {
     rhythmQuery.isStale,
     rhythmQuery.isFetching,
     rhythmQuery.refetch,
+    clientsQuery.isStale,
+    clientsQuery.isFetching,
+    clientsQuery.refetch,
   ]);
 
-  const metric = view.metric;
+  // The token metric is read in the page's scope; every projection sums the rows it already sums.
+  const metric = cubeMetric(view.metric, view.tokenScope);
   const isLineMetric = !isAdditiveMetric(metric);
   const [selectedTrendIds, setSelectedTrendIds] = React.useState<string[]>([]);
   const rows = React.useMemo(() => (cube ? filterRows(cube, cube.rows, view.filters) : []), [cube, view.filters]);
   const previousRows = React.useMemo(() => (cube ? filterRows(cube, cube.previous, view.filters) : []), [cube, view.filters]);
   const isComparing = view.isComparing && Boolean(cube?.compare);
   const current = React.useMemo(() => sumMeasures(rows), [rows]);
+  const anatomy = React.useMemo(() => tokenAnatomy(current), [current]);
   const scale = React.useMemo(() => (cube ? comparisonScale(cube) : 1), [cube]);
   // The comparison baseline is derived from the full previous period's sub-buckets using an
   // outlier-robust mean scaled to the current window's elapsed duration.
@@ -414,9 +450,38 @@ export const InsightsPage: React.FC = () => {
   const lastActive = React.useMemo(() => (cube ? lastActiveBuckets(cube, rows, 'key') : new Map<string, number>()), [cube, rows]);
   const clientKeys = React.useMemo(() => rankings.key.filter((group) => !labels.isNonKey(group.id)), [labels, rankings.key]);
 
+  const eventsHref = React.useCallback(
+    (filters: InsightsFilters, clientAgent?: string, window?: InsightsWindow) => (cube ? usageEventsHref(cube, filters, clientAgent, window) : '/usage/events'),
+    [cube],
+  );
+  const exportCsv = React.useCallback(() => {
+    if (!cube) return;
+    const entities: ExportEntity[] = [];
+    const add = (dimension: InsightsDimension) => {
+      for (const group of rankGroups(groupTotals(cube, rows, dimension), 'requests')) {
+        entities.push({
+          dimension: t(`insights.dim.${dimension}`),
+          name: labels.label(dimension, group.id),
+          detail: labels.detail(dimension, group.id) ?? '',
+          measures: group.measures,
+          anatomy: tokenAnatomy(group.measures),
+        });
+      }
+    };
+    add(modelDimension);
+    add('key');
+    const header = [
+      t('insights.csv.dimension'), t('insights.csv.name'), t('insights.csv.detail'), t('insights.metric.requests'), t('insights.csv.failures'),
+      t('insights.anatomy.uncached_input'), t('insights.anatomy.cache_read'), t('insights.anatomy.cache_write'),
+      t('insights.anatomy.regular_output'), t('insights.anatomy.reasoning'), t('insights.metric.tokens'), t('insights.anatomy.net_tokens'),
+      t('insights.csv.cache_rate'), t('insights.csv.ttft_ms'), t('insights.csv.latency_ms'), t('insights.csv.cost_usd'),
+    ];
+    saveBlob(new Blob([insightsCsv(header, entities)], { type: 'text/csv;charset=utf-8' }), exportFileName('omc-insights', 'csv', new Date()));
+  }, [cube, rows, labels, modelDimension, t]);
+
   const shownWindow = cube?.window;
   const isHourAllowed = !shownWindow || shownWindow.to - shownWindow.from <= HOUR_LIMIT_MS;
-  const rhythmMeasure = metric === 'cost' ? 'cost' : metric === 'tokens' ? 'tokens' : 'requests';
+  const rhythmMeasure = metric === 'cost' ? 'cost' : metric === 'requests' || metric === 'latency' ? 'requests' : 'tokens';
   // The span in the fewest characters that still name it: no year inside the current one, no clock
   // on a window that starts and ends on day boundaries. The exact instants and the deployment's zone
   // are the hover, so the line under the title stays a reading rather than a timestamp dump.
@@ -462,6 +527,16 @@ export const InsightsPage: React.FC = () => {
     />
   );
 
+  const exportButton = (
+    <ToolButton
+      icon={<DownloadOutlined />}
+      label={t('insights.export_csv')}
+      disabled={!cube || rows.length === 0}
+      onClick={exportCsv}
+      data-testid="insights-export"
+    />
+  );
+
   const header = (
     <PageHeader
       className={styles['head']}
@@ -471,6 +546,7 @@ export const InsightsPage: React.FC = () => {
         <>
           <InsightsRangeControl range={range} onChange={(next) => void setRange(next)} isDisabled={!isRangeStored} />
           {compareButton}
+          {exportButton}
         </>
       )}
       mobileActions={(
@@ -478,6 +554,7 @@ export const InsightsPage: React.FC = () => {
           <InsightsRangeControl range={range} onChange={(next) => void setRange(next)} isDisabled={!isRangeStored} />
           <ActionMenu>
             {compareButton}
+            {exportButton}
           </ActionMenu>
         </>
       )}
@@ -507,12 +584,40 @@ export const InsightsPage: React.FC = () => {
 
   const isEmpty = cube.rows.length === 0;
   const rankingLimit = isPhone ? 5 : 8;
+  const metricName = t(`insights.metric.${metric}`);
+  const isSingleKey = panels.key.length <= 1;
+  const clientPanel = (
+    <ClientAttributionPanel
+      className={styles['client-panel']}
+      data={clientsQuery.data}
+      metric={metric}
+      isLoading={clientsQuery.isLoading}
+      isUncaptured={apiErrorCode(clientsQuery.error) === 'demo_uncaptured'}
+      error={clientsQuery.error}
+      onRetry={() => void clientsQuery.refetch()}
+      // Either read still on the previous window or filters would build a link from mismatched halves.
+      isPlaceholder={clientsQuery.isPlaceholderData || cubeQuery.isPlaceholderData}
+      limit={rankingLimit}
+      canViewRequests={cube ? canDrillUsageEvents(cube, view.filters) : false}
+      hrefFor={(clientAgent) => eventsHref(view.filters, clientAgent, clientsQuery.data?.window)}
+      onNavigate={navigate}
+    />
+  );
   const groupingOptions = INSIGHTS_GROUPINGS.map((grouping) => ({ value: grouping, label: t(`insights.group.${grouping}`) }));
 
   return (
     <div className={`terminal-page ${styles['page']}`} data-testid="insights-page" aria-busy={isViewPending || undefined} onPointerDownCapture={anchorPress}>
       {header}
-      <InsightsFilterBar cube={cube} filters={requestedView.filters} labels={labels} modelDimension={modelDimension} onChange={(filters) => setView({ filters })} onOpenKey={setOpenKey} />
+      <InsightsFilterBar
+        cube={cube}
+        filters={requestedView.filters}
+        labels={labels}
+        modelDimension={modelDimension}
+        onChange={(filters) => setView({ filters })}
+        onOpen={openDetail}
+        onViewRequests={() => navigate(eventsHref(requestedView.filters))}
+        canViewRequests={cube ? canDrillUsageEvents(cube, requestedView.filters) : false}
+      />
       {cubeQuery.isError && (
         <LoadFailure
           tone="warning"
@@ -521,7 +626,15 @@ export const InsightsPage: React.FC = () => {
           onRetry={() => void cubeQuery.refetch()}
         />
       )}
-      <MetricTiles current={current} baseline={baseline} metric={requestedView.metric} onMetricChange={(next: InsightsMetric) => setView({ metric: next })} />
+      <MetricTiles current={current} baseline={baseline} metric={requestedView.metric} tokenScope={view.tokenScope} onMetricChange={(next: InsightsMetric) => setView({ metric: next })} />
+      {!isEmpty && (
+        <TokenAnatomyStrip
+          anatomy={anatomy}
+          scope={requestedView.tokenScope}
+          onScopeChange={(tokenScope) => setView({ tokenScope })}
+          testId="insights-anatomy"
+        />
+      )}
       <Panel
         className={styles['trend-panel']}
         title={(
@@ -542,7 +655,7 @@ export const InsightsPage: React.FC = () => {
               </>
             )}
           >
-            {t('insights.trend_label', { metric: t(`insights.metric.${metric}`) })}
+            {t('insights.trend_label', { metric: metricName })}
           </PanelTitle>
         )}
       >
@@ -586,7 +699,7 @@ export const InsightsPage: React.FC = () => {
               labelOf={trendLabel}
               metric={metric}
               totalLabel={t('insights.total')}
-              label={t('insights.trend_label', { metric: t(`insights.metric.${metric}`) })}
+              label={t('insights.trend_label', { metric: metricName })}
               onBrush={isPhone ? undefined : brush}
               height={isPhone ? 220 : 280}
             />
@@ -594,15 +707,19 @@ export const InsightsPage: React.FC = () => {
           </>
         )}
       </Panel>
-      <div className={styles['rankings']} data-layout={panels.key.length === 1 ? 'single-key' : 'grid'}>
+      {/* One key leaves its panel short, so the client attribution sits beside it; with many keys it
+          closes the grid at full width. */}
+      <div className={styles['rankings']} data-layout={isSingleKey ? 'single-key' : 'grid'}>
         <RankingPanel dimension="key" title={t('insights.dim.key')} groups={panels.key} metric={metric} labels={labels} compare={baseline?.window}
-          colorOf={groupedColor('key')} selected={requestedView.filters.key ?? []} onSelect={selectFilter} onClear={clearFilter} onOpen={setOpenKey} limit={rankingLimit} testId="insights-ranking-key" />
+          colorOf={groupedColor('key')} selected={requestedView.filters.key ?? []} onSelect={selectFilter} onClear={clearFilter} onOpen={openDetail} limit={rankingLimit} testId="insights-ranking-key" />
+        {isSingleKey && clientPanel}
         <RankingPanel dimension={modelDimension} title={t(`insights.dim.${modelDimension}`)} groups={panels.model} metric={metric} labels={labels} compare={baseline?.window}
-          colorOf={groupedColor(modelDimension)} selected={requestedView.filters[modelDimension] ?? []} onSelect={selectFilter} onClear={clearFilter} limit={rankingLimit} testId="insights-ranking-model" />
+          colorOf={groupedColor(modelDimension)} selected={requestedView.filters[modelDimension] ?? []} onSelect={selectFilter} onClear={clearFilter} onOpen={openDetail} limit={rankingLimit} testId="insights-ranking-model" />
         <RankingPanel dimension="provider" title={t('insights.ranking.provider')} groups={panels.provider} metric={metric} labels={labels} compare={baseline?.window}
-          colorOf={groupedColor('provider')} selected={requestedView.filters.provider ?? []} onSelect={selectFilter} onClear={clearFilter} limit={rankingLimit} testId="insights-ranking-provider" />
+          colorOf={groupedColor('provider')} selected={requestedView.filters.provider ?? []} onSelect={selectFilter} onClear={clearFilter} onOpen={openDetail} limit={rankingLimit} testId="insights-ranking-provider" />
         <RankingPanel dimension="credential" title={t('insights.ranking.credential')} groups={panels.credential} metric={metric} labels={labels} compare={baseline?.window}
-          colorOf={groupedColor('credential')} selected={requestedView.filters.credential ?? []} onSelect={selectFilter} onClear={clearFilter} limit={rankingLimit} testId="insights-ranking-credential" />
+          colorOf={groupedColor('credential')} selected={requestedView.filters.credential ?? []} onSelect={selectFilter} onClear={clearFilter} onOpen={openDetail} limit={rankingLimit} testId="insights-ranking-credential" />
+        {!isSingleKey && clientPanel}
       </div>
       {/* On a phone the key ranking above already lists every key and opens its detail; the table
           would repeat it as a column of label rows. */}
@@ -612,11 +729,12 @@ export const InsightsPage: React.FC = () => {
         data-testid="insights-keys"
         title={<PanelTitle extra={<span className={styles['panel-meta']}>{t('insights.key_count', { n: clientKeys.length })}</span>}>{t('insights.keys_title')}</PanelTitle>}
       >
-        <KeyTable groups={rankings.key} sparklines={sparklines} lastActive={lastActive} metric={metric} labels={labels} compare={baseline?.window} isLoading={cubeQuery.isLoading} onOpen={setOpenKey} />
+        <KeyTable groups={rankings.key} sparklines={sparklines} lastActive={lastActive} metric={metric} labels={labels} compare={baseline?.window} isLoading={cubeQuery.isLoading} onOpen={(id) => openDetail('key', id)} />
       </Panel>
       )}
-      {/* A bar per key needs the width to name the key and still show its parts; a phone has the table above. */}
-      {!isPhone && (
+      {/* A bar per key needs the width to name the key and still show its parts, so a phone gets only
+          the model load profile from this panel. */}
+      {(
         <DeferredPanel
           priority="p1"
           fallback={<Panel className={styles['trend-panel']}><ChartFallback height={280} /></Panel>}
@@ -627,6 +745,8 @@ export const InsightsPage: React.FC = () => {
             columnDimension={modelDimension}
             metric={metric}
             labels={labels}
+            filters={view.filters}
+            isPhone={isPhone}
             selectedKeys={view.filters.key ?? []}
             selectedColumns={view.filters[modelDimension] ?? []}
             onSelect={(keyId, columnId) => {
@@ -696,7 +816,10 @@ export const InsightsPage: React.FC = () => {
         <RhythmGrid
           data={rhythmQuery.data}
           measure={rhythmMeasure}
+          tokenScope={view.tokenScope}
           isLoading={rhythmQuery.isLoading}
+          error={rhythmQuery.error}
+          onRetry={() => void rhythmQuery.refetch()}
           isUncaptured={apiErrorCode(rhythmQuery.error) === 'demo_uncaptured'}
         />
       </DeferredPanel>
@@ -708,9 +831,10 @@ export const InsightsPage: React.FC = () => {
         )}
         {cube.window.to - cube.window.from > 400 * DAY_MS && <span>{t('insights.long_window')}</span>}
       </div>
-      <KeyDetailDrawer
+      <EntityDetailDrawer
         cube={cube}
-        keyId={openKey}
+        tokenScope={view.tokenScope}
+        entity={openEntity}
         filters={view.filters}
         metric={metric}
         modelDimension={modelDimension}
@@ -718,10 +842,17 @@ export const InsightsPage: React.FC = () => {
         rhythm={drawerRhythmQuery.data}
         isRhythmLoading={drawerRhythmQuery.isLoading}
         isRhythmUncaptured={apiErrorCode(drawerRhythmQuery.error) === 'demo_uncaptured'}
-        onClose={() => setOpenKey(null)}
-        onFilter={(keyId) => {
-          setOpenKey(null);
-          setView({ filters: { ...requestedView.filters, key: [keyId] } });
+        rhythmError={drawerRhythmQuery.error}
+        onRhythmRetry={() => void drawerRhythmQuery.refetch()}
+        onClose={() => setOpenEntity(null)}
+        onFilter={(entity) => {
+          setOpenEntity(null);
+          setView({ filters: { ...requestedView.filters, [entity.dimension]: [entity.id] } });
+        }}
+        canViewRequests={(entity) => canDrillUsageEvents(cube, { ...view.filters, [entity.dimension]: [entity.id] })}
+        onViewRequests={(entity) => {
+          setOpenEntity(null);
+          navigate(eventsHref({ ...view.filters, [entity.dimension]: [entity.id] }));
         }}
       />
     </div>

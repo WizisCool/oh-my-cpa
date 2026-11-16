@@ -444,4 +444,5 @@ export default {
   'events.cause_upstream_hint': '上游内部出错。与当前配置无关时，通常会自行恢复。',
   'events.cause_unknown': '请求未成功',
   'events.cause_unknown_hint': '没有记录到明确的失败原因。可在诊断中查看上游响应和关联错误。',
+  'events.filter_chip_client_agent': '客户端: {val}',
 };

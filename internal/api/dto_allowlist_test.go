@@ -167,6 +167,7 @@ func TestBrowserDTOAllowlistAndSecretExclusion(t *testing.T) {
 		// The per-model breakdown. It is a window over stored request history like the dashboard, so it
 		// must clear the same secret-leakage assertions.
 		"/api/v1/management/dashboard/models?preset=1h",
+		"/api/v1/management/insights/clients?preset=24h",
 	}
 
 	for _, endpoint := range endpoints {

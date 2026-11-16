@@ -178,6 +178,7 @@ const PARAMETERISED_ROUTES = [
   },
   { path: '/api/v1/management/insights/cube', resolve: (url) => `insights-cube-${insightsPresetOf(url)}` },
   { path: '/api/v1/management/insights/rhythm', resolve: (url) => `insights-rhythm-${insightsPresetOf(url)}` },
+  { path: '/api/v1/management/insights/clients', resolve: (url) => `insights-clients-${insightsPresetOf(url)}` },
   {
     path: '/api/v1/management/dashboard/models',
     resolve: (url) => {

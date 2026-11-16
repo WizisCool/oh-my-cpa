@@ -60,7 +60,9 @@ func recordFacts(t *testing.T, repo *Repository, query UsageFactQuery) []UsageFa
 	rows, err := repo.SQL().Query(`
 		SELECT api_group_key, model, COALESCE(model_alias, ''), auth_index, provider, auth_type, timestamp_ms,
 		       failed, input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens,
-		       cache_creation_tokens, total_tokens, latency_ms, ttft_ms, cost_nanos, pricing_status
+		       cache_creation_tokens, total_tokens, latency_ms, ttft_ms, cost_nanos, pricing_status,
+		       executor_type, endpoint,
+		       (token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') = 'complete')
 		FROM usage_events WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`,
 		query.InstanceID, query.FromMS, query.ToMS)
 	if err != nil {
@@ -69,7 +71,8 @@ func recordFacts(t *testing.T, repo *Repository, query UsageFactQuery) []UsageFa
 	defer rows.Close()
 	grouped := map[string]*UsageFactRow{}
 	for rows.Next() {
-		var key, model, alias, authIndex, provider, authType, status string
+		var key, model, alias, authIndex, provider, authType, status, executorType, endpoint string
+		var isCanonical bool
 		var timestampMS int64
 		var failed int64
 		var measures UsageMeasures
@@ -77,9 +80,22 @@ func recordFacts(t *testing.T, repo *Repository, query UsageFactQuery) []UsageFa
 		if err := rows.Scan(&key, &model, &alias, &authIndex, &provider, &authType, &timestampMS, &failed,
 			&measures.InputTokens, &measures.OutputTokens, &measures.ReasoningTokens, &measures.CachedTokens,
 			&measures.CacheReadTokens, &measures.CacheCreationTokens, &measures.TotalTokens, &measures.LatencySumMS,
-			&ttft, &cost, &status); err != nil {
+			&ttft, &cost, &status, &executorType, &endpoint, &isCanonical); err != nil {
 			t.Fatal(err)
 		}
+		measures.Accounting.PromptTokens, measures.Accounting.CompletionTokens, measures.Accounting.EffectiveCacheReadTokens, measures.Accounting.EffectiveTotalTokens = NormalizeEventPartition(EventPartitionInput{
+			IsCanonical:         isCanonical,
+			Provider:            provider,
+			ExecutorType:        executorType,
+			Endpoint:            endpoint,
+			InputTokens:         measures.InputTokens,
+			OutputTokens:        measures.OutputTokens,
+			ReasoningTokens:     measures.ReasoningTokens,
+			CachedTokens:        measures.CachedTokens,
+			CacheReadTokens:     measures.CacheReadTokens,
+			CacheCreationTokens: measures.CacheCreationTokens,
+			TotalTokens:         measures.TotalTokens,
+		})
 		values := map[UsageDimension]string{
 			UsageDimensionKey: key, UsageDimensionModel: model, UsageDimensionAuthType: authType,
 			UsageDimensionCallPoint: model, UsageDimensionProvider: "unknown",

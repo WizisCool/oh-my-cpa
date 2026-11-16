@@ -194,11 +194,14 @@ type Event struct {
 	RequestID  string
 	// AccessProvider and IsNativeKey mirror the payload fields above; empty
 	// and false mean the publishing gateway predates them.
-	AccessProvider       string
-	IsNativeKey          bool
-	ClientIP             *string
-	XForwardedFor        *string
-	UserAgent            *string
+	AccessProvider string
+	IsNativeKey    bool
+	ClientIP       *string
+	XForwardedFor  *string
+	UserAgent      *string
+	// ClientAgent is the canonical low-cardinality caller agent or SDK family
+	// resolved at ingestion before UserAgent and Endpoint are minimized.
+	ClientAgent          string
 	Model                string
 	ModelAlias           *string
 	ReasoningEffort      string
@@ -284,6 +287,7 @@ func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time
 		ClientIP:             normalizePointer(payload.ClientIP, security.NormalizeClientIP),
 		XForwardedFor:        normalizePointer(payload.XForwardedFor, security.NormalizeForwardedFor),
 		UserAgent:            security.MinimizeUserAgent(valueOf(payload.UserAgent)),
+		ClientAgent:          ClassifyClientAgent(valueOf(payload.UserAgent), payload.Endpoint).PersistedID(),
 		Model:                orUnknown(boundedSafe(payload.Model, 256)),
 		ModelAlias:           cleanBoundedString(payload.Alias, 256),
 		ReasoningEffort:      boundedSafe(payload.ReasoningEffort, 128),

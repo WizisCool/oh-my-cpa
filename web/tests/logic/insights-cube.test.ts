@@ -4,6 +4,7 @@ import {
   attributeServingProviders,
   baselineMeasures,
   buildFlow,
+  cubeMetric,
   buildMatrix,
   compareMetric,
   comparisonScale,
@@ -16,11 +17,23 @@ import {
   isOAuthRow,
   matrixCellKey,
   metricValue,
+  normalizeMeasures,
+  measuresAvgTtftMs,
+  measuresCacheRate,
+  measuresReasoningShare,
   rankGroups,
   robustBucketSum,
+  scopeTokens,
+  sumAnatomy,
   sumMeasures,
+  tokenAnatomy,
   trendSeries,
+  type Measures,
 } from '../../src/types/insightsCube.ts';
+import { canDrillUsageEvents, csvCell, insightsCsv, usageEventsHref } from '../../src/pages/insights/insightsDrill.ts';
+import { MAX_USAGE_EVENT_FILTER_VALUES } from '../../src/types/usageEvents.ts';
+import { clientCoverageShare, clientIconId, clientMeasures, clientProductName } from '../../src/types/clientAgents.ts';
+import { readEventQuery } from '../../src/types/usageEventQuery.ts';
 import { formatCountBaseline } from '../../src/types/insightsFormat.ts';
 import { insightsRangeParams, parseInsightsRange } from '../../src/types/insights.ts';
 import { canShowWeekView, peakHourSet, summarizeRhythm } from '../../src/pages/insights/insightsRhythm.ts';
@@ -601,4 +614,267 @@ test('insights label resolver handles deleted OAuth credentials, deleted OpenAI-
     'Claude (#eeee5555)',
     'credential present only in comparison window still resolves its unambiguous provider',
   );
+});
+
+test('insights token anatomy, net scope, request drill-down and export', () => {
+  const measures = (patch: Partial<Measures>): Measures => ({ ...emptyMeasures(), ...patch });
+
+  // OpenAI style: the cache read sits inside the input count and in `cached_tokens`.
+  const openai = tokenAnatomy(measures({ inputTokens: 1000, cachedTokens: 600, outputTokens: 300, reasoningTokens: 100, totalTokens: 1300 }));
+  assert.deepEqual(
+    [openai.cacheRead, openai.cacheWrite, openai.uncachedInput, openai.regularOutput, openai.reasoningOutput, openai.netTokens],
+    [600, 0, 400, 200, 100, 700],
+  );
+  // The five parts never overlap: they add back to the prompt and the completion.
+  assert.equal(openai.cacheRead + openai.cacheWrite + openai.uncachedInput, openai.promptTotal);
+  assert.equal(openai.regularOutput + openai.reasoningOutput, openai.completionTotal);
+  // Both cache fields present: the explicit read wins, they are never added together.
+  assert.equal(tokenAnatomy(measures({ inputTokens: 1000, cachedTokens: 600, cacheReadTokens: 500 })).cacheRead, 500);
+  // Anthropic style: the input is reported beside the cache parts, so the prompt is all three and the
+  // input survives as the uncached part - whether the total counted the cache or was never reported.
+  for (const totalTokens of [1070, 0, 70]) {
+    const anthropic = tokenAnatomy(measures({ inputTokens: 50, cacheReadTokens: 900, cacheCreationTokens: 100, outputTokens: 20, totalTokens }));
+    assert.deepEqual([anthropic.promptTotal, anthropic.uncachedInput, anthropic.netTokens], [1050, 50, 70], `total ${totalTokens}`);
+  }
+  // Without an input count the prompt is what the total leaves after the output.
+  assert.equal(tokenAnatomy(measures({ totalTokens: 500, outputTokens: 100 })).promptTotal, 400);
+
+  assert.equal(measuresCacheRate(measures({ inputTokens: 1000, cachedTokens: 600 })), 60);
+  assert.equal(measuresCacheRate(measures({ inputTokens: 1000, cacheReadTokens: 1000 })), 99.9);
+  assert.equal(measuresCacheRate(emptyMeasures()), null);
+  assert.equal(measuresReasoningShare(measures({ outputTokens: 400, reasoningTokens: 100 })), 25);
+  assert.equal(measuresReasoningShare(emptyMeasures()), null);
+  assert.equal(measuresAvgTtftMs(measures({ ttftSumMs: 900, ttftCount: 3 })), 300);
+  assert.equal(measuresAvgTtftMs(emptyMeasures()), null);
+
+  const COLUMNS = [
+    'bucket', 'key', 'call_point', 'model', 'provider', 'credential', 'requests', 'failures', 'input_tokens',
+    'output_tokens', 'reasoning_tokens', 'cached_tokens', 'cache_read_tokens', 'cache_creation_tokens', 'total_tokens',
+    'latency_sum_ms', 'ttft_sum_ms', 'ttft_count', 'cost_nanos', 'priced_requests', 'costed_requests',
+  ];
+  const row = (bucket: number, key: number, input: number, cacheRead: number, output: number) =>
+    [bucket, key, 0, 0, 0, 0, 1, 0, input, output, 0, 0, cacheRead, 0, input + output, 100, 0, 0, 0, 0, 0];
+  const cube = decodeInsightsCube({
+    window: { preset: 'custom', from: 1_000, to: 9_999, open_end: false, bucket: 'hour', timezone: 'UTC', widened: false },
+    compare_window: { from: -8_000, to: 999 },
+    bucket_starts: [1_000, 5_000],
+    dims: {
+      keys: [{ id: 'hmac:a', is_client_key: true }, { id: 'hmac:b', is_client_key: true }, { id: 'claude', is_client_key: false }],
+      call_points: ['fast'], models: ['gpt-5'], providers: ['codex'], credentials: [{ auth_index: 'c1', auth_type: 'oauth' }],
+    },
+    columns: COLUMNS,
+    // Key A sends large, mostly cached prompts; key B small uncached ones.
+    rows: [row(0, 0, 10_000, 9_000, 100), row(1, 1, 3_000, 0, 100)],
+    previous_rows: [row(0, 0, 5_000, 4_000, 100), row(1, 1, 1_000, 0, 100)],
+    coverage: { fact_requests: 2, detail_requests: 2 },
+  });
+  assert.equal(cube.rows[0].measures.cacheReadTokens, 9_000);
+
+  // All tokens rank key A first; net tokens rank key B first. The page reads `net_tokens` off the sums
+  // it already makes, and that agrees with rewriting every row (`scopeTokens`) and summing.
+  assert.equal(cubeMetric('tokens', 'net'), 'net_tokens');
+  assert.equal(cubeMetric('cost', 'net'), 'cost');
+  assert.deepEqual(rankGroups(groupTotals(cube, cube.rows, 'key'), 'tokens').map((group) => group.id), ['hmac:a', 'hmac:b']);
+  assert.deepEqual(rankGroups(groupTotals(cube, cube.rows, 'key'), 'net_tokens').map((group) => group.id), ['hmac:b', 'hmac:a']);
+  const net = scopeTokens(cube, 'net');
+  assert.equal(scopeTokens(cube, 'all'), cube);
+  assert.deepEqual(rankGroups(groupTotals(net, net.rows, 'key'), 'tokens').map((group) => group.id), ['hmac:b', 'hmac:a']);
+  assert.equal(metricValue(sumMeasures(cube.rows), 'net_tokens'), sumMeasures(net.rows).totalTokens);
+  assert.equal(metricValue(sumMeasures(cube.rows), 'net_tokens'), 1_100 + 3_100);
+  assert.deepEqual(
+    trendSeries(cube, cube.rows, 'net_tokens', 'key', ['hmac:a', 'hmac:b']).map((group) => group.values),
+    trendSeries(net, net.rows, 'tokens', 'key', ['hmac:a', 'hmac:b']).map((group) => group.values),
+  );
+  // The comparison baseline reads the net tokens of the rows it is compared to.
+  assert.equal(metricValue(baselineMeasures(cube.previous, 1).raw, 'net_tokens'), 1_100 + 1_100);
+  assert.equal(metricValue(baselineMeasures(cube.previous, 1).baseline, 'net_tokens'), baselineMeasures(net.previous, 1).baseline.totalTokens);
+  assert.equal(baselineMeasures(cube.previous, 1).raw.totalTokens, 5_100 + 1_100);
+
+  // Rows that count the cache three different ways decode into one accounting, each by its provider's
+  // protocol, so their sum cuts into the same parts as the rows cut one by one.
+  const mixed = decodeInsightsCube({
+    window: cube.window, compare_window: null, bucket_starts: [1_000],
+    dims: { keys: [{ id: 'hmac:a', is_client_key: true }], call_points: ['fast'], models: ['gpt-5'], providers: ['codex', 'claude'], credentials: [{ auth_index: 'c1', auth_type: 'oauth' }] },
+    columns: COLUMNS,
+    rows: [
+      // input inclusive, read reported as cached_tokens
+      [0, 0, 0, 0, 0, 0, 1, 0, 1_000, 300, 100, 600, 0, 0, 1_300, 100, 0, 0, 0, 0, 0],
+      // input inclusive, read reported as cache_read_tokens
+      [0, 0, 0, 0, 0, 0, 1, 0, 2_000, 100, 0, 0, 1_500, 0, 2_100, 100, 0, 0, 0, 0, 0],
+      // Anthropic: input reported beside the cache, no total
+      [0, 0, 0, 0, 1, 0, 1, 0, 50, 20, 0, 0, 900, 100, 0, 100, 0, 0, 0, 0, 0],
+    ],
+    previous_rows: [],
+    coverage: { fact_requests: 3, detail_requests: 3 },
+  });
+  const parts = sumAnatomy(mixed.rows);
+  const whole = tokenAnatomy(sumMeasures(mixed.rows));
+  assert.deepEqual(whole, parts);
+  assert.equal(parts.netTokens, (400 + 300) + (500 + 100) + (50 + 20));
+  assert.equal(sumMeasures(mixed.rows).netTokens, parts.netTokens);
+
+  // Normalising is idempotent: a normalised record is never read as raw again. A total that balances
+  // input, cache and output exactly says the input was reported apart from the cache.
+  const once = normalizeMeasures(measures({ inputTokens: 100, cacheReadTokens: 50, outputTokens: 10, totalTokens: 160 }));
+  assert.deepEqual(normalizeMeasures(once), once);
+  assert.deepEqual([tokenAnatomy(once).promptTotal, tokenAnatomy(once).netTokens], [150, 110]);
+  // Slack a total does not account for is never guessed into a cache reported apart.
+  const slack = normalizeMeasures(measures({ inputTokens: 100, cacheReadTokens: 50, outputTokens: 10, totalTokens: 1000 }));
+  assert.deepEqual(normalizeMeasures(slack), slack);
+  assert.deepEqual(
+    [tokenAnatomy(slack).promptTotal, tokenAnatomy(slack).uncachedInput, tokenAnatomy(slack).netTokens, slack.totalTokens],
+    [100, 50, 60, 1000],
+  );
+  // A sum's total spans rows: it cannot make one row's inclusive input read as reported apart.
+  const rowA = { bucket: 0, dims: [0, 0, 0, 0, 0], measures: normalizeMeasures(measures({ requests: 1, inputTokens: 100, outputTokens: 10, totalTokens: 1000 })) };
+  const rowB = { bucket: 0, dims: [0, 0, 0, 0, 0], measures: normalizeMeasures(measures({ requests: 1, inputTokens: 100, cacheReadTokens: 50, outputTokens: 10, totalTokens: 110 })) };
+  const summed = tokenAnatomy(sumMeasures([rowA, rowB]));
+  assert.deepEqual(summed, sumAnatomy([rowA, rowB]));
+  assert.deepEqual([summed.promptTotal, summed.uncachedInput, summed.netTokens], [200, 150, 170]);
+  // A raw record mixed into a sum keeps the sum raw.
+  assert.equal(sumMeasures([rowA, { ...rowB, measures: measures({ requests: 1 }) }]).isNormalized, false);
+  assert.equal(sumMeasures([rowA, rowB]).isNormalized, true);
+
+  // Reasoning reported beside the output: the total has room for both, so the completion is their sum.
+  const reasoning = tokenAnatomy(measures({ inputTokens: 100, outputTokens: 20, reasoningTokens: 30, totalTokens: 150 }));
+  assert.deepEqual(
+    [reasoning.completionTotal, reasoning.regularOutput, reasoning.reasoningOutput, reasoning.netTokens],
+    [50, 20, 30, 150],
+  );
+
+  // Anthropic reports the input apart from the cache and the thinking inside the output; the prompt is
+  // settled before reasoning, so room the cache leaves in the total is not extra completion.
+  const cacheRoom = tokenAnatomy(measures({ inputTokens: 50, cacheReadTokens: 900, outputTokens: 100, reasoningTokens: 20, totalTokens: 1050 }), 'claude');
+  assert.deepEqual(
+    [cacheRoom.promptTotal, cacheRoom.completionTotal, cacheRoom.regularOutput, cacheRoom.reasoningOutput, cacheRoom.netTokens],
+    [950, 100, 80, 20, 150],
+  );
+  const inclusiveReasoning = tokenAnatomy(measures({ inputTokens: 1000, cacheReadTokens: 100, outputTokens: 200, reasoningTokens: 50, totalTokens: 1300 }), 'claude');
+  assert.deepEqual([inclusiveReasoning.promptTotal, inclusiveReasoning.completionTotal, inclusiveReasoning.netTokens], [1100, 200, 1200]);
+
+  const anatomyOfPrompt = (anatomy: ReturnType<typeof tokenAnatomy>) =>
+    [anatomy.promptTotal, anatomy.completionTotal, anatomy.uncachedInput, anatomy.netTokens];
+  // Each provider has one reading: Anthropic's thinking stays inside the output whatever slack the
+  // total has, and a custom provider named for Claude is read as Anthropic.
+  for (const [provider, totalTokens] of [['claude', 150], ['plugin-claude', 140]] as const) {
+    const thinking = tokenAnatomy(measures({ inputTokens: 100, cacheReadTokens: 10, cachedTokens: 10, outputTokens: 30, reasoningTokens: 10, totalTokens }), provider);
+    assert.deepEqual([thinking.promptTotal, thinking.completionTotal, thinking.netTokens], [110, 30, 130], provider);
+  }
+
+  // A known protocol's prompt is its columns: slack in Anthropic's total never becomes uncached input,
+  // and its explicit cache sits beside the input whatever the total says.
+  const anthropicSlack = measures({ requests: 1, inputTokens: 0, outputTokens: 30, reasoningTokens: 10, cachedTokens: 100, cacheReadTokens: 100, cacheCreationTokens: 50, totalTokens: 200 });
+  assert.deepEqual(anatomyOfPrompt(tokenAnatomy(anthropicSlack, 'claude')), [150, 30, 0, 30]);
+  assert.equal(normalizeMeasures(anthropicSlack, 'claude').totalTokens, 200);
+  const anthropicShort = measures({ requests: 1, inputTokens: 100, outputTokens: 30, reasoningTokens: 10, cachedTokens: 100, cacheReadTokens: 100, cacheCreationTokens: 50, totalTokens: 180 });
+  assert.deepEqual(anatomyOfPrompt(tokenAnatomy(anthropicShort, 'claude')), [250, 30, 100, 130]);
+
+  // OpenAI counts the cache inside the input; slack in its total is not a second prompt.
+  const anatomyOf = (anatomy: ReturnType<typeof tokenAnatomy>) =>
+    [anatomy.promptTotal, anatomy.completionTotal, anatomy.uncachedInput, anatomy.regularOutput, anatomy.reasoningOutput, anatomy.netTokens];
+  const openAISlack = measures({ inputTokens: 100, cachedTokens: 80, outputTokens: 20, totalTokens: 1000 });
+  assert.deepEqual(anatomyOf(tokenAnatomy(openAISlack, 'openai')), [100, 20, 20, 20, 0, 40]);
+  assert.deepEqual(anatomyOf(tokenAnatomy(openAISlack)), [100, 20, 20, 20, 0, 40]);
+  // Gemini counts the cache inside the input and the thinking beside the output, whatever the figures coincide with.
+  const geminiEqualCache = measures({ inputTokens: 100, cachedTokens: 10, cacheReadTokens: 10, outputTokens: 30, reasoningTokens: 10, totalTokens: 140 });
+  assert.deepEqual(anatomyOf(tokenAnatomy(geminiEqualCache, 'gemini')), [100, 40, 90, 30, 10, 130]);
+  assert.deepEqual(anatomyOf(tokenAnatomy(geminiEqualCache)), [100, 40, 90, 30, 10, 130]);
+  const geminiOutputCache = tokenAnatomy(measures({ inputTokens: 100, cachedTokens: 25, cacheReadTokens: 25, outputTokens: 25, reasoningTokens: 10, totalTokens: 135 }), 'gemini');
+  assert.deepEqual([geminiOutputCache.promptTotal, geminiOutputCache.completionTotal, geminiOutputCache.netTokens], [100, 35, 110]);
+
+  // A connection drills into the credentials that served it, up to the server's ceiling on one filter;
+  // past it the link is withheld rather than cut short.
+  const servedBy = (credentials: number) => decodeInsightsCube({
+    window: cube.window, compare_window: null, bucket_starts: [1_000],
+    dims: {
+      keys: [{ id: 'hmac:a', is_client_key: true }], call_points: ['fast'], models: ['gpt-5'], providers: ['connection-id'],
+      credentials: Array.from({ length: credentials }, (_, index) => ({ auth_index: `c${String(index).padStart(3, '0')}`, auth_type: 'oauth' })),
+    },
+    columns: COLUMNS,
+    rows: Array.from({ length: credentials }, (_, index) => [0, 0, 0, 0, 0, index, 1, 0, 10, 1, 0, 0, 0, 0, 11, 100, 0, 0, 0, 0, 0]),
+    previous_rows: [],
+    coverage: { fact_requests: credentials, detail_requests: credentials },
+  });
+  for (const credentials of [65, MAX_USAGE_EVENT_FILTER_VALUES]) {
+    const served = servedBy(credentials);
+    assert.equal(canDrillUsageEvents(served, { provider: ['connection-id'] }), true);
+    const drill = new URLSearchParams(usageEventsHref(served, { provider: ['connection-id'] }).split('?')[1]);
+    assert.equal(drill.getAll('auth_index').length, credentials);
+    assert.equal(drill.has('provider'), false);
+  }
+  assert.equal(canDrillUsageEvents(servedBy(MAX_USAGE_EVENT_FILTER_VALUES + 1), { provider: ['connection-id'] }), false);
+  assert.equal(canDrillUsageEvents(cube, { key: Array.from({ length: 300 }, () => 'hmac:a') }), true);
+
+  // A server that partitions the columns sends `net_tokens`; its rows are taken as they are.
+  const partitioned = decodeInsightsCube({
+    window: cube.window, compare_window: null, bucket_starts: [1_000],
+    dims: { keys: [{ id: 'hmac:a', is_client_key: true }], call_points: ['fast'], models: ['gpt-5'], providers: ['codex'], credentials: [{ auth_index: 'c1', auth_type: 'oauth' }] },
+    columns: [...COLUMNS, 'net_tokens'],
+    rows: [[0, 0, 0, 0, 0, 0, 1, 0, 1_050, 20, 0, 900, 900, 100, 1_070, 100, 0, 0, 0, 0, 0, 70]],
+    previous_rows: [],
+    coverage: { fact_requests: 1, detail_requests: 1 },
+  });
+  assert.equal(partitioned.rows[0].measures.isNormalized, true);
+  assert.equal(partitioned.rows[0].measures.inputTokens, 1_050);
+  assert.equal(metricValue(sumMeasures(partitioned.rows), 'net_tokens'), 70);
+  assert.deepEqual(
+    clientMeasures({
+      id: 'x', category: 'agent', requests: 1, failures: 0, input_tokens: 1_050, output_tokens: 20, reasoning_tokens: 0,
+      cached_tokens: 900, cache_read_tokens: 900, cache_creation_tokens: 100, total_tokens: 1_070, net_tokens: 70,
+      latency_sum_ms: 0, ttft_sum_ms: 0, ttft_count: 0, cost_nanos: 0, priced_requests: 0, costed_requests: 0,
+    }).netTokens,
+    70,
+  );
+
+  // The request list reads back the view: window, every chosen key group - even one this window never
+  // saw, so the list opens empty as the page reads zero - the model vocabulary and the client.
+  const href = usageEventsHref(cube, { key: ['hmac:a', 'claude', 'hmac:gone'], call_point: ['fast'], model: ['gpt-5'] }, 'claude-code');
+  assert.ok(href.startsWith('/usage/events?'));
+  const query = readEventQuery(new URLSearchParams(href.slice(href.indexOf('?') + 1)));
+  assert.deepEqual([query.from, query.to], [1_000, 9_999]);
+  assert.deepEqual(query.filters, { model: ['gpt-5'], model_alias: ['fast'], api_key: ['hmac:a', 'claude', 'hmac:gone'], client_agent: ['claude-code'] });
+  assert.deepEqual(new URLSearchParams(usageEventsHref(cube, { key: ['hmac:absent'] }).split('?')[1]).getAll('api_key'), ['hmac:absent']);
+  // The client ranking passes the window its own read was answered for.
+  const clientWindow = { ...cube.window, from: 2_000, to: 3_000 };
+  const windowed = new URLSearchParams(usageEventsHref(cube, {}, 'claude-code', clientWindow).split('?')[1]);
+  assert.deepEqual([windowed.get('from'), windowed.get('to')], ['2000', '3000']);
+  assert.equal(query.text, undefined);
+  // The `other` bucket names no one program, so it narrows nothing.
+  assert.ok(!usageEventsHref(cube, {}, 'other').includes('client_agent'));
+  // A provider filter becomes the credentials that served it; a window following the clock stays open.
+  const open = { ...cube, window: { ...cube.window, open_end: true } };
+  const providerQuery = new URLSearchParams(usageEventsHref(open, { provider: ['codex'] }).split('?')[1]);
+  assert.deepEqual([providerQuery.getAll('auth_index'), providerQuery.has('to'), providerQuery.has('client_agent')], [['c1'], false, false]);
+
+  // Export: BOM, quoted text, formula-looking text defused even behind blanks.
+  assert.equal(csvCell('=SUM(A1)'), `"'=SUM(A1)"`);
+  assert.equal(csvCell('  @cmd'), `"'  @cmd"`);
+  assert.equal(csvCell('-1+2'), `"'-1+2"`);
+  assert.equal(csvCell('\tx'), `"'\tx"`);
+  assert.equal(csvCell('say "hi", ok'), '"say ""hi"", ok"');
+  assert.equal(csvCell(12), '12');
+  assert.equal(csvCell(null), '');
+  const csv = insightsCsv(['Name'], [{
+    dimension: 'Key', name: '+Ada', detail: 'sk-…aaaa',
+    measures: measures({ requests: 2, inputTokens: 1000, cachedTokens: 600, outputTokens: 300, totalTokens: 1300, latencySumMs: 400 }),
+    anatomy: openai,
+  }]);
+  assert.ok(csv.startsWith('﻿"Name"\r\n'));
+  assert.equal(csv.split('\r\n')[1], `"Key","'+Ada","sk-…aaaa",2,0,400,600,0,200,100,1300,700,60,,200,`);
+
+  assert.equal(clientProductName('claude-code'), 'Claude Code');
+  assert.equal(clientProductName('oh-my-pi'), 'Oh My Pi (omp)');
+  assert.equal(clientProductName('new-agent'), 'New Agent');
+  assert.equal(clientProductName('oh-my-cpa'), 'Oh My CPA');
+  assert.equal(clientProductName('hindsight'), 'Hindsight');
+  assert.equal(clientProductName('node-http'), 'Node HTTP');
+  assert.equal(clientProductName('google-genai-sdk'), 'Google GenAI SDK');
+  assert.equal(clientProductName('unknown'), undefined);
+  // Identifiers come from request headers; one that names an `Object.prototype` member is still just a word.
+  assert.equal(clientProductName('constructor'), 'Constructor');
+  assert.equal(clientIconId('constructor'), undefined);
+  assert.equal(clientIconId('claude-code'), 'ClaudeCode');
+  assert.equal(clientCoverageShare({ total_requests: 40, retained_requests: 10 }), 25);
+  assert.equal(clientCoverageShare({ total_requests: 40, retained_requests: 40 }), null);
+  assert.equal(clientCoverageShare({ total_requests: 0, retained_requests: 0 }), null);
 });

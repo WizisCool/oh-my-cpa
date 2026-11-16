@@ -454,3 +454,135 @@ func BenchmarkPricingUsage(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkUsageClientAgents(b *testing.B) {
+	ctx := context.Background()
+	repo := performanceRepository(b, 0)
+	const dayMS = int64(24 * 60 * 60 * 1000)
+	if _, err := repo.SQL().Exec(`
+		WITH RECURSIVE seq(k) AS (VALUES(1) UNION ALL SELECT k+1 FROM seq WHERE k <= 100000)
+		INSERT INTO usage_events (
+			instance_id, event_key, api_group_key, generate, timestamp_ms, created_at_ms,
+			client_agent, user_agent, input_tokens, output_tokens, total_tokens, cost_nanos, pricing_status
+		)
+		SELECT
+			'default', 'event-'||k, 'group', 1, 1700000000000 + ((k - 1) % 90) * ?, 1700000000000,
+			CASE k % 8
+				WHEN 0 THEN 'pi'
+				WHEN 1 THEN 'claude-code'
+				WHEN 2 THEN 'codex-cli'
+				WHEN 3 THEN 'hindsight'
+				WHEN 4 THEN 'oh-my-cpa'
+				WHEN 5 THEN 'opencode'
+				WHEN 6 THEN 'openai-sdk'
+				ELSE 'node-http'
+			END,
+			CASE k % 8
+				WHEN 0 THEN 'pi/1.5.' || (k % 25)
+				WHEN 1 THEN 'claude-cli/2.1.' || (k % 40)
+				WHEN 2 THEN 'codex_cli_rs/0.47.' || (k % 30)
+				WHEN 3 THEN 'hindsight/1.2.' || (k % 15)
+				WHEN 4 THEN 'Oh-My-CPA/0.4.' || (k % 10)
+				WHEN 5 THEN 'opencode/latest/1.19.' || (k % 20)
+				WHEN 6 THEN 'OpenAI/Python'
+				ELSE 'node/22.11.' || (k % 12)
+			END,
+			900, 300, 1200, 150000, 'priced'
+		FROM seq`, dayMS); err != nil {
+		b.Fatal(err)
+	}
+	for _, days := range []int64{7, 30} {
+		b.Run(fmt.Sprintf("%dd", days), func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				res, err := repo.QueryUsageClientAgents(ctx, "default", 1700000000000, 1700000000000+days*dayMS-1, nil)
+				if err != nil || len(res.Items) < 8 {
+					b.Fatalf("items=%d err=%v", len(res.Items), err)
+				}
+			}
+		})
+	}
+	b.Run("FilterRareClient30d", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			page, err := repo.ListUsageEvents(ctx, UsageEventFilter{
+				InstanceID:   "default",
+				FromMS:       1700000000000,
+				ToMS:         1700000000000 + 30*dayMS - 1,
+				ClientAgents: []string{"hindsight"},
+				Limit:        50,
+			})
+			if err != nil || len(page.Items) != 50 {
+				b.Fatalf("items=%d err=%v", len(page.Items), err)
+			}
+		}
+	})
+}
+
+func BenchmarkUsageClientAgentsCachedClaude(b *testing.B) {
+	ctx := context.Background()
+	repo := performanceRepository(b, 0)
+	const dayMS = int64(24 * 60 * 60 * 1000)
+	if _, err := repo.SQL().Exec(`DELETE FROM usage_events; DELETE FROM usage_inboxes`); err != nil {
+		b.Fatal(err)
+	}
+	if _, err := repo.SQL().Exec(`
+		WITH RECURSIVE seq(k) AS (VALUES(1) UNION ALL SELECT k+1 FROM seq WHERE k < 100000)
+		INSERT INTO usage_events(
+			instance_id, event_key, api_group_key, provider, executor_type, endpoint, model,
+			generate, timestamp_ms, created_at_ms, client_agent,
+			input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
+		)
+		SELECT 'default', 'cached-'||k, 'group', 'claude', 'ClaudeExecutor', 'POST /v1/messages', 'claude-sonnet',
+		       1, 1700000000000 + ((k-1)%90)*?, 1700000000000, 'claude-code',
+		       50, 100, 20, 900, 900, 100, 1150
+		FROM seq`, dayMS); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		res, err := repo.QueryUsageClientAgents(ctx, "default", 1700000000000, 1700000000000+30*dayMS-1, nil)
+		if err != nil || len(res.Items) < 1 {
+			b.Fatalf("items=%d err=%v", len(res.Items), err)
+		}
+	}
+}
+
+func TestCachedClientsFitDefaultQueryTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping 100k cached legacy scan timeout check in -short mode")
+	}
+	repo := performanceRepository(t, 0)
+	const dayMS = int64(24 * 60 * 60 * 1000)
+	if _, err := repo.SQL().Exec(`DELETE FROM usage_events; DELETE FROM usage_inboxes`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.SQL().Exec(`
+		WITH RECURSIVE seq(k) AS (VALUES(1) UNION ALL SELECT k+1 FROM seq WHERE k < 100000)
+		INSERT INTO usage_events(
+			instance_id, event_key, api_group_key, provider, executor_type, endpoint, model,
+			generate, timestamp_ms, created_at_ms, client_agent,
+			input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
+		)
+		SELECT 'default', 'cached-'||k, 'group', 'claude', 'ClaudeExecutor', 'POST /v1/messages', 'claude-sonnet',
+		       1, 1700000000000 + ((k-1)%90)*?, 1700000000000, 'claude-code',
+		       50, 100, 20, 900, 900, 100, 1150
+		FROM seq`, dayMS); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	start := time.Now()
+	res, err := repo.QueryUsageClientAgents(ctx, "default", 1700000000000, 1700000000000+90*dayMS, nil)
+	elapsed := time.Since(start)
+	t.Logf("100k cached Claude rows (90d full window): elapsed=%s items=%d err=%v", elapsed, len(res.Items), err)
+	if err != nil {
+		t.Fatalf("100k cached legacy records must fit well inside default 15s query budget: %v", err)
+	}
+	if len(res.Items) != 1 || res.Items[0].Requests != 100000 || res.Items[0].NetTokens != 100000*150 {
+		t.Fatalf("unexpected cached Claude totals: %+v", res.Items)
+	}
+}

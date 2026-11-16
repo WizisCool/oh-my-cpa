@@ -275,6 +275,7 @@ func demoExportCases() []demoExportCase {
 		cases = append(cases,
 			demoExportCase{Name: "insights-cube-" + preset, Path: "/api/v1/management/insights/cube?preset=" + preset},
 			demoExportCase{Name: "insights-rhythm-" + preset, Path: "/api/v1/management/insights/rhythm?preset=" + preset},
+			demoExportCase{Name: "insights-clients-" + preset, Path: "/api/v1/management/insights/clients?preset=" + preset},
 		)
 	}
 	// The heatmap is asked for in the viewer's own zone; the export keeps a UTC and a
@@ -444,6 +445,14 @@ func buildDemoExportDataset(t *testing.T) (demoExportResponses, []byte) {
 			}
 			if len(rhythm.Cells) != 7*24 || rhythm.Window.Timezone == "" {
 				t.Fatalf("%s must carry a window and 168 rhythm cells", one.Name)
+			}
+		} else if strings.HasPrefix(one.Name, "insights-clients-") {
+			var clients insightsClientsResponse
+			if err := json.Unmarshal([]byte(responses[one.Name].Body), &clients); err != nil {
+				t.Fatal(err)
+			}
+			if len(clients.Clients) == 0 || clients.Window.Timezone == "" {
+				t.Fatalf("%s must carry a window and client attribution rows", one.Name)
 			}
 		}
 	}

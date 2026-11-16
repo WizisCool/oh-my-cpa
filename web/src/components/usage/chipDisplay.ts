@@ -39,6 +39,8 @@ export interface ChipDisplayInput {
   servedLabels: { substituted: string; matched: string };
   /** The dictionary's names for the three transports. */
   transportLabels: Record<UsageTransport, string>;
+  /** Names a normalised client program (`claude-code` reads Claude Code). */
+  clientAgentName?: (value: string) => string;
 }
 
 /**
@@ -57,6 +59,7 @@ export function chipDisplayValue({
   costLabels,
   servedLabels,
   transportLabels,
+  clientAgentName,
 }: ChipDisplayInput): string {
   if (key === 'auth_index') return credentialNames.get(value) || value;
   if (key === 'api_key') {
@@ -68,6 +71,7 @@ export function chipDisplayValue({
   if (key === 'reasoning') return displayEffortName(value);
   if (key === 'cost') return value === 'priced' ? costLabels.priced : costLabels.unpriced;
   if (key === 'served') return value === 'matched' ? servedLabels.matched : servedLabels.substituted;
+  if (key === 'client_agent') return clientAgentName?.(value) ?? value;
   if (key === 'transport') return isUsageTransport(value) ? transportLabels[value] : value;
   if (key.endsWith('_min') || key.endsWith('_max')) {
     // Cost bounds are nano-dollars on the wire and are shown in dollars, so the

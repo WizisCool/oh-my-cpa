@@ -447,4 +447,5 @@ export default {
   "events.cause_upstream_hint": "上游內部出錯。與目前設定無關時，通常會自行恢復。",
   "events.cause_unknown": "請求未成功",
   "events.cause_unknown_hint": "沒有記錄到明確的失敗原因。可在診斷中查看上游回應和關聯錯誤。",
+  "events.filter_chip_client_agent": "用戶端: {val}",
 } satisfies Translation<typeof source>;
