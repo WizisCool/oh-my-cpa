@@ -21,6 +21,11 @@ import type { ProviderItem } from '../types/providers';
 import { useToast } from '../components/feedback';
 import { invalidateQueriesSilently } from '../utils/progressSources';
 import { useT } from '../i18n';
+import { MODEL_ICONS_PREFERENCE } from '../types/modelIcons';
+import { PROVIDER_ICONS_PREFERENCE } from '../types/providerIcons';
+import { reconcilePreferenceKeys } from './usePreference';
+
+const IDENTITY_ICON_PREFERENCE_KEYS = [MODEL_ICONS_PREFERENCE, PROVIDER_ICONS_PREFERENCE] as const;
 
 export interface StateVersionTracker {
   lastVersion: number;
@@ -142,9 +147,10 @@ export async function reconcileStateSyncEvent(
     }
     if (missedUpdates) {
       const keys = resolveQueryKeysForScopes([]);
-      await Promise.all(
-        keys.map((queryKey) => invalidateQueriesSilently(queryClient, { queryKey })),
-      );
+      await Promise.all([
+        ...keys.map((queryKey) => invalidateQueriesSilently(queryClient, { queryKey })),
+        reconcilePreferenceKeys(queryClient, IDENTITY_ICON_PREFERENCE_KEYS),
+      ]);
     }
     return;
   }
@@ -162,10 +168,16 @@ export async function reconcileStateSyncEvent(
     if (event.data) {
       applyAuthoritativeSafeSnapshot(queryClient, event.data, incomingVersion);
     }
-    const keys = resolveQueryKeysForScopes(event.scopes ?? []);
-    await Promise.all(
-      keys.map((queryKey) => invalidateQueriesSilently(queryClient, { queryKey })),
-    );
+    const syncScopes = event.scopes ?? [];
+    const shouldReconcileIcons =
+      syncScopes.length === 0 || syncScopes.includes('management-identity-directory');
+    const keys = resolveQueryKeysForScopes(syncScopes);
+    await Promise.all([
+      ...keys.map((queryKey) => invalidateQueriesSilently(queryClient, { queryKey })),
+      ...(shouldReconcileIcons
+        ? [reconcilePreferenceKeys(queryClient, IDENTITY_ICON_PREFERENCE_KEYS)]
+        : []),
+    ]);
     onSyncError?.(event);
     return;
   }
@@ -181,10 +193,15 @@ export async function reconcileStateSyncEvent(
     if (scopes.length > 0 && idleScopes.length === 0) {
       return;
     }
+    const shouldReconcileIcons =
+      idleScopes.length === 0 || idleScopes.includes('management-identity-directory');
     const keys = resolveQueryKeysForScopes(idleScopes);
-    await Promise.all(
-      keys.map((queryKey) => invalidateQueriesSilently(queryClient, { queryKey })),
-    );
+    await Promise.all([
+      ...keys.map((queryKey) => invalidateQueriesSilently(queryClient, { queryKey })),
+      ...(shouldReconcileIcons
+        ? [reconcilePreferenceKeys(queryClient, IDENTITY_ICON_PREFERENCE_KEYS)]
+        : []),
+    ]);
   }
 }
 

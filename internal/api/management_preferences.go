@@ -217,10 +217,16 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 		}
 	}
 	if key == repository.PreferenceModelIcons {
-		var values map[string]string
+		var values map[string]*string
 		if json.Unmarshal(body, &values) != nil || values == nil {
 			writeError(writer, http.StatusBadRequest, "a model icon preference must be an object of strings")
 			return
+		}
+		for _, value := range values {
+			if value == nil {
+				writeError(writer, http.StatusBadRequest, "a model icon preference must be an object of strings")
+				return
+			}
 		}
 	}
 	if key == repository.PreferenceSidebarCollapsed {

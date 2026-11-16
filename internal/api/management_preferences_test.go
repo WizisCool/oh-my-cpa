@@ -55,10 +55,13 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 	if response, payload = doJSON(t, client, http.MethodPut, base+"/provider_icons", `{"openai-compat-0":"DeepSeek","relay":"OpenAI"}`); response.StatusCode != http.StatusOK {
 		t.Fatalf("provider icons status = %d body %s", response.StatusCode, payload)
 	}
+	if response, payload = doJSON(t, client, http.MethodPut, base+"/model_icons", `{"gpt-5":""}`); response.StatusCode != http.StatusOK {
+		t.Fatalf("empty model icon string status = %d body %s", response.StatusCode, payload)
+	}
 	if response, payload = doJSON(t, client, http.MethodPut, base+"/model_icons", `{"claude-3-7-sonnet-20250219":"Claude","team/fast":"OpenAI"}`); response.StatusCode != http.StatusOK {
 		t.Fatalf("model icons status = %d body %s", response.StatusCode, payload)
 	}
-	for _, invalid := range []string{`null`, `[]`, `{"gpt-5":123}`} {
+	for _, invalid := range []string{`null`, `[]`, `{"gpt-5":123}`, `{"gpt-5":null}`} {
 		if response, payload = doJSON(t, client, http.MethodPut, base+"/model_icons", invalid); response.StatusCode != http.StatusBadRequest {
 			t.Fatalf("invalid model_icons %s status = %d body %s", invalid, response.StatusCode, payload)
 		}

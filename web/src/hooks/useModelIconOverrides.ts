@@ -14,20 +14,20 @@ import { usePreference, type PreferenceWrite } from './usePreference';
  */
 export function useModelIconOverrides() {
   const queryClient = useQueryClient();
-  const { value: modelIcons, set } = usePreference<Record<string, string>>(MODEL_ICONS_PREFERENCE, EMPTY_MODEL_ICONS, parseModelIcons);
+  const { value: modelIcons, loaded, set } = usePreference<Record<string, string>>(MODEL_ICONS_PREFERENCE, EMPTY_MODEL_ICONS, parseModelIcons);
 
-  const write = React.useCallback((model: string, icon: string): Promise<PreferenceWrite> => {
-    if (!model) return Promise.resolve({ ok: false });
+  const write = React.useCallback(async (model: string, icon: string): Promise<PreferenceWrite> => {
+    if (!model || !loaded) return { ok: false };
+    await queryClient.cancelQueries({ queryKey: QUERY_KEYS.preferences });
     const current = parseModelIcons(queryClient.getQueryData<Record<string, unknown>>(QUERY_KEYS.preferences)?.[MODEL_ICONS_PREFERENCE]);
-    return set(withModelIcon(current, model, icon)).then((result) => {
-      if (result.ok) {
-        // Reference counts and the identity directory both project this document.
-        void queryClient.invalidateQueries({ queryKey: CUSTOM_ICONS_QUERY_KEY });
-        void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.identityDirectory });
-      }
-      return result;
-    });
-  }, [queryClient, set]);
+    const result = await set(withModelIcon(current, model, icon));
+    if (result.ok) {
+      // Reference counts and the identity directory both project this document.
+      void queryClient.invalidateQueries({ queryKey: CUSTOM_ICONS_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.identityDirectory });
+    }
+    return result;
+  }, [loaded, queryClient, set]);
 
   const writeModelIcon = React.useCallback((model: string, icon: string) => write(model, icon), [write]);
   const resetModelIcon = React.useCallback((model: string) => write(model, ''), [write]);

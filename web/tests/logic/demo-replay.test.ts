@@ -260,6 +260,7 @@ test('demo sandbox isolates provider, api key, routing, and reset state', async 
       models: [{ id: 'deepseek-flash', call_point: 'deepseek-flash', vision: 'unknown' }],
       routes: [{ provider_id: 'openai-compatibility-0', upstream_model: 'deepseek-v4.1-flash-1017', call_point: 'deepseek-flash' }],
     },
+    '/preferences': { preferences: {}, time_zone: { server_timezone: 'UTC' } },
     '/management/audit/events': { events: [], next_cursor: '' },
   };
 
@@ -353,6 +354,17 @@ test('demo sandbox isolates provider, api key, routing, and reset state', async 
     fetchBaseline,
   );
   assert.ok(iconOk && iconOk.status === 200);
+  const createdIcon = (await iconOk!.json()) as { id: string };
+  await interceptDemoRequest(
+    '/preferences/model_icons',
+    { method: 'PUT', body: JSON.stringify({ 'gpt-5': `custom:${createdIcon.id}`, 'claude-3-7': 'Claude' }) },
+    fetchBaseline,
+  );
+  const iconDeleted = await interceptDemoRequest(`/custom-icons/${createdIcon.id}`, { method: 'DELETE' }, fetchBaseline);
+  assert.ok(iconDeleted && iconDeleted.status === 200);
+  const prefsAfterIconDelete = await interceptDemoRequest('/preferences', { method: 'GET' }, fetchBaseline);
+  const prefsAfterIconJson = (await prefsAfterIconDelete!.json()) as { preferences?: { model_icons?: Record<string, string> } };
+  assert.deepEqual(prefsAfterIconJson.preferences?.model_icons, { 'claude-3-7': 'Claude' });
   const riffWavBase64 = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
   const iconBad = await interceptDemoRequest(
     '/custom-icons',
