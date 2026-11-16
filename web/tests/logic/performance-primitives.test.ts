@@ -29,6 +29,7 @@ import {
 } from '../../src/performance/index.ts';
 import {
   buildMonotoneSparkline,
+  fitSparklineDomain,
   resolveSparklineIndex,
   sparklineViewBoxToHostX,
 } from '../../src/charts/monotoneSparkline.ts';
@@ -966,7 +967,7 @@ test('buildMonotoneSparkline produces overshoot-free monotone paths and maps poi
   assert.equal(empty.linePath, '');
 
   const single = buildMonotoneSparkline([{ t: 1_000, value: 42 }], 240, 64);
-  assert.equal(single.isSinglePoint, true);
+  assert.equal(single.singlePoint?.value, 42);
   assert.equal(single.hasPositiveValue, true);
   assert.equal(single.points[0]?.x, 120);
   assert.equal(single.linePath, '');
@@ -1000,68 +1001,73 @@ test('buildMonotoneSparkline produces overshoot-free monotone paths and maps poi
   assert.equal(sparklineViewBoxToHostX(6, 480, 240), 12);
   assert.equal(sparklineViewBoxToHostX(234, 480, 240), 468);
 
-  // Null samples leave gaps instead of collapsing idle buckets to 0%, and isolated non-null
-  // buckets stay visible as markers on their true time-grid x coordinates.
+  // A null sample (a ratio over an idle bucket) keeps its slot and readout, and the curve runs on
+  // between its measured neighbours instead of breaking or dropping to 0%.
   const allNull = buildMonotoneSparkline(
     [{ t: 1, value: null }, { t: 2, value: null }, { t: 3, value: null }],
     240,
     64,
-    undefined,
-    100,
   );
-  assert.equal(allNull.hasData, false);
   assert.equal(allNull.hasPositiveValue, false);
-  assert.equal(allNull.hasGaps, true);
   assert.equal(allNull.linePath, '');
-  assert.equal(allNull.areaPath, '');
-  assert.equal(allNull.isolatedPoints.length, 0);
+  assert.equal(allNull.singlePoint, null);
 
-  const singleNull = buildMonotoneSparkline([{ t: 1, value: null }], 240, 64, undefined, 100);
-  assert.equal(singleNull.isSinglePoint, false);
-  assert.equal(singleNull.hasData, false);
-  assert.equal(singleNull.hasGaps, true);
+  const lone = buildMonotoneSparkline(
+    [{ t: 1, value: null }, { t: 2, value: 40 }, { t: 3, value: null }],
+    240,
+    64,
+  );
+  assert.equal(lone.linePath, '');
+  assert.equal(lone.singlePoint?.x, 120, 'a lone measured bucket is a dot at its own x');
 
-  const gapped = buildMonotoneSparkline(
+  const bridged = buildMonotoneSparkline(
     [
       { t: 1, value: null },
       { t: 2, value: 90 },
-      { t: 3, value: 92 },
+      { t: 3, value: null },
       { t: 4, value: null },
       { t: 5, value: 50 },
-      { t: 6, value: null },
-      { t: 7, value: 0 },
-      { t: 8, value: 80 },
+      { t: 6, value: 80 },
     ],
     240,
     64,
     undefined,
-    100,
+    { min: 50, max: 100 },
   );
-  assert.equal(gapped.hasData, true);
-  assert.equal(gapped.hasPositiveValue, true);
-  assert.equal(gapped.hasGaps, true);
-  assert.equal(gapped.points[0]?.y, null);
-  assert.equal(gapped.points[3]?.y, null);
-  assert.equal(gapped.points[5]?.y, null);
-  assert.equal(gapped.isolatedPoints.length, 1);
-  assert.equal(gapped.isolatedPoints[0]?.t, 5);
-  assert.ok(
-    Math.abs((gapped.isolatedPoints[0]?.y ?? 0) - (gapped.yTop + gapped.yBottom) / 2) < 1e-6,
-    'domainMax=100 places 50% at the vertical midpoint of the plot',
-  );
-  assert.equal((gapped.linePath.match(/M/g) ?? []).length, 2, 'two disjoint non-null runs produce two M subpaths');
+  assert.equal(bridged.points[0]?.y, null);
+  assert.equal(bridged.points[2]?.y, null);
+  assert.equal((bridged.linePath.match(/M/g) ?? []).length, 1, 'idle buckets never split the curve');
+  assert.ok(bridged.linePath.startsWith('M51.6,'), 'the curve starts at the first measured bucket');
+  assert.equal(bridged.points[4]?.y, bridged.yBottom, 'the domain floor maps to the plot bottom');
 
-  const measuredZerosWithGaps = buildMonotoneSparkline(
-    [{ t: 1, value: null }, { t: 2, value: 0 }, { t: 3, value: 0 }, { t: 4, value: null }],
+  // A ratio fits the range its volume sits in; a near-idle outlier rests on the edge instead of
+  // stretching the scale, and a steady series zooms no further than minSpan.
+  const fit = { minSpan: 10, floor: 0, ceiling: 100 };
+  const steady = fitSparklineDomain(
+    [
+      { value: 90, weight: 1_000 },
+      { value: 92, weight: 1_000 },
+      { value: 5, weight: 3 },
+      { value: null, weight: 0 },
+    ],
+    fit,
+  );
+  assert.deepEqual(steady, { min: 86, max: 96 });
+  const clamped = buildMonotoneSparkline(
+    [{ t: 1, value: 90 }, { t: 2, value: 5 }, { t: 3, value: 92 }],
     240,
     64,
     undefined,
-    100,
+    steady,
   );
-  assert.equal(measuredZerosWithGaps.hasData, true);
-  assert.equal(measuredZerosWithGaps.hasPositiveValue, false);
-  assert.equal(measuredZerosWithGaps.hasGaps, true);
-  assert.ok(measuredZerosWithGaps.linePath.startsWith('M82,62L158,62'), '0% stroke spans only the measured buckets');
+  assert.equal(clamped.points[1]?.y, clamped.yBottom);
+  assert.equal(clamped.points[1]?.value, 5);
+  assert.deepEqual(fitSparklineDomain([{ value: 99, weight: 1 }], fit), { min: 90, max: 100 });
+  assert.deepEqual(
+    fitSparklineDomain([{ value: 20, weight: 500 }, { value: 80, weight: 500 }], fit),
+    { min: 20, max: 80 },
+    'a real swing carried by volume sets the scale',
+  );
 });
 
 test('getIdentityDirectoryProjection caches derived Maps and Sets per response object via WeakMap', () => {
