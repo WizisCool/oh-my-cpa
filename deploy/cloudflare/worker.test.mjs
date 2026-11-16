@@ -140,7 +140,7 @@ describe('routing', () => {
     const { default: worker } = await import('./worker.mjs');
     const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
     for (const preset of ['7d', '30d', '90d', 'all']) {
-      for (const view of ['cube', 'rhythm']) {
+      for (const view of ['cube', 'rhythm', 'clients']) {
         const response = await worker.fetch(request(`/api/v1/management/insights/${view}?preset=${preset}`), env);
         const captured = JSON.parse(DATASET.responses[`insights-${view}-${preset}`].body);
         const expected = rebase(captured, 7 * dayMs);
@@ -157,7 +157,7 @@ describe('routing', () => {
     for (const query of ['preset=today', 'preset=yesterday', 'preset=this_week', 'preset=last_week',
       'preset=this_month', 'preset=last_month', 'from=1767139200000&to=1767225600000',
       'preset=7d&bucket=month', 'preset=unknown']) {
-      for (const view of ['cube', 'rhythm']) {
+      for (const view of ['cube', 'rhythm', 'clients']) {
         const response = await worker.fetch(request(`/api/v1/management/insights/${view}?${query}`), env);
         assert.equal(response.status, 404, `${view}?${query}`);
         assert.deepEqual(await response.json(), {
@@ -590,5 +590,34 @@ describe('read-only credential warmup projections', () => {
     assert.ok(Array.isArray(state.tasks));
     assert.ok(Array.isArray(state.runs));
     assert.ok(Array.isArray(state.catalog?.providers));
+  });
+});
+
+describe('usage-events client_agent search and call-point fallback parity', () => {
+  it('matches client_agent in free-text q search and falls back model_alias to model when unaliased', async () => {
+    const { filterUsageEvents } = await import('./filters.mjs');
+    const sample = {
+      window: { from: 1000, to: 9000 },
+      limit: 50,
+      items: [
+        { id: 3, timestamp_ms: 6000, model: 'gpt-4o', model_alias: '', provider: 'openai', api_group_key: 'hmac:a', user_agent: '', failed: false, pricing_status: 'priced' },
+        { id: 2, timestamp_ms: 5000, model: 'gpt-5', model_alias: '', provider: 'codex', api_group_key: 'claude', client_agent: 'claude-code', user_agent: 'claude-cli/2.1.3', failed: false, pricing_status: 'priced' },
+        { id: 1, timestamp_ms: 4000, model: 'gpt-5', model_alias: 'fast', provider: 'codex', api_group_key: 'hmac:a', client_agent: 'hindsight', user_agent: 'hindsight/1.2.0', failed: false, pricing_status: 'priced' },
+      ],
+    };
+    const byQuery = filterUsageEvents(sample, new URL('https://demo.example/api/v1/usage/events?q=claude-code'), 0);
+    assert.deepEqual(byQuery.items.map((row) => row.id), [2]);
+
+    const byUnknownQuery = filterUsageEvents(sample, new URL('https://demo.example/api/v1/usage/events?q=unknown'), 0);
+    assert.deepEqual(byUnknownQuery.items.map((row) => row.id), [3]);
+
+    const byUnknownFilter = filterUsageEvents(sample, new URL('https://demo.example/api/v1/usage/events?client_agent=unknown'), 0);
+    assert.deepEqual(byUnknownFilter.items.map((row) => row.id), [3]);
+
+    const byCallPoint = filterUsageEvents(sample, new URL('https://demo.example/api/v1/usage/events?model_alias=gpt-5'), 0);
+    assert.deepEqual(byCallPoint.items.map((row) => row.id), [2]);
+
+    const byAlias = filterUsageEvents(sample, new URL('https://demo.example/api/v1/usage/events?model_alias=fast'), 0);
+    assert.deepEqual(byAlias.items.map((row) => row.id), [1]);
   });
 });

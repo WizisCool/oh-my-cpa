@@ -41,7 +41,7 @@ var insightsCubeColumns = []string{
 	"bucket", "key", "call_point", "model", "provider", "credential",
 	"requests", "failures", "input_tokens", "output_tokens", "reasoning_tokens", "cached_tokens",
 	"cache_read_tokens", "cache_creation_tokens", "total_tokens", "latency_sum_ms", "ttft_sum_ms",
-	"ttft_count", "cost_nanos", "priced_requests", "costed_requests",
+	"ttft_count", "cost_nanos", "priced_requests", "costed_requests", "net_tokens",
 }
 
 type insightsCubeResponse struct {
@@ -257,6 +257,43 @@ func dictionaryIndex(values map[string]int, value string) int64 {
 	return int64(len(values) - 1)
 }
 
+// projectInsightsFactMeasures reads the additive per-event token partitions
+// folded by the repository. No post-SUM dialect inference runs here; the single
+// fallback covers synthetic empty-partition rows in unit-test fixtures that
+// bypass AggregateUsageFacts and QueryUsageFacts's event arm.
+func projectInsightsFactMeasures(m repository.UsageMeasures) (repository.UsageMeasures, int64) {
+	cacheWrite := max(m.CacheCreationTokens, 0)
+	reasoning := max(m.ReasoningTokens, 0)
+	promptTotal := m.Accounting.PromptTokens
+	completionTotal := m.Accounting.CompletionTokens
+	cacheRead := m.Accounting.EffectiveCacheReadTokens
+	effectiveTotal := m.Accounting.EffectiveTotalTokens
+	if promptTotal == 0 && completionTotal == 0 && cacheRead == 0 && effectiveTotal == 0 &&
+		(m.InputTokens > 0 || m.OutputTokens > 0 || m.CachedTokens > 0 || m.CacheReadTokens > 0 || cacheWrite > 0 || m.TotalTokens > 0) {
+		promptTotal, completionTotal, cacheRead, effectiveTotal = repository.NormalizeEventPartition(repository.EventPartitionInput{
+			IsCanonical:         m.Requests > 0 && m.Accounting.CanonicalRequests == m.Requests,
+			InputTokens:         m.InputTokens,
+			OutputTokens:        m.OutputTokens,
+			ReasoningTokens:     m.ReasoningTokens,
+			CachedTokens:        m.CachedTokens,
+			CacheReadTokens:     m.CacheReadTokens,
+			CacheCreationTokens: m.CacheCreationTokens,
+			TotalTokens:         m.TotalTokens,
+		})
+	}
+	uncachedInput := max(promptTotal-cacheRead-cacheWrite, 0)
+	netTokens := uncachedInput + completionTotal
+
+	m.InputTokens = promptTotal
+	m.OutputTokens = completionTotal
+	m.ReasoningTokens = reasoning
+	m.CachedTokens = cacheRead
+	m.CacheReadTokens = cacheRead
+	m.CacheCreationTokens = cacheWrite
+	m.TotalTokens = effectiveTotal
+	return m, netTokens
+}
+
 // row encodes one fact row with provisional dictionary indices.
 func (dictionary *insightsDictionary) row(bucket int64, fact repository.UsageFactRow) []int64 {
 	credential := insightsCredential{AuthIndex: fact.Keys[4], AuthType: fact.Keys[5]}
@@ -265,14 +302,14 @@ func (dictionary *insightsDictionary) row(bucket int64, fact repository.UsageFac
 		credentialIndex = len(dictionary.credentials)
 		dictionary.credentials[credential] = credentialIndex
 	}
-	measures := fact.UsageMeasures
+	measures, netTokens := projectInsightsFactMeasures(fact.UsageMeasures)
 	return []int64{
 		bucket, dictionaryIndex(dictionary.values[0], fact.Keys[0]), dictionaryIndex(dictionary.values[1], fact.Keys[1]),
 		dictionaryIndex(dictionary.values[2], fact.Keys[2]), dictionaryIndex(dictionary.values[3], fact.Keys[3]), int64(credentialIndex),
 		measures.Requests, measures.Failures, measures.InputTokens, measures.OutputTokens, measures.ReasoningTokens,
 		measures.CachedTokens, measures.CacheReadTokens, measures.CacheCreationTokens, measures.TotalTokens,
 		measures.LatencySumMS, measures.TTFTSumMS, measures.TTFTCount, measures.CostNanos,
-		measures.PricedRequests, measures.CostedRequests,
+		measures.PricedRequests, measures.CostedRequests, netTokens,
 	}
 }
 
@@ -397,6 +434,7 @@ type insightsRhythmCell struct {
 	Hour        int   `json:"hour"`
 	Requests    int64 `json:"requests"`
 	TotalTokens int64 `json:"total_tokens"`
+	NetTokens   int64 `json:"net_tokens"`
 	CostNanos   int64 `json:"cost_nanos"`
 }
 
@@ -490,9 +528,145 @@ func (h *Handler) insightsRhythm(writer http.ResponseWriter, request *http.Reque
 	for _, row := range result.Rows {
 		local := time.UnixMilli(row.StartMS).In(zone)
 		cell := &cells[((int(local.Weekday())+6)%7)*24+local.Hour()]
-		cell.Requests += row.Requests
-		cell.TotalTokens += row.TotalTokens
-		cell.CostNanos += row.CostNanos
+		normalized, netTokens := projectInsightsFactMeasures(row.UsageMeasures)
+		cell.Requests += normalized.Requests
+		cell.TotalTokens += normalized.TotalTokens
+		cell.NetTokens += netTokens
+		cell.CostNanos += normalized.CostNanos
 	}
 	writeJSON(writer, http.StatusOK, insightsRhythmResponse{Window: window, Cells: cells})
+}
+
+type insightsClientsCoverage struct {
+	TotalRequests    int64 `json:"total_requests"`
+	RetainedRequests int64 `json:"retained_requests"`
+}
+
+type insightsClientItem struct {
+	ID                  string `json:"id"`
+	Category            string `json:"category"`
+	RawPrefix           string `json:"raw_prefix,omitempty"`
+	Requests            int64  `json:"requests"`
+	Failures            int64  `json:"failures"`
+	InputTokens         int64  `json:"input_tokens"`
+	OutputTokens        int64  `json:"output_tokens"`
+	ReasoningTokens     int64  `json:"reasoning_tokens"`
+	CachedTokens        int64  `json:"cached_tokens"`
+	CacheReadTokens     int64  `json:"cache_read_tokens"`
+	CacheCreationTokens int64  `json:"cache_creation_tokens"`
+	TotalTokens         int64  `json:"total_tokens"`
+	NetTokens           int64  `json:"net_tokens"`
+	LatencySumMS        int64  `json:"latency_sum_ms"`
+	TTFTSumMS           int64  `json:"ttft_sum_ms"`
+	TTFTCount           int64  `json:"ttft_count"`
+	CostNanos           int64  `json:"cost_nanos"`
+	PricedRequests      int64  `json:"priced_requests"`
+	CostedRequests      int64  `json:"costed_requests"`
+}
+
+type insightsClientsResponse struct {
+	Window   insightsWindow          `json:"window"`
+	Coverage insightsClientsCoverage `json:"coverage"`
+	Clients  []insightsClientItem    `json:"clients"`
+}
+
+// insightsClients aggregates retained request records in the Insights window by
+// normalized client agent or SDK family, reporting detail retention coverage
+// against the window's permanent usage facts.
+//
+// @Summary Query client and agent attribution for Insights
+// @Description Aggregate retained request records in the Insights window by normalized client agent or SDK family under optional Insights dimension filters.
+// @Tags Insights
+// @Produce json
+// @Security CookieAuth
+// @Param preset query string false "Insights time preset (today, yesterday, this_week, last_week, this_month, last_month, 24h, 7d, 30d, 90d, all)"
+// @Param from query integer false "Custom window start timestamp in Unix milliseconds"
+// @Param to query integer false "Custom window end timestamp in Unix milliseconds"
+// @Param api_key query []string false "Client API key or hmac fingerprint filters" collectionFormat(multi)
+// @Param model query []string false "Upstream model filters" collectionFormat(multi)
+// @Param model_alias query []string false "Call point filters" collectionFormat(multi)
+// @Param provider query []string false "Provider filters" collectionFormat(multi)
+// @Param auth_index query []string false "Credential auth_index filters" collectionFormat(multi)
+// @Success 200 {object} insightsClientsResponse
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/insights/clients [get]
+func (h *Handler) insightsClients(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	if h.repo == nil {
+		writeError(writer, http.StatusServiceUnavailable, "database is unavailable")
+		return
+	}
+	ctx, cancel := context.WithTimeout(request.Context(), h.queryTimeout())
+	defer cancel()
+	resolved, message, err := h.insightsRangeFromRequest(ctx, request)
+	if err != nil {
+		writeInternalError(writer, fmt.Errorf("resolve insights window: %w", err))
+		return
+	}
+	if message != "" {
+		writeError(writer, http.StatusBadRequest, message)
+		return
+	}
+	window := resolved.window
+	filters := h.insightsRhythmFilters(request)
+
+	factSummary, err := h.repo.QueryUsageFacts(ctx, repository.UsageFactQuery{
+		InstanceID: defaultInstanceID(),
+		FromMS:     window.FromMS,
+		ToMS:       window.ToMS,
+		Filters:    filters,
+	})
+	if err != nil {
+		writeInternalError(writer, fmt.Errorf("query insights client coverage: %w", err))
+		return
+	}
+	window.Widened = factSummary.FromMS != window.FromMS || factSummary.ToMS != window.ToMS
+	window.FromMS, window.ToMS = factSummary.FromMS, factSummary.ToMS
+
+	clientsResult, err := h.repo.QueryUsageClientAgents(ctx, defaultInstanceID(), window.FromMS, window.ToMS, filters)
+	if err != nil {
+		writeInternalError(writer, fmt.Errorf("query insights clients: %w", err))
+		return
+	}
+
+	totalRequests := factSummary.Totals().Requests
+	if clientsResult.RetainedRequests > totalRequests {
+		totalRequests = clientsResult.RetainedRequests
+	}
+
+	items := make([]insightsClientItem, 0, len(clientsResult.Items))
+	for _, row := range clientsResult.Items {
+		items = append(items, insightsClientItem{
+			ID:                  row.ID,
+			Category:            row.Category,
+			RawPrefix:           row.RawPrefix,
+			Requests:            row.Requests,
+			Failures:            row.Failures,
+			InputTokens:         row.InputTokens,
+			OutputTokens:        row.OutputTokens,
+			ReasoningTokens:     row.ReasoningTokens,
+			CachedTokens:        row.CachedTokens,
+			CacheReadTokens:     row.CacheReadTokens,
+			CacheCreationTokens: row.CacheCreationTokens,
+			TotalTokens:         row.TotalTokens,
+			NetTokens:           row.NetTokens,
+			LatencySumMS:        row.LatencySumMS,
+			TTFTSumMS:           row.TTFTSumMS,
+			TTFTCount:           row.TTFTCount,
+			CostNanos:           row.CostNanos,
+			PricedRequests:      row.PricedRequests,
+			CostedRequests:      row.CostedRequests,
+		})
+	}
+
+	writeJSON(writer, http.StatusOK, insightsClientsResponse{
+		Window: window,
+		Coverage: insightsClientsCoverage{
+			TotalRequests:    totalRequests,
+			RetainedRequests: clientsResult.RetainedRequests,
+		},
+		Clients: items,
+	})
 }

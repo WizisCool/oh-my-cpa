@@ -5,7 +5,7 @@ import { formatCurrency, USD_CURRENCY, type DisplayCurrency } from './currencyDi
  */
 
 import { formatTokens, formatTokensFull, type TokenNumberStyle } from './tokenDisplay';
-import type { InsightsMetric, MetricComparison } from './insightsCube';
+import type { CubeMetric, MetricComparison } from './insightsCube';
 
 const COUNT = new Intl.NumberFormat('en');
 const BASELINE_COUNT_1 = new Intl.NumberFormat('en', { maximumFractionDigits: 1 });
@@ -24,12 +24,13 @@ export function formatLatency(ms: number): string {
 }
 
 /** A metric's readout; null is written as a dash, never as zero. */
-export function formatMetric(metric: InsightsMetric, value: number | null, style: TokenNumberStyle, currency: DisplayCurrency = USD_CURRENCY): string {
+export function formatMetric(metric: CubeMetric, value: number | null, style: TokenNumberStyle, currency: DisplayCurrency = USD_CURRENCY): string {
   if (value === null || !Number.isFinite(value)) return '—';
   switch (metric) {
     case 'cost':
       return formatCurrency(value, currency);
     case 'tokens':
+    case 'net_tokens':
       return formatTokens(value, style);
     case 'requests':
       return Number.isInteger(value) ? COUNT.format(value) : formatCountBaseline(value);
@@ -42,9 +43,9 @@ export function formatMetric(metric: InsightsMetric, value: number | null, style
  * The exact form behind a rounded readout, for its title. Money has none: its reading already
  * states the precision.
  */
-export function formatMetricExact(metric: InsightsMetric, value: number | null): string | undefined {
+export function formatMetricExact(metric: CubeMetric, value: number | null): string | undefined {
   if (value === null || !Number.isFinite(value)) return undefined;
-  if (metric === 'tokens') return formatTokensFull(value);
+  if (metric === 'tokens' || metric === 'net_tokens') return formatTokensFull(value);
   if (metric === 'requests') return COUNT.format(value);
   return undefined;
 }

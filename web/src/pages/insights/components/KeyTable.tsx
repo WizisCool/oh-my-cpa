@@ -1,17 +1,21 @@
 import { useInsightsFormat } from '../useInsightsFormat';
 import React from 'react';
-import type { ColumnsType } from '@/components/ui/table';
 import dayjs from '../../../utils/time';
 import { ResponsiveList } from '../../../components/common/ResponsiveList';
 import { useT } from '../../../i18n';
 import type { InsightsCompareWindow } from '../../../types/insights';
 import { formatTokens, formatTokensFull } from '../../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import { compareMetric, metricValue, NO_COMPARISON, rankingMetric, type InsightsMetric, type RankedGroup } from '../../../types/insightsCube';
+import {
+  compareMetric, measuresAvgTtftMs, measuresCacheRate, measuresReasoningShare, metricValue, NO_COMPARISON, rankingMetric,
+  type CubeMetric, type RankedGroup,
+} from '../../../types/insightsCube';
 import { formatShare } from '../../../types/insightsFormat';
+import { CacheRateText } from './RateText';
 import { ComparisonText } from './ComparisonText';
 import type { InsightsLabels } from '../../../hooks/useInsightsLabels';
 import { Sparkline } from './Sparkline';
+import { useColumnSort, type SortableColumn } from './useColumnSort';
 import { InsightsValue } from './InsightsValue';
 import styles from '../insights.module.css';
 
@@ -19,7 +23,7 @@ interface KeyTableProps {
   groups: readonly RankedGroup[];
   sparklines: Map<string, number[]>;
   lastActive: Map<string, number>;
-  metric: InsightsMetric;
+  metric: CubeMetric;
   labels: InsightsLabels;
   /** The window the change column is measured against, so its title can name it. */
   compare?: InsightsCompareWindow | null;
@@ -29,9 +33,8 @@ interface KeyTableProps {
 
 const COUNT = new Intl.NumberFormat('en');
 
-function byNumber(pick: (group: RankedGroup) => number | null) {
-  return (left: RankedGroup, right: RankedGroup) => (pick(left) ?? -Infinity) - (pick(right) ?? -Infinity);
-}
+const cacheRate = (group: RankedGroup) => measuresCacheRate(group.measures);
+const reasoningShare = (group: RankedGroup) => measuresReasoningShare(group.measures);
 
 /**
  * Every key side by side: what the issue asked for - one table answering "who used how much of what".
@@ -44,7 +47,7 @@ export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActi
   const { formatMetric } = useInsightsFormat();
   const ranking = rankingMetric(metric);
 
-  const columns = React.useMemo<ColumnsType<RankedGroup>>(() => [
+  const columns = React.useMemo<SortableColumn<RankedGroup>[]>(() => [
     {
       key: 'name',
       title: t('insights.col.key'),
@@ -59,35 +62,59 @@ export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActi
       key: 'requests',
       title: t('insights.metric.requests'),
       align: 'right',
-      sorter: byNumber((group) => group.measures.requests),
+      sortValue: (group) => group.measures.requests,
       render: (_, group) => COUNT.format(group.measures.requests),
     },
     {
       key: 'input',
       title: t('insights.col.input'),
       align: 'right',
-      sorter: byNumber((group) => group.measures.inputTokens),
+      sortValue: (group) => group.measures.inputTokens,
       render: (_, group) => <span data-tip={formatTokensFull(group.measures.inputTokens)}>{formatTokens(group.measures.inputTokens, style)}</span>,
     },
     {
       key: 'output',
       title: t('insights.col.output'),
       align: 'right',
-      sorter: byNumber((group) => group.measures.outputTokens),
+      sortValue: (group) => group.measures.outputTokens,
       render: (_, group) => <span data-tip={formatTokensFull(group.measures.outputTokens)}>{formatTokens(group.measures.outputTokens, style)}</span>,
     },
     {
       key: 'cost',
       title: t('insights.metric.cost'),
       align: 'right',
-      sorter: byNumber((group) => metricValue(group.measures, 'cost')),
+      sortValue: (group) => metricValue(group.measures, 'cost'),
       render: (_, group) => formatMetric('cost', metricValue(group.measures, 'cost'), style),
+    },
+    {
+      key: 'cache',
+      title: t('insights.anatomy.cache_rate'),
+      align: 'right',
+      sortValue: cacheRate,
+      render: (_, group) => <CacheRateText rate={cacheRate(group)} />,
+    },
+    {
+      key: 'reasoning',
+      title: t('insights.anatomy.reasoning_share'),
+      align: 'right',
+      sortValue: reasoningShare,
+      render: (_, group) => {
+        const share = reasoningShare(group);
+        return share === null ? '—' : formatShare(share / 100);
+      },
+    },
+    {
+      key: 'ttft',
+      title: t('insights.col.ttft'),
+      align: 'right',
+      sortValue: (group) => measuresAvgTtftMs(group.measures),
+      render: (_, group) => formatMetric('latency', measuresAvgTtftMs(group.measures), style),
     },
     {
       key: 'latency',
       title: t('insights.metric.latency'),
       align: 'right',
-      sorter: byNumber((group) => metricValue(group.measures, 'latency')),
+      sortValue: (group) => metricValue(group.measures, 'latency'),
       render: (_, group) => formatMetric('latency', metricValue(group.measures, 'latency'), style),
     },
     {
@@ -99,7 +126,7 @@ export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActi
       key: 'share',
       title: t('insights.col.share'),
       align: 'right',
-      sorter: byNumber((group) => group.share),
+      sortValue: (group) => group.share,
       render: (_, group) => formatShare(group.share),
     },
     {
@@ -114,7 +141,7 @@ export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActi
       key: 'last',
       title: t('insights.col.last_active'),
       align: 'right',
-      sorter: byNumber((group) => lastActive.get(group.id) ?? null),
+      sortValue: (group) => lastActive.get(group.id) ?? null,
       render: (_, group) => {
         const last = lastActive.get(group.id);
         return last === undefined ? '—' : dayjs(last).format('MM-DD HH:mm');
@@ -122,15 +149,17 @@ export const KeyTable: React.FC<KeyTableProps> = ({ groups, sparklines, lastActi
     },
   ], [compare, labels, lastActive, onOpen, ranking, sparklines, style, t, formatMetric]);
 
+  const sorted = useColumnSort(columns, groups);
+
   return (
     <ResponsiveList<RankedGroup>
-      columns={columns}
-      dataSource={groups}
+      columns={sorted.columns}
+      dataSource={sorted.data}
       rowKey="id"
       isLoading={isLoading}
       emptyText={t('insights.no_usage')}
       pageSize={20}
-      phone={{ identity: 'name', skip: ['trend', 'input', 'output', 'latency', 'change'] }}
+      phone={{ identity: 'name', skip: ['trend', 'input', 'output', 'cache', 'reasoning', 'ttft', 'latency', 'change'] }}
       tableProps={{
         size: 'small',
         className: styles['key-table'],

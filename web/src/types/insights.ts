@@ -109,12 +109,50 @@ export interface InsightsRhythmCell {
   hour: number;
   requests: number;
   total_tokens: number;
+  /** The tokens outside the cache traffic; absent from servers that predate it. */
+  net_tokens?: number;
   cost_nanos: number;
 }
 
 export interface InsightsRhythmResponse {
   window: InsightsWindow;
   cells: InsightsRhythmCell[];
+}
+
+/** One client program's usage, as the request records' User-Agent names it. */
+export interface InsightsClientItem {
+  /** The normalised client: `claude-code`, `codex-cli`, `python-httpx`, … or `unknown` / `other`. */
+  id: string;
+  category: 'agent' | 'sdk' | 'unknown';
+  /** The redacted User-Agent prefix the request list can be searched by. */
+  raw_prefix?: string;
+  requests: number;
+  failures: number;
+  input_tokens: number;
+  output_tokens: number;
+  reasoning_tokens: number;
+  cached_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  total_tokens: number;
+  /** The tokens outside the cache traffic, with the token columns already partitioned; absent from older servers. */
+  net_tokens?: number;
+  latency_sum_ms: number;
+  ttft_sum_ms: number;
+  ttft_count: number;
+  cost_nanos: number;
+  priced_requests: number;
+  costed_requests: number;
+}
+
+export interface InsightsClientsResponse {
+  window: InsightsWindow;
+  /** Client attribution reads request records, which are retained for less time than the cube's facts. */
+  coverage: {
+    total_requests: number;
+    retained_requests: number;
+  };
+  clients: InsightsClientItem[];
 }
 
 /** How often a window that follows the clock is re-read. Hours move faster than days. */

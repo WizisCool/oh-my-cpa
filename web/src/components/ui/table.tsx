@@ -73,6 +73,8 @@ export interface ColumnDef<T> {
   ellipsis?: boolean | { showTitle?: boolean };
   fixed?: 'left' | 'right' | 'start' | 'end' | boolean;
   className?: string;
+  /** The column the rows are ordered by, announced on its header; the caller owns the ordering. */
+  sortOrder?: 'ascending' | 'descending';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   render?: (value: any, record: T, index: number) => React.ReactNode | { children?: React.ReactNode; props?: React.TdHTMLAttributes<HTMLTableCellElement> };
 }
@@ -195,6 +197,8 @@ function DataTable<T extends object>({
                   return (
                     <th
                       key={String(colKey)}
+                      scope="col"
+                      aria-sort={col.sortOrder}
                       style={{
                         width: col.width,
                         minWidth: col.minWidth,

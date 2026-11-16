@@ -40,6 +40,7 @@ import { useRequestListScroll } from '../components/usage/useRequestListScroll';
 import { useUsageEventSync } from '../components/usage/useUsageEventSync';
 import { isListStale, isViewChange } from '../components/usage/pollingPolicy';
 import { chipDisplayValue } from '../components/usage/chipDisplay';
+import { clientProductName, isLocalizedClient } from '../types/clientAgents';
 import { RequestRow } from '../components/usage/RequestRow';
 import { RequestTooltipLayer } from '../components/usage/RequestTooltip';
 import { useProviderBranding } from '../hooks/useProviderBranding';
@@ -418,6 +419,7 @@ export const UsageEventsPage: React.FC = () => {
     cost: 'events.filter_chip_cost_state',
     served: 'events.filter_chip_served_model',
     transport: 'events.filter_chip_transport',
+    client_agent: 'events.filter_chip_client_agent',
   };
 
   const credentialNames = React.useMemo(
@@ -453,6 +455,7 @@ export const UsageEventsPage: React.FC = () => {
           substituted: t('events.served_substituted'),
           matched: t('events.served_matched'),
         },
+        clientAgentName: (value) => (isLocalizedClient(value) ? t(`insights.client.${value}`) : clientProductName(value) ?? value),
         transportLabels: {
           websocket: t('events.transport_websocket'),
           sse: t('events.transport_sse'),

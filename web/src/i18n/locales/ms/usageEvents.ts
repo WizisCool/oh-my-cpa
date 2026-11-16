@@ -447,4 +447,5 @@ export default {
   "events.cause_upstream_hint": "Hulu gagal secara dalaman. Jika konfigurasi bukan puncanya, ia biasanya pulih sendiri.",
   "events.cause_unknown": "Permintaan tidak berjaya",
   "events.cause_unknown_hint": "Tiada punca jelas direkodkan. Diagnostik menunjukkan respons hulu dan ralat berkaitan.",
+  "events.filter_chip_client_agent": "Klien: {val}",
 } satisfies Translation<typeof source>;

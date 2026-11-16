@@ -68,9 +68,10 @@ const (
 const websocketExecutorSQL = `e.executor_type LIKE '%WebsocketsExecutor'`
 
 // MaxUsageEventFilterValues bounds how many values one multi-select dimension
-// may carry. The filter panel never approaches it; the cap exists so a
-// hand-written URL cannot turn into a several-thousand-term IN list.
-const MaxUsageEventFilterValues = 64
+// may carry (including provider-to-credential drill-downs from Insights across
+// large OAuth credential pools) while preventing hand-written URLs from turning
+// into several-thousand-term IN lists.
+const MaxUsageEventFilterValues = 256
 
 // ErrUsageFilterInvalid marks a filter the repository refuses to translate into
 // SQL: an unknown enum value, a negative bound, an oversized dimension. Callers
@@ -122,6 +123,7 @@ type UsageEventFilter struct {
 	ReasoningEfforts     []string
 	ServiceTiers         []string
 	ResolvedServiceTiers []string
+	ClientAgents         []string
 
 	// Endpoint and UserAgent are substring matches. Both are long,
 	// high-cardinality values that a console filters by typing rather than by
@@ -231,6 +233,7 @@ type UsageEventRow struct {
 	ClientIP       *string          `json:"client_ip,omitempty"`
 	XForwardedFor  *string          `json:"x_forwarded_for,omitempty"`
 	UserAgent      *string          `json:"user_agent,omitempty"`
+	ClientAgent    string           `json:"client_agent,omitempty"`
 	Tokens         usage.TokenStats `json:"tokens"`
 	// ResourceID and ResourceName join the event back to the user-owned Oh My
 	// CPA resource record, which is what turns a raw request into something a
@@ -390,7 +393,7 @@ func usageEventListSelect(from string) string {
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
 		       e.api_group_key, e.api_group_label, e.api_key_mask, e.source, e.model, e.model_alias, e.reasoning_effort,
 		       e.service_tier, e.effective_service_tier, e.response_service_tier, e.failed, e.generate, e.stream,
-		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
+		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent, e.client_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
 		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id,
@@ -414,18 +417,20 @@ func (r *Repository) queryUsageEventRows(ctx context.Context, query string, args
 		var streamVal sql.NullInt64
 		var costUSD sql.NullFloat64
 		var accounting sql.NullString
+		var storedClientAgent string
 		if errScan := rows.Scan(
 			&row.ID, &row.InstanceID, &row.EventKey, &row.RequestID, &row.TimestampMS,
 			&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
 			&row.APIGroupKey, &row.APIGroupLabel, &row.APIKeyMask, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
 			&row.ServiceTier, &row.EffectiveServiceTier, &row.ResponseServiceTier, &failed, &generate, &streamVal,
-			&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
+			&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent, &storedClientAgent,
 			&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 			&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
 			&row.Tokens.TotalTokens, &costUSD, &row.PricingStatus, &row.PriceVersionID,
 			&row.ResponseModel, &row.ModelSubstituted, &row.FailStatusCode, &accounting); errScan != nil {
 			return nil, fmt.Errorf("scan usage event: %w", errScan)
 		}
+		row.ClientAgent = usage.ResolveClientAgentID(storedClientAgent, pointerValue(row.UserAgent), row.Endpoint)
 		var errAccounting error
 		row.Accounting, errAccounting = decodeStoredTokenAccounting(accounting)
 		if errAccounting != nil {
@@ -545,12 +550,13 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 	var isNativeKey sql.NullInt64
 	var costUSD sql.NullFloat64
 	var accounting, structuredUsage sql.NullString
+	var storedClientAgent string
 	err := r.SQL().QueryRowContext(ctx, `
 		SELECT e.id, e.instance_id, e.event_key, e.request_id, e.timestamp_ms,
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
 		       e.api_group_key, e.api_group_label, e.api_key_mask, e.source, e.model, e.model_alias, e.reasoning_effort,
 		       e.service_tier, e.effective_service_tier, e.response_service_tier, e.failed, e.generate, e.stream,
-		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
+		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent, e.client_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
 		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id,
@@ -562,7 +568,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
 		&row.APIGroupKey, &row.APIGroupLabel, &row.APIKeyMask, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
 		&row.ServiceTier, &row.EffectiveServiceTier, &row.ResponseServiceTier, &failed, &generate, &streamVal,
-		&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
+		&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent, &storedClientAgent,
 		&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 		&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
 		&row.Tokens.TotalTokens, &costUSD, &row.PricingStatus, &row.PriceVersionID,
@@ -584,6 +590,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 	}
 	row.Failed = failed == 1
 	row.Generate = generate == 1
+	row.ClientAgent = usage.ResolveClientAgentID(storedClientAgent, pointerValue(row.UserAgent), row.Endpoint)
 	row.IsNativeKey = isNativeKey.Valid && isNativeKey.Int64 != 0
 	if streamVal.Valid {
 		isStream := streamVal.Int64 == 1
@@ -869,6 +876,7 @@ var usageEventSearchColumns = []string{
 	"e.api_key_mask",
 	"e.auth_index",
 	"e.user_agent",
+	"e.client_agent",
 }
 
 // likeEscape is the explicit escape character for the substring filters. SQLite's
@@ -953,8 +961,8 @@ func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 		values []string
 	}{
 		{"e.model", filter.Models},
-		{"e.model_alias", filter.ModelAliases},
-		{"e.provider", filter.Providers},
+		{`COALESCE(NULLIF(TRIM(COALESCE(e.model_alias, '')), ''), e.model)`, filter.ModelAliases},
+		{`COALESCE(NULLIF(TRIM(e.provider), ''), 'unknown')`, filter.Providers},
 		{"e.api_group_key", filter.APIGroupKeys},
 		{"e.auth_index", filter.AuthIndexes},
 		{"e.source", filter.Sources},
@@ -963,6 +971,7 @@ func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 		{"e.reasoning_effort", filter.ReasoningEfforts},
 		{"e.service_tier", filter.ServiceTiers},
 		{RESOLVED_SERVICE_TIER_SQL, filter.ResolvedServiceTiers},
+		{"e.client_agent", filter.ClientAgents},
 	}
 	for _, dimension := range dimensions {
 		clause, clauseArgs, err := usageEventInClause(dimension.column, dimension.values)

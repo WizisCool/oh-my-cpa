@@ -13,7 +13,7 @@ import { PanelNarrowing } from './PanelNarrowing';
 import { useT } from '../../../i18n';
 import type { InsightsCompareWindow } from '../../../types/insights';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import { compareMetric, NO_COMPARISON, rankingMetric, type InsightsDimension, type InsightsMetric, type RankedGroup } from '../../../types/insightsCube';
+import { compareMetric, NO_COMPARISON, rankingMetric, type InsightsDimension, type CubeMetric, type RankedGroup } from '../../../types/insightsCube';
 import { formatShare } from '../../../types/insightsFormat';
 import { ComparisonText } from './ComparisonText';
 import type { InsightsLabels } from '../../../hooks/useInsightsLabels';
@@ -26,7 +26,7 @@ interface RankingPanelProps {
   dimension: InsightsDimension;
   title: string;
   groups: readonly RankedGroup[];
-  metric: InsightsMetric;
+  metric: CubeMetric;
   labels: InsightsLabels;
   /** The trend's colour for a group, when this panel ranks what the trend stacks by. */
   colorOf?: (id: string) => string | undefined;
@@ -38,8 +38,8 @@ interface RankingPanelProps {
   onSelect?: (dimension: InsightsDimension, id: string) => void;
   /** Drops this panel's own filter. */
   onClear?: (dimension: InsightsDimension) => void;
-  /** A group's name opens its detail rather than filtering; only keys have one. */
-  onOpen?: (id: string) => void;
+  /** Opens a group's detail; traffic that carried no client key has none. */
+  onOpen?: (dimension: InsightsDimension, id: string) => void;
   testId?: string;
 }
 
@@ -126,11 +126,11 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
                       <ComparisonText comparison={comparison} compare={compare} className={styles['ranking-change']} />
                     )}
                   </RowElement>
-                  {onOpen && labels.isNonKey(group.id) === false && (
+                  {onOpen && !(dimension === 'key' && labels.isNonKey(group.id)) && (
                     <button
                       type="button"
                       className={styles['ranking-open']}
-                      onClick={() => onOpen(group.id)}
+                      onClick={() => onOpen(dimension, group.id)}
                       aria-label={t('insights.open_detail')}
                       data-tip={t('insights.open_detail')}
                     >

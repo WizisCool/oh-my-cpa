@@ -7,7 +7,7 @@ import clsx from 'clsx';
 import { ArrowDownOutlined, ArrowUpOutlined } from '../../../components/icons';
 import { useT } from '../../../i18n';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import { compareMetric, INSIGHTS_METRICS, metricValue, type InsightsMetric, type Measures } from '../../../types/insightsCube';
+import { compareMetric, cubeMetric, INSIGHTS_METRICS, metricValue, type InsightsMetric, type Measures, type TokenScope } from '../../../types/insightsCube';
 import { changeTrend, formatChange } from '../../../types/insightsFormat';
 import styles from '../insights.module.css';
 
@@ -19,6 +19,8 @@ interface MetricTilesProps {
    */
   baseline: { measures: Measures; raw: Measures; window: InsightsCompareWindow } | null;
   metric: InsightsMetric;
+  /** The scope the token tile reads in. */
+  tokenScope: TokenScope;
   onMetricChange: (metric: InsightsMetric) => void;
 }
 
@@ -29,7 +31,7 @@ interface MetricTilesProps {
  * a fall, unless it is within chance. The tones are mixed well toward the ink: they say which way a figure moved, and stay
  * clear of the saturated state colours that mark a failure.
  */
-export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, metric, onMetricChange }) => {
+export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, metric, tokenScope, onMetricChange }) => {
   const t = useT();
   const { style } = useTokenDisplayStyle();
   const { formatMetric, formatMetricExact } = useInsightsFormat();
@@ -38,9 +40,10 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, met
   return (
     <div className={styles['tiles']} role="tablist" aria-label={t('insights.metric_switch')} data-testid="insights-tiles">
       {INSIGHTS_METRICS.map((item) => {
-        const value = metricValue(current, item);
-        const before = baseline ? metricValue(baseline.measures, item) : null;
-        const comparison = baseline ? compareMetric(current, baseline.measures, item, baseline.raw) : null;
+        const measured = cubeMetric(item, tokenScope);
+        const value = metricValue(current, measured);
+        const before = baseline ? metricValue(baseline.measures, measured) : null;
+        const comparison = baseline ? compareMetric(current, baseline.measures, measured, baseline.raw) : null;
         const changeText = comparison?.kind === 'change' ? formatChange(comparison.change) : null;
         const changeCard = comparison && baseline ? comparisonTip({ comparison, compare: baseline.window }) : null;
         const isActive = item === metric;
@@ -54,12 +57,12 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, met
             onClick={() => onMetricChange(item)}
             data-testid={`insights-tile-${item}`}
           >
-            <span className={styles['tile-label']}>{t(`insights.metric.${item}`)}</span>
-            <span className={styles['tile-value']} data-tip={formatMetricExact(item, value)}>
+            <span className={styles['tile-label']}>{t(`insights.metric.${measured}`)}</span>
+            <span className={styles['tile-value']} data-tip={formatMetricExact(measured, value)}>
               {/* Printed, not rolled: here the four figures change together on every filter, and a
                   rolling readout measures its glyphs with a forced layout on each change - the
                   dominant cost of a click on this page. The dashboard keeps its rolling figures. */}
-              {formatMetric(item, value, style)}
+              {formatMetric(measured, value, style)}
             </span>
             <span
               className={styles['tile-change']}
@@ -81,7 +84,7 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, met
               )}
               {baseline !== null && (
                 <span className={styles['tile-change-was']}>
-                  {t('insights.change_was', { value: formatMetric(item, before, style) })}
+                  {t('insights.change_was', { value: formatMetric(measured, before, style) })}
                 </span>
               )}
             </span>

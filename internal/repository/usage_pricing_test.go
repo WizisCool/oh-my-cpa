@@ -287,6 +287,15 @@ func TestCanonicalAccountingSurvivesPricingAndRetention(t *testing.T) {
 					want.Accounting.UnresolvedRequests = 1
 				}
 			}
+			want.Accounting.PromptTokens, want.Accounting.CompletionTokens, want.Accounting.EffectiveCacheReadTokens, want.Accounting.EffectiveTotalTokens = NormalizeEventPartition(EventPartitionInput{
+				IsCanonical:     tc.wantStatus == "complete",
+				InputTokens:     want.InputTokens,
+				OutputTokens:    want.OutputTokens,
+				ReasoningTokens: want.ReasoningTokens,
+				CachedTokens:    want.CachedTokens,
+				CacheReadTokens: want.CacheReadTokens,
+				TotalTokens:     want.TotalTokens,
+			})
 			verify := func(stage string) {
 				t.Helper()
 				facts, err := repo.QueryUsageFacts(ctx, query)

@@ -8,9 +8,11 @@ import { PanelTitle } from '../../../components/common/PanelTitle';
 import { LoadingRegion } from '../../../components/common/Placeholder';
 import { ChartLinesPlaceholder } from '../../../components/common/PageLoading';
 import { EmptyState } from '../../../components/common/EmptyState';
+import { LoadFailure } from '../../../components/feedback';
 import { useT } from '../../../i18n';
 import { heatmapRampMix } from '../../../theme/heatmapRamp';
 import type { InsightsRhythmCell, InsightsRhythmResponse } from '../../../types/insights';
+import type { TokenScope } from '../../../types/insightsCube';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 
 import { canShowWeekView, peakHourSet, summarizeRhythm } from '../insightsRhythm';
@@ -23,9 +25,13 @@ interface RhythmGridProps {
   data: InsightsRhythmResponse | undefined;
   /** What the panel measures; latency has no place on a volume scale, so it falls back to requests. */
   measure: RhythmMeasure;
+  /** The scope tokens are read in; a server without the net column falls back to every token. */
+  tokenScope?: TokenScope;
   isLoading: boolean;
   /** The demonstration captured this window unfiltered only; a filtered rhythm it never recorded is not faked. */
   isUncaptured: boolean;
+  error?: unknown;
+  onRetry?: () => void;
 }
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
@@ -44,16 +50,22 @@ const clock = (hour: number) => `${String(hour % 24).padStart(2, '0')}:00`;
  * a window of a week or more the weekday-by-hour grid is one switch away. The grid carries its own
  * scale, so a shade is never a guess.
  */
-export const RhythmGrid: React.FC<RhythmGridProps> = ({ data, measure, isLoading, isUncaptured }) => {
+export const RhythmGrid: React.FC<RhythmGridProps> = ({ data, measure, tokenScope = 'all', isLoading, isUncaptured, error, onRetry }) => {
   const t = useT();
   const { style } = useTokenDisplayStyle();
   const { formatMetric } = useInsightsFormat();
   const [chosenView, setView] = React.useState<'hours' | 'week'>('hours');
   const canShowWeek = Boolean(data) && canShowWeekView(data!.window);
   const view = canShowWeek ? chosenView : 'hours';
-  const metric = measure;
-  const valueOf = React.useCallback((cell: InsightsRhythmCell) =>
-    measure === 'cost' ? cell.cost_nanos / 1e9 : measure === 'tokens' ? cell.total_tokens : cell.requests, [measure]);
+  // The net reading needs every cell's net column; a reply without it reads every token, labelled so.
+  const hasNetTokens = Boolean(data?.cells?.length) && data!.cells.every((cell) => typeof cell.net_tokens === 'number');
+  const isNet = measure === 'tokens' && tokenScope === 'net' && hasNetTokens;
+  const metric = isNet ? 'net_tokens' : measure;
+  const valueOf = React.useCallback((cell: InsightsRhythmCell) => {
+    if (measure === 'cost') return cell.cost_nanos / 1e9;
+    if (measure === 'tokens') return isNet ? cell.net_tokens! : cell.total_tokens;
+    return cell.requests;
+  }, [isNet, measure]);
   const summary = React.useMemo(() => summarizeRhythm(data?.cells ?? [], valueOf), [data, valueOf]);
   const peakHours = React.useMemo(() => peakHourSet(summary), [summary]);
   const cells = React.useMemo(() => new Map((data?.cells ?? []).map((cell) => [cell.weekday * 24 + cell.hour, cell])), [data]);
@@ -61,6 +73,7 @@ export const RhythmGrid: React.FC<RhythmGridProps> = ({ data, measure, isLoading
 
   let body: React.ReactNode;
   if (isUncaptured) body = <EmptyState size="compact" title={t('insights.rhythm_uncaptured')} />;
+  else if (error && !data) body = <LoadFailure title={t('insights.rhythm_error_title')} error={error} onRetry={onRetry} />;
   else if (!data && isLoading) body = <LoadingRegion><ChartLinesPlaceholder kind="rhythm" /></LoadingRegion>;
   else if (!data || summary.total <= 0) body = <EmptyState size="compact" title={t('insights.no_usage')} />;
   else if (view === 'hours') {
@@ -139,6 +152,10 @@ export const RhythmGrid: React.FC<RhythmGridProps> = ({ data, measure, isLoading
         </PanelTitle>
       )}
     >
+      {/* A refresh that failed leaves the last reading on screen, said so, with the retry beside it. */}
+      {error && data && !isUncaptured ? (
+        <LoadFailure tone="warning" title={t('insights.rhythm_error_title')} error={error} onRetry={onRetry} />
+      ) : null}
       {body}
     </Panel>
   );

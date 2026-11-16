@@ -76,7 +76,8 @@
 .filter-chip-remove:hover,
 .filter-chip-action:hover { background: var(--hover); color: var(--fg); }
 .filter-add { color: var(--fg-2); }
-.filter-clear { padding-inline: 4px; }
+.filter-clear,
+.filter-requests { padding-inline: 4px; }
 
 .filter-menu { display: flex; flex-direction: column; min-width: 180px; padding: 2px 0; }
 .filter-menu-item {
@@ -173,6 +174,47 @@
 .change-text { color: var(--muted); }
 .tile-change-was { margin-left: 6px; color: var(--meta); }
 
+/* ── Token anatomy: five parts of the selection's tokens on one bar ──────── */
+.anatomy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+}
+.anatomy-compact { padding: 0; box-shadow: none; border-radius: 0; background: transparent; }
+.anatomy-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; min-height: 28px; font-size: var(--text-sm); }
+.anatomy-head b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.anatomy-title { display: inline-flex; align-items: center; gap: 12px; color: var(--fg); font-weight: 500; }
+.anatomy-bar { display: flex; gap: 2px; height: 10px; border-radius: var(--radius-xs); background: var(--series-track); overflow: hidden; }
+.anatomy-bar > span { min-width: 2px; flex-basis: 0; transition: flex-grow var(--motion-base) var(--ease-standard); }
+.anatomy-legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 0; padding: 0; list-style: none; font-size: var(--text-sm); }
+.anatomy-legend > li { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.anatomy-legend i { width: 8px; height: 8px; border-radius: var(--radius-xs); }
+.anatomy-legend-label { color: var(--muted); }
+.anatomy-legend-value { color: var(--fg); }
+.anatomy-legend-share { color: var(--fg-2); }
+
+/* A rate on its two-token ramp; the component supplies the stops and the weight. */
+.rate-text {
+  color: color-mix(in oklch, var(--rate-from) var(--rate-from-share), var(--rate-to));
+  font-variant-numeric: tabular-nums;
+}
+.sort-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.sort-head:hover { color: var(--fg); }
+
 /* ── Trend ──────────────────────────────────────────────────────────────── */
 .trend-panel :global([data-slot="panel-body"]) { display: flex; flex-direction: column; gap: 8px; }
 .grouping-select { min-width: 120px; }
@@ -181,7 +223,13 @@
 .rankings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 /* One key gets a compact row of its own; the three rankings below it share one aligned row. */
 .rankings[data-layout='single-key'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.rankings[data-layout='single-key'] > :first-child { grid-column: 1 / -1; }
+/* One key's panel is short, so the client attribution takes the rest of its row; with many keys the
+   attribution closes the grid at full width. */
+.rankings[data-layout='single-key'] > .client-panel { grid-column: span 2; }
+.rankings[data-layout='grid'] > .client-panel { grid-column: 1 / -1; }
+.client-panel { min-width: 0; }
+.ranking-placeholder { height: 108px; }
+.ranking-open-spacer { flex: none; width: 28px; }
 
 /* ── Ranking: the dashboard model list's row, with a share meter ─────────── */
 .ranking-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
@@ -236,6 +284,7 @@
 /* ── Key table ──────────────────────────────────────────────────────────── */
 .table-panel :global([data-slot="panel-body"]) { display: flex; flex-direction: column; gap: 8px; }
 .key-table :global(td) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.profile-sort { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 .key-name {
   display: inline-flex;
   flex-direction: column;
@@ -305,6 +354,7 @@
 .rhythm-cell[data-empty] { background: var(--heatmap-zero-unrecorded); }
 
 .drawer-body { display: flex; flex-direction: column; gap: 16px; }
+.drawer-head { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 
 .footnote { display: flex; flex-wrap: wrap; gap: 16px; color: var(--meta); font-size: var(--text-2xs); letter-spacing: .04em; }
 
@@ -313,12 +363,13 @@
   .tile:nth-child(2n) { border-right: 0; }
   .tile:nth-child(-n + 2) { border-bottom: 1px solid var(--border-soft); }
   .rankings[data-layout='single-key'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rankings[data-layout='single-key'] > .client-panel { grid-column: auto; }
   .rankings[data-layout='single-key'] > :last-child { grid-column: 1 / -1; }
 }
 @media (max-width: 900px) {
   .rankings,
   .rankings[data-layout='single-key'] { grid-template-columns: minmax(0, 1fr); }
-  .rankings[data-layout='single-key'] > :first-child,
+  .rankings > .client-panel,
   .rankings[data-layout='single-key'] > :last-child { grid-column: auto; }
 }
 /* A phone keeps two tiles per row and drops the comparison's "was" figure; the rankings stay a
@@ -344,9 +395,11 @@
   .grouping-select, .bucket-control { min-width: 0; }
   .ranking-row, .ranking-list-plain .ranking-row { grid-template-columns: minmax(0, 1fr) auto 48px; }
   .ranking-change, .ranking-bar, .ranking-row .value-detail { display: none; }
+  .anatomy { padding: 12px; }
+  .anatomy-legend { gap: 6px 14px; }
   .rhythm { grid-template-columns: 24px repeat(24, minmax(0, 1fr)); gap: 2px; }
 }
 :global(:root[data-reduced-motion='true']) {
-  .ranking-bar > span, .ranking-list > li { transition: none; }
+  .ranking-bar > span, .ranking-list > li, .anatomy-bar > span { transition: none; }
   .filter-chip { border: 0; animation: none; }
 }

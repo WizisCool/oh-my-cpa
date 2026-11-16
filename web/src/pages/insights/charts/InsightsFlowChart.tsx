@@ -4,13 +4,13 @@ import { TooltipContent, TooltipReadout, TooltipRoot } from '@/components/ui/too
 import { RADIUS } from '../../../theme/radius';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
-import type { FlowLink, FlowNode, InsightsDimension, InsightsMetric } from '../../../types/insightsCube';
+import type { FlowLink, FlowNode, InsightsDimension, CubeMetric } from '../../../types/insightsCube';
 import { useInsightsFormat } from '../useInsightsFormat';
 
 export interface InsightsFlowChartProps {
   nodes: readonly FlowNode[];
   links: readonly FlowLink[];
-  metric: InsightsMetric;
+  metric: CubeMetric;
   colorOf: (node: FlowNode) => string;
   labelOf: (node: FlowNode) => string;
   isDimmed?: (node: FlowNode) => boolean;

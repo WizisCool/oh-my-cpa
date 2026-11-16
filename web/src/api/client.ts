@@ -2,7 +2,7 @@ import type { BackupAuthorization, BackupArchive, BackupAutomation, BackupAutoma
 import type { RoutingBoard, RoutingModels, RoutingOutcome, RoutingPlanRequest } from '../types/routing';
 import type { ExchangeRates } from '../types/currencyDisplay';
 import type { OutboundProxyInput, OutboundProxySettings } from '../types/outboundProxy';
-import type { InsightsCubeResponse, InsightsRhythmResponse } from '../types/insights';
+import type { InsightsClientsResponse, InsightsCubeResponse, InsightsRhythmResponse } from '../types/insights';
 import type { WarmupRunResponse, WarmupStateView, WarmupTaskInput } from '../types/warmup';
 import type { ModelCatalogRefreshResult, ModelSquareDirectory } from '../types/modelSquare';
 import type { CustomIcon } from '../types/customIcons';
@@ -796,6 +796,11 @@ export const api = {
   /** getInsightsRhythm reads a window's usage by local weekday and hour, narrowed by the page's filters. */
   async getInsightsRhythm(query: string): Promise<InsightsRhythmResponse> {
     return request<InsightsRhythmResponse>(`/management/insights/rhythm?${query}`, { method: 'GET' });
+  },
+
+  /** getInsightsClients reads a window's usage by client program, narrowed like the rhythm read. */
+  async getInsightsClients(query: string): Promise<InsightsClientsResponse> {
+    return request<InsightsClientsResponse>(`/management/insights/clients?${query}`, { method: 'GET' });
   },
 
   async getClientKeyUsage(
