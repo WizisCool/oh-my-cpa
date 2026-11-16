@@ -47,7 +47,14 @@ import {
 } from '../components/dashboard/CredentialQuota';
 import { ModelTrendPanel, ModelUsagePanel, ModelSeriesFocusProvider, DASHBOARD_MODELS_QUERY_KEY } from '../components/dashboard/ModelUsagePanels';
 import { DashboardBoard, preloadDashboardBoardEditor } from '../components/dashboard/DashboardBoard';
-import { DashboardKpiTilePlaceholder } from '../components/dashboard/DashboardSkeleton';
+import {
+  CredentialQuotaPlaceholder,
+  DashboardKpiTilePlaceholder,
+  HeatmapPlaceholder,
+  ModelTrendPlaceholder,
+  ModelUsagePlaceholder,
+  ProvidersPlaceholder,
+} from '../components/dashboard/DashboardSkeleton';
 import { DashboardProviders } from '../components/dashboard/DashboardProviders';
 import { isCalendarPreset } from '../types/calendarPresets';
 import {
@@ -749,7 +756,10 @@ export const DashboardPage: React.FC = () => {
             immediate={isArranging}
             fallback={(
               <Panel className="dashboard-tile">
-                <Placeholder width="24%" className="placeholder-line is-meta" />
+                <div className="dash-skeleton-tile-head" aria-hidden="true">
+                  <Placeholder width={88} className="placeholder-line is-meta" />
+                  <Placeholder width={56} className="placeholder-line is-meta" />
+                </div>
                 <RoutingMapSkeleton className="tile-placeholder-spark" />
               </Panel>
             )}
@@ -762,12 +772,7 @@ export const DashboardPage: React.FC = () => {
           <DeferredPanel
             priority="p1"
             immediate={isArranging}
-            fallback={(
-              <Panel className="dashboard-tile">
-                <Placeholder width="32%" className="placeholder-line is-meta" />
-                <Placeholder width="100%" height={220} className="tile-placeholder-spark" />
-              </Panel>
-            )}
+            fallback={<ModelTrendPlaceholder />}
           >
             <ModelTrendPanel
               query={query}
@@ -782,12 +787,7 @@ export const DashboardPage: React.FC = () => {
           <DeferredPanel
             priority="p1"
             immediate={isArranging}
-            fallback={(
-              <Panel className="dashboard-tile">
-                <Placeholder width="32%" className="placeholder-line is-meta" />
-                <Placeholder width="100%" height={220} className="tile-placeholder-spark" />
-              </Panel>
-            )}
+            fallback={<ModelUsagePlaceholder />}
           >
             <ModelUsagePanel query={query} range={range} enabled={rangeReady} />
           </DeferredPanel>
@@ -803,7 +803,7 @@ export const DashboardPage: React.FC = () => {
                   <div className="heatmap-head">
                     <span className="tile-label">{t('dash.heatmap.title')}</span>
                   </div>
-                  <div className="heatmap-skeleton" aria-hidden="true" />
+                  <HeatmapPlaceholder hasHeader={false} />
                 </div>
               </Panel>
             )}
@@ -822,10 +822,8 @@ export const DashboardPage: React.FC = () => {
                   <div className="quota-head">
                     <span className="tile-label">{t('dash.quota.title')}</span>
                   </div>
-                  <LoadingRegion className="quota-skeleton">
-                    {Array.from({ length: 4 }, (_, row) => (
-                      <Placeholder key={row} width="100%" height={18} row={row} className="placeholder-line" />
-                    ))}
+                  <LoadingRegion>
+                    <CredentialQuotaPlaceholder hasHeader={false} />
                   </LoadingRegion>
                 </div>
               </Panel>
@@ -839,14 +837,7 @@ export const DashboardPage: React.FC = () => {
           <DeferredPanel
             priority="p2"
             immediate={isArranging}
-            fallback={(
-              <section className="dashboard-section dashboard-providers-section" aria-busy="true">
-                <Placeholder width="18%" className="placeholder-line is-meta" />
-                <div className="terminal-panel provider-list-panel">
-                  <Placeholder width="100%" height={176} />
-                </div>
-              </section>
-            )}
+            fallback={<ProvidersPlaceholder />}
           >
             <DashboardProviders overview={overviewQuery.data} query={query} range={range} enabled={rangeReady} />
           </DeferredPanel>

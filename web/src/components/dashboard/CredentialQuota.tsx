@@ -8,7 +8,8 @@ import { api } from '../../api/client';
 import { useT, type TFunc } from '../../i18n';
 import { LoadFailure, useToast } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
-import { LoadingRegion, Placeholder } from '../common/Placeholder';
+import { LoadingRegion } from '../common/Placeholder';
+import { CredentialQuotaPlaceholder } from './DashboardSkeleton';
 import { RefreshButton } from '../common/RefreshButton';
 import { Tooltip } from '../common/Tooltip';
 import { usePluginMultiPortalKeys, usePluginOAuthLogos } from '../../hooks/usePluginOAuthLogos';
@@ -304,10 +305,8 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
         </div>
 
         {state === 'loading' && (
-          <LoadingRegion className="quota-skeleton">
-            {Array.from({ length: 4 }, (_, row) => (
-              <Placeholder key={row} width="100%" height={18} row={row} className="placeholder-line" />
-            ))}
+          <LoadingRegion>
+            <CredentialQuotaPlaceholder hasHeader={false} />
           </LoadingRegion>
         )}
 

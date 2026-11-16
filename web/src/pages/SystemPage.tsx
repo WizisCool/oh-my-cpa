@@ -32,7 +32,9 @@ import type {
 import { PageHeader } from '../components/common/PageHeader';
 import { PanelTitle } from '../components/common/PanelTitle';
 import { FactList } from '../components/common/FactList';
-import { ListLoading, PanelsPlaceholder, SuspenseFallback } from '../components/common/PageLoading';
+import { ParagraphPlaceholder } from '../components/common/ContentPlaceholder';
+import { SuspenseFallback, SystemSkeleton } from '../components/common/PageLoading';
+import { LoadingRegion } from '../components/common/Placeholder';
 import { StatusLabel } from '../components/common/StatusLabel';
 import type { StatusTone } from '../components/common/StatusLabel';
 import { formatBytes, formatTimeAgo } from '../utils/format';
@@ -618,7 +620,7 @@ export const SystemPage: React.FC = () => {
     return (
       <div className={`terminal-page terminal-page-stack system-page ${styles['system-page']}`}>
         {header}
-        <PanelsPlaceholder count={4} />
+        <SystemSkeleton hasHeader={false} />
       </div>
     );
   }
@@ -904,7 +906,7 @@ export const SystemPage: React.FC = () => {
         })}
       >
         {changelogProduct && (
-          <React.Suspense fallback={<SuspenseFallback><ListLoading /></SuspenseFallback>}>
+          <React.Suspense fallback={<SuspenseFallback><LoadingRegion><ParagraphPlaceholder rows={6} /></LoadingRegion></SuspenseFallback>}>
             <ProductChangelog product={changelogProduct} />
           </React.Suspense>
         )}

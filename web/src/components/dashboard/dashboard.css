@@ -407,7 +407,6 @@
 
 /* The grouping toggle sits in the card's header row, opposite the title. */
 .model-view-toggle { flex: none; }
-.model-chart-skeleton { height: 220px; }
 .model-alert { margin-top: 12px; }
 /* The stale warning opens the body above the legend or the usage bar, so its space is below it. */
 .model-stale-alert { margin-bottom: 12px; }
@@ -513,7 +512,6 @@
 .quota-foot-link { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: var(--text-sm); line-height: 1; }
 .quota-foot-link:hover { color: var(--accent); }
 .quota-link-icon { font-size: var(--text-2xs); }
-.quota-skeleton { display: flex; flex-direction: column; gap: 22px; margin-top: 20px; }
 .quota-alert { margin-top: 12px; }
 /* Below 1100px the board gives every half-width panel a row of its own, so there is no neighbour to
    take a height from and the list sets its own. */
@@ -745,15 +743,6 @@
   width: 12px;
   height: 12px;
   border-radius: var(--radius-xs);
-}
-/* Static skeleton, never a shimmer. */
-.heatmap-skeleton {
-  border: 0;
-  margin-top: 12px;
-  /* The measured field's own height: the month axis, then seven rows at the target size. */
-  height: calc(16px + var(--heatmap-cell-target) * 7 + var(--heatmap-gap) * 6);
-  box-shadow: var(--shadow-edge);
-  border-radius: var(--radius-md);
 }
 .heatmap-alert { margin-top: 12px; }
 /* A 2px indeterminate bar for the panel's own background re-read: one composited layer, no layout,

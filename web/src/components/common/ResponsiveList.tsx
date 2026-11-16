@@ -110,7 +110,7 @@ export function ResponsiveList<T extends object>({
     );
   }
 
-  if (isFirstRead) return <ListLoading />;
+  if (isFirstRead) return <ListLoading isFramed />;
   if (dataSource.length === 0) return empty;
 
   const visible = drawn;

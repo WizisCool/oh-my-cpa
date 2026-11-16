@@ -13,7 +13,6 @@ import { AuthGate } from './components/common/AuthGate';
 import { RouteErrorPage } from './components/common/RouteErrorPage';
 import { DemoNotice } from './components/common/DemoNotice';
 import { ConfirmDialogHost, Toaster } from './components/feedback';
-import type { RouteLoadingBody, RouteLoadingHandle } from './components/common/PageLoading';
 // Eager: it stands in for the shell while the shell's own download and the stored preferences are
 // in flight. It reads the locale, so a language change re-renders it rather than recreating the router.
 import { ShellLoading } from './components/common/ShellLoading';
@@ -49,14 +48,6 @@ import { MotionPreferenceSync, MotionProvider } from './hooks/useReducedMotionPr
 import { useConsoleFonts } from './hooks/useFonts';
 import { DEFAULT_SWR_STALE_TIME_MS } from './api/queryKeys';
 import { useEventSource } from './hooks/useEventSource';
-
-/**
- * The frame a route draws while its module downloads: the shape of its loaded body, so the page that
- * replaces it lands in place. A route that names none is a list. Read by `AppLayout`.
- */
-function loadingAs(loading: RouteLoadingBody): RouteLoadingHandle {
-  return { loading };
-}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -128,24 +119,24 @@ const AppRoutes: React.FC = () => {
       errorElement: <RouteErrorPage />,
       children: [
         { index: true, element: <Navigate to="/dashboard" replace /> },
-        { path: 'dashboard', element: <DashboardPage />, handle: loadingAs('dashboard') },
-        { path: 'insights', element: <InsightsPage />, handle: loadingAs('panels') },
-        { path: 'playground', element: <PlaygroundPage />, handle: loadingAs('workspace') },
-        { path: 'agent', element: <AgentPage />, handle: loadingAs('workspace') },
+        { path: 'dashboard', element: <DashboardPage /> },
+        { path: 'insights', element: <InsightsPage /> },
+        { path: 'playground', element: <PlaygroundPage /> },
+        { path: 'agent', element: <AgentPage /> },
         { path: 'model-square', element: <ModelSquarePage /> },
         { path: 'ai-providers', element: <ProvidersPage /> },
         { path: 'api-keys', element: <ApiKeysPage /> },
-        { path: 'routing', element: <RoutingPage />, handle: loadingAs('panels') },
+        { path: 'routing', element: <RoutingPage /> },
         { path: 'oauth-management', element: <OAuthManagementPage /> },
         { path: 'auth-files', element: <LegacyOAuthManagementRedirect from="/auth-files" /> },
         { path: 'oauth', element: <LegacyOAuthManagementRedirect from="/oauth" /> },
         { path: 'quota', element: <LegacyOAuthManagementRedirect from="/quota" /> },
-        { path: 'logs', element: <LogsPage />, handle: loadingAs('table') },
-        { path: 'audit', element: <AuditPage />, handle: loadingAs('table') },
-        { path: 'usage/events', element: <UsageEventsPage />, handle: loadingAs('table') },
-        { path: 'pricing', element: <PricingPage />, handle: loadingAs('table') },
-        { path: 'config', element: <ConfigPage />, handle: loadingAs('panels') },
-        { path: 'omc-settings', element: <OmcSettingsPage />, handle: loadingAs('panels') },
+        { path: 'logs', element: <LogsPage /> },
+        { path: 'audit', element: <AuditPage /> },
+        { path: 'usage/events', element: <UsageEventsPage /> },
+        { path: 'pricing', element: <PricingPage /> },
+        { path: 'config', element: <ConfigPage /> },
+        { path: 'omc-settings', element: <OmcSettingsPage /> },
         // One page under three addresses, so the store and the settings can be linked to
         // and listed in the navigation.
         { path: 'plugins', element: <PluginsPage /> },
@@ -153,7 +144,7 @@ const AppRoutes: React.FC = () => {
         { path: 'plugins/settings', element: <PluginsPage /> },
         { path: 'plugin-store', element: <Navigate to="/plugins/store" replace /> },
         { path: 'plugin-pages/:pluginId/:pageIndex', element: <PluginPageHost /> },
-        { path: 'system', element: <SystemPage />, handle: loadingAs('panels') },
+        { path: 'system', element: <SystemPage /> },
         { path: '*', element: <Navigate to="/dashboard" replace /> },
       ],
     }, {

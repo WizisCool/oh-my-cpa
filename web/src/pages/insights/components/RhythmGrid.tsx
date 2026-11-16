@@ -5,6 +5,8 @@ import React from 'react';
 import { Segmented } from '@/components/ui/segmented';
 import { Panel } from '../../../components/common/Panel';
 import { PanelTitle } from '../../../components/common/PanelTitle';
+import { LoadingRegion } from '../../../components/common/Placeholder';
+import { ChartLinesPlaceholder } from '../../../components/common/PageLoading';
 import { EmptyState } from '../../../components/common/EmptyState';
 import { useT } from '../../../i18n';
 import { heatmapRampMix } from '../../../theme/heatmapRamp';
@@ -59,11 +61,11 @@ export const RhythmGrid: React.FC<RhythmGridProps> = ({ data, measure, isLoading
 
   let body: React.ReactNode;
   if (isUncaptured) body = <EmptyState size="compact" title={t('insights.rhythm_uncaptured')} />;
-  else if (!data && isLoading) body = <div className={styles['rhythm-skeleton']} aria-hidden="true" />;
+  else if (!data && isLoading) body = <LoadingRegion><ChartLinesPlaceholder kind="rhythm" /></LoadingRegion>;
   else if (!data || summary.total <= 0) body = <EmptyState size="compact" title={t('insights.no_usage')} />;
   else if (view === 'hours') {
     body = (
-      <React.Suspense fallback={<div className="chart-placeholder" style={{ height: 200 }} aria-hidden="true" />}>
+      <React.Suspense fallback={<div className="chart-placeholder" style={{ height: 200 }} aria-hidden="true"><ChartLinesPlaceholder height={200} kind="trend" /></div>}>
         <InsightsHourChart
           values={summary.hours}
           peakHours={peakHours}

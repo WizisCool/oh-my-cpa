@@ -31,7 +31,10 @@ import { I18nProvider, useT, type MessageKey } from '../src/i18n';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { DashboardTrendChart } from '../src/charts/DashboardTrendChart';
 import { RoutingPanel } from '../src/components/dashboard/routing/RoutingPanel';
-import { renderWithOmc } from './support/render';
+import { LoadingRegion, Placeholder } from '../src/components/common/Placeholder';
+import { PAGE_SKELETON_REGISTRY, RouteSkeleton, type RouteLoadingBody } from '../src/components/common/PageLoading';
+import { ShellLoading } from '../src/components/common/ShellLoading';
+import { createTestQueryClient, renderWithOmc } from './support/render';
 import { installOmcApi, json } from './support/omcApi';
 
 describe('SearchInput', () => {
@@ -1236,5 +1239,143 @@ describe('DashboardTrendChart native SVG sparkline', () => {
     expect(screen.getByText('12 reqs')).toBeTruthy();
     fireEvent.keyDown(chart, { key: 'Escape' });
     expect(screen.queryByText('12 reqs')).toBeNull();
+  });
+});
+
+describe('ShellLoading and LoadingRegion continuity', () => {
+  it('renders route-aware dashboard skeleton inside ShellLoading and respects cached collapsed state', () => {
+    const originalPath = window.location.pathname;
+    window.history.replaceState(null, '', '/');
+    try {
+      const client = createTestQueryClient();
+      client.setQueryData(['preferences'], { omc_sidebar_collapsed: true });
+      const { container } = renderWithOmc(
+        <ThemeProvider>
+          <ShellLoading />
+        </ThemeProvider>,
+        { client },
+      );
+
+      expect(screen.getAllByRole('status')).toHaveLength(1);
+      const region = screen.getByRole('status');
+      expect(region.getAttribute('aria-busy')).toBe('true');
+      expect(region.getAttribute('data-handover')).toBe('true');
+      expect(screen.getByTestId('routing-skeleton')).toBeTruthy();
+      expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--sider-width')).toBe('58px');
+    } finally {
+      window.history.replaceState(null, '', originalPath);
+    }
+  });
+
+  it('renders the standalone authorization frame without a sidebar on /authorize/* routes', () => {
+    const originalPath = window.location.pathname;
+    window.history.replaceState(null, '', '/authorize/op_test');
+    try {
+      const { container } = renderWithOmc(
+        <ThemeProvider>
+          <ShellLoading />
+        </ThemeProvider>,
+      );
+
+      expect(container.querySelector('aside')).toBeNull();
+      expect(screen.queryByTestId('routing-skeleton')).toBeNull();
+      expect(screen.getByRole('status').getAttribute('data-handover')).toBe('true');
+    } finally {
+      window.history.replaceState(null, '', originalPath);
+    }
+  });
+
+  it('delays isolated loading regions while handing over sequential loading regions without a flash gap', () => {
+    let clock = 5_000_000;
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    try {
+      const first = render(
+        <I18nProvider>
+          <LoadingRegion>
+            <Placeholder width={120} />
+          </LoadingRegion>
+        </I18nProvider>,
+      );
+      expect(screen.getByRole('status').getAttribute('data-handover')).toBeNull();
+
+      clock += 50;
+      first.unmount();
+
+      clock += 40;
+      const second = render(
+        <I18nProvider>
+          <LoadingRegion>
+            <Placeholder width={120} />
+          </LoadingRegion>
+        </I18nProvider>,
+      );
+      expect(screen.getByRole('status').getAttribute('data-handover')).toBe('true');
+      second.unmount();
+
+      clock += 1_000;
+      const third = render(
+        <I18nProvider>
+          <LoadingRegion>
+            <Placeholder width={120} />
+          </LoadingRegion>
+        </I18nProvider>,
+      );
+      expect(screen.getByRole('status').getAttribute('data-handover')).toBeNull();
+      third.unmount();
+
+      // Restoring an earlier clock (or rerunning in the same worker) must not trigger handover via negative elapsed time.
+      clock = 100;
+      const fourth = render(
+        <I18nProvider>
+          <LoadingRegion>
+            <Placeholder width={120} />
+          </LoadingRegion>
+        </I18nProvider>,
+      );
+      expect(screen.getByRole('status').getAttribute('data-handover')).toBeNull();
+      fourth.unmount();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('renders every registered route skeleton archetype cleanly with a single busy status region', () => {
+    const bodies = Object.keys(PAGE_SKELETON_REGISTRY) as RouteLoadingBody[];
+    for (const body of bodies) {
+      const { unmount } = renderWithOmc(
+        <ThemeProvider>
+          <RouteSkeleton body={body} isImmediate />
+        </ThemeProvider>,
+      );
+      const statuses = screen.getAllByRole('status');
+      expect(statuses, `archetype ${body} must expose one status region`).toHaveLength(1);
+      expect(statuses[0].getAttribute('aria-busy')).toBe('true');
+      expect(statuses[0].getAttribute('data-handover')).toBe('true');
+      unmount();
+    }
+  });
+
+  it('projects cached hidden and reordered sidebar items inside ShellLoading', () => {
+    const originalPath = window.location.pathname;
+    window.history.replaceState(null, '', '/insights');
+    try {
+      const client = createTestQueryClient();
+      client.setQueryData(['preferences'], {
+        omc_nav_hidden: ['/agent', '/playground'],
+        omc_nav_order: { operate: ['/model-square', '/dashboard'] },
+      });
+      const { container } = renderWithOmc(
+        <ThemeProvider>
+          <ShellLoading />
+        </ThemeProvider>,
+        { client },
+      );
+
+      // 18 static items minus 2 hidden (`/agent`, `/playground`) = 16 rendered rail rows.
+      expect(container.querySelectorAll('.shell-loading-nav-item')).toHaveLength(16);
+      expect(container.querySelector('.placeholder-insights-rankings')).not.toBeNull();
+    } finally {
+      window.history.replaceState(null, '', originalPath);
+    }
   });
 });

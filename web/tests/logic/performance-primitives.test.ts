@@ -38,6 +38,9 @@ import { dashboardWidgetSpec } from '../../src/types/dashboardLayout.ts';
 import { isDiscreteWheel, keyScrollFor, pageDistance, type WheelSample } from '../../src/utils/scrollSmoothing.ts';
 import { isSameDrawing } from '../../src/charts/useChartMorph.ts';
 import { isSameReadout } from '../../src/components/dashboard/RollingNumber.tsx';
+import { PAGE_SKELETON_REGISTRY } from '../../src/components/common/PageLoading.tsx';
+import { ROUTE_DESCRIPTORS, consoleRouteRegistry } from '../../src/routePreload.ts';
+import { buildNavGroupSpecs } from '../../src/types/sidebarNav.ts';
 
 test('frame scheduler separates priority tiers across slices, caps per-slice jobs, and yields across frames', () => {
   let clock = 0;
@@ -1036,4 +1039,22 @@ test('getIdentityDirectoryProjection caches derived Maps and Sets per response o
   assert.equal(first.providersByID.get('openai-0')?.name, 'OpenAI');
   assert.equal(first.pluginTitles.get('codex-plus'), 'Codex Plus');
   assert.equal(first.multiPortalKeys.has('codex-plus'), true);
+});
+
+test('every route descriptor and static navigation entry declares a registered skeleton archetype', () => {
+  const registeredBodies = new Set(Object.keys(PAGE_SKELETON_REGISTRY));
+  assert.ok(ROUTE_DESCRIPTORS.length > 0);
+  for (const descriptor of ROUTE_DESCRIPTORS) {
+    assert.ok(descriptor.loadingBody, `${descriptor.path} must declare loadingBody in ROUTE_DESCRIPTORS`);
+    assert.ok(
+      registeredBodies.has(descriptor.loadingBody),
+      `${descriptor.path} references unregistered loadingBody=${descriptor.loadingBody}`,
+    );
+  }
+  for (const group of buildNavGroupSpecs()) {
+    for (const item of group.items) {
+      const resolved = consoleRouteRegistry.resolve(item.key);
+      assert.ok(resolved?.loadingBody, `nav item ${item.key} must resolve to a ROUTE_DESCRIPTOR with loadingBody`);
+    }
+  }
 });

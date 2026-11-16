@@ -56,7 +56,7 @@ import { LogList } from './LogList';
 import styles from './Logs.module.css';
 import { useToast } from '../feedback';
 import { LoadFailure, Notice } from '../feedback';
-import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
+import { ListLoading } from '../common/PageLoading';
 import { SearchInput } from '../common/SearchInput';
 import { SearchSelect } from '../common/SearchSelect';
 import { EmptyState } from '../common/EmptyState';
@@ -142,7 +142,7 @@ const ErrorLogFiles: React.FC<{ onView: (file: ErrorLogFile) => void }> = ({ onV
     placeholderData: keepPreviousData,
   });
 
-  if (query.isPending) return <ParagraphPlaceholder rows={4} className="log-files-state" />;
+  if (query.isPending) return <ListLoading rows={4} className="log-files-state" />;
   if (query.isError) {
     const code = apiErrorCode(query.error);
     return (

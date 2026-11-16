@@ -4,8 +4,7 @@ import { Navigate } from 'react-router-dom';
 import { useViewSearchParams } from '../hooks/useViewSearchParams';
 import { useT } from '../i18n';
 import { PageHeader } from '../components/common/PageHeader';
-import { Panel } from '../components/common/Panel';
-import { Placeholder } from '../components/common/Placeholder';
+import { LogsSkeleton } from '../components/common/PageLoading';
 import { createNamedLoader, lazyRoute } from '../utils/routeLoader';
 
 const loadCpaLogPanel = createNamedLoader(() => import('../components/logs/CpaLogPanel'), 'CpaLogPanel');
@@ -63,13 +62,7 @@ export const LogsPage: React.FC = () => {
           />
         )}
       />
-      <React.Suspense
-        fallback={(
-          <Panel className="logs-panel">
-            <Placeholder width="100%" height={360} />
-          </Panel>
-        )}
-      >
+      <React.Suspense fallback={<LogsSkeleton hasHeader={false} />}>
         {source === 'cpa' && <LazyCpaLogPanel />}
         {source === 'service' && <LazyServiceLogPanel />}
       </React.Suspense>

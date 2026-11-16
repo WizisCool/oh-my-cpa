@@ -2,7 +2,8 @@ import React from 'react';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
-import { ListLoading } from '../common/PageLoading';
+import { CardsPlaceholder, ToolbarPlaceholder } from '../common/PageLoading';
+import { LoadingRegion } from '../common/Placeholder';
 import { CloseOutlined, DownloadOutlined, GithubOutlined, LockOutlined, SettingOutlined, TagOutlined, UpgradeOutlined } from '../icons';
 import { useI18n, useT } from '../../i18n';
 import { selectStorePluginMetadata } from '../../types/pluginStoreMetadata';
@@ -106,7 +107,12 @@ export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefres
   }, []);
 
   if (isLoading) {
-    return <ListLoading className={styles.empty} />;
+    return (
+      <LoadingRegion className={clsx('placeholder-stack', styles.empty)}>
+        <ToolbarPlaceholder chips={3} />
+        <CardsPlaceholder count={6} variant="entity" />
+      </LoadingRegion>
+    );
   }
 
   const filterLabels: Record<PluginStoreFilter, string> = {

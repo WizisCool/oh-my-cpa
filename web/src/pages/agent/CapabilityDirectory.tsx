@@ -2,6 +2,7 @@ import { translateOr } from '../../i18n/catalog';
 import React from 'react';
 import { clsx } from 'clsx';
 import { CopyButton } from '../../components/common/CopyButton';
+import { ListLoading } from '../../components/common/PageLoading';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { useI18n } from '../../i18n';
 import { capabilityDescription, capabilityTitle } from '../../i18n/capabilities';
@@ -66,7 +67,7 @@ export const CapabilityDirectory = React.memo(function CapabilityDirectory({ cap
         />
       </div>
       {isError && <div className={styles['directory-note']}><LoadFailure title={t('agent.error.gateway')} onRetry={onRetry} /></div>}
-      {isPending && <p className={styles['directory-note']}>{t('common.loading')}</p>}
+      {isPending && <ListLoading rows={5} className={styles['directory-note']} />}
       {!isPending && !isError && groups.length === 0 && <p className={styles['directory-note']}>{t('agent.directory.empty')}</p>}
       {groups.map(group => (
         <section key={group.permission} className={styles['group']} aria-label={translateOr(t, `agent.permission.${group.permission}`, group.permission)}>

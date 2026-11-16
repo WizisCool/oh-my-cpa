@@ -13,7 +13,7 @@ import { useProviderBranding } from '../hooks/useProviderBranding';
 import { LobeIcon, ProviderBrandIcon } from '../components/LobeIcon';
 import { AudioOutlined, BoxOutlined, CheckOutlined, CloseOutlined, CopyOutlined, DownOutlined, ExternalLinkOutlined, FileOutlined, FileTextOutlined, LayersOutlined, PictureOutlined, RightOutlined, SyncOutlined, TypeOutlined, UpOutlined, VideoOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
-import { ListLoading } from '../components/common/PageLoading';
+import { CatalogSkeleton } from '../components/common/PageLoading';
 import { CopyButton } from '../components/common/CopyButton';
 import { StatusLabel } from '../components/common/StatusLabel';
 import { EffortTag, Tag } from '../components/common/Tag';
@@ -550,7 +550,7 @@ export const ModelSquarePage: React.FC = () => {
     <PageHeader title={t('nav.model_square')} subtitle={subtitle} actions={<CatalogRefreshButton onReread={reread} />} />
     {directory.isError && <LoadFailure title={t(needsKey ? 'models.key_required' : 'models.load_failed')} error={directory.error} onRetry={() => void directory.refetch()} />}
     {needsKey && <Link to="/api-keys">{t('models.manage_keys')}</Link>}
-    {directory.isPending ? <ListLoading /> : directory.data && <>
+    {directory.isPending ? <CatalogSkeleton hasHeader={false} /> : directory.data && <>
       <Toolbar>
         <SearchInput className={styles['search']} label={t('models.search')} value={search} onChange={(text) => setParam('q', text)} />
         <span className={styles['result-count']} role="status">

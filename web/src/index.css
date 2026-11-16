@@ -1967,7 +1967,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .chart-slot { position: relative; margin-top: 14px; min-width: 0; }
 .chart-slot > div { width: 100%; height: 100%; }
 .chart-slot svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.chart-placeholder { margin-top: 14px; border-bottom: 1px solid var(--border-soft); }
+.chart-placeholder { position: relative; margin-top: 14px; min-width: 0; }
 
 @media (max-width: 640px) {
   .dashboard-tile [data-slot="panel-body"] { padding: 16px; }
@@ -2030,9 +2030,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .responsive-list {
   animation: content-arrive var(--motion-base) var(--ease-out) backwards;
 }
-/* A placeholder waits a beat before it shows, so a load that answers within it goes straight from
-   the previous view to the content without a skeleton flashing between them. */
-.loading-region[aria-busy='true'] {
+/* A placeholder waits a beat before it shows on isolated transitions, so a fast answer never
+   flashes a skeleton. Active loading handovers (`ShellLoading -> RouteLoading -> Page`) pass
+   `data-handover` to stay visible without a 120ms blank seam. */
+.loading-region[aria-busy='true']:not([data-handover]) {
   animation: content-arrive var(--motion-fast) var(--ease-out) 120ms backwards;
 }
 /* Held for the two frames a palette change takes to paint (ThemeContext): the console lands in
@@ -2080,7 +2081,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   height: 2px;
   overflow: hidden;
   pointer-events: none;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
   transition: opacity var(--motion-base) var(--ease-standard) var(--motion-base);
 }
 .progress-bar[hidden] { display: none; }
@@ -2130,42 +2131,72 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   margin-bottom: -2px;
 }
 
-/* A first-load placeholder block. The breath is opacity only and staggered one `base` per row, so
-   the wave runs down the frame without a moving gradient. */
+/* A first-load placeholder block: a quiet translucent ink wash with tiered contrast so
+   headings, primary text, controls and metadata read in hierarchy. The breath is compositor-only
+   opacity, eased symmetrically and staggered row by row into one calm wave. */
 .placeholder {
   display: block;
   flex: none;
   max-width: 100%;
   border-radius: var(--radius-sm);
-  background: var(--border);
-  animation: placeholder-breathe 1400ms var(--ease-standard) infinite alternate both;
-  animation-delay: calc(var(--placeholder-epoch, 0ms) + var(--placeholder-row, 0) * var(--motion-base));
+  background: color-mix(in oklab, var(--fg) 8.5%, transparent);
+  animation: placeholder-breathe 1600ms ease-in-out infinite alternate both;
+  animation-delay: calc(var(--placeholder-epoch, 0ms) + var(--placeholder-row, 0) * 85ms);
 }
 @keyframes placeholder-breathe {
   from { opacity: 1; }
-  to { opacity: 0.45; }
+  to { opacity: 0.56; }
+}
+@media (forced-colors: active) {
+  .placeholder,
+  .placeholder-rhythm-cell {
+    background: transparent;
+    outline: 1px solid GrayText;
+    outline-offset: -1px;
+  }
 }
 .placeholder-lines { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 /* Line heights are the glyph height of the copy they stand for, centred in its line box. */
 .placeholder-line { height: 10px; }
-.placeholder-line.is-meta { height: 8px; }
-.placeholder-title { height: 18px; }
+.placeholder-line.is-meta { height: 8px; background: color-mix(in oklab, var(--fg) 6%, transparent); }
+.placeholder-title { height: 18px; background: color-mix(in oklab, var(--fg) 11.5%, transparent); }
+.placeholder.is-control { border-radius: var(--radius-md); background: color-mix(in oklab, var(--fg) 7.5%, transparent); }
+.placeholder.is-surface { border-radius: var(--radius-lg); background: color-mix(in oklab, var(--fg) 5.5%, transparent); }
+.placeholder.is-pill { border-radius: 9999px; background: color-mix(in oklab, var(--fg) 8.5%, transparent); }
+.placeholder.is-circle { border-radius: 50%; }
 .loading-region { min-width: 0; }
+/* Mirrors `.data-table` and `Panel`: the panel's own ground and edge shadow, never a muddy fill. */
+.placeholder-frame {
+  border: 0;
+  border-radius: var(--radius-xl);
+  background: var(--bg);
+  box-shadow: var(--shadow-edge);
+  overflow: clip;
+}
 /* The title's 32px line box, so the body below starts where the real head ends. */
-.placeholder-page-head { padding: 7px 0; }
+.placeholder-page-head { align-items: center; }
+.placeholder-page-heading { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 8px; min-height: 32px; }
 .placeholder-list { display: flex; flex-direction: column; }
 .placeholder-list-row {
   display: flex;
   align-items: center;
   gap: 14px;
-  min-height: 64px;
-  padding: 12px 16px;
+  min-height: 60px;
+  padding: 12px 18px;
 }
 .placeholder-list-row + .placeholder-list-row { border-top: 1px solid var(--border-soft); }
-.placeholder-list-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 9px; }
+.placeholder-list-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .block-loading .placeholder-list-row { padding-inline: 0; }
 .placeholder-paragraph { padding: 4px 0; }
 .placeholder-paragraph .placeholder-lines { gap: 14px; }
+.placeholder-table-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 38px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
 .placeholder-table-row {
   display: flex;
   align-items: center;
@@ -2179,58 +2210,376 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    empty message, edge to edge as real rows would be. */
 [data-slot="table-cell"]:has(.placeholder-table) { padding: 0; text-align: start; }
 .placeholder-panels { display: flex; flex-direction: column; gap: 16px; }
-.placeholder-panel-body { margin-top: 18px; }
+.placeholder-panel-rows { display: flex; flex-direction: column; }
+.placeholder-panel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 0;
+}
+.placeholder-panel-row:first-child { padding-top: 2px; }
+.placeholder-panel-row:last-child { padding-bottom: 2px; }
+.placeholder-panel-row + .placeholder-panel-row { border-top: 1px solid var(--border-soft); }
+.placeholder-panel-row-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.thread-placeholder-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+}
+.thread-placeholder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.thread-placeholder-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 /* A conversation's first load, at the thread's reading column. Global because a lazy route draws it
    before the workspace's own stylesheet has loaded. */
 .thread-placeholder {
-  flex: 1;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   min-height: 0;
   width: 100%;
   max-width: calc(var(--workspace-column, 760px) + 48px);
   margin: 0 auto;
-  padding: 24px;
+  padding: 28px 24px 20px;
   box-sizing: border-box;
 }
-.thread-placeholder-column { display: flex; flex-direction: column; gap: 24px; }
-.thread-placeholder-question { align-self: flex-end; }
-
-/* The shell's own placeholder, at the geometry `AppLayout` paints: a 236px rail, a 56px header. */
-.shell-loading {
-  height: 100vh;
-  height: 100dvh;
-  display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
-  overflow: hidden;
-  background: var(--bg);
-}
-.shell-loading-sider { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); }
-.shell-loading-sider .app-brand { cursor: default; }
-/* The rail's rhythm: a 28px group label and 36px items, so each placeholder row sits on the row
-   the real item will occupy. */
-.shell-loading-nav { display: flex; flex-direction: column; gap: 9px; padding: 13px 20px 0; overflow: hidden; }
-.shell-loading-nav-group { display: flex; flex-direction: column; }
-.shell-loading-nav-group > .placeholder { margin: 10px 0; }
-.shell-loading-nav-item { display: flex; align-items: center; gap: 12px; height: 36px; padding-left: 20px; }
-.shell-loading-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.shell-loading-header {
-  position: relative;
+.thread-placeholder-column { flex: 1 1 auto; display: flex; flex-direction: column; gap: 24px; overflow: hidden; }
+.thread-placeholder-question { align-self: flex-end; border-radius: var(--radius-lg); }
+.thread-placeholder-reply { display: flex; align-items: flex-start; gap: 12px; }
+.thread-placeholder-reply > .placeholder-lines { flex: 1 1 auto; padding-top: 4px; }
+.thread-placeholder-composer {
   flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: auto;
+  padding: 14px 16px;
+  border-radius: var(--radius-xl);
+  background: var(--bg);
+  box-shadow: var(--shadow-edge);
+}
+.thread-placeholder-composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.thread-placeholder-composer-tools { display: flex; align-items: center; gap: 8px; }
+
+/* Shared composable page skeleton layouts (Insights, Catalog, Directory, Fleet, Routing, Logs,
+   Workbench, Settings, System, Plugins, PluginHost, Authorize). */
+.placeholder-stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.placeholder-head-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.placeholder-desktop-only { display: block; }
+.placeholder-phone-only { display: none; }
+.placeholder-stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(var(--placeholder-tile-count, 4), minmax(0, 1fr));
+  gap: 8px;
+}
+.placeholder-stat-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  box-shadow: var(--shadow-edge);
+}
+.placeholder-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  min-width: 0;
+}
+.placeholder-toolbar-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.placeholder-toolbar-trailing { margin-left: auto; }
+.placeholder-chip-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.placeholder-catalog-section { display: flex; flex-direction: column; gap: 12px; }
+.placeholder-catalog-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.placeholder-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+.placeholder-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: var(--radius-xl);
+  background: var(--bg);
+  box-shadow: var(--shadow-edge);
+}
+.placeholder-card.is-model {
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+}
+.placeholder-card-head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.placeholder-card-identity { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.placeholder-card-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.placeholder-card-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  height: 56px;
-  padding: 0 24px 0 16px;
-  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
 }
-.shell-loading-crumbs, .shell-loading-actions { display: flex; align-items: center; gap: 14px; }
-.shell-loading-actions { gap: 10px; }
-.shell-loading-progress { position: absolute; inset-inline: 0; bottom: -1px; }
-.shell-loading-content { flex: 1 1 0; min-height: 0; overflow: hidden; }
+.placeholder-card.is-model .placeholder-card-foot { padding-top: 2px; border-top: 0; }
+.placeholder-card-marks { display: inline-flex; align-items: center; gap: 6px; }
+.placeholder-chart-trend { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.placeholder-chart-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.placeholder-chart-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.placeholder-chart-canvas { position: relative; flex: 1 1 auto; min-height: 150px; display: flex; align-items: flex-end; }
+.placeholder-chart-guides {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.placeholder-chart-guide { display: block; width: 100%; height: 1px; background: var(--border-soft); }
+.placeholder-chart-svg { width: 100%; height: 100%; color: var(--fg); opacity: 0.45; }
+.placeholder-chart-flow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  align-items: center;
+  padding: 12px 0;
+}
+.placeholder-chart-flow-col { display: flex; flex-direction: column; gap: 12px; }
+.placeholder-chart-rhythm {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px 0;
+}
+.placeholder-rhythm-cell {
+  aspect-ratio: 1;
+  border-radius: var(--radius-xs);
+  background: color-mix(in oklab, var(--fg) 5.5%, transparent);
+  animation: placeholder-breathe 1600ms ease-in-out infinite alternate both;
+  animation-delay: calc(var(--placeholder-epoch, 0ms) + var(--placeholder-row, 0) * 85ms);
+}
+.placeholder-rhythm-cell.is-mid { background: color-mix(in oklab, var(--fg) 10%, transparent); }
+.placeholder-insights-rankings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.placeholder-ranking-rows { display: flex; flex-direction: column; gap: 14px; }
+.placeholder-ranking-row { display: flex; flex-direction: column; gap: 6px; }
+.placeholder-ranking-copy { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.placeholder-routing-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  gap: 16px;
+  align-items: start;
+}
+.placeholder-routing-board { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.placeholder-routing-entry { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; }
+.placeholder-routing-lens { margin-left: auto; }
+.placeholder-routing-tier {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  box-shadow: var(--shadow-edge);
+}
+.placeholder-routing-gutter { display: flex; align-items: flex-start; gap: 10px; }
+.placeholder-routing-gutter-copy { display: flex; flex-direction: column; gap: 6px; }
+.placeholder-routing-cards { display: flex; flex-wrap: wrap; gap: 8px; }
+.placeholder-logs-tabs {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 0 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.placeholder-log-lines { display: flex; flex-direction: column; padding-top: 6px; }
+.placeholder-log-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 6px 2px;
+}
+.placeholder-log-row + .placeholder-log-row { border-top: 1px solid var(--border-soft); }
+.placeholder-code-lines { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+.placeholder-code-row { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.placeholder-code-body { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; }
+.placeholder-workbench {
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.placeholder-workbench-nav { display: flex; flex-direction: column; gap: 4px; }
+.placeholder-workbench-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+}
+.placeholder-workbench-nav-item.is-selected {
+  background: var(--bg);
+  box-shadow: var(--shadow-control);
+}
+.placeholder-settings-card { padding: 10px 18px; }
+.placeholder-system-product { display: flex; flex-direction: column; gap: 12px; padding: 12px 0; }
+.placeholder-system-product + .placeholder-system-product { border-top: 1px solid var(--border-soft); }
+.placeholder-system-product-head { display: flex; flex-direction: column; gap: 6px; }
+.placeholder-system-versions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+.placeholder-system-action { margin-left: auto; }
+.placeholder-system-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.placeholder-plugins-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; padding-top: 2px; }
+.placeholder-plugin-host { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }
+.placeholder-plugin-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-xl);
+  background: var(--bg);
+  box-shadow: var(--shadow-edge);
+}
+.placeholder-plugin-identity { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.placeholder-plugin-actions { display: flex; align-items: center; gap: 6px; }
+.placeholder-plugin-stage {
+  flex: 1 1 auto;
+  min-height: 420px;
+  padding: 20px;
+  border-radius: var(--radius-xl);
+  background: var(--bg);
+  box-shadow: var(--shadow-edge);
+}
+.placeholder-plugin-stage-inner { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.placeholder-auth-card { max-width: 440px; }
+.placeholder-auth-parties { display: flex; align-items: center; justify-content: center; gap: 14px; padding-bottom: 6px; }
+.placeholder-auth-party { border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-edge); }
+.placeholder-auth-centered { align-self: center; }
+.placeholder-auth-request {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-edge);
+}
+.placeholder-auth-request-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.placeholder-auth-request-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 4px; }
+.placeholder-auth-link { align-self: center; }
+.placeholder-auth-check { display: flex; align-items: center; gap: 8px; }
 @media (max-width: 900px) {
-  .shell-loading { grid-template-columns: minmax(0, 1fr); }
+  .placeholder-routing-workspace,
+  .placeholder-workbench,
+  .placeholder-system-grid,
+  .placeholder-insights-rankings {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .placeholder-desktop-only { display: none; }
+  .placeholder-phone-only { display: block; }
+  .placeholder-stat-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .placeholder-toolbar-search { flex: 1 1 100%; width: 100%; }
+  .placeholder-toolbar-trailing { margin-left: 0; }
+  .placeholder-routing-tier { grid-template-columns: 1fr; }
+  .placeholder-routing-lens { display: none; }
+  .placeholder-chart-rhythm { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .placeholder-rhythm-cell:nth-child(n+85) { display: none; }
+  .thread-placeholder-head { padding: 0 16px; }
+  .thread-placeholder { padding: 18px 16px 14px; }
+}
+
+/* The shell's own placeholder, sharing `AppLayout`'s canvas rail and inset rounded panel so
+   signing in and cold boots match the loaded console from the first frame. */
+.shell-loading {
+  --sider-width: 236px;
+}
+.shell-loading-sider .app-brand { cursor: default; }
+.shell-loading-nav-group-label {
+  display: flex;
+  align-items: center;
+  height: 17px;
+}
+.shell-loading-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  margin: 1px 0;
+  padding: 0 10px 0 24px;
+  border-radius: var(--radius-md);
+}
+.shell-loading-nav-item.is-selected {
+  background: var(--bg);
+  box-shadow: var(--shadow-control);
+}
+.shell-loading-nav-item.is-selected > .placeholder {
+  background: color-mix(in oklab, var(--fg) 10%, transparent);
+}
+.app-sider-collapsed .shell-loading-nav-item {
+  justify-content: center;
+  padding-inline: 0;
+  gap: 0;
+}
+.shell-loading-header { cursor: default; }
+.shell-loading-icon-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+}
+.shell-loading-lang-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 8px;
+}
+.shell-loading-phone-only { display: none; }
+.shell-loading-content { overflow-x: hidden; overflow-y: auto; }
+.shell-loading-auth-card { display: flex; flex-direction: column; gap: 14px; }
+@media (max-width: 900px) {
   .shell-loading-sider { display: none; }
-  .shell-loading-header { padding: 0 16px 0 12px; }
+}
+@media (max-width: 640px) {
+  .shell-loading-desktop-only { display: none; }
+  .shell-loading-phone-only { display: inline-flex; width: 40px; height: 40px; }
+}
+@media (forced-colors: active) {
+  .shell-loading-nav-item.is-selected { border: 1px solid Highlight; }
 }
 /* Console icon wrappers (`web/src/components/icons`). */
 .omc-icon {
@@ -2264,7 +2613,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .progress-bar { transition: none; }
   .progress-bar-activity-mark { animation: none; opacity: 0; }
   /* A placeholder keeps its place and drops the breath. */
-  .placeholder { animation: none; opacity: 0.7; }
+  .placeholder,
+  .placeholder-rhythm-cell { animation: none; opacity: 0.78; }
   /* The static glyph still reads as "refreshing"; only its rotation is dropped. */
   .omc-icon-spin { animation: none; }
 }

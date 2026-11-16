@@ -16,7 +16,7 @@ import { Notice } from '../feedback';
 import { useProgressTask } from '../../hooks/useProgressTask';
 import { progressTasks } from '../../utils/progressTasks';
 import { ProgressBar } from './ProgressBar';
-import { Placeholder } from './Placeholder';
+import { LoadingRegion, Placeholder } from './Placeholder';
 import { useIsNarrowViewport } from '../../hooks/useIsNarrowViewport';
 import { isMotionReduced } from '../../utils/motionPreference';
 import type { SignInStageState } from './SignInStage';
@@ -48,12 +48,10 @@ function enterConsole(update: () => void): void {
 const PASSWORD_MANAGER_ACCOUNT = 'management-key';
 
 const AUTH_PLACEHOLDERS = [
-  { width: '78%', height: 28, className: styles['placeholder-title'] },
+  { width: '78%', height: 28, className: `placeholder-title ${styles['placeholder-title']}` },
   { width: '64%', className: `placeholder-line ${styles['placeholder-subtitle']}` },
   { width: 112, className: `placeholder-line is-meta ${styles['placeholder-label']}` },
-  { height: 40 },
-  { width: 96, className: `placeholder-line ${styles['placeholder-option']}` },
-  { height: 40 },
+  { height: 40, className: 'is-control' },
 ];
 
 export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -192,9 +190,14 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
         <main className={styles['main']}>
           <section className={`auth-card ${styles['card']}`} aria-labelledby={isLoading ? undefined : 'auth-title'} aria-busy={isLoading || undefined}>
             {isLoading ? (
-              <div role="status" aria-label={t('auth.checking')}>
+              <LoadingRegion isImmediate>
                 {AUTH_PLACEHOLDERS.map((placeholder, row) => <Placeholder key={row} {...placeholder} row={row} />)}
-              </div>
+                <div className={`placeholder-auth-check ${styles['placeholder-option']}`} aria-hidden="true">
+                  <Placeholder width={16} height={16} row={4} className="is-control" />
+                  <Placeholder width={88} row={4} className="placeholder-line" />
+                </div>
+                <Placeholder height={40} row={5} className="is-control" />
+              </LoadingRegion>
             ) : (
               <>
                 <h1 id="auth-title" className={`terminal-title auth-title ${styles['rise']}`} style={rise(0)}>{t('auth.title')}</h1>

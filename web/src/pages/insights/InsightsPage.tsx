@@ -29,7 +29,7 @@ import { PanelTitle } from '../../components/common/PanelTitle';
 import { EmptyState } from '../../components/common/EmptyState';
 import { ToolButton } from '../../components/common/ToolButton';
 import { ActionMenu } from '../../components/common/ActionMenu';
-import { LoadingRegion, Placeholder } from '../../components/common/Placeholder';
+import { ChartLinesPlaceholder, InsightsSkeleton } from '../../components/common/PageLoading';
 import { SwapOutlined } from '../../components/icons';
 import { LoadFailure } from '../../components/feedback';
 import {
@@ -124,8 +124,12 @@ function formatWindowSpan(window: { from: number; to: number; open_end: boolean 
   return `${stamp(from)} – ${isWholeDays || !from.isSame(to, 'day') ? stamp(to) : to.format('HH:mm')}`;
 }
 
-function ChartFallback({ height }: { height: number }) {
-  return <div className="chart-placeholder" style={{ height }} aria-hidden="true" />;
+function ChartFallback({ height, kind = 'trend' }: { height: number; kind?: 'trend' | 'flow' | 'rhythm' }) {
+  return (
+    <div className="chart-placeholder" style={{ height }} aria-hidden="true">
+      <ChartLinesPlaceholder height={height} kind={kind} />
+    </div>
+  );
 }
 
 /**
@@ -496,16 +500,7 @@ export const InsightsPage: React.FC = () => {
     return (
       <div className={`terminal-page ${styles['page']}`}>
         {header}
-        <LoadingRegion className={styles['tiles']}>
-          {Array.from({ length: 4 }, (_, index) => (
-            <div key={index} className={styles['tile']}>
-              <Placeholder width="50%" row={index} className="placeholder-line is-meta" />
-              <Placeholder width="70%" height={24} row={index + 1} />
-              <Placeholder width="40%" row={index + 2} className="placeholder-line is-meta" />
-            </div>
-          ))}
-        </LoadingRegion>
-        <Panel className={styles['trend-panel']}><ChartFallback height={280} /></Panel>
+        <InsightsSkeleton hasHeader={false} />
       </div>
     );
   }
@@ -657,7 +652,7 @@ export const InsightsPage: React.FC = () => {
       {flow && flow.links.length > 0 && (
         <DeferredPanel
           priority="p2"
-          fallback={<Panel className={styles['trend-panel']}><ChartFallback height={320} /></Panel>}
+          fallback={<Panel className={styles['trend-panel']}><ChartFallback height={320} kind="flow" /></Panel>}
         >
           <Panel
             data-testid="insights-flow"
@@ -679,7 +674,7 @@ export const InsightsPage: React.FC = () => {
               </PanelTitle>
             )}
           >
-            <React.Suspense fallback={<ChartFallback height={320} />}>
+            <React.Suspense fallback={<ChartFallback height={320} kind="flow" />}>
               <InsightsFlowChart
                 nodes={flow.nodes}
                 links={flow.links}
@@ -696,7 +691,7 @@ export const InsightsPage: React.FC = () => {
       )}
       <DeferredPanel
         priority="p2"
-        fallback={<Panel className={styles['trend-panel']}><ChartFallback height={220} /></Panel>}
+        fallback={<Panel className={styles['trend-panel']}><ChartFallback height={220} kind="rhythm" /></Panel>}
       >
         <RhythmGrid
           data={rhythmQuery.data}

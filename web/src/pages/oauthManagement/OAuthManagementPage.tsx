@@ -13,6 +13,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownCaret } from '@/components/ui/dropdown-caret';
 import { ListPlaceholder, LoadingRegion } from '../../components/common/Placeholder';
+import { CardsPlaceholder } from '../../components/common/PageLoading';
 import {
   BranchesOutlined,
   CloudUploadOutlined,
@@ -841,7 +842,7 @@ export const OAuthManagementPage: React.FC = () => {
 
           {isPending ? (
             <LoadingRegion>
-              <ListPlaceholder rows={6} isFramed />
+              {queryState.layout === 'cards' ? <CardsPlaceholder count={6} variant="entity" /> : <ListPlaceholder rows={6} isFramed />}
             </LoadingRegion>
           ) : visibleRecords.length === 0 ? (
             <div className={styles.empty}>

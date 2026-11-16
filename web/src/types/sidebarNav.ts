@@ -18,6 +18,91 @@ import type { TFunc } from '../i18n';
  * ordering is a choice inside a group, never a way to reclassify an entry by dragging it.
  */
 
+/** Pure serializable specification of a static navigation entry (icon-free for boot skeletons). */
+export interface NavEntrySpec {
+  readonly key: string;
+  readonly labelKey: MessageKey;
+  /** Approximate label width percentage in `ShellLoading`; defaults to a deterministic rhythm. */
+  readonly skeletonWidth?: number;
+}
+
+/** Pure serializable specification of a static navigation group. */
+export interface NavGroupSpec {
+  readonly key: string;
+  readonly labelKey: MessageKey;
+  readonly items: readonly NavEntrySpec[];
+}
+
+/**
+ * The rail's fixed destinations, grouped the way the console reasons about them: what it runs,
+ * the gateway in front of those models, what it observed, and how it is controlled.
+ *
+ * Kept icon-free here so both `navigation.tsx` (live sidebar) and `ShellLoading.tsx` (boot
+ * skeleton) read one canonical list without importing icon components into the entry shell.
+ */
+export const STATIC_NAV_GROUP_SPECS: readonly NavGroupSpec[] = [
+  {
+    key: 'operate',
+    labelKey: 'nav.group.operate',
+    items: [
+      { key: '/dashboard', labelKey: 'nav.dashboard', skeletonWidth: 52 },
+      { key: '/agent', labelKey: 'nav.agent', skeletonWidth: 46 },
+      { key: '/playground', labelKey: 'nav.playground', skeletonWidth: 58 },
+      { key: '/model-square', labelKey: 'nav.model_square', skeletonWidth: 62 },
+    ],
+  },
+  {
+    key: 'gateway',
+    labelKey: 'nav.group.gateway',
+    items: [
+      { key: '/ai-providers', labelKey: 'nav.providers', skeletonWidth: 64 },
+      { key: '/oauth-management', labelKey: 'nav.auth_files', skeletonWidth: 68 },
+      { key: '/api-keys', labelKey: 'nav.api_keys', skeletonWidth: 56 },
+      { key: '/routing', labelKey: 'nav.routing', skeletonWidth: 58 },
+    ],
+  },
+  {
+    key: 'observe',
+    labelKey: 'nav.group.observe',
+    items: [
+      { key: '/insights', labelKey: 'nav.insights', skeletonWidth: 44 },
+      { key: '/usage/events', labelKey: 'nav.usage_events', skeletonWidth: 60 },
+      { key: '/pricing', labelKey: 'nav.pricing', skeletonWidth: 56 },
+      { key: '/logs', labelKey: 'nav.logs', skeletonWidth: 54 },
+      { key: '/audit', labelKey: 'nav.audit', skeletonWidth: 58 },
+    ],
+  },
+  {
+    key: 'control',
+    labelKey: 'nav.group.control',
+    items: [
+      { key: '/config', labelKey: 'nav.config', skeletonWidth: 58 },
+      { key: '/omc-settings', labelKey: 'nav.omc_settings', skeletonWidth: 62 },
+      { key: '/system', labelKey: 'nav.system', skeletonWidth: 56 },
+    ],
+  },
+];
+
+export const PLUGIN_STATIC_NAV_ITEMS: readonly NavEntrySpec[] = [
+  { key: '/plugins', labelKey: 'nav.plugins', skeletonWidth: 58 },
+  { key: '/plugins/store', labelKey: 'nav.plugin_store', skeletonWidth: 60 },
+];
+
+/** Five-group rail specification in display order (with `plugins` inserted before `control`). */
+export function buildNavGroupSpecs(): readonly NavGroupSpec[] {
+  const controlIndex = STATIC_NAV_GROUP_SPECS.findIndex((group) => group.key === 'control');
+  const pluginGroup: NavGroupSpec = {
+    key: 'plugins',
+    labelKey: 'nav.group.plugins',
+    items: PLUGIN_STATIC_NAV_ITEMS,
+  };
+  return [
+    ...STATIC_NAV_GROUP_SPECS.slice(0, controlIndex),
+    pluginGroup,
+    ...STATIC_NAV_GROUP_SPECS.slice(controlIndex),
+  ];
+}
+
 /**
  * One destination in the rail.
  *

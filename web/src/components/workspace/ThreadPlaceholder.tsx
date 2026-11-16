@@ -1,25 +1,63 @@
+import clsx from 'clsx';
 import { LoadingRegion, Placeholder } from '../common/Placeholder';
+import { PlaceholderLines } from '../common/ContentPlaceholder';
 
 /**
- * A stored conversation on its first load: a question at the trailing edge and an answer under
- * it, twice, at the thread's own column width, so the turns that replace it land in place.
+ * First-load frame of a conversation page (Agent or Playground): optional top workspace bar,
+ * user turn bubble, assistant reply rows with avatar mark, and resting composer card.
+ *
+ * Pages that already render their own header (`AgentPage` bar) or composer (`AgentPage` bottom
+ * input) pass `hasHeader={false}` / `hasComposer={false}` so placeholders never duplicate live chrome.
  */
-export function ThreadPlaceholder({ testId }: { testId?: string }) {
+export function ThreadPlaceholder({
+  testId,
+  isImmediate = false,
+  hasHeader = false,
+  hasComposer = true,
+}: {
+  testId?: string;
+  isImmediate?: boolean;
+  hasHeader?: boolean;
+  hasComposer?: boolean;
+}) {
   return (
-    <LoadingRegion className="thread-placeholder">
-      <div className="thread-placeholder-column" data-testid={testId}>
-        <Placeholder width="38%" height={34} className="thread-placeholder-question" />
-        <div className="placeholder-lines">
-          <Placeholder width="92%" row={1} className="placeholder-line" />
-          <Placeholder width="80%" row={2} className="placeholder-line" />
-          <Placeholder width="58%" row={3} className="placeholder-line" />
+    <div className={clsx('thread-placeholder-shell', hasHeader && 'has-header')} data-testid={testId}>
+      {hasHeader && (
+        <div className="thread-placeholder-head" aria-hidden="true">
+          <Placeholder width={112} className="placeholder-title" />
+          <div className="thread-placeholder-head-actions">
+            <Placeholder width={32} height={32} className="is-control" />
+            <Placeholder width={32} height={32} className="is-control" />
+            <Placeholder width={32} height={32} className="is-control" />
+          </div>
         </div>
-        <Placeholder width="30%" height={34} row={4} className="thread-placeholder-question" />
-        <div className="placeholder-lines">
-          <Placeholder width="84%" row={5} className="placeholder-line" />
-          <Placeholder width="66%" row={6} className="placeholder-line" />
+      )}
+      <LoadingRegion isImmediate={isImmediate} className="thread-placeholder">
+        <div className="thread-placeholder-column">
+          <Placeholder width="36%" height={36} className="thread-placeholder-question is-surface" />
+          <div className="thread-placeholder-reply">
+            <Placeholder width={24} height={24} row={1} className="is-circle" />
+            <PlaceholderLines widths={['92%', '80%', '58%']} row={1} />
+          </div>
+          <Placeholder width="28%" height={36} row={4} className="thread-placeholder-question is-surface" />
+          <div className="thread-placeholder-reply">
+            <Placeholder width={24} height={24} row={5} className="is-circle" />
+            <PlaceholderLines widths={['84%', '66%']} row={5} />
+          </div>
         </div>
-      </div>
-    </LoadingRegion>
+        {hasComposer && (
+          <div className="thread-placeholder-composer" aria-hidden="true">
+            <Placeholder width="42%" row={7} className="placeholder-line" />
+            <div className="thread-placeholder-composer-foot">
+              <div className="thread-placeholder-composer-tools">
+                <Placeholder width={88} height={26} row={7} className="is-control" />
+                <Placeholder width={64} height={26} row={7} className="is-control" />
+              </div>
+              <Placeholder width={30} height={30} row={7} className="is-control" />
+            </div>
+          </div>
+        )}
+      </LoadingRegion>
+    </div>
   );
 }

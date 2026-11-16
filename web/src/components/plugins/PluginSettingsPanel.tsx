@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox, CheckboxGroup } from '@/components/ui/checkbox';
 import { Switch } from '../common/Switch';
-import { ListLoading } from '../common/PageLoading';
+import { PanelsPlaceholder } from '../common/PageLoading';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, PlusOutlined, SafetyCertificateOutlined, SaveOutlined, UndoOutlined } from '../icons';
 import { api, ApiError, apiErrorCode, describeError } from '../../api/client';
@@ -129,7 +129,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
   });
 
   if (settingsQuery.isLoading) {
-    return <ListLoading className={styles.empty} />;
+    return <PanelsPlaceholder count={2} />;
   }
   if (settingsQuery.isError || !current) {
     return <LoadFailure className={styles['store-notice']} title={t('plugin.settings_load_failed')} error={settingsQuery.error} onRetry={() => void settingsQuery.refetch()} />;

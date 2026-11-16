@@ -8,7 +8,7 @@ import { languageLocale, useI18n } from '../i18n';
 import { getAppConfig } from '../types/config';
 import { useTheme } from '../theme/ThemeContext';
 import { ExternalLinkOutlined, ReloadOutlined, SettingOutlined } from '../components/icons';
-import { ListLoading } from '../components/common/PageLoading';
+import { PluginHostSkeleton } from '../components/common/PageLoading';
 import { LoadFailure } from '../components/feedback';
 import { PluginLogo } from '../components/plugins/PluginParts';
 import { collectPluginPages, findPluginPage, pluginPageFrameURL } from '../components/plugins/pluginPages';
@@ -94,7 +94,13 @@ export const PluginPageHost: React.FC = () => {
     setFrameState('loading');
   }, [frameURL, frameTitle, reloadCount]);
 
-  if (pluginsQuery.isLoading) return <ListLoading />;
+  if (pluginsQuery.isLoading) {
+    return (
+      <div className="terminal-page">
+        <PluginHostSkeleton hasBar />
+      </div>
+    );
+  }
   if (pluginsQuery.isError && !pluginsQuery.data) {
     return (
       <div className="terminal-page">
@@ -120,7 +126,13 @@ export const PluginPageHost: React.FC = () => {
   // The frame waits for the first credential read, so the plugin's first paint already
   // sees the mirror. A background refresh leaves a loaded page alone rather than
   // unmounting it.
-  if (credentialQuery.isLoading) return <ListLoading />;
+  if (credentialQuery.isLoading) {
+    return (
+      <div className="terminal-page">
+        <PluginHostSkeleton hasBar />
+      </div>
+    );
+  }
 
   return (
     <div className={styles.page} data-plugin-page={entry.pluginId}>
@@ -170,7 +182,7 @@ export const PluginPageHost: React.FC = () => {
           />
         ) : (
           <>
-            {isFrameLoading && <ListLoading className={styles.loading} />}
+            {isFrameLoading && <PluginHostSkeleton hasBar={false} className={styles.loading} />}
             <iframe
               key={`${entry.route}:${frameURL}:${frameTitle}:${reloadCount}`}
               ref={shellRef}
