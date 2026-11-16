@@ -39,20 +39,30 @@ func TestCustomIconsCRUDAndRestart(t *testing.T) {
 	if err := repo.PutPreference(ctx, PreferenceProviderIcons, string(raw)); err != nil {
 		t.Fatal(err)
 	}
+	if err := repo.PutPreference(ctx, PreferenceModelIcons, `{"gpt-5":"custom:`+icon.ID+`","claude-opus":"Claude"}`); err != nil {
+		t.Fatal(err)
+	}
 	listed, err := repo.ListCustomIcons(ctx)
-	if err != nil || len(listed) != 1 || listed[0].ReferenceCount != 2 || len(listed[0].Content) != 0 {
+	if err != nil || len(listed) != 1 || listed[0].ReferenceCount != 3 || len(listed[0].Content) != 0 {
 		t.Fatalf("%+v %v", listed, err)
 	}
 	updated, err = repo.UpdateCustomIcon(ctx, icon.ID, &name, nil)
-	if err != nil || updated.ReferenceCount != 2 {
+	if err != nil || updated.ReferenceCount != 3 {
 		t.Fatalf("updated reference counts: %+v %v", updated, err)
 	}
 	if err := repo.PutPreference(ctx, PreferenceProviderIcons, `{"provider":"custom:missing"}`); !errors.Is(err, ErrCustomIconMissing) {
 		t.Fatalf("%v", err)
 	}
+	if err := repo.PutPreference(ctx, PreferenceModelIcons, `{"gpt-5":"custom:missing"}`); !errors.Is(err, ErrCustomIconMissing) {
+		t.Fatalf("%v", err)
+	}
 	stored, _, _ := repo.GetPreference(ctx, PreferenceProviderIcons)
 	if stored != string(raw) {
 		t.Fatal("invalid reference changed preferences")
+	}
+	storedModels, _, _ := repo.GetPreference(ctx, PreferenceModelIcons)
+	if storedModels != `{"gpt-5":"custom:`+icon.ID+`","claude-opus":"Claude"}` {
+		t.Fatal("invalid model icon reference changed preferences")
 	}
 	if err := database.Close(); err != nil {
 		t.Fatal(err)
@@ -83,6 +93,10 @@ func TestCustomIconsCRUDAndRestart(t *testing.T) {
 	stored, _, err = repo.GetPreference(ctx, PreferenceProviderIcons)
 	if err != nil || stored != `{"another":"DeepSeek"}` {
 		t.Fatalf("all matching ID and legacy-name overrides must be cleared: %s %v", stored, err)
+	}
+	storedModels, _, err = repo.GetPreference(ctx, PreferenceModelIcons)
+	if err != nil || storedModels != `{"claude-opus":"Claude"}` {
+		t.Fatalf("matching model icon overrides must be cleared on delete: %s %v", storedModels, err)
 	}
 	if err := repo.DeleteCustomIcon(ctx, icon.ID); !errors.Is(err, ErrCustomIconMissing) {
 		t.Fatalf("repeat deletion must report missing: %v", err)

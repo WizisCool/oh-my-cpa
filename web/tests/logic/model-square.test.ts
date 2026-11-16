@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { buildModelSquareEntries, buildModelReferenceLinks, countModelManufacturers, filterModelSquareEntries, isSafeReferenceURL, referenceContextWindow, resolveEntryReference, resolveModelManufacturer, type ModelSquareDirectory, type ModelReference } from '../../src/types/modelSquare.ts';
 import { LOBE_ICON_CATALOG } from '../../src/types/lobeIconCatalog.ts';
+import { EMPTY_MODEL_ICONS, parseModelIcons, resolveModelIconOverride, withModelIcon } from '../../src/types/modelIcons.ts';
 
 const GPT: ModelReference = {
   id: 'openai/gpt-5', name: 'GPT-5', context_length: 400_000, max_completion_tokens: 128_000,
@@ -121,4 +122,20 @@ test('families the source does not describe still resolve to their maker', () =>
   // The catalog's author outranks the id's prefix, and its spelling folds into the console's maker.
   assert.equal(resolveModelManufacturer('relay/grok-5', { ...GPT, author: 'x-ai', id: 'relay/grok-5' }).id, 'xai');
   assert.equal(resolveModelManufacturer('mystery', { ...GPT, author: 'Qwen', id: 'mystery' }).id, 'alibaba');
+});
+
+test('a model icon override is read under the call name, then the upstream it routes to', () => {
+  const icons = parseModelIcons({ 'team/fast': 'custom:0123456789abcdef0123456789abcdef', 'gpt-5': 'Codex' });
+  assert.equal(resolveModelIconOverride(icons, 'team/fast', 'gpt-5'), 'custom:0123456789abcdef0123456789abcdef');
+  assert.equal(resolveModelIconOverride(icons, 'alias', 'gpt-5'), 'Codex');
+  assert.equal(resolveModelIconOverride(icons, 'constructor'), undefined);
+  assert.equal(resolveModelIconOverride(parseModelIcons(['Codex']), 'gpt-5'), undefined);
+  assert.equal(parseModelIcons(null), EMPTY_MODEL_ICONS);
+});
+
+test('setting a model icon to empty removes the override and leaves the others', () => {
+  const icons = { 'gpt-5': 'Codex', 'team/fast': 'Gemini' };
+  assert.deepEqual(withModelIcon(icons, 'gpt-5', ''), { 'team/fast': 'Gemini' });
+  assert.deepEqual(withModelIcon(icons, 'new', 'Claude'), { ...icons, new: 'Claude' });
+  assert.deepEqual(icons, { 'gpt-5': 'Codex', 'team/fast': 'Gemini' });
 });

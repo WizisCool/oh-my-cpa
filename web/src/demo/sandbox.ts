@@ -6,13 +6,14 @@ import type {
   ConfigScalarsResponse,
   ConfigSourceResponse,
 } from '../types/configManagement';
-import type { CustomIcon } from '../types/customIcons';
+import { clearCustomIconAssignments, type CustomIcon } from '../types/customIcons';
 import type {
   ArchivedCredentialItem,
   ArchivedProviderItem,
   IdentityDirectoryResponse,
 } from '../types/identityDirectory';
 import { PROVIDER_ICONS_PREFERENCE, parseProviderIcons } from '../types/providerIcons';
+import { MODEL_ICONS_PREFERENCE, parseModelIcons } from '../types/modelIcons';
 import type { InstalledFont } from '../types/fonts';
 import type {
   ManagementAuthFile,
@@ -1745,6 +1746,9 @@ export async function interceptDemoRequest(
         credentials: mergedAuth,
         plugins: mergedPlugins,
         provider_icons: providerIcons,
+        model_icons: MODEL_ICONS_PREFERENCE in mergedPrefs
+          ? parseModelIcons(mergedPrefs[MODEL_ICONS_PREFERENCE])
+          : (baseDir?.model_icons ?? {}),
         archived_credentials: archivedCredentials,
         archived_providers: archivedProviders,
         catalog_status: {
@@ -3744,6 +3748,24 @@ export async function interceptDemoRequest(
       if (!state.customIcons.deletedIds.includes(id)) state.customIcons.deletedIds.push(id);
       state.customIcons.created = state.customIcons.created.filter((i) => i.id !== id);
       delete state.customIcons.dataUrls[id];
+      const prefsBase = await ensureBaseline<{ preferences?: Record<string, unknown> }>(
+        'preferences',
+        '/preferences',
+        fetchBaseline,
+      );
+      const mergedPrefs = { ...(prefsBase?.preferences ?? {}), ...state.preferences };
+      if (PROVIDER_ICONS_PREFERENCE in mergedPrefs) {
+        const currentProviders = parseProviderIcons(mergedPrefs[PROVIDER_ICONS_PREFERENCE]);
+        if (Object.values(currentProviders).some((ref) => ref === `custom:${id}`)) {
+          state.preferences[PROVIDER_ICONS_PREFERENCE] = clearCustomIconAssignments(currentProviders, id);
+        }
+      }
+      if (MODEL_ICONS_PREFERENCE in mergedPrefs) {
+        const currentModels = parseModelIcons(mergedPrefs[MODEL_ICONS_PREFERENCE]);
+        if (Object.values(currentModels).some((ref) => ref === `custom:${id}`)) {
+          state.preferences[MODEL_ICONS_PREFERENCE] = clearCustomIconAssignments(currentModels, id);
+        }
+      }
       saveState(state);
       return jsonResponse({ status: 'ok' });
     }

@@ -40,6 +40,14 @@
   transition: var(--select-transition);
 }
 
+.tile:hover {
+  box-shadow: var(--shadow-raised);
+}
+
+.tile[aria-pressed="true"]:hover {
+  box-shadow: var(--shadow-selected);
+}
+
 .tile:active {
   transform: scale(var(--press-scale));
 }

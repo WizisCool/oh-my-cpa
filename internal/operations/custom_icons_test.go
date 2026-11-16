@@ -53,6 +53,9 @@ func TestCustomIconCapabilitiesAcrossAdapters(t *testing.T) {
 		if err := repo.PutPreference(ctx, repository.PreferenceProviderIcons, `{"provider":"custom:`+icon.ID+`"}`); err != nil {
 			t.Fatal(err)
 		}
+		if err := repo.PutPreference(ctx, repository.PreferenceModelIcons, `{"gpt-5":"custom:`+icon.ID+`"}`); err != nil {
+			t.Fatal(err)
+		}
 		result, err = executor.Invoke(ctx, principal, "custom_icon_delete", target, "")
 		if err != nil || result.Status != "pending" {
 			t.Fatalf("%+v %v", result, err)
@@ -62,7 +65,7 @@ func TestCustomIconCapabilitiesAcrossAdapters(t *testing.T) {
 		}
 		pending, err := executor.Get(ctx, principal, result.OperationID)
 		previewJSON, _ := json.Marshal(pending.Preview)
-		if err != nil || !strings.Contains(string(previewJSON), "restore_defaults") || !strings.Contains(string(previewJSON), `"reference_count":"1"`) {
+		if err != nil || !strings.Contains(string(previewJSON), `"provider_icons":"restore_defaults"`) || !strings.Contains(string(previewJSON), `"model_icons":"restore_defaults"`) || !strings.Contains(string(previewJSON), `"reference_count":"2"`) {
 			t.Fatalf("approval must explain assignment removal: %s %v", previewJSON, err)
 		}
 		operation, err := executor.Decide(ctx, capability.Principal{ID: "administrator", Adapter: "agent", IsAdmin: true}, result.OperationID, true, "")
@@ -71,7 +74,11 @@ func TestCustomIconCapabilitiesAcrossAdapters(t *testing.T) {
 		}
 		raw, _, err := repo.GetPreference(ctx, repository.PreferenceProviderIcons)
 		if err != nil || raw != `{}` {
-			t.Fatalf("approved deletion left an override: %s %v", raw, err)
+			t.Fatalf("approved deletion left a provider override: %s %v", raw, err)
+		}
+		rawModel, _, err := repo.GetPreference(ctx, repository.PreferenceModelIcons)
+		if err != nil || rawModel != `{}` {
+			t.Fatalf("approved deletion left a model override: %s %v", rawModel, err)
 		}
 		forbidden := capability.Principal{ID: "limited", Adapter: adapter}
 		result, err = executor.Invoke(ctx, forbidden, "custom_icons_list", json.RawMessage(`{}`), "")

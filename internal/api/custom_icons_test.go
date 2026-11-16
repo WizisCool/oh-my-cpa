@@ -69,13 +69,18 @@ func TestCustomIconHTTPCRUDAndCaching(t *testing.T) {
 	if response.StatusCode != 200 {
 		t.Fatalf("assign: %s", payload)
 	}
+	modelPreferenceURL := baseURL + "/omc/api/v1/preferences/model_icons"
+	response, payload = doJSON(t, client, http.MethodPut, modelPreferenceURL, `{"gpt-5":"custom:`+icon.ID+`"}`)
+	if response.StatusCode != 200 {
+		t.Fatalf("assign model icon: %s", payload)
+	}
 	response, payload = doJSON(t, client, http.MethodDelete, base+"/"+icon.ID, "")
 	if response.StatusCode != 204 {
 		t.Fatalf("referenced deletion: %d %s", response.StatusCode, payload)
 	}
 	response, payload = getJSON(t, client, baseURL+"/omc/api/v1/preferences")
 	if response.StatusCode != 200 || strings.Contains(string(payload), "custom:"+icon.ID) {
-		t.Fatalf("provider reference was not cleared: %d %s", response.StatusCode, payload)
+		t.Fatalf("provider or model reference was not cleared: %d %s", response.StatusCode, payload)
 	}
 	response, _ = getJSON(t, client, base+"/"+icon.ID+"/content")
 	if response.StatusCode != 404 {

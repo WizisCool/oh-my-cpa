@@ -71,6 +71,7 @@ export interface IdentityDirectoryResponse {
   credentials: IdentityCredentialItem[];
   plugins: PluginItem[];
   provider_icons: Record<string, string>;
+  model_icons?: Record<string, string>;
   archived_credentials: ArchivedCredentialItem[];
   archived_providers: ArchivedProviderItem[];
   catalog_status: IdentityCatalogStatus;

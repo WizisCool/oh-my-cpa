@@ -1,4 +1,8 @@
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../api/client';
+import { QUERY_KEYS } from '../api/queryKeys';
+import { resolveModelIconOverride, selectModelIcons } from '../types/modelIcons';
 import { modelMarkIconId, type ModelReference } from '../types/modelSquare';
 import { BoxOutlined } from './icons';
 import { LobeIcon } from './LobeIcon';
@@ -15,6 +19,8 @@ export interface ModelMarkProps {
    * (e.g. When the primary is a custom call point/alias, fallback to the requested model).
    */
   fallbackModel?: string;
+  /** An icon chosen by the caller; wins over the operator's override and the maker mark. */
+  iconId?: string;
   /** Size in pixels (width and height). Defaults to 16. */
   size?: number;
   /** Optional custom CSS class. */
@@ -27,21 +33,33 @@ export interface ModelMarkProps {
  * ModelMark renders the maker's brand mark for a model identity or call point,
  * using the same resolution rules as Model Square.
  *
- * A name with no maker falls back to the upstream it routes to, then to a neutral glyph.
+ * An icon the operator picked in Model Square wins over the maker mark. A name with no maker
+ * falls back to the upstream it routes to, then to a neutral glyph.
  */
 export const ModelMark: React.FC<ModelMarkProps> = React.memo(({
   model,
   callPoint,
   metadata,
   fallbackModel,
+  iconId: explicitIconId,
   size = 16,
   className,
   style,
 }) => {
   const primary = model ?? callPoint ?? '';
+  // Reads the shared preference document the console already holds; it never refetches on its own.
+  const { data: modelIcons } = useQuery({
+    queryKey: QUERY_KEYS.preferences,
+    queryFn: api.getPreferences,
+    select: selectModelIcons,
+    staleTime: Infinity,
+    meta: { silent: true },
+  });
   const iconId = React.useMemo(
-    () => modelMarkIconId(primary, fallbackModel, metadata),
-    [primary, fallbackModel, metadata],
+    () => explicitIconId
+      || (modelIcons && resolveModelIconOverride(modelIcons, primary, fallbackModel))
+      || modelMarkIconId(primary, fallbackModel, metadata),
+    [explicitIconId, modelIcons, primary, fallbackModel, metadata],
   );
 
   if (iconId) {

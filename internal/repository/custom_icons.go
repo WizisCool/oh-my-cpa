@@ -31,6 +31,11 @@ type CustomIcon struct {
 	Content        []byte `json:"-"`
 }
 
+var customIconPreferenceKeys = []string{
+	PreferenceProviderIcons,
+	PreferenceModelIcons,
+}
+
 func validateCustomIconName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || !utf8.ValidString(name) || utf8.RuneCountInString(name) > 80 {
@@ -57,13 +62,19 @@ func (r *Repository) ListCustomIcons(ctx context.Context) ([]CustomIcon, error) 
 	if err != nil {
 		return nil, err
 	}
-	raw, _, err := r.GetPreference(ctx, PreferenceProviderIcons)
-	if err != nil {
-		return nil, err
-	}
-	references, err := customIconReferences(raw)
-	if err != nil {
-		return nil, err
+	references := map[string]int{}
+	for _, prefKey := range customIconPreferenceKeys {
+		raw, _, err := r.GetPreference(ctx, prefKey)
+		if err != nil {
+			return nil, err
+		}
+		keyRefs, err := customIconReferences(raw)
+		if err != nil {
+			return nil, err
+		}
+		for id, count := range keyRefs {
+			references[id] += count
+		}
 	}
 	for index := range icons {
 		icons[index].ReferenceCount = references[icons[index].ID]
@@ -171,14 +182,20 @@ func (r *Repository) UpdateCustomIcon(ctx context.Context, id string, name *stri
 	if err != nil {
 		return CustomIcon{}, err
 	}
-	var raw string
-	err = tx.QueryRowContext(ctx, `SELECT pref_value FROM ui_preferences WHERE pref_key=?`, PreferenceProviderIcons).Scan(&raw)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return CustomIcon{}, err
-	}
-	references, err := customIconReferences(raw)
-	if err != nil {
-		return CustomIcon{}, err
+	references := map[string]int{}
+	for _, prefKey := range customIconPreferenceKeys {
+		var raw string
+		err = tx.QueryRowContext(ctx, `SELECT pref_value FROM ui_preferences WHERE pref_key=?`, prefKey).Scan(&raw)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return CustomIcon{}, err
+		}
+		keyRefs, err := customIconReferences(raw)
+		if err != nil {
+			return CustomIcon{}, err
+		}
+		for refID, count := range keyRefs {
+			references[refID] += count
+		}
 	}
 	icon.ReferenceCount = references[id]
 	return icon, tx.Commit()
@@ -205,33 +222,36 @@ func (r *Repository) DeleteCustomIconChecked(ctx context.Context, id string, exp
 			return errors.New("resource_conflict")
 		}
 	}
-	var raw string
-	err = tx.QueryRowContext(ctx, `SELECT pref_value FROM ui_preferences WHERE pref_key=?`, PreferenceProviderIcons).Scan(&raw)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	var assignments map[string]string
-	if raw != "" {
-		if err := json.Unmarshal([]byte(raw), &assignments); err != nil {
+	nowMS := time.Now().UnixMilli()
+	for _, prefKey := range customIconPreferenceKeys {
+		var raw string
+		err = tx.QueryRowContext(ctx, `SELECT pref_value FROM ui_preferences WHERE pref_key=?`, prefKey).Scan(&raw)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-	}
-	hasRemovedReferences := false
-	for providerKey, reference := range assignments {
-		if reference == "custom:"+id {
-			delete(assignments, providerKey)
-			hasRemovedReferences = true
+		var assignments map[string]string
+		if raw != "" {
+			if err := json.Unmarshal([]byte(raw), &assignments); err != nil {
+				return err
+			}
 		}
-	}
-	if hasRemovedReferences {
-		encoded, err := json.Marshal(assignments)
-		if err != nil {
-			return err
+		hasRemovedReferences := false
+		for targetKey, reference := range assignments {
+			if reference == "custom:"+id {
+				delete(assignments, targetKey)
+				hasRemovedReferences = true
+			}
 		}
-		// Removing overrides preserves each surface's own default and plugin authority.
-		// The asset delete shares this transaction so failures cannot leave a partial reset.
-		if _, err := tx.ExecContext(ctx, `UPDATE ui_preferences SET pref_value=?,updated_at_ms=? WHERE pref_key=?`, string(encoded), time.Now().UnixMilli(), PreferenceProviderIcons); err != nil {
-			return err
+		if hasRemovedReferences {
+			encoded, err := json.Marshal(assignments)
+			if err != nil {
+				return err
+			}
+			// Removing overrides preserves each surface's own default and plugin authority.
+			// The asset delete shares this transaction so failures cannot leave a partial reset.
+			if _, err := tx.ExecContext(ctx, `UPDATE ui_preferences SET pref_value=?,updated_at_ms=? WHERE pref_key=?`, string(encoded), nowMS, prefKey); err != nil {
+				return err
+			}
 		}
 	}
 	customRef := "custom:" + id

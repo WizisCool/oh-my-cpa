@@ -57,7 +57,7 @@ func (s *Service) registerCustomIcons(registry *capability.Registry) error {
 	}); err != nil {
 		return err
 	}
-	metadata = Meta("custom_icon_delete", "Delete a custom icon and clear all provider assignments to it, restoring their default artwork.", "destructive", "high")
+	metadata = Meta("custom_icon_delete", "Delete a custom icon and clear all provider and model assignments to it, restoring their default artwork.", "destructive", "high")
 	metadata.Invalidates = []string{"custom-icons", "preferences"}
 	return capability.Register(registry, metadata, func(ctx context.Context, input CustomIconTarget) (capability.Preview, error) {
 		icon, err := s.Repo.GetCustomIcon(ctx, input.ID)
@@ -73,7 +73,7 @@ func (s *Service) registerCustomIcons(registry *capability.Registry) error {
 				icon.ReferenceCount = listed.ReferenceCount
 			}
 		}
-		return capability.Preview{Target: icon.ID, Revision: strconv.FormatInt(icon.Revision, 10), Changes: map[string]string{"name": icon.Name, "reference_count": strconv.Itoa(icon.ReferenceCount), "provider_icons": "restore_defaults"}}, nil
+		return capability.Preview{Target: icon.ID, Revision: strconv.FormatInt(icon.Revision, 10), Changes: map[string]string{"name": icon.Name, "reference_count": strconv.Itoa(icon.ReferenceCount), "provider_icons": "restore_defaults", "model_icons": "restore_defaults"}}, nil
 	}, func(ctx context.Context, input CustomIconTarget, revision, _ string) (Done, error) {
 		expected, err := strconv.ParseInt(revision, 10, 64)
 		if err != nil {

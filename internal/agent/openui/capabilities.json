@@ -160,7 +160,7 @@
   },
   {
     "name": "custom_icon_delete",
-    "description": "Delete a custom icon and clear all provider assignments to it, restoring their default artwork.",
+    "description": "Delete a custom icon and clear all provider and model assignments to it, restoring their default artwork.",
     "permission": "destructive",
     "input_schema": {
       "type": "object",

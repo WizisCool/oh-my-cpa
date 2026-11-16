@@ -2,6 +2,7 @@ import { CustomIconLibrary } from './CustomIconLibrary';
 import { shouldCloseIconPicker } from '../types/customIcons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import {
   LOBE_ICON_CATALOG,
@@ -15,20 +16,30 @@ import { ToggleTag } from './common/Tag';
 import styles from './IconPickerModal.module.css';
 import { AppModal } from './common/AppModal';
 
+/** A picker outcome: `false` keeps the dialog open, anything else closes it. */
+type PickResult = boolean | void | Promise<boolean | void>;
+
 interface IconPickerModalProps {
   open: boolean;
+  title?: React.ReactNode;
   currentIcon?: string;
-  onSelect: (iconId: string) => boolean | void | Promise<boolean | void>;
+  onSelect: (iconId: string) => PickResult;
   onClose: () => void;
   onDeleted?: (id: string) => void;
+  /** Offers to drop the chosen icon and return to the resolved default. */
+  canReset?: boolean;
+  onReset?: () => PickResult;
 }
 
 export const IconPickerModal: React.FC<IconPickerModalProps> = ({
   open,
+  title,
   currentIcon,
   onSelect,
   onClose,
   onDeleted,
+  canReset = false,
+  onReset,
 }) => {
   const t = useT();
   const [isLibraryBusy, setIsLibraryBusy] = useState(false);
@@ -37,14 +48,15 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
   useEffect(() => {
     if (open) setTab(currentIcon?.startsWith('custom:') ? 'custom' : 'builtin');
   }, [open]);
-  const selectIcon = async (reference: string) => {
+  const settle = async (pick: () => PickResult) => {
     setIsSelecting(true);
     try {
-      if (shouldCloseIconPicker(await onSelect(reference))) onClose();
+      if (shouldCloseIconPicker(await pick())) onClose();
     } finally {
       setIsSelecting(false);
     }
   };
+  const selectIcon = (reference: string) => settle(() => onSelect(reference));
   const [search, setSearch] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<
     'all' | 'provider' | 'model' | 'application'
@@ -116,12 +128,22 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
 
   return (
     <AppModal
-      title={t('pro.icon_picker_title')}
+      title={title ?? t('pro.icon_picker_title')}
       open={open}
       onCancel={() => {
         if (!isSelecting && !isLibraryBusy) onClose();
       }}
       footer={null}
+      footerStart={canReset && onReset ? (
+        <Button
+          variant="ghost"
+          disabled={isSelecting || isLibraryBusy}
+          data-testid="icon-picker-reset"
+          onClick={() => void settle(onReset)}
+        >
+          {t('pro.reset_icon')}
+        </Button>
+      ) : undefined}
       size="large"
       destroyOnHidden
     >

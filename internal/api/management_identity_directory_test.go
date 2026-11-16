@@ -199,6 +199,9 @@ func TestIdentityDirectoryLifecycleAcrossToggleDisableAndDeletion(t *testing.T) 
 	if err := repo.PutPreference(context.Background(), repository.PreferenceProviderIcons, `{"openai-compat-0":"`+customIconRef+`"}`); err != nil {
 		t.Fatal(err)
 	}
+	if err := repo.PutPreference(context.Background(), repository.PreferenceModelIcons, `{"mercury-coder":"`+customIconRef+`"}`); err != nil {
+		t.Fatal(err)
+	}
 
 	// Seed historical usage events for both the Inception API key and the OAuth credential.
 	nowMS := time.Now().UnixMilli()
@@ -294,6 +297,9 @@ func TestIdentityDirectoryLifecycleAcrossToggleDisableAndDeletion(t *testing.T) 
 	}
 	if len(dir1.Providers[0].AuthIndexes) != 1 || dir1.Providers[0].AuthIndexes[0] != "idx-inception-v1" {
 		t.Fatalf("expected runtime auth_index idx-inception-v1, got %+v", dir1.Providers[0].AuthIndexes)
+	}
+	if dir1.ModelIcons["mercury-coder"] != customIconRef {
+		t.Fatalf("expected identity-directory model_icons[mercury-coder]=%q, got %+v", customIconRef, dir1.ModelIcons)
 	}
 
 	// Step 2: Disable Inception via StateCoordinator status toggle.
@@ -492,6 +498,9 @@ func TestIdentityDirectoryLifecycleAcrossToggleDisableAndDeletion(t *testing.T) 
 		if c.AuthIndex == "idx-inception-v1" && c.IconID != "" {
 			t.Fatalf("deleted custom icon was not cleared from archived_credentials: %+v", c)
 		}
+	}
+	if len(dirAfterIconDelete.ModelIcons) != 0 {
+		t.Fatalf("deleted custom icon was not cleared from model_icons: %+v", dirAfterIconDelete.ModelIcons)
 	}
 }
 

@@ -32,25 +32,31 @@
 .model-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; padding: 12px 0 0; margin: 0; list-style: none; }
 .model-row {
   border: 0;
-  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-content: space-between; row-gap: 6px; min-width: 0;
-  padding: 6px 4px 10px 12px; box-shadow: var(--shadow-edge); border-radius: var(--radius-lg); background: var(--bg);
-  transition: background-color var(--motion-fast) ease-out, box-shadow var(--motion-fast) ease-out;
+  position: relative; display: grid; grid-template-columns: 32px minmax(0, 1fr) 28px; align-items: center; align-content: space-between; gap: 10px; min-width: 0;
+  padding: 10px 4px 10px 12px; box-shadow: var(--shadow-edge); border-radius: var(--radius-lg); background: var(--bg);
+  transition: background-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
 }
-.model-row:hover { background: var(--hover-inset); box-shadow: var(--shadow-raised); }
-.model-name { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
-.model-caption { margin-top: -2px; }
+/* A pressable card rises under the pointer and never moves; the chevron says where it goes. */
+.model-row:hover { background: color-mix(in srgb, var(--elevated) 55%, var(--bg)); box-shadow: var(--shadow-raised); }
+/* The stretched details button carries the card's focus, so the ring goes round the whole card. */
+.model-row:has(.model-details:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.model-name { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; }
 .model-meta { grid-column: 1 / -1; grid-row: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 12px; min-width: 0; padding-right: 8px; }
 /* The card's own controls sit above the details button that is stretched over the card. */
+.model-icon { grid-column: 1; grid-row: 1; z-index: 1; }
 .copy-name, .set-price { position: relative; z-index: 1; border: 0; background: transparent; font: inherit; cursor: pointer; }
+/* The name is its own copy control: a faint wash that hugs the text, offset so the text keeps the
+   caption's left edge at rest and on hover. */
 .copy-name {
-  display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; margin-left: -6px; padding: 5px 6px;
-  border-radius: var(--radius-md); color: var(--muted); text-align: left;
-  transition: color var(--motion-fast) ease-out, background-color var(--motion-fast) ease-out;
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; margin-inline-start: -6px; padding: 2px 6px;
+  border-radius: var(--radius-sm); color: var(--muted); text-align: left;
+  transition: color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard);
 }
-.copy-name:hover { background: var(--selected-inset); color: var(--fg); }
-.copy-name:focus-visible, .set-price:focus-visible, .model-details:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.copy-name:hover { background: color-mix(in srgb, var(--fg) 6%, transparent); color: var(--fg-2); }
+.copy-name:focus-visible, .set-price:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.model-details:focus-visible { outline: none; }
 .copy-name[data-copied] { color: var(--success); }
-.copy-name :global(.omc-icon) { flex: none; font-size: var(--text-sm); }
+.copy-name :global(.omc-icon) { flex: none; font-size: var(--text-xs); }
 .model-identity { color: var(--fg); font-size: var(--text-md); overflow-wrap: anywhere; }
 .model-caption { color: var(--muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
 .model-price { min-width: 0; color: var(--fg-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
@@ -59,9 +65,13 @@
 .model-sources { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 12px; min-width: 0; margin-left: auto; }
 .model-source { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--fg-2); font-size: var(--text-sm); }
 .source-marks { display: inline-flex; align-items: center; gap: 4px; }
-.model-details { grid-column: 2; grid-row: 1; display: flex; align-items: center; justify-content: center; height: 28px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: var(--text-lg); cursor: pointer; }
+.model-details { grid-column: 3; grid-row: 1; display: flex; align-items: center; justify-content: center; height: 28px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: var(--text-lg); cursor: pointer; }
 .model-details::after { content: ""; position: absolute; inset: 0; }
-.model-row:hover .model-details { color: var(--fg-2); }
+.model-details :global(.omc-icon) { transition: transform var(--motion-base) var(--ease-out); }
+/* The chevron answers only where a click opens the details, not over the card's own controls. */
+.model-row:hover:not(:has(.model-icon:hover, .copy-name:hover, .set-price:hover)) .model-details { color: var(--fg); }
+.model-row:hover:not(:has(.model-icon:hover, .copy-name:hover, .set-price:hover)) .model-details :global(.omc-icon) { transform: translateX(2px); }
+:global(:root[data-reduced-motion='true']) .model-details :global(.omc-icon) { transition: none; }
 .is-absent { color: var(--meta); }
 
 .pagination { display: flex; justify-content: flex-end; margin-top: 20px; }
@@ -73,7 +83,7 @@
 .link-row h3 { margin: 0; color: var(--muted); font-size: var(--text-xs); font-weight: 500; }
 
 .model-profile + .model-profile { border-top: 1px solid var(--border); padding-top: 24px; margin-top: 24px; }
-.profile-heading { display: flex; align-items: center; gap: 12px; }
+.profile-heading { display: flex; align-items: center; gap: 14px; }
 .profile-heading > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .profile-heading strong { font-size: var(--text-lg); overflow-wrap: anywhere; }
 .profile-heading code { color: var(--muted); font-family: var(--font-mono); font-size: var(--text-xs); overflow-wrap: anywhere; }
@@ -155,13 +165,12 @@
   /* Makers scroll inside their own strip so a long roster costs one line, and the page itself never moves sideways. */
   .maker-strip { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; }
   .maker-strip .chip { flex: none; }
-  .copy-name { min-height: 44px; }
-  /* The name's touch height is taller than its text; the caption closes the gap it leaves. */
-  .model-caption { margin-top: -8px; }
+  /* Touch widens the name's hit area, never its box, so the caption keeps its place. */
+  .copy-name::before { content: ""; position: absolute; inset: -10px 0; }
   .model-meta { padding-right: 12px; }
   .model-details { min-width: 44px; min-height: 44px; }
   .set-price { min-height: 36px; }
-  .model-row { border: 0; grid-template-columns: minmax(0, 1fr) 44px; padding: 0 0 10px 12px; }
+  .model-row { border: 0; grid-template-columns: 32px minmax(0, 1fr) 44px; padding: 4px 0 10px 12px; }
   .reference-link { border: 0; min-height: 44px; }
   .details-footer :global([data-slot='button']) { min-height: 40px; }
 }

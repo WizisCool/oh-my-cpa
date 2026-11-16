@@ -51,9 +51,20 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 		t.Fatalf("log filters status = %d body %s", response.StatusCode, payload)
 	}
 
-	// Provider icons are also persisted in the database so custom brand assignments survive restarts.
+	// Provider icons and model icons are also persisted in the database so custom brand assignments survive restarts.
 	if response, payload = doJSON(t, client, http.MethodPut, base+"/provider_icons", `{"openai-compat-0":"DeepSeek","relay":"OpenAI"}`); response.StatusCode != http.StatusOK {
 		t.Fatalf("provider icons status = %d body %s", response.StatusCode, payload)
+	}
+	if response, payload = doJSON(t, client, http.MethodPut, base+"/model_icons", `{"gpt-5":""}`); response.StatusCode != http.StatusOK {
+		t.Fatalf("empty model icon string status = %d body %s", response.StatusCode, payload)
+	}
+	if response, payload = doJSON(t, client, http.MethodPut, base+"/model_icons", `{"claude-3-7-sonnet-20250219":"Claude","team/fast":"OpenAI"}`); response.StatusCode != http.StatusOK {
+		t.Fatalf("model icons status = %d body %s", response.StatusCode, payload)
+	}
+	for _, invalid := range []string{`null`, `[]`, `{"gpt-5":123}`, `{"gpt-5":null}`} {
+		if response, payload = doJSON(t, client, http.MethodPut, base+"/model_icons", invalid); response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("invalid model_icons %s status = %d body %s", invalid, response.StatusCode, payload)
+		}
 	}
 
 	// Usage events view settings (filters, grouping, advanced visibility) are also persisted.
@@ -108,6 +119,7 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 	if !strings.Contains(string(payload), `"dashboard_range":{"preset":"6h"}`) ||
 		!strings.Contains(string(payload), `"log_filters":{"hideManagement":true,"levels":["warn"],"statusClass":"all"}`) ||
 		!strings.Contains(string(payload), `"provider_icons":{"openai-compat-0":"DeepSeek","relay":"OpenAI"}`) ||
+		!strings.Contains(string(payload), `"model_icons":{"claude-3-7-sonnet-20250219":"Claude","team/fast":"OpenAI"}`) ||
 		!strings.Contains(string(payload), `"usage_events_view":{"preset":"24h","result":"failed","grouping":"provider","advanced":true}`) ||
 		!strings.Contains(string(payload), `"usage_events_columns":{"time":120,"provider":220,"tps":90}`) ||
 		!strings.Contains(string(payload), `"oauth_management_view_v1":{"density":"compact","pageSize":24}`) ||
@@ -131,6 +143,9 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 	}
 	if _, found, err = repo.GetPreference(context.Background(), repository.PreferenceProviderIcons); err != nil || !found {
 		t.Fatalf("provider icons not persisted: found=%v err=%v", found, err)
+	}
+	if _, found, err = repo.GetPreference(context.Background(), repository.PreferenceModelIcons); err != nil || !found {
+		t.Fatalf("model icons not persisted: found=%v err=%v", found, err)
 	}
 	if _, found, err = repo.GetPreference(context.Background(), repository.PreferenceUsageEventsView); err != nil || !found {
 		t.Fatalf("usage events view not persisted: found=%v err=%v", found, err)

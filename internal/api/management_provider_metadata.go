@@ -278,6 +278,14 @@ func (h *Handler) loadProviderIconsStrict(ctx context.Context) (map[string]strin
 	return h.loadStringPreference(ctx, repository.PreferenceProviderIcons)
 }
 
+func (h *Handler) loadModelIcons(ctx context.Context) map[string]string {
+	icons, err := h.loadStringPreference(ctx, repository.PreferenceModelIcons)
+	if err != nil {
+		return nil
+	}
+	return icons
+}
+
 func (h *Handler) loadStringPreference(ctx context.Context, key string) (map[string]string, error) {
 	if h.repo == nil {
 		return nil, errors.New("repository is not initialized")

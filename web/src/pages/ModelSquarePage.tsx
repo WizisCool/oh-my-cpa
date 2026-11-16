@@ -56,6 +56,10 @@ import { AppDrawer } from '../components/common/AppDrawer';
 import { Toolbar } from '../components/common/Toolbar';
 import { Pager } from '../components/common/Pager';
 import { Count } from '../components/common/Count';
+import { IconTileButton } from '../components/common/IconTileButton';
+import { IconPickerModal } from '../components/IconPickerModal';
+import { useModelIconOverrides } from '../hooks/useModelIconOverrides';
+import { resolveModelIconOverride } from '../types/modelIcons';
 
 const PAGE_SIZE = 120;
 /** How long the check mark stands in for the copy glyph, matching `CopyButton`. */
@@ -81,15 +85,24 @@ const FRAMED_MARK_MIN_SIZE = 20;
  * identified - are drawn from the console's palette rather than at brand weight, so they sit
  * beside the artwork as quiet chrome instead of reading as a tenth, louder brand.
  */
-const ManufacturerMark: React.FC<{ manufacturer: ModelManufacturer; size: number }> = ({ manufacturer, size }) => {
-  const iconId = manufacturer.modelIconId || manufacturer.iconId;
+const ManufacturerMark: React.FC<{ manufacturer: ModelManufacturer; size: number; isBare?: boolean }> = ({ manufacturer, size, isBare = false }) => {
+  const iconId = defaultModelIcon(manufacturer);
   if (iconId) return <LobeIcon iconId={iconId} size={size} />;
   const Glyph = manufacturer.id === 'multiple' ? LayersOutlined : BoxOutlined;
-  const isFramed = size >= FRAMED_MARK_MIN_SIZE;
+  const isFramed = !isBare && size >= FRAMED_MARK_MIN_SIZE;
   return <span className={clsx(styles['generic-mark'], isFramed && styles['generic-mark-framed'])} style={{ width: size, height: size }} aria-hidden="true">
     <Glyph size={isFramed ? Math.round(size * 0.6) : size} strokeWidth={1.5} />
   </span>;
 };
+
+const defaultModelIcon = (manufacturer: ModelManufacturer) => manufacturer.modelIconId || manufacturer.iconId;
+/** The one upstream an alias routes to, whose chosen icon the alias inherits as `ModelMark` does elsewhere. */
+const singleUpstreamIdentity = (entry: ModelSquareEntry) => (entry.profiles.length === 1 ? entry.profiles[0].identity : undefined);
+
+/** A model's mark: the icon the operator chose, else its maker's. Drawn bare inside an `IconTileButton`. */
+const ModelIconMark: React.FC<{ manufacturer: ModelManufacturer; iconId?: string; size: number }> = ({ manufacturer, iconId, size }) => iconId
+  ? <LobeIcon iconId={iconId} size={size} />
+  : <ManufacturerMark manufacturer={manufacturer} size={size} isBare />;
 
 // A connection named after its own adapter ("codex") carries no name of its own, so the adapter's
 // display label stands in for it.
@@ -144,11 +157,14 @@ interface ModelRowProps {
   entry: ModelSquareEntry;
   ledger: ModelLedgerEntry;
   providers: ReadonlyMap<string, ModelSquareProvider>;
+  /** The icon the operator chose for this model, if any. */
+  iconId?: string;
   onOpen: (identity: string) => void;
+  onPickIcon: (identity: string) => void;
   onSetPrice?: (identity: string) => void;
 }
 
-const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers, branding, onOpen, onSetPrice }) => {
+const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers, branding, iconId, onOpen, onPickIcon, onSetPrice }) => {
   const t = useT();
   const filterMotion = useFilterItemMotion();
   const reference = resolveEntryReference(entry);
@@ -162,6 +178,9 @@ const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers
   const { price } = ledger;
 
   return <m.li {...filterMotion} className={styles['model-row']}>
+    <IconTileButton className={styles['model-icon']} label={t('models.change_icon_for', { model: entry.identity })} data-model-icon={entry.identity} onClick={() => onPickIcon(entry.identity)}>
+      <ModelIconMark manufacturer={entry.manufacturer} iconId={iconId} size={20} />
+    </IconTileButton>
     <span className={styles['model-name']}>
       <CopyModelName identity={entry.identity} />
       {caption && <span className={styles['model-caption']}>{caption}</span>}
@@ -187,7 +206,7 @@ const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers
       </span>
     </span>
     {/* Last in the card and stretched over it: everything that is not its own control opens the details. */}
-    <button type="button" className={styles['model-details']} data-model-identity={entry.identity} onClick={() => onOpen(entry.identity)} aria-label={t('models.details_for', { model: entry.identity })}>
+    <button type="button" className={styles['model-details']} data-focus-ring="outer" data-model-identity={entry.identity} onClick={() => onOpen(entry.identity)} aria-label={t('models.details_for', { model: entry.identity })}>
       <RightOutlined />
     </button>
   </m.li>;
@@ -205,7 +224,15 @@ const TOOL_PARAMETERS = ['tools'];
 const STRUCTURED_OUTPUT_PARAMETERS = ['structured_outputs', 'response_format'];
 const REASONING_PARAMETERS = ['reasoning', 'include_reasoning'];
 
-const ModelProfile: React.FC<{ identity: string; metadata?: ModelReference }> = ({ identity, metadata }) => {
+interface ModelProfileProps {
+  identity: string;
+  metadata?: ModelReference;
+  /** The icon the operator chose for the model this profile describes, if any. */
+  iconId?: string;
+  onPickIcon: () => void;
+}
+
+const ModelProfile: React.FC<ModelProfileProps> = ({ identity, metadata, iconId, onPickIcon }) => {
   const t = useT();
   const maker = resolveModelManufacturer(identity, metadata);
   const unknown = <span className={styles['is-absent']}>{t('models.unknown')}</span>;
@@ -225,7 +252,7 @@ const ModelProfile: React.FC<{ identity: string; metadata?: ModelReference }> = 
     : <span className={clsx(styles['flag'], styles['is-absent'])}><CloseOutlined />{t('models.unsupported')}</span>;
 
   if (!metadata) return <section className={styles['model-profile']}>
-    <ProfileHeading identity={identity} maker={maker} />
+    <ProfileHeading identity={identity} maker={maker} iconId={iconId} onPickIcon={onPickIcon} />
     <div className={styles['profile-notice']}><Notice tone="info" title={t('models.metadata_unknown')} /></div>
     <ExternalLookup identity={identity} />
   </section>;
@@ -238,7 +265,7 @@ const ModelProfile: React.FC<{ identity: string; metadata?: ModelReference }> = 
   const weightsURL = metadata.hugging_face_id ? `https://huggingface.co/${metadata.hugging_face_id.split('/').map(encodeURIComponent).join('/')}` : '';
 
   return <section className={styles['model-profile']}>
-    <ProfileHeading identity={identity} maker={maker} metadata={metadata} />
+    <ProfileHeading identity={identity} maker={maker} metadata={metadata} iconId={iconId} onPickIcon={onPickIcon} />
     {metadata.description && <p className={styles['model-description']}>{metadata.description}</p>}
     <dl className={clsx(styles['stat-tiles'], styles['limit-tiles'])}>
       <div><dt>{t('models.context_window')}</dt><dd>{limit(metadata.context_length)}</dd></div>
@@ -274,13 +301,18 @@ const ModelProfile: React.FC<{ identity: string; metadata?: ModelReference }> = 
   </section>;
 };
 
-const ProfileHeading: React.FC<{ identity: string; maker: ModelManufacturer; metadata?: ModelReference }> = ({ identity, maker, metadata }) => <div className={styles['profile-heading']}>
-  <ManufacturerMark manufacturer={maker} size={32} />
-  <div>
-    <strong>{metadata?.name || identity}</strong>
-    <code>{metadata?.id || identity}</code>
-  </div>
-</div>;
+const ProfileHeading: React.FC<{ identity: string; maker: ModelManufacturer; metadata?: ModelReference; iconId?: string; onPickIcon: () => void }> = ({ identity, maker, metadata, iconId, onPickIcon }) => {
+  const t = useT();
+  return <div className={styles['profile-heading']}>
+    <IconTileButton size="lg" label={t('models.change_icon_for', { model: metadata?.name || identity })} data-testid="model-profile-icon" onClick={onPickIcon}>
+      <ModelIconMark manufacturer={maker} iconId={iconId} size={28} />
+    </IconTileButton>
+    <div>
+      <strong>{metadata?.name || identity}</strong>
+      <code>{metadata?.id || identity}</code>
+    </div>
+  </div>;
+};
 
 const ExternalLookup: React.FC<{ identity: string; metadata?: ModelReference }> = ({ identity, metadata }) => {
   const t = useT();
@@ -464,6 +496,9 @@ export const ModelSquarePage: React.FC = () => {
   const [selectedIdentity, setSelectedIdentity] = React.useState<string>();
   const closeDetails = React.useCallback(() => setSelectedIdentity(undefined), []);
   const detailsRef = React.useRef<HTMLDivElement>(null);
+  const toast = useToast();
+  const { modelIcons, writeModelIcon, resetModelIcon } = useModelIconOverrides();
+  const [iconTarget, setIconTarget] = React.useState<string>();
 
   const directory = useQuery({
     queryKey: ['model-square'],
@@ -536,6 +571,25 @@ export const ModelSquarePage: React.FC = () => {
     setPage(Math.floor((selectedIndex + offset) / PAGE_SIZE) + 1);
     detailsRef.current?.closest('[data-slot="sheet-body"]')?.scrollTo({ top: 0 });
   };
+  const iconEntry = iconTarget === undefined ? undefined : allEntries.find(entry => entry.identity === iconTarget);
+  // Only the model's own choice can be reset; an icon inherited from its upstream is that model's to change.
+  const iconOverride = iconTarget === undefined ? undefined : resolveModelIconOverride(modelIcons, iconTarget);
+  const iconShown = iconEntry && (resolveModelIconOverride(modelIcons, iconEntry.identity, singleUpstreamIdentity(iconEntry)) ?? defaultModelIcon(iconEntry.manufacturer));
+  const closeIconPicker = () => setIconTarget(undefined);
+  // A failed write keeps the picker open; usePreference has already reported why.
+  const pickIcon = async (icon: string) => {
+    if (iconTarget === undefined) return false;
+    const { ok } = await writeModelIcon(iconTarget, icon);
+    if (ok) toast.success(t('models.icon_saved'));
+    return ok;
+  };
+  const resetIcon = async () => {
+    if (iconTarget === undefined) return false;
+    const { ok } = await resetModelIcon(iconTarget);
+    if (ok) toast.success(t('models.icon_reset'));
+    return ok;
+  };
+  const selectedIcon = selected && resolveModelIconOverride(modelIcons, selected.identity, singleUpstreamIdentity(selected));
   const selectedRoutes = selected?.routes.filter(route => providers.has(route.provider_id)) ?? [];
   const matchedProfiles = selected?.profiles.filter(profile => profile.metadata !== undefined) ?? [];
 
@@ -581,7 +635,7 @@ export const ModelSquarePage: React.FC = () => {
           </div>
           <ul className={styles['model-rows']}>
             <FilterTransition itemKeys={group.entries.map((entry) => entry.identity)}>
-              {group.entries.map(entry => <ModelRow branding={branding} key={entry.identity} entry={entry} ledger={ledger.entryFor(entry.identity)} providers={providers} onOpen={setSelectedIdentity} onSetPrice={openPriceEditor} />)}
+              {group.entries.map(entry => <ModelRow branding={branding} key={entry.identity} entry={entry} ledger={ledger.entryFor(entry.identity)} providers={providers} iconId={resolveModelIconOverride(modelIcons, entry.identity, singleUpstreamIdentity(entry))} onOpen={setSelectedIdentity} onPickIcon={setIconTarget} onSetPrice={openPriceEditor} />)}
             </FilterTransition>
           </ul>
         </li>)}
@@ -604,12 +658,21 @@ export const ModelSquarePage: React.FC = () => {
     >
       {selected && <div ref={detailsRef}>
         {matchedProfiles.length > 0
-          ? matchedProfiles.map(profile => <ModelProfile key={profile.identity} identity={profile.identity} metadata={profile.metadata} />)
+          ? matchedProfiles.map(profile => <ModelProfile key={profile.identity} identity={profile.identity} metadata={profile.metadata} iconId={matchedProfiles.length > 1 ? resolveModelIconOverride(modelIcons, selected.identity, profile.identity) : selectedIcon} onPickIcon={() => setIconTarget(selected.identity)} />)
           // Unmatched names say so once; each connection row below names the upstream it routes to.
-          : <ModelProfile identity={selected.profiles.length === 1 ? selected.profiles[0].identity : selected.identity} />}
+          : <ModelProfile identity={selected.profiles.length === 1 ? selected.profiles[0].identity : selected.identity} iconId={selectedIcon} onPickIcon={() => setIconTarget(selected.identity)} />}
         <ModelConnections identity={selected.identity} ledger={ledger.entryFor(selected.identity)} routes={selectedRoutes} providers={providers} branding={branding} pricing={pricing.data} onSetPrice={priceFromDetails} />
         {matchedProfiles.length > 0 && <p className={styles['scope-note']}>{t('models.reference_note')}</p>}
       </div>}
     </AppDrawer>
+    <IconPickerModal
+      open={iconTarget !== undefined}
+      title={t('models.icon_picker_title')}
+      currentIcon={iconShown}
+      canReset={iconOverride !== undefined}
+      onSelect={pickIcon}
+      onReset={resetIcon}
+      onClose={closeIconPicker}
+    />
   </div>;
 };

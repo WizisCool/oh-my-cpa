@@ -1,7 +1,8 @@
 import { useT } from '../i18n';
 import React from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode, describeError } from '../api/client';
+import { QUERY_KEYS } from '../api/queryKeys';
 import { useToast } from '../components/feedback';
 
 export interface Preference<T> {
@@ -28,6 +29,130 @@ export interface PreferenceWrite {
 }
 
 const writeQueues = new Map<string, Promise<void>>();
+const writeSeq = new Map<string, number>();
+const deferredReconcileKeys = new WeakMap<QueryClient, Set<string>>();
+const pendingReconcileKeys = new WeakMap<QueryClient, Set<string>>();
+const reconcileGeneration = new WeakMap<QueryClient, number>();
+
+function queueDeferredReconcile(queryClient: QueryClient, key: string): void {
+  let keys = deferredReconcileKeys.get(queryClient);
+  if (!keys) {
+    keys = new Set<string>();
+    deferredReconcileKeys.set(queryClient, keys);
+  }
+  keys.add(key);
+}
+
+function arePreferenceValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (typeof left !== typeof right || left === null || right === null) return false;
+  if (typeof left !== 'object') return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((item, index) => arePreferenceValuesEqual(item, right[index]));
+  }
+  const leftObj = left as Record<string, unknown>;
+  const rightObj = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftObj);
+  const rightKeys = Object.keys(rightObj);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every(
+    (prop) => Object.prototype.hasOwnProperty.call(rightObj, prop) && arePreferenceValuesEqual(leftObj[prop], rightObj[prop]),
+  );
+}
+
+/**
+ * Reconciles selected server-side preference keys into an already-loaded preferences cache
+ * without overwriting unrelated keys or any key whose local write is currently in flight.
+ */
+export async function reconcilePreferenceKeys(
+  queryClient: QueryClient,
+  keys: readonly string[],
+  depth = 0,
+): Promise<void> {
+  if (keys.length === 0) return;
+  const initialCached = queryClient.getQueryData<Record<string, unknown>>(QUERY_KEYS.preferences);
+  if (!initialCached) return;
+
+  let activeSet = pendingReconcileKeys.get(queryClient);
+  if (!activeSet) {
+    activeSet = new Set<string>();
+    pendingReconcileKeys.set(queryClient, activeSet);
+  }
+  for (const key of keys) activeSet.add(key);
+
+  const idleKeys: string[] = [];
+  for (const key of activeSet) {
+    if (writeQueues.has(key)) {
+      queueDeferredReconcile(queryClient, key);
+    } else {
+      idleKeys.push(key);
+    }
+  }
+  if (idleKeys.length === 0) {
+    activeSet.clear();
+    return;
+  }
+
+  const generation = (reconcileGeneration.get(queryClient) ?? 0) + 1;
+  reconcileGeneration.set(queryClient, generation);
+
+  const seqBefore = new Map<string, number>();
+  const snapshotBefore = new Map<string, unknown>();
+  for (const key of idleKeys) {
+    seqBefore.set(key, writeSeq.get(key) ?? 0);
+    snapshotBefore.set(key, initialCached[key]);
+  }
+
+  let fresh: Record<string, unknown>;
+  try {
+    fresh = await api.getPreferences();
+  } catch {
+    if (reconcileGeneration.get(queryClient) === generation) {
+      activeSet.clear();
+    }
+    return;
+  }
+
+  if (reconcileGeneration.get(queryClient) !== generation) {
+    return;
+  }
+  activeSet.clear();
+
+  const retryLater: string[] = [];
+  queryClient.setQueryData<Record<string, unknown>>(QUERY_KEYS.preferences, (cached) => {
+    if (!cached) return cached;
+    let next: Record<string, unknown> | undefined;
+    for (const key of idleKeys) {
+      const localWriteStarted =
+        writeQueues.has(key) ||
+        (writeSeq.get(key) ?? 0) !== seqBefore.get(key) ||
+        !arePreferenceValuesEqual(cached[key], snapshotBefore.get(key));
+      if (localWriteStarted) {
+        if (writeQueues.has(key)) {
+          queueDeferredReconcile(queryClient, key);
+        } else {
+          retryLater.push(key);
+        }
+        continue;
+      }
+      const freshValue = fresh[key];
+      if (!arePreferenceValuesEqual(cached[key], freshValue)) {
+        next ??= { ...cached };
+        if (freshValue === undefined) {
+          delete next[key];
+        } else {
+          next[key] = freshValue;
+        }
+      }
+    }
+    return next ?? cached;
+  });
+
+  if (retryLater.length > 0 && depth < 1) {
+    await reconcilePreferenceKeys(queryClient, retryLater, depth + 1);
+  }
+}
 
 /**
  * usePreference reads and writes one server-stored console preference.
@@ -73,11 +198,12 @@ export function usePreference<T>(
     // server's last known value or an earlier write that has not settled yet -
     // which is exactly what the control must fall back to when the server
     // refuses this one.
-    const previous = queryClient.getQueryData<Record<string, unknown>>(['preferences'])?.[key];
-    queryClient.setQueryData<Record<string, unknown>>(['preferences'], (cached) => ({
+    const previous = queryClient.getQueryData<Record<string, unknown>>(QUERY_KEYS.preferences)?.[key];
+    queryClient.setQueryData<Record<string, unknown>>(QUERY_KEYS.preferences, (cached) => ({
       ...(cached ?? {}),
       [key]: next,
     }));
+    writeSeq.set(key, (writeSeq.get(key) ?? 0) + 1);
     const previousPromise = writeQueues.get(key) ?? Promise.resolve();
     let ok = true;
     const nextPromise = previousPromise
@@ -107,10 +233,19 @@ export function usePreference<T>(
         // server's older value - trading this control's honesty for a flicker in
         // controls this write never touched.
         if (writeQueues.get(key) === nextPromise) {
-          queryClient.setQueryData<Record<string, unknown>>(['preferences'], (cached) => ({
+          queryClient.setQueryData<Record<string, unknown>>(QUERY_KEYS.preferences, (cached) => ({
             ...(cached ?? {}),
             [key]: previous,
           }));
+        }
+      })
+      .finally(() => {
+        if (writeQueues.get(key) === nextPromise) {
+          writeQueues.delete(key);
+          const deferred = deferredReconcileKeys.get(queryClient);
+          if (deferred?.delete(key)) {
+            void reconcilePreferenceKeys(queryClient, [key]);
+          }
         }
       });
     writeQueues.set(key, nextPromise);
