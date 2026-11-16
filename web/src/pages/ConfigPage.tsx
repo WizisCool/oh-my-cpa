@@ -96,6 +96,7 @@ export const ConfigPage: React.FC = () => {
     firstFieldErrorMessage,
     hasYamlErrors,
     hasConfigErrors,
+    hasPendingPayloadEdits,
     saveConfig,
     requestSaveConfirmation,
     handleViewModeChange,
@@ -241,10 +242,13 @@ export const ConfigPage: React.FC = () => {
     for (const fieldId of Object.keys(patternRulesIssues)) {
       changed.add(fieldId);
     }
+    if (hasPendingPayloadEdits) {
+      changed.add('payloadReplaceRules');
+    }
     return changed;
     // rawYaml is the draft's revision: the refs are rewritten before it changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDirty, rawYaml, docRef, serverDocRef, stringMapIssues, patternRulesIssues]);
+  }, [isDirty, rawYaml, docRef, serverDocRef, stringMapIssues, patternRulesIssues, hasPendingPayloadEdits]);
   const changedSectionIds = React.useMemo(
     () => new Set(ALL_CONFIG_FIELDS.filter((field) => changedFieldIds.has(field.id)).map((field) => field.sectionId)),
     [changedFieldIds],

@@ -311,7 +311,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_payload_rules',
     descKey: 'cfg.grp_payload_rules_desc',
     variant: 'payload-builder',
-    fieldIds: ['payloadDefaultRules', 'payloadDefaultRawRules', 'payloadOverrideRules', 'payloadOverrideRawRules', 'payloadFilterRules'],
+    fieldIds: ['payloadDefaultRules', 'payloadDefaultRawRules', 'payloadOverrideRules', 'payloadOverrideRawRules', 'payloadReplaceRules', 'payloadFilterRules'],
   },
 ];
 
@@ -1590,6 +1590,15 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     yamlPath: ['requests', 'payload', 'override-raw'],
     type: 'json_editor',
     keywords: ['payload', 'override', 'raw'],
+  },
+  {
+    id: 'payloadReplaceRules',
+    sectionId: 'payload',
+    labelKey: 'cfg.f_payload_replace',
+    descKey: 'cfg.f_payload_replace_desc',
+    yamlPath: ['requests', 'payload', 'replace'],
+    type: 'json_editor',
+    keywords: ['payload', 'replace', 'text', 'user', 'replacements', 'positions', 'all'],
   },
   {
     id: 'payloadFilterRules',
