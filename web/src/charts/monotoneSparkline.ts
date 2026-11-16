@@ -1,5 +1,12 @@
 export interface SparklinePoint {
   readonly x: number;
+  readonly y: number | null;
+  readonly t: number;
+  readonly value: number | null;
+}
+
+export interface SparklineMarker {
+  readonly x: number;
   readonly y: number;
   readonly t: number;
   readonly value: number;
@@ -7,13 +14,16 @@ export interface SparklinePoint {
 
 export interface SparklineGeometry {
   readonly points: readonly SparklinePoint[];
+  readonly isolatedPoints: readonly SparklineMarker[];
   readonly linePath: string;
   readonly areaPath: string;
   readonly x0: number;
   readonly x1: number;
   readonly yTop: number;
   readonly yBottom: number;
+  readonly hasData: boolean;
   readonly hasPositiveValue: boolean;
+  readonly hasGaps: boolean;
   readonly isSinglePoint: boolean;
 }
 
@@ -57,38 +67,17 @@ function fmt(n: number): string {
 }
 
 /**
- * Fills the buckets that have no reading so a ratio series draws as one line: a gap takes the
- * straight line between the readings around it, and the edges hold the nearest reading. A
- * series with no reading at all returns null: it has nothing to draw, and a flat line at zero
- * would read as a genuine 0%.
- */
-export function bridgeSparklineGaps(values: ReadonlyArray<number | null>): number[] | null {
-  const filled = new Array<number>(values.length).fill(0);
-  let previous = -1;
-  for (let i = 0; i < values.length; i += 1) {
-    const value = values[i];
-    if (value === null || value === undefined) continue;
-    const from = previous < 0 ? value : values[previous]!;
-    for (let gap = previous + 1; gap < i; gap += 1) {
-      filled[gap] = from + ((value - from) * (gap - previous)) / (i - previous);
-    }
-    filled[i] = value;
-    previous = i;
-  }
-  if (previous < 0) return null;
-  filled.fill(values[previous]!, previous + 1);
-  return filled;
-}
-
-/**
  * Builds monotone cubic Hermite SVG line and closed area paths (`curveMonotoneX`) without
  * pulling in Recharts or d3-shape, preserving non-negativity and local extrema with zero overshoot.
+ * Null samples break the series cleanly at their true time-grid slots instead of interpolating
+ * across idle stretches or collapsing them to zero.
  */
 export function buildMonotoneSparkline(
-  samples: ReadonlyArray<{ readonly t: number; readonly value: number }>,
+  samples: ReadonlyArray<{ readonly t: number; readonly value: number | null }>,
   width: number,
   height: number,
   margin: SparklineMargin = DEFAULT_SPARKLINE_MARGIN,
+  maxDomain?: number,
 ): SparklineGeometry {
   const x0 = margin.left;
   const x1 = Math.max(x0 + 1, width - margin.right);
@@ -99,121 +88,171 @@ export function buildMonotoneSparkline(
   if (n === 0) {
     return {
       points: [],
+      isolatedPoints: [],
       linePath: '',
       areaPath: '',
       x0,
       x1,
       yTop,
       yBottom,
+      hasData: false,
       hasPositiveValue: false,
+      hasGaps: false,
       isSinglePoint: false,
     };
   }
 
   let maxValue = 0;
+  let hasData = false;
+  let hasGaps = false;
   for (let i = 0; i < n; i += 1) {
-    const v = samples[i]!.value;
+    const raw = samples[i]!.value;
+    if (raw === null || !Number.isFinite(raw)) {
+      hasGaps = true;
+      continue;
+    }
+    hasData = true;
+    const v = Math.max(0, raw);
     if (v > maxValue) maxValue = v;
   }
   const hasPositiveValue = maxValue > 0;
-  const domainMax = hasPositiveValue ? maxValue : 1;
+  const domainMax =
+    maxDomain !== undefined && Number.isFinite(maxDomain) && maxDomain > 0
+      ? Math.max(maxDomain, maxValue)
+      : (hasPositiveValue ? maxValue : 1);
   const plotWidth = x1 - x0;
   const plotHeight = yBottom - yTop;
 
   const points: SparklinePoint[] = new Array<SparklinePoint>(n);
   if (n === 1) {
     const sample = samples[0]!;
+    const x = (x0 + x1) / 2;
+    if (sample.value === null || !Number.isFinite(sample.value)) {
+      points[0] = { x, y: null, t: sample.t, value: null };
+      return {
+        points,
+        isolatedPoints: [],
+        linePath: '',
+        areaPath: '',
+        x0,
+        x1,
+        yTop,
+        yBottom,
+        hasData: false,
+        hasPositiveValue: false,
+        hasGaps: true,
+        isSinglePoint: false,
+      };
+    }
     const v = Math.max(0, sample.value);
     points[0] = {
-      x: (x0 + x1) / 2,
+      x,
       y: yBottom - (v / domainMax) * plotHeight,
       t: sample.t,
       value: v,
     };
     return {
       points,
+      isolatedPoints: [],
       linePath: '',
       areaPath: '',
       x0,
       x1,
       yTop,
       yBottom,
+      hasData: true,
       hasPositiveValue,
+      hasGaps: false,
       isSinglePoint: true,
     };
   }
 
+  const runs: SparklineMarker[][] = [];
+  let activeRun: SparklineMarker[] | null = null;
   for (let i = 0; i < n; i += 1) {
     const sample = samples[i]!;
+    const x = x0 + (i / (n - 1)) * plotWidth;
+    if (sample.value === null || !Number.isFinite(sample.value)) {
+      points[i] = { x, y: null, t: sample.t, value: null };
+      activeRun = null;
+      continue;
+    }
     const v = Math.max(0, sample.value);
-    points[i] = {
-      x: x0 + (i / (n - 1)) * plotWidth,
-      y: yBottom - (v / domainMax) * plotHeight,
-      t: sample.t,
-      value: v,
-    };
+    const y = yBottom - (v / domainMax) * plotHeight;
+    const marker: SparklineMarker = { x, y, t: sample.t, value: v };
+    points[i] = marker;
+    if (!activeRun) {
+      activeRun = [marker];
+      runs.push(activeRun);
+    } else {
+      activeRun.push(marker);
+    }
   }
 
-  if (n === 2) {
-    const p0 = points[0]!;
-    const p1 = points[1]!;
-    const linePath = `M${fmt(p0.x)},${fmt(p0.y)}L${fmt(p1.x)},${fmt(p1.y)}`;
-    const areaPath = `${linePath}L${fmt(p1.x)},${fmt(yBottom)}L${fmt(p0.x)},${fmt(yBottom)}Z`;
-    return {
-      points,
-      linePath,
-      areaPath,
-      x0,
-      x1,
-      yTop,
-      yBottom,
-      hasPositiveValue,
-      isSinglePoint: false,
-    };
-  }
+  const lineSegments: string[] = [];
+  const areaSegments: string[] = [];
+  const isolatedPoints: SparklineMarker[] = [];
 
-  const tangents = new Float64Array(n);
-  for (let i = 1; i < n - 1; i += 1) {
-    const prev = points[i - 1]!;
-    const curr = points[i]!;
-    const next = points[i + 1]!;
-    tangents[i] = slope3(prev.x, prev.y, curr.x, curr.y, next.x, next.y);
-  }
-  tangents[0] = slope2(points[0]!.x, points[0]!.y, points[1]!.x, points[1]!.y, tangents[1]!);
-  tangents[n - 1] = slope2(
-    points[n - 2]!.x,
-    points[n - 2]!.y,
-    points[n - 1]!.x,
-    points[n - 1]!.y,
-    tangents[n - 2]!,
-  );
-
-  const first = points[0]!;
-  const segments: string[] = [`M${fmt(first.x)},${fmt(first.y)}`];
-  for (let i = 0; i < n - 1; i += 1) {
-    const p0 = points[i]!;
-    const p1 = points[i + 1]!;
-    const dx = (p1.x - p0.x) / 3;
-    const t0 = tangents[i]!;
-    const t1 = tangents[i + 1]!;
-    segments.push(
-      `C${fmt(p0.x + dx)},${fmt(p0.y + dx * t0)},${fmt(p1.x - dx)},${fmt(p1.y - dx * t1)},${fmt(p1.x)},${fmt(p1.y)}`,
+  for (const run of runs) {
+    if (run.length === 1) {
+      isolatedPoints.push(run[0]!);
+      continue;
+    }
+    if (run.length === 2) {
+      const p0 = run[0]!;
+      const p1 = run[1]!;
+      const seg = `M${fmt(p0.x)},${fmt(p0.y)}L${fmt(p1.x)},${fmt(p1.y)}`;
+      lineSegments.push(seg);
+      areaSegments.push(`${seg}L${fmt(p1.x)},${fmt(yBottom)}L${fmt(p0.x)},${fmt(yBottom)}Z`);
+      continue;
+    }
+    const m = run.length;
+    const tangents = new Float64Array(m);
+    for (let i = 1; i < m - 1; i += 1) {
+      const prev = run[i - 1]!;
+      const curr = run[i]!;
+      const next = run[i + 1]!;
+      tangents[i] = slope3(prev.x, prev.y, curr.x, curr.y, next.x, next.y);
+    }
+    tangents[0] = slope2(run[0]!.x, run[0]!.y, run[1]!.x, run[1]!.y, tangents[1]!);
+    tangents[m - 1] = slope2(
+      run[m - 2]!.x,
+      run[m - 2]!.y,
+      run[m - 1]!.x,
+      run[m - 1]!.y,
+      tangents[m - 2]!,
     );
-  }
 
-  const linePath = segments.join('');
-  const last = points[n - 1]!;
-  const areaPath = `${linePath}L${fmt(last.x)},${fmt(yBottom)}L${fmt(first.x)},${fmt(yBottom)}Z`;
+    const first = run[0]!;
+    const segments: string[] = [`M${fmt(first.x)},${fmt(first.y)}`];
+    for (let i = 0; i < m - 1; i += 1) {
+      const p0 = run[i]!;
+      const p1 = run[i + 1]!;
+      const dx = (p1.x - p0.x) / 3;
+      const t0 = tangents[i]!;
+      const t1 = tangents[i + 1]!;
+      segments.push(
+        `C${fmt(p0.x + dx)},${fmt(p0.y + dx * t0)},${fmt(p1.x - dx)},${fmt(p1.y - dx * t1)},${fmt(p1.x)},${fmt(p1.y)}`,
+      );
+    }
+    const runLine = segments.join('');
+    const last = run[m - 1]!;
+    lineSegments.push(runLine);
+    areaSegments.push(`${runLine}L${fmt(last.x)},${fmt(yBottom)}L${fmt(first.x)},${fmt(yBottom)}Z`);
+  }
 
   return {
     points,
-    linePath,
-    areaPath,
+    isolatedPoints,
+    linePath: lineSegments.join(''),
+    areaPath: areaSegments.join(''),
     x0,
     x1,
     yTop,
     yBottom,
+    hasData,
     hasPositiveValue,
+    hasGaps,
     isSinglePoint: false,
   };
 }

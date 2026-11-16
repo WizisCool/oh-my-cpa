@@ -28,7 +28,6 @@ import {
   type ObservedBoxSize,
 } from '../../src/performance/index.ts';
 import {
-  bridgeSparklineGaps,
   buildMonotoneSparkline,
   resolveSparklineIndex,
   sparklineViewBoxToHostX,
@@ -1000,14 +999,69 @@ test('buildMonotoneSparkline produces overshoot-free monotone paths and maps poi
   assert.equal(resolveSparklineIndex(12, 480, 73), 0);
   assert.equal(sparklineViewBoxToHostX(6, 480, 240), 12);
   assert.equal(sparklineViewBoxToHostX(234, 480, 240), 468);
-});
 
-test('bridgeSparklineGaps connects readings across idle buckets and holds the edges', () => {
-  assert.deepEqual(bridgeSparklineGaps([null, 90, null, null, 60, null]), [90, 90, 80, 70, 60, 60]);
-  assert.deepEqual(bridgeSparklineGaps([0, null, 0]), [0, 0, 0]);
-  // No reading at all is not a 0% series: there is nothing to draw.
-  assert.equal(bridgeSparklineGaps([null, null]), null);
-  assert.equal(bridgeSparklineGaps([]), null);
+  // Null samples leave gaps instead of collapsing idle buckets to 0%, and isolated non-null
+  // buckets stay visible as markers on their true time-grid x coordinates.
+  const allNull = buildMonotoneSparkline(
+    [{ t: 1, value: null }, { t: 2, value: null }, { t: 3, value: null }],
+    240,
+    64,
+    undefined,
+    100,
+  );
+  assert.equal(allNull.hasData, false);
+  assert.equal(allNull.hasPositiveValue, false);
+  assert.equal(allNull.hasGaps, true);
+  assert.equal(allNull.linePath, '');
+  assert.equal(allNull.areaPath, '');
+  assert.equal(allNull.isolatedPoints.length, 0);
+
+  const singleNull = buildMonotoneSparkline([{ t: 1, value: null }], 240, 64, undefined, 100);
+  assert.equal(singleNull.isSinglePoint, false);
+  assert.equal(singleNull.hasData, false);
+  assert.equal(singleNull.hasGaps, true);
+
+  const gapped = buildMonotoneSparkline(
+    [
+      { t: 1, value: null },
+      { t: 2, value: 90 },
+      { t: 3, value: 92 },
+      { t: 4, value: null },
+      { t: 5, value: 50 },
+      { t: 6, value: null },
+      { t: 7, value: 0 },
+      { t: 8, value: 80 },
+    ],
+    240,
+    64,
+    undefined,
+    100,
+  );
+  assert.equal(gapped.hasData, true);
+  assert.equal(gapped.hasPositiveValue, true);
+  assert.equal(gapped.hasGaps, true);
+  assert.equal(gapped.points[0]?.y, null);
+  assert.equal(gapped.points[3]?.y, null);
+  assert.equal(gapped.points[5]?.y, null);
+  assert.equal(gapped.isolatedPoints.length, 1);
+  assert.equal(gapped.isolatedPoints[0]?.t, 5);
+  assert.ok(
+    Math.abs((gapped.isolatedPoints[0]?.y ?? 0) - (gapped.yTop + gapped.yBottom) / 2) < 1e-6,
+    'domainMax=100 places 50% at the vertical midpoint of the plot',
+  );
+  assert.equal((gapped.linePath.match(/M/g) ?? []).length, 2, 'two disjoint non-null runs produce two M subpaths');
+
+  const measuredZerosWithGaps = buildMonotoneSparkline(
+    [{ t: 1, value: null }, { t: 2, value: 0 }, { t: 3, value: 0 }, { t: 4, value: null }],
+    240,
+    64,
+    undefined,
+    100,
+  );
+  assert.equal(measuredZerosWithGaps.hasData, true);
+  assert.equal(measuredZerosWithGaps.hasPositiveValue, false);
+  assert.equal(measuredZerosWithGaps.hasGaps, true);
+  assert.ok(measuredZerosWithGaps.linePath.startsWith('M82,62L158,62'), '0% stroke spans only the measured buckets');
 });
 
 test('getIdentityDirectoryProjection caches derived Maps and Sets per response object via WeakMap', () => {

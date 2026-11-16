@@ -641,7 +641,7 @@ func TestDashboardTailKeepsAnEmptyWindowRenderable(t *testing.T) {
 		t.Fatalf("an empty tail must still carry a splicable grid: %s", payload)
 	}
 	for _, point := range tail.Requests.Series {
-		if point.Requests != 0 || point.Failures != 0 || point.Tokens != 0 {
+		if point.Requests != 0 || point.Failures != 0 || point.Tokens != 0 || point.CacheRate != nil {
 			t.Fatalf("empty window invented traffic: %+v", point)
 		}
 	}
@@ -674,8 +674,8 @@ func TestFillDashboardBucketsFoldsEdgeBuckets(t *testing.T) {
 	from := bucket*10 + 500 // unaligned start
 	to := bucket * 14
 	buckets := []repository.UsageBucket{
-		{StartMS: bucket * 9, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{Requests: 3, InputTokens: 20, TotalTokens: 30, CacheReadTokens: 5}}},
-		{StartMS: bucket * 12, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{Requests: 5, InputTokens: 40, TotalTokens: 50, CacheReadTokens: 10}}},
+		{StartMS: bucket * 9, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{Requests: 3, TotalTokens: 30, CacheReadTokens: 7}}},
+		{StartMS: bucket * 12, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{Requests: 5, TotalTokens: 50, CacheReadTokens: 11}}},
 	}
 	costs := []repository.UsageCostBucket{
 		{StartMS: bucket * 9, CostNanos: 2_000_000_000},
@@ -685,10 +685,11 @@ func TestFillDashboardBucketsFoldsEdgeBuckets(t *testing.T) {
 	if len(points) < 2 {
 		t.Fatalf("expected a filled grid, got %d points", len(points))
 	}
-	var requests, tokens, costNanos int64
+	var requests, tokens, cacheRead, costNanos int64
 	for _, point := range points {
 		requests += point.Requests
 		tokens += point.Tokens
+		cacheRead += point.CacheReadTokens
 		costNanos += point.CostNanos
 		if point.TimeMS%bucket != 0 {
 			t.Fatalf("bucket start %d is not grid aligned", point.TimeMS)
@@ -700,8 +701,8 @@ func TestFillDashboardBucketsFoldsEdgeBuckets(t *testing.T) {
 	}
 	// Cache and cost ride the same folding, so the tiles cannot disagree about
 	// which bucket an edge event belongs to.
-	if rate := points[0].CacheRate; rate == nil || *rate != 25 {
-		t.Fatalf("folded edge bucket cache rate = %v, want 25", rate)
+	if cacheRead != 18 {
+		t.Fatalf("cache reads lost on fold: got %d, want 18", cacheRead)
 	}
 	if costNanos != 5_000_000_000 {
 		t.Fatalf("cost lost on fold: got %d, want 5000000000", costNanos)
@@ -716,43 +717,134 @@ func TestFillDashboardBucketsFoldsEdgeBuckets(t *testing.T) {
 }
 
 // TestDashboardSeriesCarriesPerBucketCacheAndCost pins the properties the four
-// right-hand tiles depend on: each bucket must state its own cache rate and its
-// own cost, so the cache-rate and cost tiles stop plotting token volume.
+// right-hand tiles depend on: each bucket must state its own cache reads, its
+// own cache rate (computed via cacheRateParts, nil when there are no prompt
+// tokens), and its own cost.
 func TestDashboardSeriesCarriesPerBucketCacheAndCost(t *testing.T) {
 	const bucket = int64(60_000)
 	from := bucket * 10
-	to := bucket * 13
+	to := bucket * 16
 	buckets := []repository.UsageBucket{
-		{StartMS: bucket * 11, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{
+		// OpenAI-style: 60 / 100 = 60%.
+		{StartMS: bucket * 10, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{
 			Requests: 4, InputTokens: 100, CacheReadTokens: 60, TotalTokens: 160,
 		}}},
+		// Anthropic-style: 900 / (100 + 900) = 90%.
+		{StartMS: bucket * 11, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{
+			Requests: 1, InputTokens: 100, CacheReadTokens: 900, TotalTokens: 200,
+		}}},
+		// Active bucket with prompt tokens and zero cache hits -> measured 0%, not nil.
+		{StartMS: bucket * 12, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{
+			Requests: 2, InputTokens: 200, OutputTokens: 50, CacheReadTokens: 0, TotalTokens: 250,
+		}}},
+		// Full cache hit -> capped at 99.9%.
+		{StartMS: bucket * 13, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{
+			Requests: 1, InputTokens: 100, CacheReadTokens: 100, TotalTokens: 120,
+		}}},
+		// Output-only bucket -> no prompt tokens, rate stays nil.
+		{StartMS: bucket * 14, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{
+			Requests: 1, InputTokens: 0, OutputTokens: 90, TotalTokens: 90,
+		}}},
+		// Edge bucket folded into bucket*16 (end of grid) with 100% cache hit over 100 tokens,
+		// combined with an already-in-grid 0% bucket of 300 tokens -> 100 / 400 = 25% (not avg 50% by bucket).
+		{StartMS: bucket * 16, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{
+			Requests: 1, InputTokens: 300, CacheReadTokens: 0, TotalTokens: 300,
+		}}},
+		{StartMS: bucket * 17, UsageMeasures: repository.UsageMeasures{UsageTotals: repository.UsageTotals{
+			Requests: 1, InputTokens: 100, CacheReadTokens: 100, TotalTokens: 100,
+		}}},
 	}
-	costs := []repository.UsageCostBucket{{StartMS: bucket * 11, CostNanos: 1_500_000_000}}
+	costs := []repository.UsageCostBucket{{StartMS: bucket * 10, CostNanos: 1_500_000_000}}
 	points := fillDashboardBuckets(from, to, bucket, buckets, costs)
 
 	byTime := make(map[int64]dashboardSeriesPoint, len(points))
 	for _, point := range points {
 		byTime[point.TimeMS] = point
 	}
-	populated, ok := byTime[bucket*11]
+	populated, ok := byTime[bucket*10]
 	if !ok {
-		t.Fatalf("expected a point at %d, got %d points", bucket*11, len(points))
+		t.Fatalf("expected a point at %d, got %d points", bucket*10, len(points))
+	}
+	if populated.CacheReadTokens != 60 {
+		t.Fatalf("cache reads not carried per bucket: got %d, want 60", populated.CacheReadTokens)
 	}
 	if populated.CacheRate == nil || *populated.CacheRate != 60 {
-		t.Fatalf("cache rate not carried per bucket: got %v, want 60", populated.CacheRate)
+		t.Fatalf("openai-style bucket cache rate = %v, want 60", populated.CacheRate)
 	}
 	if populated.CostNanos != 1_500_000_000 {
 		t.Fatalf("cost not carried per bucket: got %d, want 1500000000", populated.CostNanos)
 	}
-	// A bucket with no priced event must not borrow its neighbour's cost: a
-	// fabricated cost would overstate spend in exactly the window it must not.
-	// An idle bucket has no cache rate; a 0% would read as every prompt missing the cache.
-	empty := byTime[bucket*12]
-	if empty.CostNanos != 0 {
-		t.Fatalf("empty bucket fabricated cost: %d", empty.CostNanos)
+	if b := byTime[bucket*11]; b.CacheRate == nil || *b.CacheRate != 90 {
+		t.Fatalf("anthropic-style bucket cache rate = %v, want 90", b.CacheRate)
 	}
-	if empty.CacheRate != nil {
-		t.Fatalf("empty bucket fabricated cache rate: %v", *empty.CacheRate)
+	zeroHit := byTime[bucket*12]
+	if zeroHit.CacheRate == nil || *zeroHit.CacheRate != 0 {
+		t.Fatalf("zero-hit active bucket must report 0%% rather than nil: %v", zeroHit.CacheRate)
+	}
+	if raw, err := json.Marshal(zeroHit); err != nil || !strings.Contains(string(raw), `"cache_rate":0`) {
+		t.Fatalf("zero-hit active bucket must serialize cache_rate:0 on wire, got %s (%v)", raw, err)
+	}
+	if b := byTime[bucket*13]; b.CacheRate == nil || *b.CacheRate != 99.9 {
+		t.Fatalf("capped bucket cache rate = %v, want 99.9", b.CacheRate)
+	}
+	if b := byTime[bucket*14]; b.CacheRate != nil {
+		t.Fatalf("output-only bucket must have nil cache_rate, got %v", *b.CacheRate)
+	}
+	// A bucket with no traffic or priced event must not borrow its neighbour's cost
+	// or invent a 0% cache rate.
+	empty := byTime[bucket*15]
+	if empty.CostNanos != 0 || empty.CacheReadTokens != 0 || empty.CacheRate != nil {
+		t.Fatalf("empty bucket fabricated data: cost=%d cacheRead=%d cacheRate=%v", empty.CostNanos, empty.CacheReadTokens, empty.CacheRate)
+	}
+	if raw, err := json.Marshal(empty); err != nil || strings.Contains(string(raw), `"cache_rate"`) {
+		t.Fatalf("empty bucket must omit cache_rate on wire, got %s (%v)", raw, err)
+	}
+	if folded := byTime[bucket*16]; folded.CacheRate == nil || *folded.CacheRate != 25 {
+		t.Fatalf("folded edge bucket must recompute rate from summed totals (100/400 = 25%%), got %v", folded.CacheRate)
+	}
+}
+
+func TestDashboardEndpointSeriesIncludesPerBucketCacheRate(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	now := time.Now().UTC().Truncate(time.Minute)
+	seedEvents(t, repo, now, []repository.UsageDecoded{
+		{Event: eventFor("high-cache", now.Add(-10*time.Minute), usage.TokenStats{
+			InputTokens: 1000, OutputTokens: 100, CacheReadTokens: 900, TotalTokens: 1100,
+		}, false)},
+		{Event: eventFor("zero-cache", now.Add(-2*time.Minute), usage.TokenStats{
+			InputTokens: 500, OutputTokens: 50, CacheReadTokens: 0, TotalTokens: 550,
+		}, false)},
+	})
+
+	window := fmt.Sprintf("?from=%d&to=%d", now.Add(-20*time.Minute).UnixMilli(), now.UnixMilli())
+	full := getDashboardJSON(t, client, baseURL+"/omc/api/v1/management/dashboard"+window)
+	var rates []float64
+	nilCount := 0
+	for _, point := range full.Tokens.Series {
+		if point.CacheRate == nil {
+			nilCount++
+		} else {
+			rates = append(rates, *point.CacheRate)
+		}
+	}
+	if nilCount == 0 {
+		t.Fatal("expected idle buckets in tokens.series to leave cache_rate nil")
+	}
+	if len(rates) != 2 || rates[0] != 90 || rates[1] != 0 {
+		t.Fatalf("tokens.series non-nil cache_rate values = %v, want [90 0]", rates)
+	}
+
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/dashboard/tail"+window)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("tail status = %d body %s", response.StatusCode, payload)
+	}
+	var tail dashboardTailResponse
+	if err := json.Unmarshal(payload, &tail); err != nil {
+		t.Fatal(err)
+	}
+	lastFull := full.Tokens.Series[len(full.Tokens.Series)-len(tail.Tokens.Series):]
+	if !reflect.DeepEqual(tail.Tokens.Series, lastFull) {
+		t.Fatalf("tail tokens.series %+v disagrees with full %+v", tail.Tokens.Series, lastFull)
 	}
 }
 

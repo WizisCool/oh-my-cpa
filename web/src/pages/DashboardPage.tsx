@@ -655,6 +655,7 @@ export const DashboardPage: React.FC = () => {
               pick={pickCacheRate}
               tone="neutral"
               height={44}
+              domainMax={100}
               label={formatTrendTime}
               format={formatCacheRate}
             />

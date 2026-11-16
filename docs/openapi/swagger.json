@@ -18017,11 +18017,13 @@
       "type": "object",
       "properties": {
         "cache_rate": {
-          "description": "CacheRate is the bucket's own cache rate, absent when the bucket carried no\nprompt tokens: an idle bucket has no rate, which is not a 0% rate.",
           "type": "number"
         },
+        "cache_read": {
+          "description": "CacheReadTokens, CacheRate and CostNanos are per-bucket, so the cache-rate\nand cost tiles can plot their own series instead of repeating the token volume.\nNanos rather than a float keeps the wire value exact; the browser scales it.\nCacheRate is nil (omitted) when the bucket has no prompt tokens.",
+          "type": "integer"
+        },
         "cost_nanos": {
-          "description": "Nanos rather than a float keeps the wire value exact; the browser scales it.",
           "type": "integer"
         },
         "f": {
