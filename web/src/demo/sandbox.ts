@@ -13,6 +13,7 @@ import type {
   IdentityDirectoryResponse,
 } from '../types/identityDirectory';
 import { PROVIDER_ICONS_PREFERENCE, parseProviderIcons } from '../types/providerIcons';
+import { MODEL_ICONS_PREFERENCE, parseModelIcons } from '../types/modelIcons';
 import type { InstalledFont } from '../types/fonts';
 import type {
   ManagementAuthFile,
@@ -1745,6 +1746,9 @@ export async function interceptDemoRequest(
         credentials: mergedAuth,
         plugins: mergedPlugins,
         provider_icons: providerIcons,
+        model_icons: MODEL_ICONS_PREFERENCE in mergedPrefs
+          ? parseModelIcons(mergedPrefs[MODEL_ICONS_PREFERENCE])
+          : (baseDir?.model_icons ?? {}),
         archived_credentials: archivedCredentials,
         archived_providers: archivedProviders,
         catalog_status: {

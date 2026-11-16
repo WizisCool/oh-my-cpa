@@ -21,6 +21,7 @@ import {
   parseProviderIcons,
   PROVIDER_ICONS_PREFERENCE,
 } from '../types/providerIcons';
+import { MODEL_ICONS_PREFERENCE, parseModelIcons } from '../types/modelIcons';
 import { useCustomIcons } from '../hooks/useCustomIcons';
 import { LobeIcon } from './LobeIcon';
 import {
@@ -217,6 +218,10 @@ export const CustomIconLibrary: React.FC<Props> = ({
                 ...cached,
                 [PROVIDER_ICONS_PREFERENCE]: clearCustomIconAssignments(
                   parseProviderIcons(cached[PROVIDER_ICONS_PREFERENCE]),
+                  id,
+                ),
+                [MODEL_ICONS_PREFERENCE]: clearCustomIconAssignments(
+                  parseModelIcons(cached[MODEL_ICONS_PREFERENCE]),
                   id,
                 ),
               }

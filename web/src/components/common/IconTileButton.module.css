@@ -1,0 +1,30 @@
+.icon-tile {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+  color: var(--fg-2);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+.icon-tile:hover { background: color-mix(in srgb, var(--fg) 10%, transparent); }
+.icon-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.icon-tile:disabled { cursor: default; opacity: 0.6; }
+
+:global(:root:not([data-reduced-motion='true'])) .icon-tile {
+  transition: background-color var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-out);
+}
+:global(:root:not([data-reduced-motion='true'])) .icon-tile:active:not(:disabled) { transform: scale(0.96); }
+
+.is-md { width: 32px; height: 32px; }
+.is-lg { width: 48px; height: 48px; }
+
+@media (max-width: 640px) {
+  /* Touch widens the hit area, never the tile. */
+  .is-md::before { content: ""; position: absolute; inset: -6px; }
+}

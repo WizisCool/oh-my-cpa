@@ -154,6 +154,7 @@ type IdentityDirectoryResponse struct {
 	Credentials         []IdentityCredentialDTO         `json:"credentials"`
 	Plugins             []PluginItemDTO                 `json:"plugins"`
 	ProviderIcons       map[string]string               `json:"provider_icons"`
+	ModelIcons          map[string]string               `json:"model_icons"`
 	ArchivedCredentials []repository.ArchivedCredential `json:"archived_credentials"`
 	ArchivedProviders   []repository.ArchivedProvider   `json:"archived_providers"`
 	CatalogStatus       IdentityCatalogStatusDTO        `json:"catalog_status"`
@@ -710,6 +711,7 @@ func (h *Handler) getIdentityDirectory(writer http.ResponseWriter, request *http
 		Credentials:         []IdentityCredentialDTO{},
 		Plugins:             []PluginItemDTO{},
 		ProviderIcons:       map[string]string{},
+		ModelIcons:          map[string]string{},
 		ArchivedCredentials: []repository.ArchivedCredential{},
 		ArchivedProviders:   []repository.ArchivedProvider{},
 	}
@@ -717,6 +719,9 @@ func (h *Handler) getIdentityDirectory(writer http.ResponseWriter, request *http
 	if h.repo != nil {
 		if icons := h.loadProviderIcons(ctx); icons != nil {
 			resp.ProviderIcons = icons
+		}
+		if modelIcons := h.loadModelIcons(ctx); modelIcons != nil {
+			resp.ModelIcons = modelIcons
 		}
 	}
 

@@ -14198,6 +14198,12 @@
             "$ref": "#/definitions/api.IdentityCredentialDTO"
           }
         },
+        "model_icons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "plugins": {
           "type": "array",
           "items": {

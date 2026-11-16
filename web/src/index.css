@@ -1600,8 +1600,9 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
    and halo on an Input, a Select, a picker or a number field), and a browser matches
    `:focus-visible` on every focused text field, mouse or keyboard alike. Ringing the inner field
    as well drew a second, smaller rectangle inside the control - its corners showing beside the
-   prefix glyph and the caret of every Select. */
-:focus-visible:not(input):not(textarea):not([data-slot="select-trigger"]):not([data-slot="combobox-trigger"]):not([data-slot="color-picker-trigger"]) { outline: none; box-shadow: 0 0 0 2px var(--accent) !important; border-radius: var(--radius-md); }
+   prefix glyph and the caret of every Select. A control marked `data-focus-ring="outer"` is
+   likewise ringed by its container (a card whose stretched button opens it). */
+:focus-visible:not(input):not(textarea):not([data-slot="select-trigger"]):not([data-slot="combobox-trigger"]):not([data-slot="color-picker-trigger"]):not([data-focus-ring="outer"]) { outline: none; box-shadow: 0 0 0 2px var(--accent) !important; border-radius: var(--radius-md); }
 input:focus-visible, textarea:focus-visible { outline: none; }
 
 /* ── shell: a rail on the canvas, the page on one sheet ─────────────────────

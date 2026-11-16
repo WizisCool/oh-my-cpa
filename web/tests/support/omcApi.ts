@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import type { ArchivedCredentialItem, ArchivedProviderItem } from '../../src/types/identityDirectory';
 import { PROVIDER_ICONS_PREFERENCE, parseProviderIcons } from '../../src/types/providerIcons';
+import { MODEL_ICONS_PREFERENCE, parseModelIcons } from '../../src/types/modelIcons';
 import type { ProviderItem } from '../../src/types/providers';
 import type { HealthStatus } from '../../src/types/resource';
 import type { ManagementAuthFile } from '../../src/types/managementAuthFile';
@@ -121,6 +122,7 @@ const BUILT_IN_ROUTES: Route[] = [
       credentials: state.authFiles.map(entry => entry.file),
       plugins: state.plugins,
       provider_icons: parseProviderIcons(state.preferences[PROVIDER_ICONS_PREFERENCE]),
+      model_icons: parseModelIcons(state.preferences[MODEL_ICONS_PREFERENCE]),
       archived_credentials: state.archivedCredentials,
       archived_providers: state.archivedProviders,
       catalog_status: { providers_known: true, credentials_known: true, plugins_known: true },

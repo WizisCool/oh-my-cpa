@@ -17,6 +17,7 @@ import {
   type PluginOAuthLogos,
 } from '../types/pluginOAuthProviders';
 import { EMPTY_PROVIDER_ICONS, PROVIDER_ICONS_PREFERENCE, parseProviderIcons } from '../types/providerIcons';
+import { EMPTY_MODEL_ICONS, selectModelIcons } from '../types/modelIcons';
 import type { ProviderItem } from '../types/providers';
 import { indexCredentialFiles, type CredentialIndex, type ProviderResolutionArchive } from '../types/usageEventIdentity';
 
@@ -246,6 +247,14 @@ export function useIdentityDirectory() {
     meta: { silent: true },
   });
 
+  const { data: prefModelIcons } = useQuery({
+    queryKey: QUERY_KEYS.preferences,
+    queryFn: api.getPreferences,
+    select: selectModelIcons,
+    staleTime: Infinity,
+    meta: { silent: true },
+  });
+
   const directoryQuery = useQuery({
     queryKey: QUERY_KEYS.identityDirectory,
     queryFn: ({ signal }) => api.getIdentityDirectory({ signal }),
@@ -261,6 +270,8 @@ export function useIdentityDirectory() {
     return data?.provider_icons ?? EMPTY_PROVIDER_ICONS;
   }, [data?.provider_icons, prefIcons]);
 
+  const modelIcons = prefModelIcons ?? data?.model_icons ?? EMPTY_MODEL_ICONS;
+
   const projection = getIdentityDirectoryProjection(data);
 
   const isProviderCatalogUnproven = isError || !data || !data.catalog_status.providers_known;
@@ -273,6 +284,7 @@ export function useIdentityDirectory() {
   return useMemo(() => ({
     directory: data,
     providerIcons,
+    modelIcons,
     pluginLogos: projection.pluginLogos,
     pluginTitles: projection.pluginTitles,
     multiPortalKeys: projection.multiPortalKeys,
@@ -291,6 +303,7 @@ export function useIdentityDirectory() {
   }), [
     data,
     providerIcons,
+    modelIcons,
     projection,
     isCredentialsUnavailable,
     isProviderCatalogUnproven,

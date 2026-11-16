@@ -36,6 +36,7 @@ import {
 } from './opencodeSession';
 import { Notice } from '../feedback';
 import { SecretInput } from '../common/SecretInput';
+import { IconTileButton } from '../common/IconTileButton';
 import styles from './ProviderEditorDrawer.module.css';
 import { AppDrawer } from '../common/AppDrawer';
 import { ConfirmAction } from '../common/ConfirmAction';
@@ -278,16 +279,16 @@ export function ProviderEditorDrawer({
         <div>
           {/* Provider Icon Card */}
           <div className={styles['icon-card']}>
-            <div
-              className={styles['icon-tile']}
+            <IconTileButton
+              size="lg"
+              label={t('pro.change_icon')}
               onClick={() => {
                 setTargetProviderForIcon(null);
                 setIconPickerOpen(true);
               }}
-              data-tip={t('pro.change_icon')}
             >
               <ProviderMark provider={{ id: editingProvider?.id, family: formFamily, name: formName, upstream_name: editingProvider?.upstream_name, base_url: formBaseURL, icon_id: formIcon }} sources={{ pluginLogos }} size={30} />
-            </div>
+            </IconTileButton>
             <div className={styles['icon-meta']}>
               <div className={styles['icon-label']}>{t('pro.field_icon')}</div>
               <div className={styles['icon-name']}>{iconName}</div>

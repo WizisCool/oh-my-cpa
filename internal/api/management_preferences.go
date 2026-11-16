@@ -27,6 +27,7 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceInsightsRange:          true,
 	repository.PreferenceLogFilters:             true,
 	repository.PreferenceProviderIcons:          true,
+	repository.PreferenceModelIcons:             true,
 	repository.PreferenceProviderNames:          true,
 	repository.PreferenceProviderWebsites:       true,
 	repository.PreferenceUsageEventsView:        true,
@@ -215,6 +216,13 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 			return
 		}
 	}
+	if key == repository.PreferenceModelIcons {
+		var values map[string]string
+		if json.Unmarshal(body, &values) != nil || values == nil {
+			writeError(writer, http.StatusBadRequest, "a model icon preference must be an object of strings")
+			return
+		}
+	}
 	if key == repository.PreferenceSidebarCollapsed {
 		var isCollapsed *bool
 		if json.Unmarshal(body, &isCollapsed) != nil || isCollapsed == nil {
@@ -247,6 +255,8 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 			_ = h.readProviderItems(request.Context(), client)
 		}
 		h.publishStateSync("management-providers", "management-providers-sanitized", stateScopeIdentityDirectory)
+	} else if key == repository.PreferenceModelIcons {
+		h.publishStateSync(stateScopeIdentityDirectory)
 	}
 	writeJSON(writer, http.StatusOK, PreferencePutResponseDTO{Key: key, Value: json.RawMessage(body)})
 }

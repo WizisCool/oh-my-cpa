@@ -19,6 +19,7 @@ const (
 	PreferenceInsightsRange       = "insights_range"
 	PreferenceLogFilters          = "log_filters"
 	PreferenceProviderIcons       = "provider_icons"
+	PreferenceModelIcons          = "model_icons"
 	PreferenceProviderNames       = "provider_names"
 	PreferenceProviderWebsites    = "provider_websites"
 	PreferenceProviderTestModels  = "provider_test_models"
@@ -256,7 +257,7 @@ func (r *Repository) putPreferences(ctx context.Context, values map[string]strin
 
 	now := time.Now().UTC().UnixMilli()
 	for key, value := range values {
-		if key == PreferenceProviderIcons {
+		if key == PreferenceProviderIcons || key == PreferenceModelIcons {
 			if err := validateCustomIconReferences(ctx, tx, value); err != nil {
 				return err
 			}
