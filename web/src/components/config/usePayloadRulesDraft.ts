@@ -5,6 +5,7 @@ import type { Document } from 'yaml';
 import { useT } from '../../i18n';
 import {
   appendReplacePositionTokens,
+  areModelItemsEqual,
   buildPayloadProtocolOptions,
   buildUnresolvedPendingIssues,
   generateDynamicId,
@@ -13,7 +14,10 @@ import {
   parseReplaceRules,
   parseTypedRules,
   readPayloadCategory,
+  reconcileFilterRules,
+  reconcileRawRules,
   reconcileReplaceRules,
+  reconcileTypedRules,
   serializeFilterRules,
   serializeRawRules,
   serializeReplaceRules,
@@ -185,15 +189,18 @@ export function usePayloadRulesDraft({
 
     if (docChanged && doc) {
       lastDocInstanceRef.current = doc;
-      const nextDefault = parseTypedRules(readPayloadCategory(doc, 'default'), 'default');
-      const nextDefaultRaw = parseRawRules(readPayloadCategory(doc, 'default-raw'), 'default-raw');
-      const nextOverride = parseTypedRules(readPayloadCategory(doc, 'override'), 'override');
-      const nextOverrideRaw = parseRawRules(readPayloadCategory(doc, 'override-raw'), 'override-raw');
+      const parsedDefault = parseTypedRules(readPayloadCategory(doc, 'default'), 'default');
+      const parsedDefaultRaw = parseRawRules(readPayloadCategory(doc, 'default-raw'), 'default-raw');
+      const parsedOverride = parseTypedRules(readPayloadCategory(doc, 'override'), 'override');
+      const parsedOverrideRaw = parseRawRules(readPayloadCategory(doc, 'override-raw'), 'override-raw');
       const parsedReplace = parseReplaceRules(readPayloadCategory(doc, 'replace'), 'replace');
-      const nextReplace = resetChanged
-        ? parsedReplace
-        : reconcileReplaceRules(parsedReplace, replaceRulesRef.current);
-      const nextFilter = parseFilterRules(readPayloadCategory(doc, 'filter'), 'filter');
+      const parsedFilter = parseFilterRules(readPayloadCategory(doc, 'filter'), 'filter');
+      const nextDefault = resetChanged ? parsedDefault : reconcileTypedRules(parsedDefault, defaultRulesRef.current);
+      const nextDefaultRaw = resetChanged ? parsedDefaultRaw : reconcileRawRules(parsedDefaultRaw, defaultRawRulesRef.current);
+      const nextOverride = resetChanged ? parsedOverride : reconcileTypedRules(parsedOverride, overrideRulesRef.current);
+      const nextOverrideRaw = resetChanged ? parsedOverrideRaw : reconcileRawRules(parsedOverrideRaw, overrideRawRulesRef.current);
+      const nextReplace = resetChanged ? parsedReplace : reconcileReplaceRules(parsedReplace, replaceRulesRef.current);
+      const nextFilter = resetChanged ? parsedFilter : reconcileFilterRules(parsedFilter, filterRulesRef.current);
       defaultRulesRef.current = nextDefault;
       defaultRawRulesRef.current = nextDefaultRaw;
       overrideRulesRef.current = nextOverride;
@@ -250,14 +257,30 @@ export function usePayloadRulesDraft({
       }
       const openModal = advModalStateRef.current;
       if (openModal && docChanged) {
-        if (openModal.category !== 'replace') {
-          setAdvModalState(null);
-        } else {
-          const targetRule = replaceRulesRef.current.find((r) => r.id === openModal.ruleId);
-          const targetModelExists = Boolean(targetRule?.models.some((m) => m.id === openModal.modelId));
-          if (!targetModelExists) {
-            setAdvModalState(null);
-          }
+        const findModalTarget = (): PayloadModelItem | undefined => {
+          const byCategory: Record<
+            PayloadCategoryKey,
+            ReadonlyArray<{ id: string; models: PayloadModelItem[] }>
+          > = {
+            default: defaultRulesRef.current,
+            'default-raw': defaultRawRulesRef.current,
+            override: overrideRulesRef.current,
+            'override-raw': overrideRawRulesRef.current,
+            replace: replaceRulesRef.current,
+            filter: filterRulesRef.current,
+          };
+          return byCategory[openModal.category]
+            .find((r) => r.id === openModal.ruleId)
+            ?.models.find((m) => m.id === openModal.modelId);
+        };
+        const currentTarget = findModalTarget();
+        const isTargetUnchanged = Boolean(
+          currentTarget && areModelItemsEqual(currentTarget, openModal.model),
+        );
+        if (!isTargetUnchanged) {
+          setAdvModalState((prev) => (prev ? { ...prev, isTargetStale: true } : null));
+        } else if (openModal.isTargetStale) {
+          setAdvModalState((prev) => (prev ? { ...prev, isTargetStale: false } : null));
         }
       }
     }
@@ -337,6 +360,7 @@ export function usePayloadRulesDraft({
     ruleId: string;
     modelId: string;
     model: PayloadModelItem;
+    isTargetStale?: boolean;
   } | null>(null);
   const advModalStateRef = useRef(advModalState);
   advModalStateRef.current = advModalState;

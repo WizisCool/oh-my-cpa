@@ -84,6 +84,8 @@ export interface PayloadFilterRule {
 export interface PayloadReplaceTarget {
   positions: number[];
   all: boolean;
+  /** Preserves non-boolean YAML `all` values so edits never drop or coerce them. */
+  invalidAll?: { value: unknown };
   /** Preserves non-numeric YAML tokens or unparseable UI tokens so validation flags them. */
   invalidPositions?: string[];
   /** Preserves an unsupported or missing YAML role so edits never silently retarget it to 'user'. */
@@ -113,6 +115,8 @@ export interface PayloadReplaceRule {
   models: PayloadModelItem[];
   target: PayloadReplaceTarget;
   replacements: PayloadReplacementItem[];
+  /** Preserves non-array YAML `replacements` values until the operator replaces them with a list. */
+  invalidReplacements?: { value: unknown };
   _extra?: Record<string, unknown>;
 }
 
@@ -497,6 +501,9 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
         : hasRole
           ? { present: true, value: rawRole }
           : { present: false };
+      const invalidAll = rawAll !== undefined && typeof rawAll !== 'boolean'
+        ? { value: rawAll }
+        : undefined;
       const positions: number[] = [];
       const invalidPositions: string[] = [];
       if (Array.isArray(rawPositions)) {
@@ -513,6 +520,7 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
       parsedTarget = {
         positions,
         all: rawAll === true,
+        ...(invalidAll ? { invalidAll } : {}),
         ...(invalidRole ? { invalidRole } : {}),
         ...(invalidPositions.length > 0 ? { invalidPositions } : {}),
         ...(Object.keys(targetExtra).length > 0 ? { _extra: targetExtra } : {}),
@@ -520,6 +528,9 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
     }
 
     const parsedReplacements: PayloadReplacementItem[] = [];
+    const invalidReplacements = replacements !== undefined && !Array.isArray(replacements)
+      ? { value: replacements }
+      : undefined;
     if (Array.isArray(replacements)) {
       replacements.forEach((entry, repIdx) => {
         const repId = `${ruleId}_rep${repIdx}`;
@@ -579,6 +590,7 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
       models: parsedModels,
       target: parsedTarget,
       replacements: parsedReplacements,
+      ...(invalidReplacements ? { invalidReplacements } : {}),
       _extra: Object.keys(extra).length > 0 ? extra : undefined,
     };
   });
@@ -648,20 +660,48 @@ function canonicalizeForFingerprint(value: unknown): unknown {
   return value;
 }
 
-export function reconcileReplaceRules(
-  incoming: readonly PayloadReplaceRule[],
-  previous: readonly PayloadReplaceRule[],
-): PayloadReplaceRule[] {
+export function areModelItemsEqual(left: PayloadModelItem, right: PayloadModelItem): boolean {
+  const stripIds = (item: PayloadModelItem) => ({
+    name: item.name,
+    protocol: item.protocol ?? '',
+    fromProtocol: item.fromProtocol ?? '',
+    headers: (item.headers ?? []).map(({ key, value }) => ({ key, value })),
+    match: (item.match ?? []).map(({ key, value }) => ({ key, value })),
+    notMatch: (item.notMatch ?? []).map(({ key, value }) => ({ key, value })),
+    exist: item.exist ?? [],
+    notExist: item.notExist ?? [],
+    _extra: item._extra ?? null,
+  });
+  return (
+    JSON.stringify(canonicalizeForFingerprint(stripIds(left)))
+    === JSON.stringify(canonicalizeForFingerprint(stripIds(right)))
+  );
+}
+
+function nextReservedId(prefix: string, reserved: Set<string>): string {
+  let id = generateDynamicId(prefix);
+  while (reserved.has(id)) {
+    id = generateDynamicId(prefix);
+  }
+  reserved.add(id);
+  return id;
+}
+
+function reconcileRuleList<T extends { id: string; models: PayloadModelItem[] }>(
+  incoming: readonly T[],
+  previous: readonly T[],
+  rulePrefix: string,
+  fingerprint: (rule: T) => string,
+  mapMatchedChildren: (rule: T, prev: T | undefined, reservedModelIds: Set<string>) => Partial<T>,
+): T[] {
   if (incoming.length === 0 || previous.length === 0) {
     return [...incoming];
   }
 
-  const ruleFingerprint = (rule: PayloadReplaceRule): string =>
-    JSON.stringify(canonicalizeForFingerprint(serializeReplaceRules([rule])[0]));
-  const prevSerialized = previous.map(ruleFingerprint);
-  const nextSerialized = incoming.map(ruleFingerprint);
+  const prevSerialized = previous.map(fingerprint);
+  const nextSerialized = incoming.map(fingerprint);
   const usedPrevIndices = new Set<number>();
-  const matchedPrev: Array<PayloadReplaceRule | undefined> = Array(incoming.length).fill(undefined);
+  const matchedPrev: Array<T | undefined> = Array(incoming.length).fill(undefined);
 
   // Pass 1: LCS on exact serialized rule content preserves identity & order across concurrent insertions.
   const m = incoming.length;
@@ -692,7 +732,7 @@ export function reconcileReplaceRules(
   }
 
   // Pass 2: match reordered identical rules; rules whose content changed concurrently do not
-  // inherit an older rule's identity or pending position edits (e.g. shared `models: [*]`).
+  // inherit an older rule's identity or pending edits.
   for (let idx = 0; idx < m; idx += 1) {
     if (matchedPrev[idx]) continue;
     const matchIdx = previous.findIndex(
@@ -704,42 +744,109 @@ export function reconcileReplaceRules(
     }
   }
 
-  // Reserve every previous rule and child ID so unmatched or modified rules never inherit
-  // state from a removed or replaced rule.
   const reservedRuleIds = new Set(previous.map((prev) => prev.id));
   const reservedModelIds = new Set(previous.flatMap((prev) => prev.models.map((item) => item.id)));
-  const reservedRepIds = new Set(previous.flatMap((prev) => prev.replacements.map((rep) => rep.id)));
-
-  const nextUniqueId = (prefix: string, reserved: Set<string>): string => {
-    let id = generateDynamicId(prefix);
-    while (reserved.has(id)) {
-      id = generateDynamicId(prefix);
-    }
-    reserved.add(id);
-    return id;
-  };
 
   return incoming.map((rule, idx) => {
     const prev = matchedPrev[idx];
+    const extraChildren = mapMatchedChildren(rule, prev, reservedModelIds);
     if (!prev) {
       return {
         ...rule,
-        id: nextUniqueId('replace_rule', reservedRuleIds),
-        models: rule.models.map((mItem) => ({ ...mItem, id: nextUniqueId('m', reservedModelIds) })),
-        replacements: rule.replacements.map((rep) => ({ ...rep, id: nextUniqueId('rep', reservedRepIds) })),
+        id: nextReservedId(rulePrefix, reservedRuleIds),
+        models: rule.models.map((mItem) => ({ ...mItem, id: nextReservedId('m', reservedModelIds) })),
+        ...extraChildren,
       };
     }
     return {
       ...rule,
       id: prev.id,
       models: rule.models.map((mItem, mIdx) => (
-        prev.models[mIdx] ? { ...mItem, id: prev.models[mIdx].id } : { ...mItem, id: nextUniqueId('m', reservedModelIds) }
+        prev.models[mIdx] ? { ...mItem, id: prev.models[mIdx].id } : { ...mItem, id: nextReservedId('m', reservedModelIds) }
       )),
-      replacements: rule.replacements.map((rep, repIdx) => (
-        prev.replacements[repIdx] ? { ...rep, id: prev.replacements[repIdx].id } : { ...rep, id: nextUniqueId('rep', reservedRepIds) }
-      )),
+      ...extraChildren,
     };
   });
+}
+
+export function reconcileTypedRules(
+  incoming: readonly PayloadTypedRule[],
+  previous: readonly PayloadTypedRule[],
+): PayloadTypedRule[] {
+  const reservedParamIds = new Set(previous.flatMap((prev) => prev.params.map((p) => p.id)));
+  return reconcileRuleList(
+    incoming,
+    previous,
+    'rule',
+    (rule) => JSON.stringify(canonicalizeForFingerprint(serializeTypedRules([rule])[0])),
+    (rule, prev) => ({
+      params: rule.params.map((param, pIdx) => (
+        prev?.params[pIdx]
+          ? { ...param, id: prev.params[pIdx].id }
+          : { ...param, id: nextReservedId('p', reservedParamIds) }
+      )),
+    }),
+  );
+}
+
+export function reconcileRawRules(
+  incoming: readonly PayloadRawRule[],
+  previous: readonly PayloadRawRule[],
+): PayloadRawRule[] {
+  const reservedParamIds = new Set(previous.flatMap((prev) => prev.params.map((p) => p.id)));
+  return reconcileRuleList(
+    incoming,
+    previous,
+    'raw',
+    (rule) => JSON.stringify(canonicalizeForFingerprint(serializeRawRules([rule])[0])),
+    (rule, prev) => ({
+      params: rule.params.map((param, pIdx) => (
+        prev?.params[pIdx]
+          ? { ...param, id: prev.params[pIdx].id }
+          : { ...param, id: nextReservedId('p', reservedParamIds) }
+      )),
+    }),
+  );
+}
+
+export function reconcileFilterRules(
+  incoming: readonly PayloadFilterRule[],
+  previous: readonly PayloadFilterRule[],
+): PayloadFilterRule[] {
+  const reservedParamIds = new Set(previous.flatMap((prev) => prev.params.map((p) => p.id)));
+  return reconcileRuleList(
+    incoming,
+    previous,
+    'filter',
+    (rule) => JSON.stringify(canonicalizeForFingerprint(serializeFilterRules([rule])[0])),
+    (rule, prev) => ({
+      params: rule.params.map((param, pIdx) => (
+        prev?.params[pIdx]
+          ? { ...param, id: prev.params[pIdx].id }
+          : { ...param, id: nextReservedId('fp', reservedParamIds) }
+      )),
+    }),
+  );
+}
+
+export function reconcileReplaceRules(
+  incoming: readonly PayloadReplaceRule[],
+  previous: readonly PayloadReplaceRule[],
+): PayloadReplaceRule[] {
+  const reservedRepIds = new Set(previous.flatMap((prev) => prev.replacements.map((rep) => rep.id)));
+  return reconcileRuleList(
+    incoming,
+    previous,
+    'replace_rule',
+    (rule) => JSON.stringify(canonicalizeForFingerprint(serializeReplaceRules([rule])[0])),
+    (rule, prev) => ({
+      replacements: rule.replacements.map((rep, repIdx) => (
+        prev?.replacements[repIdx]
+          ? { ...rep, id: prev.replacements[repIdx].id }
+          : { ...rep, id: nextReservedId('rep', reservedRepIds) }
+      )),
+    }),
+  );
 }
 
 export function serializeReplaceRules(rules: PayloadReplaceRule[]): Record<string, unknown>[] {
@@ -756,7 +863,9 @@ export function serializeReplaceRules(rules: PayloadReplaceRule[]): Record<strin
       } else if (r.target.invalidRole.present) {
         targetObj.role = r.target.invalidRole.value;
       }
-      if (r.target.all) {
+      if (r.target.invalidAll) {
+        targetObj.all = r.target.invalidAll.value;
+      } else if (r.target.all) {
         targetObj.all = true;
       }
       const serializedPositions: unknown[] = [
@@ -769,19 +878,21 @@ export function serializeReplaceRules(rules: PayloadReplaceRule[]): Record<strin
       targetOut = targetObj;
     }
 
-    const replacementsOut: unknown[] = r.replacements.map((rep) => {
-      if (rep._invalidReason && Object.prototype.hasOwnProperty.call(rep, '_rawEntry')) {
-        return rep._rawEntry;
-      }
-      const entry: Record<string, string> = {};
-      Object.defineProperty(entry, rep.from, {
-        value: rep.to,
-        enumerable: true,
-        writable: true,
-        configurable: true,
-      });
-      return entry;
-    });
+    const replacementsOut: unknown = r.invalidReplacements
+      ? r.invalidReplacements.value
+      : r.replacements.map((rep) => {
+          if (rep._invalidReason && Object.prototype.hasOwnProperty.call(rep, '_rawEntry')) {
+            return rep._rawEntry;
+          }
+          const entry: Record<string, string> = {};
+          Object.defineProperty(entry, rep.from, {
+            value: rep.to,
+            enumerable: true,
+            writable: true,
+            configurable: true,
+          });
+          return entry;
+        });
 
     return {
       ...(r._extra ?? {}),
@@ -1093,6 +1204,15 @@ export function validateAllPayloadRules(
           messageKey: 'cfg.payload_replace_role_invalid',
         });
       }
+      if (r.target.invalidAll) {
+        issues.push({
+          category: 'replace',
+          ruleId: r.id,
+          targetId,
+          field: 'target',
+          messageKey: 'cfg.payload_replace_all_invalid',
+        });
+      }
       if (r.target.all && hasPositions) {
         issues.push({
           category: 'replace',
@@ -1101,7 +1221,7 @@ export function validateAllPayloadRules(
           field: 'target',
           messageKey: 'cfg.payload_replace_target_conflict',
         });
-      } else if (!r.target.all && !hasPositions) {
+      } else if (!r.target.all && !r.target.invalidAll && !hasPositions) {
         issues.push({
           category: 'replace',
           ruleId: r.id,
@@ -1122,7 +1242,15 @@ export function validateAllPayloadRules(
         });
       }
 
-      if (r.replacements.length === 0) {
+      if (r.invalidReplacements) {
+        issues.push({
+          category: 'replace',
+          ruleId: r.id,
+          targetId: `${r.id}_replacements`,
+          field: 'replacement',
+          messageKey: 'cfg.payload_replace_list_invalid',
+        });
+      } else if (r.replacements.length === 0) {
         issues.push({
           category: 'replace',
           ruleId: r.id,

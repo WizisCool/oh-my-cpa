@@ -24,6 +24,7 @@ import {
 } from './payloadRuleSections';
 import { usePayloadRulesDraft } from './usePayloadRulesDraft';
 import { Tag } from '../common/Tag';
+import { Notice } from '../feedback';
 import './config.css';
 import { AppModal } from '../common/AppModal';
 
@@ -189,10 +190,16 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
     } else {
       setAdvDraft(null);
     }
-  }, [advModalState]);
+  }, [
+    advModalState?.open,
+    advModalState?.category,
+    advModalState?.ruleId,
+    advModalState?.modelId,
+    advModalState?.model,
+  ]);
 
   const handleSaveAdvanced = () => {
-    if (!advModalState || !advDraft) return;
+    if (!advModalState || !advDraft || advModalState.isTargetStale) return;
     updateModelById(
       advModalState.category,
       advModalState.ruleId,
@@ -278,12 +285,21 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
         open={Boolean(advModalState?.open)}
         onOk={handleSaveAdvanced}
         onCancel={() => setAdvModalState(null)}
+        okButtonProps={advModalState?.isTargetStale ? { disabled: true } : undefined}
+        mask={advModalState?.isTargetStale ? { closable: false } : true}
         okText={t('common.confirm')}
-        cancelText={t('common.cancel')}
+        cancelText={advModalState?.isTargetStale ? t('cfg.payload_replace_pending_discard') : t('common.cancel')}
         destroyOnHidden
       >
         {advDraft && (
           <div className="payload-adv-modal-body">
+            {advModalState?.isTargetStale && (
+              <Notice
+                tone="warning"
+                title={t('cfg.payload_adv_target_stale')}
+                data-testid="payload-adv-stale-notice"
+              />
+            )}
             {/* from-protocol */}
             <div className="payload-adv-field">
               <label className="payload-adv-label">{t('cfg.payload_adv_from_proto')}</label>

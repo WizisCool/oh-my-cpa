@@ -725,4 +725,36 @@ test('replace target preserves unsupported or missing YAML roles instead of sile
     ['x'],
     { a: 'edited' },
   ]);
+
+  // Malformed target.all (`"true"`) and non-array `replacements` (`{ old: "new" }`) remain intact across edits
+  // and flag target/shape validation errors until explicitly corrected.
+  const malformedAllAndMap = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'user', all: 'true', positions: [1] },
+      replacements: { old: 'new' },
+    },
+    {
+      models: [{ name: 'claude-*' }],
+      target: { role: 'user', all: true },
+      replacements: [{ foo: 'bar' }],
+    },
+  ]);
+  assert.deepEqual(malformedAllAndMap[0].target.invalidAll, { value: 'true' });
+  assert.deepEqual(malformedAllAndMap[0].invalidReplacements, { value: { old: 'new' } });
+  assert.deepEqual(
+    validateAllPayloadRules([], [], [], [], [], malformedAllAndMap).map((i) => i.messageKey),
+    ['cfg.payload_replace_all_invalid', 'cfg.payload_replace_list_invalid'],
+  );
+
+  // Editing another rule leaves rule 0's malformed `all` and mapping `replacements` verbatim.
+  malformedAllAndMap[1].replacements[0].to = 'baz';
+  const serializedMalformed = serializeReplaceRules(malformedAllAndMap);
+  assert.deepEqual((serializedMalformed[0] as Record<string, unknown>).target, {
+    role: 'user',
+    all: 'true',
+    positions: [1],
+  });
+  assert.deepEqual((serializedMalformed[0] as Record<string, unknown>).replacements, { old: 'new' });
+  assert.deepEqual((serializedMalformed[1] as Record<string, unknown>).replacements, [{ foo: 'baz' }]);
 });

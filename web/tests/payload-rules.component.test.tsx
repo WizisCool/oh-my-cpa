@@ -900,7 +900,7 @@ requests:
       await waitFor(() => expect(screen.getByTestId('payload-draft').textContent).toBe(initialA));
       fireEvent.click(screen.getByRole('button', { name: /^Replacement Rules/ }));
 
-      const toInputA = screen.getByTestId('payload-replace-to-0-0') as HTMLInputElement;
+      const toInputA = screen.getByTestId('payload-replace-to-0-0') as HTMLTextAreaElement;
       fireEvent.compositionStart(toInputA);
       typeComposing(toInputA, 'zhong', true);
 
@@ -910,9 +910,9 @@ requests:
       });
 
       await waitFor(() => expect(screen.getByTestId('payload-replace-rule-card-1')).toBeTruthy());
-      const movedToInputA = screen.getByTestId('payload-replace-to-1-0') as HTMLInputElement;
+      const movedToInputA = screen.getByTestId('payload-replace-to-1-0') as HTMLTextAreaElement;
       expect(movedToInputA.value).toBe('zhong');
-      expect((screen.getByTestId('payload-replace-to-0-0') as HTMLInputElement).value).toBe('newB');
+      expect((screen.getByTestId('payload-replace-to-0-0') as HTMLTextAreaElement).value).toBe('newB');
 
       // Completing composition must commit into Rule A (now card 1), not Rule B (card 0).
       typeComposing(movedToInputA, '中文新值', true);
@@ -1153,11 +1153,16 @@ requests:
     }
   });
 
-  it('closes advanced model modal when its target rule disappears in a background refresh', async () => {
+  it('requires explicit discard when a background refresh removes or modifies the open advanced modal target, and preserves drafts across unrelated refreshes', async () => {
     const initialAB = `server:
   port: 8317
 requests:
   payload:
+    default:
+      - models:
+          - name: gpt-4o
+        params:
+          temperature: 0.2
     replace:
       - models:
           - name: model-a
@@ -1176,10 +1181,16 @@ requests:
         replacements:
           - c: d
 `;
+    const refreshedUnrelated = initialAB.replace('port: 8317', 'port: 8318');
     const onlyA = `server:
   port: 8320
 requests:
   payload:
+    default:
+      - models:
+          - name: gpt-4o
+        params:
+          temperature: 0.2
     replace:
       - models:
           - name: model-a
@@ -1212,13 +1223,37 @@ requests:
     try {
       await waitFor(() => expect(screen.getByTestId('payload-draft').textContent).toBe(initialAB));
 
-      fireEvent.click(screen.getByRole('button', { name: /^Replacement Rules/ }));
+      // 1) Open Advanced Model Conditions on a `default` rule, edit conditions, and receive an
+      // unrelated server port refresh: modal and unsaved `advDraft` stay open and intact.
+      const defaultHeader = screen.getByRole('button', { name: /^Default Rules/ });
+      fireEvent.click(defaultHeader);
+      const defaultPanel = defaultHeader.closest('[data-slot="accordion-item"]') as HTMLElement;
+      fireEvent.click(within(defaultPanel).getByRole('button', { name: 'Advanced' }));
+
+      const defaultModal = await screen.findByRole('dialog');
+      fireEvent.click(within(defaultModal).getAllByRole('button', { name: /Add Condition/ })[0]);
+      fireEvent.change(within(defaultModal).getByPlaceholderText('Key / Path'), { target: { value: 'X-Keep' } });
+      fireEvent.change(within(defaultModal).getByPlaceholderText('Value / Pattern'), { target: { value: 'yes' } });
 
       act(() => {
-        portUpdateRef.current?.(8319);
+        client2.setQueryData(['management-config'], { scalars: {}, revision: 'fixture-r2', safe_yaml: refreshedUnrelated });
       });
-      await waitFor(() => expect(screen.getByTestId('payload-draft').textContent).toContain('port: 8319'));
 
+      await waitFor(() => expect(screen.getByTestId('payload-draft').textContent).toContain('port: 8318'));
+      expect(screen.getByRole('dialog')).toBeTruthy();
+      expect((within(screen.getByRole('dialog')).getByPlaceholderText('Key / Path') as HTMLInputElement).value).toBe('X-Keep');
+      expect((within(screen.getByRole('dialog')).getByPlaceholderText('Value / Pattern') as HTMLInputElement).value).toBe('yes');
+      expect(screen.queryByTestId('payload-adv-stale-notice')).toBeNull();
+
+      // Confirming applies the preserved `advDraft` to `default`.
+      const confirmDefaultBtn = Array.from(screen.getByRole('dialog').querySelectorAll('button')).pop()!;
+      fireEvent.click(confirmDefaultBtn);
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(screen.getByTestId('payload-draft').textContent).toContain('X-Keep: yes');
+
+      // 2) Open Advanced Model Conditions on replace rule B, then remove rule B via refresh:
+      // modal remains open with stale warning + disabled Confirm until explicitly discarded.
+      fireEvent.click(screen.getByRole('button', { name: /^Replacement Rules/ }));
       const cardB2 = screen.getByTestId('payload-replace-rule-card-1');
       fireEvent.click(within(cardB2).getByRole('button', { name: 'Advanced' }));
       expect(await screen.findByRole('dialog')).toBeTruthy();
@@ -1227,10 +1262,90 @@ requests:
         client2.setQueryData(['management-config'], { scalars: {}, revision: 'fixture-r3', safe_yaml: onlyA });
       });
 
+      const staleNotice = await screen.findByTestId('payload-adv-stale-notice');
+      expect(staleNotice).toBeTruthy();
+      const staleDialog = screen.getByRole('dialog');
+      const okBtn = within(staleDialog).getByRole('button', { name: 'Confirm' }) as HTMLButtonElement;
+      expect(okBtn.disabled).toBe(true);
+      fireEvent.click(within(staleDialog).getByRole('button', { name: 'Discard' }));
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     } finally {
       client2.clear();
     }
+  });
+
+  it('preserves multiline replacement text, non-string null destinations on source-only edits, and invalid all/list shapes until explicitly corrected', async () => {
+    const doc = parseDocument(`requests:
+  payload:
+    replace:
+      - models:
+          - name: "*"
+        target:
+          role: user
+          all: "true"
+          positions: [1]
+        replacements:
+          - hello: null
+          - old: "first\\nsecond"
+      - models:
+          - name: claude-*
+        target:
+          role: user
+          all: true
+        replacements:
+          oldMap: newMap
+`);
+    let latestIssues: Array<{ messageKey: string }> = [];
+    render(
+      <PayloadSurface
+        doc={doc}
+        onDocChange={vi.fn()}
+        onValidationChange={(issues) => {
+          latestIssues = issues;
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Replacement Rules/ }));
+
+    // 1) Malformed `all: "true"` and non-array `replacements` surface immediately and survive unrelated edits.
+    expect(screen.getByTestId('payload-replace-all-tag-0').textContent).toBe('all: true');
+    expect(latestIssues.map((i) => i.messageKey)).toEqual(
+      expect.arrayContaining([
+        'cfg.payload_replace_all_invalid',
+        'cfg.payload_replace_dest_invalid',
+        'cfg.payload_replace_list_invalid',
+      ]),
+    );
+
+    // Editing source only on `{ hello: null }` preserves `null` destination instead of turning into `""`.
+    const fromInput0 = screen.getByTestId('payload-replace-from-0-0') as HTMLTextAreaElement;
+    fireEvent.change(fromInput0, { target: { value: 'hello2' } });
+    fireEvent.blur(fromInput0);
+
+    // Editing multiline destination `"first\nsecond"` preserves literal line breaks.
+    const toInput1 = screen.getByTestId('payload-replace-to-0-1') as HTMLTextAreaElement;
+    expect(toInput1.value).toBe('first\nsecond');
+    fireEvent.change(toInput1, { target: { value: 'first\nsecond!' } });
+    fireEvent.blur(toInput1);
+
+    const midList = readPayloadCategory(doc, 'replace') as Array<Record<string, unknown>>;
+    expect(midList[0].target).toEqual({ role: 'user', all: 'true', positions: [1] });
+    expect(midList[0].replacements).toEqual([{ hello2: null }, { old: 'first\nsecond!' }]);
+    expect(midList[1].replacements).toEqual({ oldMap: 'newMap' });
+
+    // Explicit fixes clear each malformed shape on demand.
+    fireEvent.click(screen.getByTestId('payload-replace-fix-all-0'));
+    fireEvent.change(screen.getByTestId('payload-replace-to-0-0'), { target: { value: 'fixed' } });
+    fireEvent.click(screen.getByTestId('payload-replace-add-entry-1'));
+    fireEvent.change(screen.getByTestId('payload-replace-from-1-0'), { target: { value: 'k' } });
+    fireEvent.change(screen.getByTestId('payload-replace-to-1-0'), { target: { value: 'v' } });
+
+    const fixedList = readPayloadCategory(doc, 'replace') as Array<Record<string, unknown>>;
+    expect(fixedList[0].target).toEqual({ role: 'user', positions: [1] });
+    expect(fixedList[0].replacements).toEqual([{ hello2: 'fixed' }, { old: 'first\nsecond!' }]);
+    expect(fixedList[1].replacements).toEqual([{ k: 'v' }]);
+    expect(latestIssues).toEqual([]);
   });
 });
 
@@ -1261,8 +1376,9 @@ it('adding a raw rule updates the actual configuration draft and exposes its sav
   } finally { client.clear(); }
 });
 
-function typeComposing(input: HTMLInputElement, value: string, isComposingText: boolean) {
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+function typeComposing(input: HTMLInputElement | HTMLTextAreaElement, value: string, isComposingText: boolean) {
+  const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(input, value);
   const event = new Event('input', { bubbles: true });
   Object.defineProperty(event, 'isComposing', { value: isComposingText });
   fireEvent(input, event);
