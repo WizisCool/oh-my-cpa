@@ -117,6 +117,9 @@ function formatRate(value: number | null | undefined): string {
 function pickRequests(point: DashboardSeriesPoint): number { return point.v ?? 0; }
 function pickTokens(point: DashboardSeriesPoint): number { return point.tokens ?? 0; }
 function pickCacheRate(point: DashboardSeriesPoint): number | null { return point.cache_rate ?? null; }
+// Cache rate sits in a narrow band, so its sparkline fits that band; a token-heavy bucket counts
+// for more than a stray request, and 10 points is the least it zooms to.
+const CACHE_RATE_FIT = { minSpan: 10, floor: 0, ceiling: 100, weight: (point: DashboardSeriesPoint) => point.tokens ?? 0 };
 /** The receipt reads the Insights cube and embeds fonts to export; none of it is paid for until it is opened. */
 const loadReceiptShowcase = () => import('../components/dashboard/receipt/ReceiptShowcase');
 const preloadReceiptShowcase = () => void loadReceiptShowcase();
@@ -655,7 +658,7 @@ export const DashboardPage: React.FC = () => {
               pick={pickCacheRate}
               tone="neutral"
               height={44}
-              domainMax={100}
+              fit={CACHE_RATE_FIT}
               label={formatTrendTime}
               format={formatCacheRate}
             />

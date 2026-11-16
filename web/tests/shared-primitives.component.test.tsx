@@ -1243,13 +1243,13 @@ describe('DashboardTrendChart native SVG sparkline', () => {
     expect(screen.queryByText('12 reqs')).toBeNull();
   });
 
-  it('plots cache-rate percentages with null gaps, isolated markers, and dash readouts for empty buckets', () => {
+  it('plots cache-rate percentages across idle buckets with dash readouts for them', () => {
     const surface = renderWithOmc(
       <ThemeProvider>
         <DashboardTrendChart
           ariaLabel="Cache rate"
           height={44}
-          domainMax={100}
+          fit={{ minSpan: 10, floor: 0, ceiling: 100, weight: (p) => p.tokens ?? 0 }}
           points={[
             { t: 1_700_000_000_000, tokens: 0, cache_read: 0 },
             { t: 1_700_000_060_000, tokens: 1000, cache_read: 952, cache_rate: 95.24 },
@@ -1269,8 +1269,9 @@ describe('DashboardTrendChart native SVG sparkline', () => {
     const chart = screen.getByRole('img', { name: 'Cache rate' });
     chart.getBoundingClientRect = () =>
       ({ left: 0, top: 0, right: 480, bottom: 44, width: 480, height: 44, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
-    // Isolated non-null buckets (42% and 0%) render dedicated dot markers rather than vanishing.
-    expect(surface.container.querySelectorAll('[data-slot="sparkline-isolated-dot"]')).toHaveLength(2);
+    // Idle buckets never split the curve into fragments.
+    const curve = surface.container.querySelector('svg path[fill="none"]');
+    expect((curve?.getAttribute('d')?.match(/M/g) ?? []).length).toBe(1);
 
     // Pointer hover on index 0 (null bucket at x=12px) shows '—' without an active curve dot.
     fireEvent.pointerMove(chart, { clientX: 12, clientY: 20, pointerType: 'mouse' });
@@ -1303,13 +1304,13 @@ describe('DashboardTrendChart native SVG sparkline', () => {
     expect(surface.container.querySelector('[data-slot="sparkline-active-dot"]')).not.toBeNull();
     fireEvent.keyDown(chart, { key: 'Escape' });
 
-    // All-null window draws only the baseline (no SVG curve paths) and prints '—' on selection.
+    // An all-idle window draws only the baseline and prints '—' on selection.
     const emptySurface = renderWithOmc(
       <ThemeProvider>
         <DashboardTrendChart
           ariaLabel="Empty cache rate"
           height={44}
-          domainMax={100}
+          fit={{ minSpan: 10, floor: 0, ceiling: 100, weight: (p) => p.tokens ?? 0 }}
           points={[
             { t: 1_700_000_000_000, tokens: 0, cache_read: 0 },
             { t: 1_700_000_060_000, tokens: 0, cache_read: 0 },
