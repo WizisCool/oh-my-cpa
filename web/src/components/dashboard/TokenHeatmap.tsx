@@ -581,13 +581,17 @@ export const TokenHeatmap: React.FC = React.memo(function TokenHeatmap() {
   if (isError && !data) {
     return (
       <Panel className="dashboard-tile heatmap-panel">
-        <div className="tile-label">{t('dash.heatmap.title')}</div>
-        <LoadFailure
-          className="heatmap-alert"
-          title={t('dash.heatmap.error')}
-          detail={error instanceof ApiError ? error.message : t('dash.error_desc')}
-          onRetry={() => void refetch()}
-        />
+        <div className="heatmap-inner">
+          <div className="heatmap-head">
+            <span className="tile-label">{t('dash.heatmap.title')}</span>
+          </div>
+          <LoadFailure
+            className="heatmap-alert"
+            title={t('dash.heatmap.error')}
+            detail={error instanceof ApiError ? error.message : t('dash.error_desc')}
+            onRetry={() => void refetch()}
+          />
+        </div>
       </Panel>
     );
   }

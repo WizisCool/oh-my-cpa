@@ -549,3 +549,35 @@ test('foldable panels, Collapse variants, and payload builder do not clip edge s
   assert.equal(/settings-group-body/.test(payloadBranch), false);
 });
 
+test('no retired input-wrapper slot selectors remain and alignment invariants hold', () => {
+  const retiredInputWrapper: string[] = [];
+  for (const file of sourceFiles(sourceRoot)) {
+    const text = stripCodeComments(readFileSync(file, 'utf8'));
+    if (/\[\s*data-slot\s*[~|^$*]?=\s*(?:['"`]input-wrapper['"`]|input-wrapper)(?:\s+[is])?\s*\]/i.test(text)) {
+      retiredInputWrapper.push(path.relative(sourceRoot, file));
+    }
+  }
+  assert.deepEqual(retiredInputWrapper, []);
+
+  const indexCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'index.css'), 'utf8'));
+  const configCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/config/config.css'), 'utf8'));
+  const dashboardCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/dashboard/dashboard.css'), 'utf8'));
+
+  assert.match(
+    indexCss,
+    /\.settings-field-control\.is-string_list\s+:is\(\[data-slot="combobox-trigger"\],\s*\[data-slot="combobox-inline-tags"\]\)/,
+  );
+  assert.match(
+    indexCss,
+    /\[data-slot="panel"\]:has\(>\s*\[data-slot="panel-body"\]\s*>\s*\.empty-state:only-child\)\s*>\s*\[data-slot="panel-body"\]/,
+  );
+  assert.match(configCss, /\.settings-field-control\.is-switch\s*\{[^}]*margin-top:\s*0;/);
+  assert.equal(/\.settings-field-switch-header\s*\{[^}]*min-height:/.test(configCss), false);
+  assert.match(dashboardCss, /\.model-trend-legend\s*\{\s*margin:\s*0 0 8px;/);
+  assert.match(dashboardCss, /\.heatmap-head,\s*\.quota-head\s*\{\s*min-height:\s*28px;/);
+  assert.match(
+    dashboardCss,
+    /\.model-trend-card:has\(\.model-view-toggle\)\s*\[data-slot="panel-head"\],\s*\.model-usage-card\s*\[data-slot="panel-head"\]\s*\{[^}]*padding-block:\s*8px;/,
+  );
+});
+

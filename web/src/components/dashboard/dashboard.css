@@ -170,7 +170,7 @@
     grid-column: 1 / -1;
   }
 }
-.empty-copy { color: var(--muted); font-size: var(--text-md); }
+.dashboard-tile .empty-state { margin-block: auto; }
 .dashboard-key-filter { min-width: 180px; max-width: 240px; }
 .dashboard-key-filter-icon { color: var(--muted); }
 .tile-label {
@@ -237,7 +237,8 @@
 /* One pip, on the verdict. What sits beside it is the evidence for that number,
    so a hairline separates the two and the failure count carries the colour the
    pip would otherwise repeat. */
-.tile-rate { display: inline-flex; align-items: center; gap: 6px; }
+.tile-rate { display: inline-flex; align-items: baseline; gap: 6px; }
+.tile-rate .legend-dot { align-self: center; }
 .tile-split {
   display: inline-flex;
   align-items: baseline;
@@ -271,8 +272,9 @@
   .tile-split { gap: 10px; padding-left: 10px; }
 }
 /* The trend's shared chart legend wraps rather than scrolls: a legend that scrolls hides the very
-   series the reader is looking for, and six entries in a two-column card is at most two rows. */
-.model-trend-legend { margin: 12px 0 4px; }
+   series the reader is looking for, and six entries in a two-column card is at most two rows. It opens
+   at the top of the body, level with the usage bar beside it. */
+.model-trend-legend { margin: 0 0 8px; }
 .model-series-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
 .model-series-mark { flex: none; }
 .model-series-mark-folded { color: var(--muted); }
@@ -281,7 +283,9 @@
    opposite - so the two cards in a row share their head's height and rule. A head too narrow for
    the sum lets it wrap under the title. */
 /* The toggle is taller than a title line, so the head trims its padding to keep the shared 48px. */
-.model-usage-card [data-slot="panel-head"] { container: modelhead / inline-size; padding-block: 8px; }
+.model-trend-card:has(.model-view-toggle) [data-slot="panel-head"],
+.model-usage-card [data-slot="panel-head"] { padding-block: 8px; }
+.model-usage-card [data-slot="panel-head"] { container: modelhead / inline-size; }
 .model-usage-title { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 12px; row-gap: 2px; min-width: 0; }
 .model-usage-card .tile-label { white-space: nowrap; }
 .model-usage-total {
@@ -403,12 +407,10 @@
 
 /* The grouping toggle sits in the card's header row, opposite the title. */
 .model-view-toggle { flex: none; }
-.model-empty { margin: 16px 0 0; }
 .model-chart-skeleton { height: 220px; }
 .model-alert { margin-top: 12px; }
 /* The stale warning opens the body above the legend or the usage bar, so its space is below it. */
 .model-stale-alert { margin-bottom: 12px; }
-.model-stale-alert + .model-trend-legend { margin-top: 0; }
 /* ── token heatmap: a DOM grid, not a chart mark ────────────────────────────
    A contribution graph: seven weekday rows by a year of week columns. The panel shows as many of
    the newest weeks as fit at `--heatmap-cell-target` and stretches them to reach its edge, so the
@@ -513,8 +515,6 @@
 .quota-link-icon { font-size: var(--text-2xs); }
 .quota-skeleton { display: flex; flex-direction: column; gap: 22px; margin-top: 20px; }
 .quota-alert { margin-top: 12px; }
-.quota-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 14px; }
-.quota-all-disabled { margin-top: 14px; }
 /* Below 1100px the board gives every half-width panel a row of its own, so there is no neighbour to
    take a height from and the list sets its own. */
 @media (max-width: 1100px) {
@@ -532,9 +532,9 @@
   /* A phone shows fewer weeks either way; the smaller target keeps a quarter in view. */
   .heatmap-scroll { --heatmap-cell-target: 14px; --heatmap-gap: 3px; }
 }
-/* The two heads share one height - the quota head carries a refresh control - so the field and the
-   list below them start on one line, as they end on one. */
-.heatmap-head, .quota-head { min-height: 24px; }
+/* The two heads share one height - the quota head carries a 28px refresh control - so the field and
+   the list below them start on one line, as they end on one. */
+.heatmap-head, .quota-head { min-height: 28px; }
 .heatmap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 /* The field scrolls sideways inside its panel whenever a year of weeks is wider than it - with
    the scrollbar itself hidden, because a bar inside a dashboard card is visual noise and touch

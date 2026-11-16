@@ -1539,7 +1539,6 @@
 .field > :global([data-slot='number-input']),
 .field > :global([data-slot='select-trigger']),
 .field > :global([data-slot='combobox-trigger']),
-.field > :global([data-slot='input-wrapper']),
 .field > :global([data-slot='input']) {
   width: 100%;
 }

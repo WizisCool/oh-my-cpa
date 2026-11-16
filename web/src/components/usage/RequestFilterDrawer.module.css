@@ -38,7 +38,6 @@
 }
 .control > :global([data-slot='select-trigger']),
 .control > :global([data-slot='combobox-trigger']),
-.control > :global([data-slot='input-wrapper']),
 .control > :global([data-slot='input']),
 .control > :global([data-slot='segmented']),
 .select {

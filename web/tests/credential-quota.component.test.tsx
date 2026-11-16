@@ -7,6 +7,15 @@ import {
   CredentialQuotaPanel,
   type CredentialQuotaPanelProps,
 } from '../src/components/dashboard/CredentialQuota';
+import {
+  ModelSeriesFocusProvider,
+  ModelTrendPanel,
+  ModelUsagePanel,
+} from '../src/components/dashboard/ModelUsagePanels';
+import { TokenHeatmap } from '../src/components/dashboard/TokenHeatmap';
+import { ThemeProvider } from '../src/theme/ThemeContext';
+import { TokenDisplayProvider } from '../src/types/tokenDisplayContext';
+import { CurrencyDisplayProvider } from '../src/types/CurrencyDisplayContext';
 import { buildCredentialQuotaBoard, credentialQuotaRefreshTargets } from '../src/components/dashboard/credentialQuotaLogic';
 import { resolveCredentialMark } from '../src/types/brandMark';
 import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
@@ -545,5 +554,112 @@ describe('quota consumption and window capacity dialog', () => {
         expect(capacityCard.textContent).not.toContain('123');
       });
     } finally { view.unmount(); }
+  });
+});
+
+describe('dashboard model panels and heatmap alignment states', () => {
+  it('omits the trend legend when models are empty and mounts it once models exist', async () => {
+    const api = installOmcApi();
+    let modelsPayload = {
+      window: { from: NOW_MS - HOUR_MS, to: NOW_MS, bucket_ms: 60_000, minutes: 60 },
+      total_tokens: 0,
+      models: [] as Array<{
+        model: string;
+        tokens: number;
+        requests: number;
+        priced_requests: number;
+        cost_usd: number | null;
+        buckets: number[];
+      }>,
+    };
+    api.on('GET', '/management/dashboard/models', () => modelsPayload);
+
+    const view = renderWithOmc(
+      <MemoryRouter>
+        <ThemeProvider>
+          <TokenDisplayProvider>
+            <CurrencyDisplayProvider>
+              <ModelSeriesFocusProvider>
+                <ModelTrendPanel query="preset=1h" range={{ preset: '1h' }} enabled />
+                <ModelUsagePanel query="preset=1h" range={{ preset: '1h' }} enabled />
+              </ModelSeriesFocusProvider>
+            </CurrencyDisplayProvider>
+          </TokenDisplayProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(screen.getAllByText(makeT('en')('dash.models.empty'))).toHaveLength(2);
+      });
+      expect(screen.queryByTestId('model-trend-legend')).toBeNull();
+
+      modelsPayload = {
+        window: { from: NOW_MS - HOUR_MS, to: NOW_MS, bucket_ms: 60_000, minutes: 60 },
+        total_tokens: 1200,
+        models: [
+          {
+            model: 'gpt-5',
+            tokens: 1200,
+            requests: 4,
+            priced_requests: 4,
+            cost_usd: 0.12,
+            buckets: [400, 800],
+          },
+        ],
+      };
+
+      const nextView = renderWithOmc(
+        <MemoryRouter>
+          <ThemeProvider>
+            <TokenDisplayProvider>
+              <CurrencyDisplayProvider>
+                <ModelSeriesFocusProvider>
+                  <ModelTrendPanel query="preset=24h" range={{ preset: '24h' }} enabled />
+                  <ModelUsagePanel query="preset=24h" range={{ preset: '24h' }} enabled />
+                </ModelSeriesFocusProvider>
+              </CurrencyDisplayProvider>
+            </TokenDisplayProvider>
+          </ThemeProvider>
+        </MemoryRouter>,
+      );
+
+      try {
+        const legend = await within(nextView.container).findByTestId('model-trend-legend');
+        const toggle = within(legend).getByRole('button', { name: /gpt-5/ });
+        expect(toggle.getAttribute('aria-pressed')).toBe('false');
+        fireEvent.click(toggle);
+        expect(toggle.getAttribute('aria-pressed')).toBe('true');
+      } finally {
+        nextView.unmount();
+      }
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it('keeps the heatmap header wrapper mounted when the first heatmap read fails', async () => {
+    const api = installOmcApi();
+    api.on('GET', '/management/dashboard/token-heatmap', () => {
+      throw new Error('heatmap unavailable');
+    });
+
+    const view = renderWithOmc(
+      <MemoryRouter>
+        <ThemeProvider>
+          <TokenDisplayProvider>
+            <TokenHeatmap />
+          </TokenDisplayProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    try {
+      await within(view.container).findByText(makeT('en')('dash.heatmap.error'));
+      expect(view.container.querySelector('.heatmap-inner > .heatmap-head')).not.toBeNull();
+    } finally {
+      view.unmount();
+    }
   });
 });

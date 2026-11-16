@@ -7,6 +7,7 @@ import clsx from 'clsx';
 import { api } from '../../api/client';
 import { useT, type TFunc } from '../../i18n';
 import { LoadFailure, useToast } from '../feedback';
+import { EmptyState } from '../common/EmptyState';
 import { LoadingRegion, Placeholder } from '../common/Placeholder';
 import { RefreshButton } from '../common/RefreshButton';
 import { Tooltip } from '../common/Tooltip';
@@ -315,13 +316,12 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
         )}
 
         {state === 'empty' && (
-          <div className="quota-empty">
-            <p className="empty-copy">{t('dash.quota.empty')}</p>
+          <EmptyState size="compact" title={t('dash.quota.empty')}>
             <Link to="/oauth-management?action=connect" className="quota-foot-link">
               <span>{t('dash.quota.connect')}</span>
               <RightOutlined className="quota-link-icon" />
             </Link>
-          </div>
+          </EmptyState>
         )}
 
         {board && state === 'ready' && (
@@ -343,7 +343,7 @@ export const CredentialQuotaPanel: React.FC<CredentialQuotaPanelProps> = ({
                 {board.rows.map((row) => <CredentialQuotaRowView key={row.key} row={row} nowMS={nowMS} pluginLogos={pluginLogos} />)}
               </ul>
             ) : (
-              <p className="empty-copy quota-all-disabled">{t('dash.quota.all_disabled')}</p>
+              <EmptyState size="compact" title={t('dash.quota.all_disabled')} />
             )}
           </>
         )}
