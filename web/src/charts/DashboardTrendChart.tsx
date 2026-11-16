@@ -47,13 +47,15 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = React.mem
   const gradientId = React.useId().replace(/:/g, '');
   const color = sparkColor(theme.palette, tone);
 
-  // A bucket without a reading is bridged for the line but keeps its dash in the readout.
+  // A bucket without a reading is bridged for the line but keeps its dash in the readout. A
+  // window with no reading at all draws the empty placeholder rather than a line at zero.
   const samples = React.useMemo(() => {
     const readings = points.map((point) => {
       const value = pick(point);
       return value === null ? null : Math.max(0, value);
     });
     const drawn = bridgeSparklineGaps(readings);
+    if (!drawn) return [];
     return points.map((point, index) => ({ t: point.t, value: drawn[index]!, hasReading: readings[index] !== null }));
   }, [points, pick]);
 

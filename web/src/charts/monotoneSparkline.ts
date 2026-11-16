@@ -59,9 +59,10 @@ function fmt(n: number): string {
 /**
  * Fills the buckets that have no reading so a ratio series draws as one line: a gap takes the
  * straight line between the readings around it, and the edges hold the nearest reading. A
- * series with no reading at all lies flat at zero.
+ * series with no reading at all returns null: it has nothing to draw, and a flat line at zero
+ * would read as a genuine 0%.
  */
-export function bridgeSparklineGaps(values: ReadonlyArray<number | null>): number[] {
+export function bridgeSparklineGaps(values: ReadonlyArray<number | null>): number[] | null {
   const filled = new Array<number>(values.length).fill(0);
   let previous = -1;
   for (let i = 0; i < values.length; i += 1) {
@@ -74,7 +75,8 @@ export function bridgeSparklineGaps(values: ReadonlyArray<number | null>): numbe
     filled[i] = value;
     previous = i;
   }
-  if (previous >= 0) filled.fill(values[previous]!, previous + 1);
+  if (previous < 0) return null;
+  filled.fill(values[previous]!, previous + 1);
   return filled;
 }
 

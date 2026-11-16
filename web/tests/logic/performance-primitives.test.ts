@@ -1004,8 +1004,10 @@ test('buildMonotoneSparkline produces overshoot-free monotone paths and maps poi
 
 test('bridgeSparklineGaps connects readings across idle buckets and holds the edges', () => {
   assert.deepEqual(bridgeSparklineGaps([null, 90, null, null, 60, null]), [90, 90, 80, 70, 60, 60]);
-  assert.deepEqual(bridgeSparklineGaps([null, null]), [0, 0]);
-  assert.deepEqual(bridgeSparklineGaps([]), []);
+  assert.deepEqual(bridgeSparklineGaps([0, null, 0]), [0, 0, 0]);
+  // No reading at all is not a 0% series: there is nothing to draw.
+  assert.equal(bridgeSparklineGaps([null, null]), null);
+  assert.equal(bridgeSparklineGaps([]), null);
 });
 
 test('getIdentityDirectoryProjection caches derived Maps and Sets per response object via WeakMap', () => {
