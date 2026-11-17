@@ -160,6 +160,7 @@ const EVENT_IDENTITY_FIELDS = [
   'source',
   'user_agent',
   'client_agent',
+  'client_agent_category',
   'stream',
   'latency_ms',
   'ttft_ms',
