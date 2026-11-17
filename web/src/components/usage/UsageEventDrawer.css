@@ -151,7 +151,7 @@
   color: var(--muted);
 }
 
-/* The route: who asked, which provider answered, with which credential. */
+/* The route: the client that sent the request, the provider that answered, with which credential. */
 .req-route {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
@@ -196,10 +196,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.req-route-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.req-route-value strong {
+  min-width: 0;
+}
 .req-route-badge {
   flex: none;
-  align-self: flex-start;
-  --tag-tone: var(--muted);
 }
 .req-route-link {
   display: inline-flex;
@@ -292,7 +299,7 @@
 }
 .req-settings {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px 16px;
   margin: 0;
 }
@@ -434,6 +441,9 @@
     justify-content: center;
     width: 34px;
     transform: rotate(90deg);
+  }
+  .req-settings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 /* Response headers read as name/value pairs in two tracks: the names align so a

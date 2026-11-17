@@ -643,7 +643,7 @@ func TestUsageEventDetailFailureClassificationAllowlist(t *testing.T) {
 		{"future_classification", ""},
 	} {
 		row := repository.UsageEventRow{Failed: true, FailCode: test.code, FailStatusCode: 400, FailBody: "request_scoped"}
-		detail := projectUsageEventDetail(row, "")
+		detail := projectUsageEventDetail(row, projectUsageEvent(row))
 		got, hasCode := detail["fail_code"]
 		if hasCode != (test.want != "") || (hasCode && got != test.want) {
 			t.Fatalf("project code %q = %v (%v), want %q", test.code, got, hasCode, test.want)
@@ -652,8 +652,8 @@ func TestUsageEventDetailFailureClassificationAllowlist(t *testing.T) {
 			t.Fatalf("failure evidence changed: %+v", detail)
 		}
 	}
-	if detail := projectUsageEventDetail(repository.UsageEventRow{FailCode: usage.FailureRequestScoped}, ""); detail["fail_code"] != nil {
-		t.Fatalf("success projected failure code: %+v", detail)
+	if row := (repository.UsageEventRow{FailCode: usage.FailureRequestScoped}); projectUsageEventDetail(row, projectUsageEvent(row))["fail_code"] != nil {
+		t.Fatal("success projected a failure code")
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -209,6 +210,19 @@ func TestUsageEventsCarryResolvedAlias(t *testing.T) {
 	// The mask is retained as fallback metadata for anything that does not resolve.
 	if page.Items[0].APIKeyMask == "" {
 		t.Fatal("api_key_mask must be retained as the fallback label")
+	}
+
+	// The request drawer names the key the way the row it opened from does.
+	detailResp, detailPayload := getJSON(t, client, baseURL+"/omc/api/v1/usage/events/"+strconv.FormatInt(page.Items[0].ID, 10))
+	if detailResp.StatusCode != http.StatusOK {
+		t.Fatalf("detail status = %d body %s", detailResp.StatusCode, detailPayload)
+	}
+	var detail UsageEventDetailResponseDTO
+	if err := json.Unmarshal(detailPayload, &detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.Event.APIKeyAlias != "Production CI" {
+		t.Fatalf("detail api_key_alias = %q, want the resolved name", detail.Event.APIKeyAlias)
 	}
 
 	// The caller-key facet offers the same name, so the dropdown and the rows it

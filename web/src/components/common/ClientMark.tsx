@@ -49,9 +49,10 @@ function ownClientMark(id: string): React.ReactNode {
 
 /**
  * The mark a client is recognised by: its own artwork, the icon catalog's, or a glyph for its kind.
- * Renders nothing for a client the server could not attribute.
+ * Renders the fallback, or nothing, for a client without one.
  */
-export function ClientMark({ id, category }: { id: string; category?: ClientCategory }) {
+export function ClientMark({ id, category, fallback = null }: { id?: string; category?: ClientCategory; fallback?: React.ReactNode }) {
+  if (!id) return fallback;
   const own = ownClientMark(id);
   if (own) return own;
   const iconId = clientIconId(id);
@@ -59,5 +60,5 @@ export function ClientMark({ id, category }: { id: string; category?: ClientCate
   if (id === 'browser') return <GlobalOutlined />;
   if (category === 'agent') return <CodeSandboxOutlined />;
   if (category === 'sdk') return <CodeOutlined />;
-  return null;
+  return fallback;
 }

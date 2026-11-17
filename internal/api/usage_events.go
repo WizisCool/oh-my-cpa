@@ -681,12 +681,14 @@ func (h *Handler) getUsageEvent(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 
-	// The provider key mask is resolved on the detail view as well as the list: the
-	// two must not disagree about which credential answered, and the drawer is where
-	// an operator goes to check the claim a row made.
-	item := projectUsageEvent(row)
-	applyProviderKeyMask(&item, h.resolveProviderKeyMasks(request, []usageEventResponse{item}))
-	response := map[string]any{"event": projectUsageEventDetail(row, item.ProviderKeyMask)}
+	// The detail view is enriched exactly as the list is - the provider key mask and the
+	// caller key's alias: the two must not disagree about which credential answered or
+	// what the caller key is called, and the drawer is where an operator goes to check
+	// the claim a row made.
+	items := []usageEventResponse{projectUsageEvent(row)}
+	applyProviderKeyMask(&items[0], h.resolveProviderKeyMasks(request, items))
+	h.attachClientKeyAliases(request, items)
+	response := map[string]any{"event": projectUsageEventDetail(row, items[0])}
 	// partial_errors carries stable section codes, not prose: the console decides
 	// which section each one degrades and says so in the viewer's language.
 	var partialErrors []string
@@ -712,10 +714,10 @@ func (h *Handler) getUsageEvent(writer http.ResponseWriter, request *http.Reques
 	writeJSON(writer, http.StatusOK, response)
 }
 
-// projectUsageEventDetail is the single-record view: it may include the endpoint
-// and client metadata the list view deliberately omits.
-func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask string) map[string]any {
-	item := projectUsageEvent(row)
+// projectUsageEventDetail is the single-record view: the list projection of the row,
+// already enriched the way the list enriches it, plus the endpoint and client
+// metadata the list view deliberately omits.
+func projectUsageEventDetail(row repository.UsageEventRow, item usageEventResponse) map[string]any {
 	detail := map[string]any{
 		"id":                           item.ID,
 		"event_key":                    item.EventKey,
@@ -765,6 +767,10 @@ func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask strin
 	}
 	if item.ClientAgent != "" {
 		detail["client_agent"] = item.ClientAgent
+		detail["client_agent_category"] = item.ClientAgentCategory
+	}
+	if item.APIKeyAlias != "" {
+		detail["api_key_alias"] = item.APIKeyAlias
 	}
 	if code := usage.NormalizeFailureCode(row.FailCode); row.Failed && code != "" {
 		detail["fail_code"] = code
@@ -775,8 +781,8 @@ func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask strin
 	// Present only when a credential was actually identified: an absent key and an
 	// empty one read differently to a consumer, and the console prints no key line
 	// for a record it cannot attribute.
-	if providerKeyMask != "" {
-		detail["provider_key_mask"] = providerKeyMask
+	if item.ProviderKeyMask != "" {
+		detail["provider_key_mask"] = item.ProviderKeyMask
 	}
 	return detail
 }
