@@ -161,21 +161,27 @@ test('chunk recovery identifies Safari/Chrome/Firefox module script failures and
   assert.equal(attemptChunkReload(options), true);
   assert.equal(reloads, 1);
   assert.equal(isChunkReloadPending(), true);
+
+  // If the page stays loaded past the cooldown (e.g. reload cancelled by beforeunload), pending state expires.
+  clock += 30_000;
+  assert.equal(isChunkReloadPending(), false);
+  assert.equal(attemptChunkReload(options), true);
+  assert.equal(reloads, 2);
   clearChunkReloadPending();
 
-  // Within cooldown, a second failure refuses to loop.
+  // Within cooldown after clearing pending state, a second failure refuses to loop.
   clock += 5_000;
   assert.equal(attemptChunkReload(options), false);
-  assert.equal(reloads, 1);
+  assert.equal(reloads, 2);
   assert.equal(isChunkReloadPending(), false);
 
   // After cooldown expires, a later deployment can trigger recovery once more.
   clock += 30_000;
   assert.equal(attemptChunkReload(options), true);
-  assert.equal(reloads, 2);
+  assert.equal(reloads, 3);
   clearChunkReloadPending();
 
-  // Offline or failing storage fails closed without reloading.
+  // Offline, throwing storage methods, or a throwing sessionStorage getter fail closed without reloading.
   assert.equal(attemptChunkReload({ ...options, now: () => clock + 60_000, isOnline: () => false }), false);
   assert.equal(
     attemptChunkReload({
@@ -192,10 +198,37 @@ test('chunk recovery identifies Safari/Chrome/Firefox module script failures and
     }),
     false,
   );
-  assert.equal(reloads, 2);
+  const originalWindow = (globalThis as { window?: unknown }).window;
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      get sessionStorage() {
+        throw new DOMException('Access denied', 'SecurityError');
+      },
+    },
+  });
+  try {
+    assert.equal(
+      attemptChunkReload({
+        now: () => clock + 60_000,
+        isOnline: () => true,
+        reload: () => {
+          reloads += 1;
+        },
+      }),
+      false,
+    );
+  } finally {
+    if (originalWindow === undefined) {
+      delete (globalThis as { window?: unknown }).window;
+    } else {
+      Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
+    }
+  }
+  assert.equal(reloads, 3);
 });
 
-test('installChunkLoadRecovery reloads on vite:preloadError without cancelling default error propagation', () => {
+test('installChunkLoadRecovery reloads on vite:preloadError only for module-load payloads without cancelling propagation', () => {
   clearChunkReloadPending();
   const listeners = new Map<string, Set<EventListener>>();
   const target = {
@@ -218,12 +251,21 @@ test('installChunkLoadRecovery reloads on vite:preloadError without cancelling d
     },
   });
 
-  const event = new Event('vite:preloadError', { cancelable: true });
+  const nonChunkEvent = new Event('vite:preloadError', { cancelable: true }) as Event & { payload?: unknown };
+  nonChunkEvent.payload = new Error('bad configuration');
   for (const listener of listeners.get('vite:preloadError') ?? []) {
-    listener(event);
+    listener(nonChunkEvent);
+  }
+  assert.equal(reloads, 0);
+  assert.equal(nonChunkEvent.defaultPrevented, false);
+
+  const chunkEvent = new Event('vite:preloadError', { cancelable: true }) as Event & { payload?: unknown };
+  chunkEvent.payload = new TypeError('Importing a module script failed.');
+  for (const listener of listeners.get('vite:preloadError') ?? []) {
+    listener(chunkEvent);
   }
   assert.equal(reloads, 1);
-  assert.equal(event.defaultPrevented, false);
+  assert.equal(chunkEvent.defaultPrevented, false);
 
   dispose();
   clearChunkReloadPending();
