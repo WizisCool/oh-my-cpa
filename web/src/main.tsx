@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import './index.css';
 import { applyStoredFonts } from './theme/fontLibrary';
+import { installChunkLoadRecovery } from './utils/chunkRecovery';
+
+installChunkLoadRecovery();
 
 // iOS Safari zooms the whole page into any focused field set under 16px, which every field at the
 // console's 13px reading size is. `maximum-scale=1` stops that focus zoom while iOS keeps pinch zoom

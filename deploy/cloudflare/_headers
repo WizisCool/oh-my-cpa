@@ -3,12 +3,14 @@
 # The file is copied into the staged asset directory by `scripts/build-demo.mjs`, and
 # Cloudflare applies these rules to static asset responses instead of serving the file.
 
-# Hashed build output: the name changes when the content does, so it can be cached
-# indefinitely.
-/assets/*
-  Cache-Control: public, max-age=31536000, immutable
-
-# Everything else - the documents, the icons and the SPA's fallback - is revalidated on
-# every visit.
+# Everything outside hashed bundles - the documents, the icons and the SPA's fallback -
+# must not pin an old index.html across deployments.
 /*
-  Cache-Control: public, max-age=0, must-revalidate
+  Cache-Control: no-store
+
+# Hashed build output: the name changes when the content does, so it can be cached
+# indefinitely. Detach the inherited Cache-Control header from /* first so Cloudflare
+# does not join both.
+/assets/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable

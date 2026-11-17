@@ -42,41 +42,105 @@ describe('public site worker (/demo subpath mount)', () => {
   });
 
   it('falls back deep SPA routes under /demo/ to /demo/ while keeping missing static files as 404', async () => {
-    const fetchedPaths = [];
+    const fetched = [];
     const env = {
       ASSETS: {
         fetch: (request) => {
           const path = new URL(request.url).pathname;
-          fetchedPaths.push(path);
+          fetched.push({
+            path,
+            ifNoneMatch: request.headers.get('if-none-match'),
+            ifModifiedSince: request.headers.get('if-modified-since'),
+          });
           if (path === '/demo/' || path === '/' || path === '/api-reference/' || path === '/docs/' || path === '/docs/zh/') {
-            return new Response(`<html>${path}</html>`, { status: 200 });
+            return new Response(`<html>${path}</html>`, {
+              status: 200,
+              headers: {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'public, max-age=0, must-revalidate',
+              },
+            });
+          }
+          if (path === '/demo/assets/index.js') {
+            return new Response('console.log(1);', {
+              status: 200,
+              headers: {
+                'Content-Type': 'text/javascript; charset=utf-8',
+                'Cache-Control': 'public, max-age=31536000, immutable',
+              },
+            });
+          }
+          if (path.startsWith('/demo/assets/')) {
+            return new Response('Not Found', {
+              status: 404,
+              headers: {
+                'Cache-Control': 'public, max-age=31536000, immutable',
+              },
+            });
           }
           return new Response('Not Found', { status: 404 });
         },
       },
     };
 
-    const spaRoute = await worker.fetch(makeRequest('/demo/usage/events'), env);
+    const spaRoute = await worker.fetch(
+      makeRequest('/demo/usage/events', {
+        headers: {
+          'If-None-Match': '"stale-etag"',
+          'If-Modified-Since': 'Tue, 17 Nov 2026 00:00:00 GMT',
+        },
+      }),
+      env,
+    );
     assert.equal(spaRoute.status, 200);
     assert.equal(await spaRoute.text(), '<html>/demo/</html>');
-    assert.deepEqual(fetchedPaths, ['/demo/usage/events', '/demo/']);
+    assert.equal(spaRoute.headers.get('Cache-Control'), 'no-store');
+    assert.deepEqual(fetched, [
+      {
+        path: '/demo/usage/events',
+        ifNoneMatch: '"stale-etag"',
+        ifModifiedSince: 'Tue, 17 Nov 2026 00:00:00 GMT',
+      },
+      {
+        path: '/demo/',
+        ifNoneMatch: null,
+        ifModifiedSince: null,
+      },
+    ]);
 
-    fetchedPaths.length = 0;
+    fetched.length = 0;
+    const entryRoute = await worker.fetch(
+      makeRequest('/demo/', {
+        headers: { 'If-None-Match': '"stale-etag"' },
+      }),
+      env,
+    );
+    assert.equal(entryRoute.status, 200);
+    assert.equal(entryRoute.headers.get('Cache-Control'), 'no-store');
+    assert.deepEqual(fetched, [{ path: '/demo/', ifNoneMatch: null, ifModifiedSince: null }]);
+
+    fetched.length = 0;
+    const validAsset = await worker.fetch(makeRequest('/demo/assets/index.js'), env);
+    assert.equal(validAsset.status, 200);
+    assert.equal(validAsset.headers.get('Cache-Control'), 'public, max-age=31536000, immutable');
+
+    fetched.length = 0;
     const missingAsset = await worker.fetch(makeRequest('/demo/assets/nonexistent.js'), env);
     assert.equal(missingAsset.status, 404);
-    assert.deepEqual(fetchedPaths, ['/demo/assets/nonexistent.js']);
+    assert.equal(missingAsset.headers.get('Cache-Control'), 'no-store');
+    assert.deepEqual(fetched.map((item) => item.path), ['/demo/assets/nonexistent.js']);
 
-    fetchedPaths.length = 0;
+    fetched.length = 0;
     const apiRefRoute = await worker.fetch(makeRequest('/api-reference/'), env);
     assert.equal(apiRefRoute.status, 200);
     assert.equal(await apiRefRoute.text(), '<html>/api-reference/</html>');
 
-    fetchedPaths.length = 0;
+    fetched.length = 0;
     const docsRoute = await worker.fetch(makeRequest('/docs/'), env);
     assert.equal(docsRoute.status, 200);
     assert.equal(await docsRoute.text(), '<html>/docs/</html>');
 
-    fetchedPaths.length = 0;
+    fetched.length = 0;
     const zhDocsRoute = await worker.fetch(makeRequest('/docs/zh/'), env);
     assert.equal(zhDocsRoute.status, 200);
     assert.equal(await zhDocsRoute.text(), '<html>/docs/zh/</html>');

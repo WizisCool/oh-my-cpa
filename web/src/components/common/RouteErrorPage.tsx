@@ -6,10 +6,17 @@ import { BrandArtwork } from './BrandArtwork';
 import { CopyButton } from './CopyButton';
 import { FactList } from './FactList';
 import { PanelTitle } from './PanelTitle';
+import { ShellLoading } from './ShellLoading';
 import { StatusLabel } from './StatusLabel';
 import { useT } from '../../i18n';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { getAppConfig } from '../../types/config';
+import {
+  attemptChunkReload,
+  clearChunkReloadPending,
+  isChunkReloadPending,
+  isModuleLoadFailure,
+} from '../../utils/chunkRecovery';
 import { createRouteErrorDiagnostics, formatRouteErrorReport } from '../../utils/routeErrorDiagnostics';
 import styles from './RouteErrorPage.module.css';
 import { Panel } from './Panel';
@@ -20,16 +27,40 @@ export const RouteErrorPage: React.FC = () => {
   const headingRef = React.useRef<HTMLHeadingElement>(null);
   const { basePath, version } = getAppConfig();
   const dashboardPath = `${basePath.replace(/\/+$/, '')}/dashboard`;
+  const isModuleFailure = isModuleLoadFailure(error);
+  const [isReloading, setIsReloading] = React.useState(() => isModuleFailure && isChunkReloadPending());
   const diagnostics = React.useMemo(() => createRouteErrorDiagnostics(error, {
     routePath: window.location.pathname,
     version: version ?? '',
     occurredAt: new Date().toISOString(),
   }), [error, version]);
-  useDocumentTitle(t('route_error.title'));
 
   React.useEffect(() => {
-    headingRef.current?.focus();
-  }, []);
+    if (!isModuleFailure) return;
+    if (isChunkReloadPending() || attemptChunkReload()) {
+      setIsReloading(true);
+    }
+  }, [isModuleFailure]);
+
+  React.useEffect(() => {
+    if (!isReloading) return;
+    // If reload was blocked or interrupted, reveal diagnostics instead of holding the loading shell forever.
+    const timer = window.setTimeout(() => {
+      clearChunkReloadPending();
+      setIsReloading(false);
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [isReloading]);
+
+  useDocumentTitle(isReloading ? null : t('route_error.title'));
+
+  React.useEffect(() => {
+    if (!isReloading) headingRef.current?.focus();
+  }, [isReloading]);
+
+  if (isReloading) {
+    return <ShellLoading />;
+  }
 
   const unavailable = t('route_error.unavailable');
   const facts = [

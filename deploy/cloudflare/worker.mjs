@@ -348,6 +348,33 @@ function isStaticAssetSubpath(innerPath) {
   return /\.[a-z0-9]{1,12}$/i.test(lastSegment);
 }
 
+function withoutConditionalHeaders(headers) {
+  const next = new Headers(headers);
+  next.delete('if-none-match');
+  next.delete('if-modified-since');
+  return next;
+}
+
+/**
+ * Ensures error responses (such as missing chunk 404s that matched an immutable `_headers` rule)
+ * and SPA HTML entry documents are never pinned in browser or edge caches across deployments.
+ */
+function withStaticAssetCacheHeaders(response, { isHtmlShell = false } = {}) {
+  const isError = response.status >= 400;
+  const contentType = (response.headers.get('content-type') || '').toLowerCase();
+  const isHtml = isHtmlShell || contentType.includes('text/html');
+  if (!isError && !(response.status === 200 && isHtml)) {
+    return response;
+  }
+  const headers = new Headers(response.headers);
+  headers.set('Cache-Control', 'no-store');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 /**
  * Builds the Worker fetch handler for either a root deployment (`''`, e.g. `omc-demo.junze.dev`)
  * or a subpath mount (`'/demo'`, e.g. `omc.junze.dev/demo/`).
@@ -377,20 +404,31 @@ export function createDemoHandler({ basePath = '' } = {}) {
         // Not an API path, so it belongs to the static assets. Under a subpath mount,
         // deep-linked SPA routes (e.g. `/demo/dashboard`) fall back to `/demo/` rather
         // than the site root's `index.html`.
-        const assetResponse = await env.ASSETS.fetch(request);
-        if (!prefix || assetResponse.status !== 404) {
-          return assetResponse;
-        }
         const method = request.method.toUpperCase();
-        if ((method !== 'GET' && method !== 'HEAD') || isStaticAssetSubpath(innerPath)) {
-          return assetResponse;
+        const isReadMethod = method === 'GET' || method === 'HEAD';
+        const isShellPath = innerPath === '/' || innerPath === '/index.html';
+        const assetRequest = isReadMethod && isShellPath
+          ? new Request(request.url, {
+              method: request.method,
+              headers: withoutConditionalHeaders(request.headers),
+            })
+          : request;
+        const assetResponse = await env.ASSETS.fetch(assetRequest);
+        if (!prefix || assetResponse.status !== 404) {
+          return withStaticAssetCacheHeaders(assetResponse, {
+            isHtmlShell: innerPath === '/' && assetResponse.status === 200,
+          });
         }
-        return env.ASSETS.fetch(
+        if (!isReadMethod || isStaticAssetSubpath(innerPath)) {
+          return withStaticAssetCacheHeaders(assetResponse);
+        }
+        const fallbackResponse = await env.ASSETS.fetch(
           new Request(new URL(`${prefix}/`, request.url), {
             method: request.method,
-            headers: request.headers,
+            headers: withoutConditionalHeaders(request.headers),
           }),
         );
+        return withStaticAssetCacheHeaders(fallbackResponse, { isHtmlShell: true });
       }
 
       const apiUrl = new URL(request.url);

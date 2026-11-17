@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
+  attemptChunkReload,
+  clearChunkReloadPending,
+  installChunkLoadRecovery,
+  isChunkReloadPending,
+  isModuleLoadFailure,
+} from '../../src/utils/chunkRecovery.ts';
+import {
   createRouteErrorDiagnostics,
   formatRouteErrorReport,
   redactDiagnosticText,
@@ -119,4 +126,105 @@ test('large messages are bounded after redaction and control bytes are removed',
   assert.ok(!sanitized.includes('private-key'));
   assert.equal(redactDiagnosticText('Error\u0000\n  at render\u0007'), 'Error\n  at render');
   assert.equal(redactDiagnosticText('at /console/assets/page.js?key=private-key#secret\n at ./page.js?query=hidden'), 'at /console/assets/page.js\n at ./page.js');
+});
+
+function memoryStorage() {
+  const store = new Map<string, string>();
+  return {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+  };
+}
+
+test('chunk recovery identifies Safari/Chrome/Firefox module script failures and reloads at most once per cooldown', () => {
+  clearChunkReloadPending();
+  assert.equal(isModuleLoadFailure(new TypeError('Importing a module script failed.')), true);
+  assert.equal(isModuleLoadFailure(new TypeError('Failed to fetch dynamically imported module: https://omc.junze.dev/demo/assets/DashboardPage.js')), true);
+  assert.equal(isModuleLoadFailure(new TypeError('error loading dynamically imported module: https://omc.junze.dev/demo/assets/DashboardPage.js')), true);
+  assert.equal(isModuleLoadFailure(new Error('Unable to preload CSS for ./assets/index.css')), true);
+  assert.equal(isModuleLoadFailure(new TypeError('Cannot read properties of undefined')), false);
+
+  const storage = memoryStorage();
+  let clock = 100_000;
+  let reloads = 0;
+  const options = {
+    now: () => clock,
+    storage,
+    isOnline: () => true,
+    reload: () => {
+      reloads += 1;
+    },
+  };
+
+  assert.equal(attemptChunkReload(options), true);
+  assert.equal(reloads, 1);
+  assert.equal(isChunkReloadPending(), true);
+  clearChunkReloadPending();
+
+  // Within cooldown, a second failure refuses to loop.
+  clock += 5_000;
+  assert.equal(attemptChunkReload(options), false);
+  assert.equal(reloads, 1);
+  assert.equal(isChunkReloadPending(), false);
+
+  // After cooldown expires, a later deployment can trigger recovery once more.
+  clock += 30_000;
+  assert.equal(attemptChunkReload(options), true);
+  assert.equal(reloads, 2);
+  clearChunkReloadPending();
+
+  // Offline or failing storage fails closed without reloading.
+  assert.equal(attemptChunkReload({ ...options, now: () => clock + 60_000, isOnline: () => false }), false);
+  assert.equal(
+    attemptChunkReload({
+      ...options,
+      now: () => clock + 60_000,
+      storage: {
+        getItem: () => {
+          throw new Error('blocked');
+        },
+        setItem: () => {
+          throw new Error('blocked');
+        },
+      },
+    }),
+    false,
+  );
+  assert.equal(reloads, 2);
+});
+
+test('installChunkLoadRecovery reloads on vite:preloadError without cancelling default error propagation', () => {
+  clearChunkReloadPending();
+  const listeners = new Map<string, Set<EventListener>>();
+  const target = {
+    addEventListener: (type: string, listener: EventListener) => {
+      const group = listeners.get(type) ?? new Set<EventListener>();
+      group.add(listener);
+      listeners.set(type, group);
+    },
+    removeEventListener: (type: string, listener: EventListener) => {
+      listeners.get(type)?.delete(listener);
+    },
+  };
+  let reloads = 0;
+  const dispose = installChunkLoadRecovery(target as unknown as Window, {
+    now: () => 50_000,
+    storage: memoryStorage(),
+    isOnline: () => true,
+    reload: () => {
+      reloads += 1;
+    },
+  });
+
+  const event = new Event('vite:preloadError', { cancelable: true });
+  for (const listener of listeners.get('vite:preloadError') ?? []) {
+    listener(event);
+  }
+  assert.equal(reloads, 1);
+  assert.equal(event.defaultPrevented, false);
+
+  dispose();
+  clearChunkReloadPending();
 });
