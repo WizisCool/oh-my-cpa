@@ -1,9 +1,10 @@
+import clsx from 'clsx';
 import { Button } from '@/components/ui/button';
 import { useT } from '../../i18n';
 import { ThunderboltOutlined } from '../../components/icons';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
 import type { ClaudeResetGrant, CodexResetCreditsInfo } from '../../types/quota';
-import { formatTimeWithCountdown } from './quotaFormat';
+import { formatShortDateTime, formatTimeWithCountdown, orderCodexResetCredits } from './quotaFormat';
 import styles from './QuotaWindowCards.module.css';
 
 export interface QuotaResetCardsProps {
@@ -16,26 +17,26 @@ export interface QuotaResetCardsProps {
 }
 
 /**
- * The resets a credential holds: Codex's bank of reset credits, which this console can spend, and
- * Claude's grants, which it only lists. Each is a card naming what it restores, how many are left
- * and until when.
+ * The resets a credential holds: Codex's bank of reset credits, which lists every available credit
+ * and its expiry so manual redemptions can be planned directly, and Claude's grants, which it only
+ * lists.
  */
 export function QuotaResetCards({ credits, grants = [], nowMS, isDemo, onRedeem }: QuotaResetCardsProps) {
   const t = useT();
   const liveGrants = grants.filter((grant) => grant.resets_left > 0);
-  const expiries = (credits?.credits ?? [])
-    .map((credit) => credit.expires_at_ms)
-    .filter((expiresAtMS): expiresAtMS is number => expiresAtMS != null && expiresAtMS > nowMS)
-    .sort((left, right) => left - right);
   const hasCredits = (credits?.available_count ?? 0) > 0;
   if (!hasCredits && liveGrants.length === 0) return null;
+  const creditRows = hasCredits && credits ? orderCodexResetCredits(credits.credits) : [];
+  const hasApplicableNote = Boolean(
+    credits && credits.applicable_available_count > 0 && credits.applicable_available_count !== credits.available_count,
+  );
   const until = (atMS: number) => formatTimeWithCountdown(atMS, nowMS, t);
   return (
     <section className={styles.group} aria-label={t('quota.resets_title')}>
       <div className={styles['group-name']}>{t('quota.resets_title')}</div>
       <div className={styles.grid}>
         {hasCredits && credits && (
-          <div className={styles.card} data-quota-reset="credits">
+          <div className={clsx(styles.card, styles['credits-card'])} data-quota-reset="credits">
             <span className={styles.head}>
               <span className={styles.name}>{t('quota.reset_credits_title')}</span>
               <span className={styles.value}>
@@ -43,27 +44,50 @@ export function QuotaResetCards({ credits, grants = [], nowMS, isDemo, onRedeem 
                 <b>{credits.available_count}</b>
               </span>
             </span>
-            {expiries.length > 0 && (
-              <span className={styles.detail} data-tip={expiries.map(until).join('\n')}>
-                {t('quota.reset_credit_expires', { when: until(expiries[0]) })}
-              </span>
+            {creditRows.length > 0 && (
+              <dl className={styles['credit-list']} data-quota-reset-list="credits" aria-label={t('quota.reset_credits_title')}>
+                {creditRows.map((credit, index) => {
+                  const hasExpiry = credit.expires_at_ms != null && Number.isFinite(credit.expires_at_ms) && credit.expires_at_ms > 0;
+                  const isExpired = hasExpiry && credit.expires_at_ms! <= nowMS;
+                  const expiryText = !hasExpiry
+                    ? '—'
+                    : isExpired
+                      ? t('quota.reset_credit_expired', { when: formatShortDateTime(credit.expires_at_ms!) })
+                      : t('quota.reset_credit_expires', { when: until(credit.expires_at_ms!) });
+                  return (
+                    <div
+                      className={styles['credit-row']}
+                      key={`${credit.id || 'credit'}-${index}`}
+                      data-quota-reset-credit={credit.id || String(index)}
+                    >
+                      <dt className={styles['credit-label']}>{t('quota.reset_credit_item', { n: index + 1 })}</dt>
+                      <dd className={styles['credit-expiry']} data-expired={isExpired ? 'true' : undefined}>
+                        {expiryText}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
             )}
-            {credits.applicable_available_count > 0 && credits.applicable_available_count !== credits.available_count && (
-              <span className={styles.detail}>{t('omc.quota_credit_applicable', { n: credits.applicable_available_count })}</span>
-            )}
-            {onRedeem && (
-              <span className={styles.foot}>
-                <span />
-                <ConfirmAction
-                  title={t('quota.redeem_credit_confirm_title')}
-                  description={t('quota.redeem_credit_confirm_desc')}
-                  onConfirm={onRedeem}
-                  isDanger
-                >
-                  <Button size="sm" icon={<ThunderboltOutlined />} disabled={isDemo} data-tip={isDemo ? t('demo.blocked') : undefined}>
-                    {t('quota.btn_reset_quota')}
-                  </Button>
-                </ConfirmAction>
+            {(hasApplicableNote || onRedeem) && (
+              <span className={clsx(styles.foot, styles['reset-foot'])}>
+                {hasApplicableNote ? (
+                  <span className={styles.detail}>{t('omc.quota_credit_applicable', { n: credits.applicable_available_count })}</span>
+                ) : (
+                  <span />
+                )}
+                {onRedeem && (
+                  <ConfirmAction
+                    title={t('quota.redeem_credit_confirm_title')}
+                    description={t('quota.redeem_credit_confirm_desc')}
+                    onConfirm={onRedeem}
+                    isDanger
+                  >
+                    <Button size="sm" icon={<ThunderboltOutlined />} disabled={isDemo} data-tip={isDemo ? t('demo.blocked') : undefined}>
+                      {t('quota.btn_reset_quota')}
+                    </Button>
+                  </ConfirmAction>
+                )}
               </span>
             )}
           </div>

@@ -154,3 +154,53 @@ button.card:focus-visible {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
+
+/* The bank of Codex reset credits spans the section so every credit's expiry and countdown sit
+   on one line without squeezing or hiding behind a hover hint. */
+.credits-card {
+  grid-column: 1 / -1;
+}
+
+.credit-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.credit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+  min-width: 0;
+  padding: 7px 0;
+  border-block-start: 1px solid var(--float-rule);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.credit-row:last-child {
+  padding-bottom: 2px;
+}
+
+.credit-label {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.credit-expiry {
+  margin: 0;
+  margin-inline-start: auto;
+  color: var(--fg-2);
+  text-align: end;
+}
+
+.credit-expiry[data-expired='true'] {
+  color: var(--danger);
+}
+
+.reset-foot {
+  align-items: center;
+  flex-wrap: wrap;
+}

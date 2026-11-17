@@ -239,6 +239,120 @@ describe('credential quota body details', () => {
     expect(screen.getByText('100%')).toBeTruthy();
   });
 
+  it('lists every Codex reset credit in expiry order instead of only the earliest one', () => {
+    const onRedeem = vi.fn();
+    const { rerender } = render(
+      <MemoryRouter>
+        <I18nProvider>
+          <CredentialQuotaBody
+            item={quota('codex-credits', [quotaWindow('five_hour', 20, 3)], {
+              capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: true },
+              reset_credits: {
+                available_count: 3,
+                applicable_available_count: 1,
+                credits: [
+                  { id: 'c-3', status: 'available', expires_at_ms: NOW_MS + 20 * 24 * HOUR_MS },
+                  { id: 'c-1', status: 'available', expires_at_ms: NOW_MS + 3 * 24 * HOUR_MS },
+                  { id: 'c-2', status: 'available', expires_at_ms: NOW_MS + 10 * 24 * HOUR_MS },
+                ],
+              },
+            })}
+            credentialLabel="codex-credits"
+            nowMS={NOW_MS}
+            isDemo={false}
+            onRedeemCredit={onRedeem}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    const card = document.querySelector<HTMLElement>('[data-quota-reset="credits"]')!;
+    expect(card).toBeTruthy();
+    expect(within(card).getByText('Reset credits')).toBeTruthy();
+    expect(within(card).getByText('3')).toBeTruthy();
+    expect(within(card).getByText('Applicable 1')).toBeTruthy();
+
+    const rows = Array.from(card.querySelectorAll<HTMLElement>('[data-quota-reset-credit]'));
+    expect(rows.map((row) => row.getAttribute('data-quota-reset-credit'))).toEqual(['c-1', 'c-2', 'c-3']);
+    expect(rows[0].textContent).toContain('Credit #1');
+    expect(rows[0].textContent).toContain('3d left');
+    expect(rows[1].textContent).toContain('Credit #2');
+    expect(rows[1].textContent).toContain('10d left');
+    expect(rows[2].textContent).toContain('Credit #3');
+    expect(rows[2].textContent).toContain('20d left');
+    expect(within(card).getByRole('button', { name: 'Reset quota' })).toBeTruthy();
+
+    // Also retains stale/expired and undated entries when available_count > 0, and stays clean when credits list is absent.
+    rerender(
+      <MemoryRouter>
+        <I18nProvider>
+          <CredentialQuotaBody
+            item={quota('codex-credits', [quotaWindow('five_hour', 20, 3)], {
+              capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: true },
+              reset_credits: {
+                available_count: 2,
+                applicable_available_count: 2,
+                credits: [
+                  { id: 'c-expired', status: 'available', expires_at_ms: NOW_MS - HOUR_MS },
+                  { id: 'c-undated', status: 'available' },
+                ],
+              },
+            })}
+            credentialLabel="codex-credits"
+            nowMS={NOW_MS}
+            isDemo={false}
+            onRedeemCredit={onRedeem}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    const staleRows = Array.from(document.querySelectorAll<HTMLElement>('[data-quota-reset-credit]'));
+    expect(staleRows).toHaveLength(2);
+    expect(staleRows[0].querySelector('[data-expired="true"]')?.textContent).toMatch(/^Expired /);
+    expect(staleRows[1].textContent).toContain('—');
+
+    rerender(
+      <MemoryRouter>
+        <I18nProvider>
+          <CredentialQuotaBody
+            item={quota('codex-credits', [quotaWindow('five_hour', 20, 3)], {
+              capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: true },
+              reset_credits: { available_count: 2, applicable_available_count: 2 },
+            })}
+            credentialLabel="codex-credits"
+            nowMS={NOW_MS}
+            isDemo={false}
+            onRedeemCredit={onRedeem}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    expect(document.querySelector('[data-quota-reset="credits"]')).toBeTruthy();
+    expect(document.querySelector('[data-quota-reset-list="credits"]')).toBeNull();
+
+    rerender(
+      <MemoryRouter>
+        <I18nProvider>
+          <CredentialQuotaBody
+            item={quota('codex-credits', [quotaWindow('five_hour', 20, 3)], {
+              capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: true },
+              reset_credits: {
+                available_count: 0,
+                applicable_available_count: 0,
+                credits: [{ id: 'c-stale', status: 'available', expires_at_ms: NOW_MS + HOUR_MS }],
+              },
+            })}
+            credentialLabel="codex-credits"
+            nowMS={NOW_MS}
+            isDemo={false}
+            onRedeemCredit={onRedeem}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    expect(document.querySelector('[data-quota-reset="credits"]')).toBeNull();
+  });
+
 });
 
 function renderCredentialRow(

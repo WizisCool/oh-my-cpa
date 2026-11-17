@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import type { TFunc } from '../../src/i18n/index.tsx';
 import type { QuotaWindowCapacity } from '../../src/types/quota.ts';
 import { compactQuotaCapacity, describeCapacityCard, formatCycleCardFigures, quotaCapacityNote } from '../../src/pages/quota/quotaCapacity.ts';
-import { formatQuotaMetric, quotaPayloadSummary } from '../../src/pages/quota/quotaFormat.ts';
+import { formatQuotaMetric, orderCodexResetCredits, quotaPayloadSummary } from '../../src/pages/quota/quotaFormat.ts';
 import { siblingCapacityWindows } from '../../src/pages/quota/quotaWindowSelection.ts';
 
 const t = ((key: string, params?: Record<string, unknown>) => params ? `${key}(${Object.values(params).join(',')})` : key) as TFunc;
@@ -101,4 +101,20 @@ test('sibling capacity windows group by quota family and sort shortest period fi
     siblingCapacityWindows(weekly, [weekly, codeReview, sonnetModel, fiveHour]).map((w) => w.id),
     ['five_hour', 'seven_day'],
   );
+});
+
+test('orderCodexResetCredits excludes spent credits and orders soonest-expiring first with undated entries last', () => {
+  const ordered = orderCodexResetCredits([
+    { id: 'c-late', status: 'available', granted_at_ms: 200, expires_at_ms: 3000 },
+    { id: 'c-used', status: 'used', granted_at_ms: 50, expires_at_ms: 500 },
+    { id: 'c-undated', status: 'available', granted_at_ms: 100 },
+    { id: 'c-early', status: 'available', granted_at_ms: 300, expires_at_ms: 1000 },
+    { id: 'c-tie-b', status: 'available', granted_at_ms: 400, expires_at_ms: 2000 },
+    { id: 'c-tie-a', status: 'available', granted_at_ms: 100, expires_at_ms: 2000 },
+  ]);
+  assert.deepEqual(
+    ordered.map((credit) => credit.id),
+    ['c-early', 'c-tie-a', 'c-tie-b', 'c-late', 'c-undated'],
+  );
+  assert.deepEqual(orderCodexResetCredits(undefined), []);
 });

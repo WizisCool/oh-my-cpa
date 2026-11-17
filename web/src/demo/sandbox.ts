@@ -2232,9 +2232,17 @@ export async function interceptDemoRequest(
             next.windows = next.windows.map((w) => ({ ...w, used_percent: 0, remaining_percent: 100 }));
             next.active_cooldown = undefined;
             next.quota_exceeded = false;
+            const nextCount = Math.max(0, next.reset_credits.available_count - redeemed);
+            const nextCredits = next.reset_credits.credits
+              ? [...next.reset_credits.credits]
+                  .sort((a, b) => (a.expires_at_ms ?? Number.MAX_SAFE_INTEGER) - (b.expires_at_ms ?? Number.MAX_SAFE_INTEGER))
+                  .slice(redeemed)
+              : undefined;
             next.reset_credits = {
               ...next.reset_credits,
-              available_count: Math.max(0, next.reset_credits.available_count - redeemed),
+              available_count: nextCount,
+              applicable_available_count: Math.min(next.reset_credits.applicable_available_count, nextCount),
+              ...(nextCredits !== undefined ? { credits: nextCredits } : {}),
             };
           }
           return next;
