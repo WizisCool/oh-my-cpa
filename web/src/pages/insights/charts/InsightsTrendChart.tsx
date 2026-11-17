@@ -24,13 +24,15 @@ import { useT } from '../../../i18n';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { InsightsBucket } from '../../../types/insights';
-import { isAdditiveMetric, type CubeMetric, type TrendGroup } from '../../../types/insightsCube';
+import { isAdditiveMetric, type CubeMetric, type InsightsDimension, type TrendGroup } from '../../../types/insightsCube';
 import { formatShare } from '../../../types/insightsFormat';
 import { useInsightsFormat } from '../useInsightsFormat';
 
 export interface InsightsTrendChartProps {
   bucketStarts: readonly number[];
   bucket: InsightsBucket;
+  /** What the series are, so a drawing of another grouping is never read as the same bars. */
+  groupingDimension: InsightsDimension | null;
   groups: readonly TrendGroup[];
   tooltipGroups: readonly TrendGroup[];
   totals: ReadonlyArray<number | null>;
@@ -379,6 +381,8 @@ function isSameAxis(next: readonly number[], current: readonly number[]): boolea
 function canGlide(next: InsightsTrendChartProps, current: InsightsTrendChartProps): boolean {
   if (!isAdditiveMetric(next.metric) || !isAdditiveMetric(current.metric)) return false;
   if (next.bucket !== current.bucket || !isSameAxis(next.bucketStarts, current.bucketStarts)) return false;
+  // The folded remainder keeps its id in every grouping, so the series alone cannot tell them apart.
+  if (next.groupingDimension !== current.groupingDimension) return false;
   if (next.groups.length * next.bucketStarts.length > GLIDE_SEGMENT_LIMIT) return false;
   const drawn = new Set(current.groups.map((group) => group.id));
   return next.groups.some((group) => drawn.has(group.id));

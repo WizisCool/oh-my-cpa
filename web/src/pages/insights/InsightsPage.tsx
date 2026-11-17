@@ -684,6 +684,7 @@ export const InsightsPage: React.FC = () => {
               <InsightsTrendChart
                 bucketStarts={cube.bucketStarts}
                 bucket={cube.window.bucket}
+                groupingDimension={groupingDimension}
                 groups={visibleTrend}
                 tooltipGroups={visibleTrendTooltip}
                 totals={trendTotals}

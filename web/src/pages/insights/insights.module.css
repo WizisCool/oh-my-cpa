@@ -144,10 +144,14 @@
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-  transition: opacity var(--motion-fast) var(--ease-standard);
 }
-/* Pointing at a part steps the others back, on the bar and in the columns alike. */
-.anatomy [data-dimmed] { opacity: .4; }
+.anatomy-parts i, .anatomy-part-name, .anatomy-part-value {
+  transition: opacity var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+/* Pointing at a part steps the others back: their marks fade, and their text quiets to a colour
+   that still reads. */
+.anatomy-bar > [data-dimmed], .anatomy-parts > [data-dimmed] i { opacity: .4; }
+.anatomy-parts > [data-dimmed] :is(.anatomy-part-name, .anatomy-part-value) { color: var(--muted); }
 .anatomy-part-name {
   display: flex;
   align-items: center;
@@ -160,7 +164,8 @@
   white-space: nowrap;
 }
 .anatomy-part-name > i { flex: none; width: 8px; height: 8px; border-radius: var(--radius-xs); }
-.anatomy-part-reading { display: flex; align-items: baseline; gap: 8px; padding-left: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A full reading wider than its column puts its share on the next line rather than over a neighbour. */
+.anatomy-part-reading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding-left: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .anatomy-part-value { color: var(--fg); font-size: var(--text-lg); font-weight: 600; line-height: 1.25; letter-spacing: -.01em; }
 .anatomy-part-share { color: var(--muted); font-size: var(--text-sm); }
 /* Too narrow for five columns (a drawer, a phone), each part is a row: its name, then its reading. */
@@ -373,6 +378,6 @@
   .rhythm { grid-template-columns: 24px repeat(24, minmax(0, 1fr)); gap: 2px; }
 }
 :global(:root[data-reduced-motion='true']) {
-  .ranking-bar > span, .ranking-list > li, .anatomy-bar > span, .anatomy-parts > li { transition: none; }
+  .ranking-bar > span, .ranking-list > li, .anatomy-bar > span, .anatomy-parts i, .anatomy-part-name, .anatomy-part-value { transition: none; }
   .filter-chip { border: 0; animation: none; }
 }

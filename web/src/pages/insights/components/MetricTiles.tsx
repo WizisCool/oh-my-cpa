@@ -70,8 +70,10 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, met
               <>
                 {comparison.change > 0 && <ArrowUpOutlined aria-hidden="true" />}
                 {comparison.change < 0 && <ArrowDownOutlined aria-hidden="true" />}
-                {/* The arrow carries the direction, so the figure drops its sign rather than saying it twice. */}
-                <span>{comparison.change === 0 ? changeText : changeText.replace(/^[+−]/, '')}</span>
+                {/* The arrow carries the direction, so the figure drops its sign rather than saying it twice;
+                    a screen reader, which hears no arrow, reads the signed figure. */}
+                <span aria-hidden="true">{changeText.replace(/^[+−]/, '')}</span>
+                <span className="sr-only">{changeText}</span>
                 {comparison.isNoise && <span className="sr-only">{t('insights.change_noise')}</span>}
               </>
             )}

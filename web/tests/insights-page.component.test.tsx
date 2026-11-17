@@ -133,6 +133,14 @@ describe('insights page', () => {
     fireEvent.click(screen.getByTestId('insights-compare'));
     await waitFor(() => expect(within(tile('requests')).queryByText('125%')).toBeNull());
     expect(tile('requests').children).toHaveLength(parts);
+
+    // Narrowed to a model only one key called, every ranking stays where the reader left it.
+    const places = () => [...screen.getByTestId('insights-ranking-key').parentElement!.children].map((panel) => panel.getAttribute('data-testid'));
+    const order = ['insights-ranking-model', 'insights-ranking-client', 'insights-ranking-key', 'insights-ranking-provider', 'insights-ranking-credential'];
+    expect(places()).toEqual(order);
+    fireEvent.click(within(screen.getByTestId('insights-ranking-model')).getByText('sonnet'));
+    await waitFor(() => expect(within(screen.getByTestId('insights-ranking-key')).queryByText('sk-…bbbb')).toBeNull());
+    expect(places()).toEqual(order);
   });
 
   it('isolates a series from the legend or chart click and resets on background click', async () => {
@@ -176,21 +184,6 @@ describe('insights page', () => {
 
     fireEvent.click(within(screen.getByTestId('insights-token-scope')).getByText('With cache'));
     await waitFor(() => expect(new URLSearchParams(lastSearch).has('scope')).toBe(false));
-  });
-
-  it('keeps every ranking in its place whether the window holds one key or many', async () => {
-    const order = async () => {
-      const rankings = (await screen.findByTestId('insights-ranking-key')).parentElement!;
-      return [...rankings.children].map((panel) => panel.getAttribute('data-testid'));
-    };
-    const places = ['insights-ranking-model', 'insights-ranking-client', 'insights-ranking-key', 'insights-ranking-provider', 'insights-ranking-credential'];
-    const many = mount('/insights');
-    expect(await order()).toEqual(places);
-    many.unmount();
-
-    api.on('GET', '/management/insights/cube', () => ({ ...CUBE, rows: CUBE.rows.filter((entry) => entry[1] === 0) }));
-    mount('/insights', createTestQueryClient());
-    expect(await order()).toEqual(places);
   });
 
   it('opens a client\'s requests by its normalised identifier', async () => {
