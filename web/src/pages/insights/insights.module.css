@@ -223,9 +223,10 @@
 .ranking-open-spacer { flex: none; width: 28px; }
 
 /* ── Ranking: the dashboard model list's row, with a share meter ─────────── */
-.ranking-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.ranking-list > li { position: relative; display: flex; align-items: stretch; border-bottom: 1px solid var(--border-soft); }
-.ranking-list > li:last-child { border-bottom: 0; }
+/* Rows sit apart on spacing alone and run to the panel's padding edge, so a washed or chosen row
+   reads as one rounded shape with its text still on the panel's line. */
+.ranking-list { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; padding: 0; list-style: none; }
+.ranking-list > li { position: relative; display: flex; align-items: stretch; border-radius: var(--radius-md); }
 .ranking-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(56px, auto) 104px 60px;
@@ -233,9 +234,9 @@
   column-gap: 12px;
   width: 100%;
   min-height: 36px;
-  padding: 0 4px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -246,10 +247,12 @@
 .ranking-list-plain .ranking-row { grid-template-columns: minmax(0, 1fr) minmax(56px, auto) 104px; }
 .ranking-row-interactive { cursor: pointer; transition: background-color var(--motion-fast) var(--ease-standard); }
 .ranking-row-interactive:hover { background: var(--hover-inset); }
-/* A chosen row is filled and ruled at its leading edge; its unchosen neighbours step back. */
-.ranking-row-selected { background: var(--selected-inset); box-shadow: inset 2px 0 0 var(--fg); font-weight: 600; }
-.ranking-list > li { transition: opacity var(--motion-fast) var(--ease-standard); }
-.ranking-list > li[data-dimmed='true'] { opacity: .45; }
+/* A chosen row is picked up and lit like the dashboard's model list, the whole row with its detail
+   control; its unchosen neighbours step back. */
+.ranking-list > li[data-selected] { box-shadow: var(--shadow-selected); background: var(--select-surface); }
+.ranking-list > li[data-selected] .ranking-row-interactive:hover { background: transparent; }
+.ranking-list > li { transition: var(--select-transition), opacity var(--motion-base) var(--ease-standard); }
+.ranking-list > li[data-dimmed='true'] { opacity: .5; }
 /* Unfolded, a ranking scrolls inside its panel: a hundred credentials must not lengthen the page. */
 .ranking-list-expanded { max-height: 432px; overflow-y: auto; overscroll-behavior: contain; }
 .ranking-search { width: 100%; margin-bottom: 8px; }
@@ -264,6 +267,7 @@
   width: 28px;
   padding: 0;
   border: 0;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted);
   font-size: var(--text-sm);
