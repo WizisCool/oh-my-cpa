@@ -296,10 +296,12 @@ function useLensModels(props: ModelUsagePanelsProps) {
   const hasArrived = models.data !== undefined && !models.isPlaceholderData;
   if (hasArrived && shown !== grouping) setShown(grouping);
   const isPending = !hasArrived && models.data !== undefined;
+  // With nothing held - a first read, or one that failed - the card speaks for the lens asked for.
+  const current = isPending ? shown : grouping;
   return {
     models,
-    shown: hasArrived ? grouping : shown,
-    shownLens: (hasArrived ? grouping : shown) === 'client' ? 'clients' as const : 'models' as const,
+    shown: current,
+    shownLens: current === 'client' ? 'clients' as const : 'models' as const,
     isPending,
   };
 }

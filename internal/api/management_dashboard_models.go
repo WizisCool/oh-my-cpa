@@ -36,6 +36,7 @@ type dashboardModelsResponse struct {
 	// CoveredFromMS is set when the client view starts later than the window:
 	// client attribution is kept only as long as the request records, so the
 	// groups and their series begin at that horizon instead of at window.from.
+	// It falls after window.to when the whole window predates the horizon.
 	CoveredFromMS *int64 `json:"covered_from,omitempty"`
 	// Errors reports what could not be read, so a panel can say its numbers are partial
 	// rather than presenting a short list as the whole picture.
@@ -158,9 +159,11 @@ func (h *Handler) dashboardModels(writer http.ResponseWriter, request *http.Requ
 	// A clipped client read lays its series on the grid it actually read, so the trend starts
 	// where attribution does instead of drawing the unattributed past as a stretch of zeros.
 	grid := window
-	if buckets.CoveredFromMS > window.FromMS && buckets.CoveredFromMS <= window.ToMS {
-		grid.FromMS = buckets.CoveredFromMS
+	if buckets.CoveredFromMS > window.FromMS {
 		response.CoveredFromMS = &buckets.CoveredFromMS
+		if buckets.CoveredFromMS <= window.ToMS {
+			grid.FromMS = buckets.CoveredFromMS
+		}
 	}
 	models := buildModelUsage(grid, buckets.Rows)
 	if dimension == repository.UsageDimensionClientAgent {

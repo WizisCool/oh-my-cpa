@@ -518,8 +518,11 @@ type UsageFactResult struct {
 	FactRequests   int64
 	DetailRequests int64
 	// Clipped reports that a client read started at the request-record horizon
-	// rather than at the requested FromMS.
-	Clipped bool
+	// rather than at the requested FromMS, and HorizonMS is that horizon. A window
+	// that ends before it reads nothing and keeps its requested bounds, so only
+	// HorizonMS says where attribution starts.
+	Clipped   bool
+	HorizonMS int64
 }
 
 // Totals sums every row of the read.
@@ -788,7 +791,7 @@ func (r *Repository) QueryUsageFacts(ctx context.Context, query UsageFactQuery) 
 	}
 	isClientRead := query.isClientRead()
 	if isClientRead && horizonMS > 0 && query.FromMS < horizonMS {
-		result.Clipped = true
+		result.Clipped, result.HorizonMS = true, horizonMS
 		if query.ToMS < horizonMS {
 			result.FromMS, result.ToMS, result.BucketMS = query.FromMS, query.ToMS, query.BucketMS
 			if query.Calendar != nil {

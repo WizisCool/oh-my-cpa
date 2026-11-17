@@ -86,13 +86,22 @@ func (r *Repository) QueryUsageModelBuckets(ctx context.Context, instanceID stri
 		return UsageModelBuckets{}, fmt.Errorf("read usage model buckets: %w", err)
 	}
 	result := UsageModelBuckets{Rows: make([]UsageModelBucketRow, 0, len(facts.Rows)), CoveredFromMS: fromMS}
-	if facts.Clipped {
+	switch {
+	case facts.Clipped && facts.HorizonMS > toMS:
+		result.CoveredFromMS = facts.HorizonMS
+	case facts.Clipped:
 		result.CoveredFromMS = facts.FromMS
 	}
 	for _, fact := range facts.Rows {
 		costNanos, pricedRequests := fact.CostNanos, fact.CostedRequests
+		// Client facts keep only the normalised total, so a client row reads that total from
+		// request records too; otherwise a request would change size when it is folded.
+		tokens := fact.TotalTokens
+		if dimension == UsageDimensionClientAgent {
+			tokens = fact.Accounting.EffectiveTotalTokens
+		}
 		result.Rows = append(result.Rows, UsageModelBucketRow{
-			Model: fact.Keys[0], StartMS: fact.StartMS, Tokens: fact.TotalTokens, Requests: fact.Requests,
+			Model: fact.Keys[0], StartMS: fact.StartMS, Tokens: tokens, Requests: fact.Requests,
 			CostNanos: &costNanos, PricedRequests: &pricedRequests,
 		})
 	}

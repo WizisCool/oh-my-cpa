@@ -808,6 +808,35 @@ describe('dashboard model panels and heatmap alignment states', () => {
     }
   });
 
+  it('speaks for the chosen lens when its read fails with no ranking held', async () => {
+    const api = installOmcApi();
+    api.on('GET', '/management/dashboard/models', () => {
+      throw new Error('models unavailable');
+    });
+    const t = makeT('en');
+
+    const view = renderWithOmc(
+      <MemoryRouter>
+        <ThemeProvider>
+          <TokenDisplayProvider>
+            <CurrencyDisplayProvider>
+              <ModelPanelsProvider>
+                <ModelUsagePanel query="preset=1h" range={{ preset: '1h' }} enabled />
+              </ModelPanelsProvider>
+            </CurrencyDisplayProvider>
+          </TokenDisplayProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+    try {
+      await within(view.container).findByText(t('dash.models.error'));
+      fireEvent.click(screen.getByRole('tab', { name: t('dash.models.lens_clients') }));
+      await within(view.container).findByText(t('dash.clients.error'));
+    } finally {
+      view.unmount();
+    }
+  });
+
   it('keeps the heatmap header wrapper mounted when the first heatmap read fails', async () => {
     const api = installOmcApi();
     api.on('GET', '/management/dashboard/token-heatmap', () => {

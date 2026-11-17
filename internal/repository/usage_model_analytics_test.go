@@ -306,31 +306,46 @@ func TestQueryUsageModelBucketsGroupsByClientProgram(t *testing.T) {
 	if err := repo.SQL().QueryRowContext(ctx, `SELECT COUNT(1) FROM `+usageClientFactsFineTable).Scan(&foldedRows); err != nil || foldedRows == 0 {
 		t.Fatalf("client facts hold %d rows (err=%v), want the first bucket folded", foldedRows, err)
 	}
-	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{
-		clientEvent("c-5", &claudeUA, base.Add(15*time.Minute), 50, true),
-	}); err != nil {
+	// Its reported total understates its parts, so the raw and the normalised totals differ.
+	late := clientEvent("c-5", &claudeUA, base.Add(15*time.Minute), 0, true)
+	late.InputTokens, late.OutputTokens, late.TotalTokens = 40, 30, 50
+	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{late}); err != nil {
 		t.Fatal(err)
 	}
 
-	buckets, err := repo.QueryUsageModelBuckets(ctx, "default", base.UnixMilli(), base.Add(30*time.Minute).UnixMilli(),
-		(15 * time.Minute).Milliseconds(), UsageModelBucketOptions{GroupBy: UsageDimensionClientAgent})
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := map[string]int64{}
-	for _, row := range buckets.Rows {
-		got[fmt.Sprintf("%s@%d", row.Model, row.StartMS)] += row.Tokens
+	read := func() UsageModelBuckets {
+		t.Helper()
+		buckets, err := repo.QueryUsageModelBuckets(ctx, "default", base.UnixMilli(), base.Add(30*time.Minute).UnixMilli(),
+			(15 * time.Minute).Milliseconds(), UsageModelBucketOptions{GroupBy: UsageDimensionClientAgent})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return buckets
 	}
 	want := map[string]int64{
 		fmt.Sprintf("%s@%d", usage.ClientAgentClaudeCode, base.UnixMilli()):                     100,
-		fmt.Sprintf("%s@%d", usage.ClientAgentClaudeCode, base.Add(15*time.Minute).UnixMilli()): 50,
+		fmt.Sprintf("%s@%d", usage.ClientAgentClaudeCode, base.Add(15*time.Minute).UnixMilli()): 70,
 		fmt.Sprintf("%s@%d", usage.ClientAgentCodexCLI, base.UnixMilli()):                       200,
 		fmt.Sprintf("%s@%d", usage.ClientAgentUnknown, base.UnixMilli()):                        30,
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("client groups = %#v, want %#v", got, want)
+	check := func(stage string) {
+		t.Helper()
+		buckets := read()
+		got := map[string]int64{}
+		for _, row := range buckets.Rows {
+			got[fmt.Sprintf("%s@%d", row.Model, row.StartMS)] += row.Tokens
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s: client groups = %#v, want %#v", stage, got, want)
+		}
+		if buckets.CoveredFromMS != base.UnixMilli() {
+			t.Fatalf("%s: covered from %d, want the requested start %d", stage, buckets.CoveredFromMS, base.UnixMilli())
+		}
 	}
-	if buckets.CoveredFromMS != base.UnixMilli() {
-		t.Fatalf("covered from %d, want the requested start %d", buckets.CoveredFromMS, base.UnixMilli())
+	check("before the fold")
+	// Folding the second bucket must not change what its request counts for.
+	if _, err := repo.AggregateUsageFacts(ctx, 5000); err != nil {
+		t.Fatal(err)
 	}
+	check("after the fold")
 }

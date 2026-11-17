@@ -441,6 +441,21 @@ func TestDashboardModelsClientViewRanksClientPrograms(t *testing.T) {
 	if clipped.Window.FromMS >= horizon {
 		t.Fatalf("window.from = %d, want the requested window kept", clipped.Window.FromMS)
 	}
+
+	// A window that ends before the horizon has no attribution at all: it says where attribution
+	// starts rather than reading as a window without client traffic.
+	future := now.Add(time.Hour).UnixMilli()
+	if _, err := repo.SQL().ExecContext(context.Background(),
+		`UPDATE data_lifecycle_state SET horizon_ms = ? WHERE policy = ?`, future, repository.LifecycleUsageDetail); err != nil {
+		t.Fatal(err)
+	}
+	expired := read()
+	if expired.CoveredFromMS == nil || *expired.CoveredFromMS != future {
+		t.Fatalf("covered_from = %v, want the horizon %d past the window", expired.CoveredFromMS, future)
+	}
+	if len(expired.Models) != 0 {
+		t.Fatalf("expired window groups = %s, want none", describeGroups(expired.Models))
+	}
 }
 
 // TestDashboardModelsGroupByIsClosed pins the parameter's validation: an unrecognised grouping is a

@@ -18046,7 +18046,7 @@
       "type": "object",
       "properties": {
         "covered_from": {
-          "description": "CoveredFromMS is set when the client view starts later than the window:\nclient attribution is kept only as long as the request records, so the\ngroups and their series begin at that horizon instead of at window.from.",
+          "description": "CoveredFromMS is set when the client view starts later than the window:\nclient attribution is kept only as long as the request records, so the\ngroups and their series begin at that horizon instead of at window.from.\nIt falls after window.to when the whole window predates the horizon.",
           "type": "integer"
         },
         "models": {
