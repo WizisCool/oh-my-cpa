@@ -115,87 +115,68 @@
 .filter-value-name { min-width: 0; }
 .filter-value-count { color: var(--muted); font-variant-numeric: tabular-nums; }
 
-/* ── Metric tiles: four readouts that double as the trend's metric switch ─── */
-.tiles {
-  border: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  box-shadow: var(--shadow-edge);
-  border-radius: var(--radius-lg);
-  /* The panels' own ground (antd's container colour), so the strip reads as one more panel. */
-  background: var(--bg);
-  overflow: hidden;
-}
-.tile {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  min-width: 0;
-  padding: 14px 16px 12px;
-  border: 0;
-  border-right: 1px solid var(--border-soft);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color var(--motion-fast) var(--ease-standard);
-}
-.tile:last-child { border-right: 0; }
-.tile:hover { background: var(--hover-inset); }
-/* The selected tile takes the selected-row fill, the console's one mark for "this is the one being
-   read": the trend below plots this number. An edge rule would be a stripe no other selection uses. */
-.tile-active,
-.tile-active:hover { background: var(--selected-inset); }
-.tile-active .tile-label { color: var(--fg); }
-.tile:focus-visible { box-shadow: inset 0 0 0 2px var(--accent) !important; }
-.tile-label { color: var(--muted); font-size: var(--text-sm); font-weight: 500; letter-spacing: .02em; }
-.tile-value {
-  color: var(--fg);
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -.02em;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.tile-change {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 16px;
-  color: var(--fg-2);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-}
+/* ── Metric tiles: the shared StatTiles strip; this is only its change line ── */
+.tile-change { display: inline-flex; align-items: center; gap: 4px; }
 .tile-change-none { color: var(--meta); }
-.change-text { color: var(--muted); }
 .tile-change-was { margin-left: 6px; color: var(--meta); }
+.change-text { color: var(--muted); }
 
 /* ── Token anatomy: five parts of the selection's tokens on one bar ──────── */
-.anatomy {
+.anatomy { container: anatomy / inline-size; display: flex; flex-direction: column; gap: 18px; }
+.anatomy-rates { color: var(--muted); font-size: var(--text-sm); font-weight: 400; }
+.anatomy-rates b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.anatomy-bar { display: flex; gap: 2px; height: 12px; border-radius: var(--radius-sm); background: var(--series-track); overflow: hidden; }
+.anatomy-bar > span {
+  min-width: 3px;
+  flex-basis: 0;
+  transition: flex-grow var(--motion-base) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard);
+}
+.anatomy-parts {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.anatomy-parts > li {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 16px;
-  box-shadow: var(--shadow-edge);
-  border-radius: var(--radius-lg);
-  background: var(--bg);
+  gap: 6px;
+  min-width: 0;
 }
-.anatomy-compact { padding: 0; box-shadow: none; border-radius: 0; background: transparent; }
-.anatomy-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; min-height: 28px; font-size: var(--text-sm); }
-.anatomy-head b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
-.anatomy-title { display: inline-flex; align-items: center; gap: 12px; color: var(--fg); font-weight: 500; }
-.anatomy-bar { display: flex; gap: 2px; height: 10px; border-radius: var(--radius-xs); background: var(--series-track); overflow: hidden; }
-.anatomy-bar > span { min-width: 2px; flex-basis: 0; transition: flex-grow var(--motion-base) var(--ease-standard); }
-.anatomy-legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 0; padding: 0; list-style: none; font-size: var(--text-sm); }
-.anatomy-legend > li { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
-.anatomy-legend i { width: 8px; height: 8px; border-radius: var(--radius-xs); }
-.anatomy-legend-label { color: var(--muted); }
-.anatomy-legend-value { color: var(--fg); }
-.anatomy-legend-share { color: var(--fg-2); }
+.anatomy-parts i, .anatomy-part-name, .anatomy-part-value {
+  transition: opacity var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+/* Pointing at a part steps the others back: their marks fade, and their text quiets to a colour
+   that still reads. */
+.anatomy-bar > [data-dimmed], .anatomy-parts > [data-dimmed] i { opacity: .4; }
+.anatomy-parts > [data-dimmed] :is(.anatomy-part-name, .anatomy-part-value) { color: var(--muted); }
+.anatomy-part-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.anatomy-part-name > i { flex: none; width: 8px; height: 8px; border-radius: var(--radius-xs); }
+/* A full reading wider than its column puts its share on the next line rather than over a neighbour. */
+.anatomy-part-reading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding-left: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.anatomy-part-value { color: var(--fg); font-size: var(--text-lg); font-weight: 600; line-height: 1.25; letter-spacing: -.01em; }
+.anatomy-part-share { color: var(--muted); font-size: var(--text-sm); }
+/* Too narrow for five columns (a drawer, a phone), each part is a row: its name, then its reading. */
+@container anatomy (max-width: 600px) {
+  .anatomy { gap: 12px; }
+  .anatomy-parts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .anatomy-parts > li { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; }
+  .anatomy-part-reading { padding-left: 0; }
+  .anatomy-part-value { font-size: var(--text-md); }
+  .anatomy-part-share { min-width: 44px; text-align: right; }
+}
 
 /* A rate on its two-token ramp; the component supplies the stops and the weight. */
 .rate-text {
@@ -220,14 +201,24 @@
 .grouping-select { min-width: 120px; }
 .bucket-control { min-width: 128px; }
 
-.rankings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-/* One key gets a compact row of its own; the three rankings below it share one aligned row. */
-.rankings[data-layout='single-key'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-/* One key's panel is short, so the client attribution takes the rest of its row; with many keys the
-   attribution closes the grid at full width. */
-.rankings[data-layout='single-key'] > .client-panel { grid-column: span 2; }
-.rankings[data-layout='grid'] > .client-panel { grid-column: 1 / -1; }
-.client-panel { min-width: 0; }
+/* The rankings' fixed places: models and clients share the first row in halves; keys, providers and
+   credentials the next in thirds. A narrower page gives the keys a row of their own over providers
+   and credentials, and a phone stacks them; the data never moves a panel. */
+.rankings {
+  container: rankings / inline-size;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 16px;
+}
+.rankings > * { grid-column: span 2; min-width: 0; container: ranking / inline-size; }
+.rankings > :nth-child(-n + 2) { grid-column: span 3; }
+@container rankings (max-width: 1180px) {
+  .rankings > :nth-child(n + 4) { grid-column: span 3; }
+  .rankings > :nth-child(3) { grid-column: 1 / -1; }
+}
+@container rankings (max-width: 720px) {
+  .rankings > :nth-child(n) { grid-column: 1 / -1; }
+}
 .ranking-placeholder { height: 108px; }
 .ranking-open-spacer { flex: none; width: 28px; }
 
@@ -279,7 +270,15 @@
   cursor: pointer;
 }
 .ranking-open:hover { background: var(--hover-inset); color: var(--fg); }
+/* A tool button keeps its own control height, so it centres on the row rather than standing at its top. */
+.ranking-open-tool { align-self: center; }
 .ranking-more { margin: 8px 0 -4px; color: var(--muted); }
+/* A narrow panel keeps the share as a figure and drops its meter, so the names keep their room. */
+@container ranking (max-width: 460px) {
+  .ranking-row { grid-template-columns: minmax(0, 1fr) minmax(56px, auto) 48px 60px; }
+  .ranking-list-plain .ranking-row { grid-template-columns: minmax(0, 1fr) minmax(56px, auto) 48px; }
+  .ranking-bar, .ranking-row .value-detail { display: none; }
+}
 
 /* ── Key table ──────────────────────────────────────────────────────────── */
 .table-panel :global([data-slot="panel-body"]) { display: flex; flex-direction: column; gap: 8px; }
@@ -358,20 +357,6 @@
 
 .footnote { display: flex; flex-wrap: wrap; gap: 16px; color: var(--meta); font-size: var(--text-2xs); letter-spacing: .04em; }
 
-@media (max-width: 1100px) {
-  .tiles { border: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tile:nth-child(2n) { border-right: 0; }
-  .tile:nth-child(-n + 2) { border-bottom: 1px solid var(--border-soft); }
-  .rankings[data-layout='single-key'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rankings[data-layout='single-key'] > .client-panel { grid-column: auto; }
-  .rankings[data-layout='single-key'] > :last-child { grid-column: 1 / -1; }
-}
-@media (max-width: 900px) {
-  .rankings,
-  .rankings[data-layout='single-key'] { grid-template-columns: minmax(0, 1fr); }
-  .rankings > .client-panel,
-  .rankings[data-layout='single-key'] > :last-child { grid-column: auto; }
-}
 /* A phone keeps two tiles per row and drops the comparison's "was" figure; the rankings stay a
    single monochrome column. */
 @media (max-width: 640px) {
@@ -382,11 +367,6 @@
   .head :global(.terminal-page-heading) { flex: 1 1 auto; }
   .head :global(.terminal-subtitle) { margin-top: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
   .head :global(.terminal-page-actions) { flex: none; }
-  .tiles { border: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tile { padding: 12px; border-bottom: 1px solid var(--border-soft); }
-  .tile:nth-child(2n) { border-right: 0; }
-  .tile:nth-last-child(-n + 2) { border-bottom: 0; }
-  .tile-value { font-size: var(--text-xl); }
   .tile-change-was { display: none; }
   /* The trend's title and its two controls share one line: the controls go borderless and size to
      their label instead of wrapping beneath the title as a second toolbar. */
@@ -395,11 +375,9 @@
   .grouping-select, .bucket-control { min-width: 0; }
   .ranking-row, .ranking-list-plain .ranking-row { grid-template-columns: minmax(0, 1fr) auto 48px; }
   .ranking-change, .ranking-bar, .ranking-row .value-detail { display: none; }
-  .anatomy { padding: 12px; }
-  .anatomy-legend { gap: 6px 14px; }
   .rhythm { grid-template-columns: 24px repeat(24, minmax(0, 1fr)); gap: 2px; }
 }
 :global(:root[data-reduced-motion='true']) {
-  .ranking-bar > span, .ranking-list > li, .anatomy-bar > span { transition: none; }
+  .ranking-bar > span, .ranking-list > li, .anatomy-bar > span, .anatomy-parts i, .anatomy-part-name, .anatomy-part-value { transition: none; }
   .filter-chip { border: 0; animation: none; }
 }

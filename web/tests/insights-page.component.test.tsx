@@ -1,3 +1,4 @@
+import type React from 'react';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes, useLocation } from 'react-router-dom';
@@ -10,6 +11,7 @@ import type { InsightsClientsResponse, InsightsCubeResponse, InsightsRhythmCell,
 import { RhythmGrid } from '../src/pages/insights/components/RhythmGrid';
 vi.mock('../src/pages/insights/charts/InsightsFlowChart', () => ({ default: () => null }));
 vi.mock('../src/components/dashboard/RollingNumber', () => ({
+  RollingNumberGroup: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   RollingNumber: ({ readout }: { readout?: { number: number; prefix?: string; suffix: string; format: Intl.NumberFormatOptions } }) =>
     <>{readout ? `${readout.prefix ?? ''}${new Intl.NumberFormat('en', readout.format).format(readout.number)}${readout.suffix}` : '—'}</>,
 }));
@@ -110,7 +112,7 @@ describe('insights page', () => {
     mount('/insights?group=key&metric=cache_rate');
     await waitFor(() => expect(within(tile('requests')).getByText('45')).toBeTruthy());
     expect(within(tile('requests')).getByText('125%')).toBeTruthy();
-    expect(tile('tokens').getAttribute('aria-selected')).toBe('true');
+    expect(tile('tokens').getAttribute('aria-pressed')).toBe('true');
 
     const ranking = await screen.findByTestId('insights-ranking-key');
     fireEvent.click(within(ranking).getByText('Design team'));
@@ -123,8 +125,22 @@ describe('insights page', () => {
     expect(api.requests.filter((request) => request.path === '/management/insights/cube')).toHaveLength(1);
 
     fireEvent.click(tile('latency'));
-    await waitFor(() => expect(tile('latency').getAttribute('aria-selected')).toBe('true'));
+    await waitFor(() => expect(tile('latency').getAttribute('aria-pressed')).toBe('true'));
     expect(new URLSearchParams(lastSearch).get('metric')).toBe('latency');
+
+    // The change line keeps its place when the comparison is turned off, so nothing below it moves.
+    const parts = tile('requests').children.length;
+    fireEvent.click(screen.getByTestId('insights-compare'));
+    await waitFor(() => expect(within(tile('requests')).queryByText('125%')).toBeNull());
+    expect(tile('requests').children).toHaveLength(parts);
+
+    // Narrowed to a model only one key called, every ranking stays where the reader left it.
+    const places = () => [...screen.getByTestId('insights-ranking-key').parentElement!.children].map((panel) => panel.getAttribute('data-testid'));
+    const order = ['insights-ranking-model', 'insights-ranking-client', 'insights-ranking-key', 'insights-ranking-provider', 'insights-ranking-credential'];
+    expect(places()).toEqual(order);
+    fireEvent.click(within(screen.getByTestId('insights-ranking-model')).getByText('sonnet'));
+    await waitFor(() => expect(within(screen.getByTestId('insights-ranking-key')).queryByText('sk-…bbbb')).toBeNull());
+    expect(places()).toEqual(order);
   });
 
   it('isolates a series from the legend or chart click and resets on background click', async () => {

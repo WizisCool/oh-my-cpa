@@ -323,7 +323,7 @@ export function PanelsPlaceholder({ count = 3 }: { count?: number }) {
   );
 }
 
-/** Insights (`/insights`): range controls, 4-col MetricTiles, trend curve panel, and 2x2 rankings. */
+/** Insights (`/insights`): range controls, 4-col MetricTiles, trend curve panel, token parts, and the rankings' fixed places. */
 export function InsightsSkeleton({
   hasHeader = true,
   isImmediate = false,
@@ -352,8 +352,24 @@ export function InsightsSkeleton({
         >
           <ChartLinesPlaceholder height={260} kind="trend" row={2} />
         </Panel>
+        <Panel
+          title={<Placeholder width={120} row={3} className="placeholder-line" />}
+          extra={<Placeholder width={132} height={26} row={3} className="is-control" />}
+        >
+          <div className="placeholder-anatomy">
+            <Placeholder width="100%" height={12} row={3} />
+            <div className="placeholder-anatomy-parts">
+              {[0, 1, 2, 3, 4].map((part) => (
+                <div key={part} className="placeholder-ranking-row">
+                  <Placeholder width={72 + (part % 3) * 12} row={3} className="placeholder-line is-meta" />
+                  <Placeholder width={56} height={18} row={3} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </Panel>
         <div className="placeholder-insights-rankings" aria-hidden="true">
-          {[0, 1, 2, 3].map((panel) => (
+          {[0, 1, 2, 3, 4].map((panel) => (
             <Panel
               key={panel}
               title={<Placeholder width={84 + (panel % 2) * 20} row={3} className="placeholder-line" />}

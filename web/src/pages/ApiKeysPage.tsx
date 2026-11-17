@@ -475,7 +475,7 @@ export const ApiKeysPage: React.FC = () => {
           tiles={USE_TILES.map((tile) => ({
             key: tile.key,
             label: t(tile.labelKey),
-            count: tile.key === 'all' && !overview.counts
+            value: tile.key === 'all' && !overview.counts
               ? (keysQuery.data ? overview.visible.length : undefined)
               : overview.counts?.[tile.key],
             tone: tile.tone,

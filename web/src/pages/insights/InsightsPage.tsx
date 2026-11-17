@@ -86,6 +86,7 @@ import { PanelNarrowing } from './components/PanelNarrowing';
 import { RhythmGrid } from './components/RhythmGrid';
 import { EntityDetailDrawer, type InsightsEntity } from './components/EntityDetailDrawer';
 import { TokenAnatomyStrip } from './components/TokenAnatomyStrip';
+import { RollingNumberGroup } from '../../components/dashboard/RollingNumber';
 import { ClientAttributionPanel } from './components/ClientAttributionPanel';
 import { canDrillUsageEvents, insightsCsv, usageEventsHref, type ExportEntity } from './insightsDrill';
 import {
@@ -585,10 +586,8 @@ export const InsightsPage: React.FC = () => {
   const isEmpty = cube.rows.length === 0;
   const rankingLimit = isPhone ? 5 : 8;
   const metricName = t(`insights.metric.${metric}`);
-  const isSingleKey = panels.key.length <= 1;
   const clientPanel = (
     <ClientAttributionPanel
-      className={styles['client-panel']}
       data={clientsQuery.data}
       metric={metric}
       isLoading={clientsQuery.isLoading}
@@ -626,100 +625,106 @@ export const InsightsPage: React.FC = () => {
           onRetry={() => void cubeQuery.refetch()}
         />
       )}
-      <MetricTiles current={current} baseline={baseline} metric={requestedView.metric} tokenScope={view.tokenScope} onMetricChange={(next: InsightsMetric) => setView({ metric: next })} />
-      {!isEmpty && (
-        <TokenAnatomyStrip
-          anatomy={anatomy}
-          scope={requestedView.tokenScope}
-          onScopeChange={(tokenScope) => setView({ tokenScope })}
-          testId="insights-anatomy"
-        />
-      )}
-      <Panel
-        className={styles['trend-panel']}
-        title={(
-          <PanelTitle
-            extra={(
-              <>
-                <Select
-                  size="small"
-                  variant={isPhone ? 'borderless' : undefined}
-                  className={styles['grouping-select']}
-                  value={requestedView.grouping}
-                  options={groupingOptions}
-                  onChange={(grouping: InsightsGrouping) => setView({ grouping })}
-                  aria-label={t('insights.group_label')}
-                  popupMatchSelectWidth={false}
-                />
-                {bucketControl}
-              </>
-            )}
-          >
-            {t('insights.trend_label', { metric: metricName })}
-          </PanelTitle>
-        )}
-      >
-        {isEmpty ? (
-          <EmptyState size="compact" title={t('insights.no_usage')} description={t('insights.no_usage_hint')} />
-        ) : (
-          <>
-          {groupingDimension && (
-            <ChartLegend
-              label={t('insights.group_label')}
-              testId="insights-trend-legend"
-              items={[
-                ...trend.map((group) => ({
-                  id: group.id,
-                  color: trendColor(group.id),
-                  content: group.folded
-                    ? <span>{t('insights.folded')}</span>
-                    : <InsightsValue dimension={groupingDimension} id={group.id} labels={labels} />,
-                  // The legend chooses which series the chart draws; it never filters the page.
-                  isPressed: selectedTrendIds.includes(group.id),
-                  isDimmed: selectedTrendIds.length > 0 && !selectedTrendIds.includes(group.id),
-                  onToggle: () => toggleTrendGroup(group.id),
-                })),
-                ...(isLineMetric && trend.length > 1
-                  ? [{ id: '\u0000total', isDashed: true, content: <span>{t('insights.total')}</span>, testId: 'insights-legend-total' }]
-                  : []),
-              ]}
-            />
+      {/* One group, so a filter that moves the headline figures and the token parts rolls them as
+          one sweep with a single measurement, rather than one per readout. The tiles switch what the
+          trend plots, so the trend sits right under them and the token parts follow it. */}
+      <RollingNumberGroup>
+        <MetricTiles current={current} baseline={baseline} metric={requestedView.metric} tokenScope={view.tokenScope} onMetricChange={(next: InsightsMetric) => setView({ metric: next })} />
+        <Panel
+          className={styles['trend-panel']}
+          title={(
+            <PanelTitle
+              extra={(
+                <>
+                  <Select
+                    size="small"
+                    variant={isPhone ? 'borderless' : undefined}
+                    className={styles['grouping-select']}
+                    value={requestedView.grouping}
+                    options={groupingOptions}
+                    onChange={(grouping: InsightsGrouping) => setView({ grouping })}
+                    aria-label={t('insights.group_label')}
+                    popupMatchSelectWidth={false}
+                  />
+                  {bucketControl}
+                </>
+              )}
+            >
+              {t('insights.trend_label', { metric: metricName })}
+            </PanelTitle>
           )}
-          <React.Suspense fallback={<ChartFallback height={280} />}>
-            <InsightsTrendChart
-              bucketStarts={cube.bucketStarts}
-              bucket={cube.window.bucket}
-              groups={visibleTrend}
-              tooltipGroups={visibleTrendTooltip}
-              totals={trendTotals}
-              totalSamples={trendTotalSamples}
-              showTotal={isLineMetric && trend.length > 1}
-              onSelectGroup={selectTrendGroup}
-              colorOf={trendColor}
-              labelOf={trendLabel}
-              metric={metric}
-              totalLabel={t('insights.total')}
-              label={t('insights.trend_label', { metric: metricName })}
-              onBrush={isPhone ? undefined : brush}
-              height={isPhone ? 220 : 280}
-            />
-          </React.Suspense>
-          </>
+        >
+          {isEmpty ? (
+            <EmptyState size="compact" title={t('insights.no_usage')} description={t('insights.no_usage_hint')} />
+          ) : (
+            <>
+            {groupingDimension && (
+              <ChartLegend
+                label={t('insights.group_label')}
+                testId="insights-trend-legend"
+                items={[
+                  ...trend.map((group) => ({
+                    id: group.id,
+                    color: trendColor(group.id),
+                    content: group.folded
+                      ? <span>{t('insights.folded')}</span>
+                      : <InsightsValue dimension={groupingDimension} id={group.id} labels={labels} />,
+                    // The legend chooses which series the chart draws; it never filters the page.
+                    isPressed: selectedTrendIds.includes(group.id),
+                    isDimmed: selectedTrendIds.length > 0 && !selectedTrendIds.includes(group.id),
+                    onToggle: () => toggleTrendGroup(group.id),
+                  })),
+                  ...(isLineMetric && trend.length > 1
+                    ? [{ id: '\u0000total', isDashed: true, content: <span>{t('insights.total')}</span>, testId: 'insights-legend-total' }]
+                    : []),
+                ]}
+              />
+            )}
+            <React.Suspense fallback={<ChartFallback height={280} />}>
+              <InsightsTrendChart
+                bucketStarts={cube.bucketStarts}
+                bucket={cube.window.bucket}
+                groupingDimension={groupingDimension}
+                groups={visibleTrend}
+                tooltipGroups={visibleTrendTooltip}
+                totals={trendTotals}
+                totalSamples={trendTotalSamples}
+                showTotal={isLineMetric && trend.length > 1}
+                onSelectGroup={selectTrendGroup}
+                colorOf={trendColor}
+                labelOf={trendLabel}
+                metric={metric}
+                totalLabel={t('insights.total')}
+                label={t('insights.trend_label', { metric: metricName })}
+                onBrush={isPhone ? undefined : brush}
+                height={isPhone ? 220 : 280}
+              />
+            </React.Suspense>
+            </>
+          )}
+        </Panel>
+        {!isEmpty && (
+          <TokenAnatomyStrip
+            anatomy={anatomy}
+            scope={requestedView.tokenScope}
+            onScopeChange={(tokenScope) => setView({ tokenScope })}
+            testId="insights-anatomy"
+          />
         )}
-      </Panel>
-      {/* One key leaves its panel short, so the client attribution sits beside it; with many keys it
-          closes the grid at full width. */}
-      <div className={styles['rankings']} data-layout={isSingleKey ? 'single-key' : 'grid'}>
-        <RankingPanel dimension="key" title={t('insights.dim.key')} groups={panels.key} metric={metric} labels={labels} compare={baseline?.window}
-          colorOf={groupedColor('key')} selected={requestedView.filters.key ?? []} onSelect={selectFilter} onClear={clearFilter} onOpen={openDetail} limit={rankingLimit} testId="insights-ranking-key" />
-        {isSingleKey && clientPanel}
+      </RollingNumberGroup>
+      {/* Every ranking keeps its place whatever the window holds, so a reader's eye goes back to where
+          a panel was. The models and the programs that called them, the two most read, share the wide
+          first row; keys, providers and credentials share the next. Only the width rearranges them. */}
+      <div className={styles['rankings']}>
         <RankingPanel dimension={modelDimension} title={t(`insights.dim.${modelDimension}`)} groups={panels.model} metric={metric} labels={labels} compare={baseline?.window}
           colorOf={groupedColor(modelDimension)} selected={requestedView.filters[modelDimension] ?? []} onSelect={selectFilter} onClear={clearFilter} onOpen={openDetail} limit={rankingLimit} testId="insights-ranking-model" />
+        {clientPanel}
+        <RankingPanel dimension="key" title={t('insights.dim.key')} groups={panels.key} metric={metric} labels={labels} compare={baseline?.window}
+          colorOf={groupedColor('key')} selected={requestedView.filters.key ?? []} onSelect={selectFilter} onClear={clearFilter} onOpen={openDetail} limit={rankingLimit} testId="insights-ranking-key" />
         <RankingPanel dimension="provider" title={t('insights.ranking.provider')} groups={panels.provider} metric={metric} labels={labels} compare={baseline?.window}
           colorOf={groupedColor('provider')} selected={requestedView.filters.provider ?? []} onSelect={selectFilter} onClear={clearFilter} onOpen={openDetail} limit={rankingLimit} testId="insights-ranking-provider" />
         <RankingPanel dimension="credential" title={t('insights.ranking.credential')} groups={panels.credential} metric={metric} labels={labels} compare={baseline?.window}
           colorOf={groupedColor('credential')} selected={requestedView.filters.credential ?? []} onSelect={selectFilter} onClear={clearFilter} onOpen={openDetail} limit={rankingLimit} testId="insights-ranking-credential" />
-        {!isSingleKey && clientPanel}
       </div>
       {/* On a phone the key ranking above already lists every key and opens its detail; the table
           would repeat it as a column of label rows. */}

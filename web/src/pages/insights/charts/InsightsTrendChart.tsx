@@ -15,7 +15,8 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
-import { STACK_CAP_KEY, stackCapOf, stackCapShape } from '../../../charts/stackCap';
+import { STACK_CAP_KEY, stackCapOf } from '../../../charts/stackCap';
+import { GLIDE_SEGMENT_LIMIT, glideStackShape } from '../../../charts/barGlide';
 import { BucketBrush } from '../../../charts/BucketBrush';
 import dayjs from '../../../utils/time';
 import { useTimeZone } from '../../../utils/TimeZoneProvider';
@@ -23,13 +24,15 @@ import { useT } from '../../../i18n';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import type { InsightsBucket } from '../../../types/insights';
-import { isAdditiveMetric, type CubeMetric, type TrendGroup } from '../../../types/insightsCube';
+import { isAdditiveMetric, type CubeMetric, type InsightsDimension, type TrendGroup } from '../../../types/insightsCube';
 import { formatShare } from '../../../types/insightsFormat';
 import { useInsightsFormat } from '../useInsightsFormat';
 
 export interface InsightsTrendChartProps {
   bucketStarts: readonly number[];
   bucket: InsightsBucket;
+  /** What the series are, so a drawing of another grouping is never read as the same bars. */
+  groupingDimension: InsightsDimension | null;
   groups: readonly TrendGroup[];
   tooltipGroups: readonly TrendGroup[];
   totals: ReadonlyArray<number | null>;
@@ -284,7 +287,7 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
                   stackId="total"
                   maxBarSize={28}
                   fill={color}
-                  shape={stackCapShape(key)}
+                  shape={glideStackShape(key)}
                   isAnimationActive={false}
                   onClick={() => {
                     didInteractSeriesRef.current = true;
@@ -365,16 +368,37 @@ const InsightsTrendChartView: React.FC<InsightsTrendChartProps> = ({
   );
 };
 
+function isSameAxis(next: readonly number[], current: readonly number[]): boolean {
+  return next === current || (next.length === current.length && next.every((start, index) => start === current[index]));
+}
+
 /**
- * The chart takes its props through `useChartMorph`: a new dataset is one render of the marks inside
- * a compositor cross-fade, not a library tween that re-renders every SVG mark on every frame - which
- * is what made a filter or metric change stall the page.
+ * Whether the next drawing is the same bars changing: stacked bars on both sides, on the same
+ * buckets, sharing a series, and few enough segments to move within a frame. Picking a series out of
+ * the stack, a legend toggle, another additive metric or a poll's revision glides; another grouping,
+ * window or bucket size is another picture, and cross-fades.
+ */
+function canGlide(next: InsightsTrendChartProps, current: InsightsTrendChartProps): boolean {
+  if (!isAdditiveMetric(next.metric) || !isAdditiveMetric(current.metric)) return false;
+  if (next.bucket !== current.bucket || !isSameAxis(next.bucketStarts, current.bucketStarts)) return false;
+  // The folded remainder keeps its id in every grouping, so the series alone cannot tell them apart.
+  if (next.groupingDimension !== current.groupingDimension) return false;
+  if (next.groups.length * next.bucketStarts.length > GLIDE_SEGMENT_LIMIT) return false;
+  const drawn = new Set(current.groups.map((group) => group.id));
+  return next.groups.some((group) => drawn.has(group.id));
+}
+
+/**
+ * The chart takes its props through `useChartMorph`: a new dataset is one render of the marks, never
+ * a library tween that re-renders every SVG mark on every frame - which is what made a filter or
+ * metric change stall the page. The same bars changing glide segment by segment; anything else
+ * cross-fades on the compositor.
  */
 const InsightsTrendChartPlot = React.memo(InsightsTrendChartView);
 export const InsightsTrendChart = React.memo<InsightsTrendChartProps>((props) => {
-  const { shown, scopeRef } = useMorphedProps(props);
+  const { shown, scopeRef } = useMorphedProps(props, canGlide);
   return (
-    <div ref={scopeRef} className="omc-chart-morph">
+    <div ref={scopeRef} className="omc-chart-morph omc-chart-glide">
       <InsightsTrendChartPlot {...shown} />
     </div>
   );

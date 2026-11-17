@@ -34,7 +34,7 @@ import { canDrillUsageEvents, cleanValues, csvCell, insightsCsv, usageEventsHref
 import { MAX_USAGE_EVENT_FILTER_VALUES } from '../../src/types/usageEvents.ts';
 import { clientCoverageShare, clientIconId, clientMeasures, clientProductName } from '../../src/types/clientAgents.ts';
 import { readEventQuery } from '../../src/types/usageEventQuery.ts';
-import { formatCountBaseline } from '../../src/types/insightsFormat.ts';
+import { formatCountBaseline, formatMetric, metricReadout } from '../../src/types/insightsFormat.ts';
 import { insightsRangeParams, parseInsightsRange } from '../../src/types/insights.ts';
 import { canShowWeekView, peakHourSet, summarizeRhythm } from '../../src/pages/insights/insightsRhythm.ts';
 import {
@@ -329,6 +329,21 @@ test('insights cube', () => {
   assert.equal(formatCountBaseline(32.5), '32.5');
   assert.equal(formatCountBaseline(3.47), '3.47');
   assert.equal(formatCountBaseline(0.004), '<0.01');
+
+  // A tile's rolling figure prints exactly what its static form prints, at every magnitude.
+  const printReadout = (readout: NonNullable<ReturnType<typeof metricReadout>>) =>
+    `${readout.prefix ?? ''}${new Intl.NumberFormat('en', readout.format).format(readout.number)}${readout.suffix}`;
+  for (const value of [0, 0.4, 7, 999.4, 999.6, 1000, 1004.9, 1005, 12_345.678, 999_949, 1_234_567, 98_765_432_101]) {
+    for (const metric of ['tokens', 'net_tokens', 'cost', 'requests', 'latency'] as const) {
+      for (const style of ['en-compact', 'zh', 'full'] as const) {
+        const whole = metric === 'requests' ? Math.round(value) : value;
+        const readout = metricReadout(metric, whole, style);
+        assert.ok(readout, `${metric} ${whole} has a readout`);
+        assert.equal(printReadout(readout), formatMetric(metric, whole, style), `${metric} ${whole} (${style}) rolls to its printed form`);
+      }
+    }
+  }
+  assert.equal(metricReadout('tokens', null, 'en-compact'), undefined, 'a missing reading has no readout');
 
   // ── the view in the URL ───────────────────────────────────────────────────────
 
