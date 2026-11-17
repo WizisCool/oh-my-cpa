@@ -5,10 +5,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { CloseOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '../../../components/icons';
 import { SearchInput } from '../../../components/common/SearchInput';
 import { useT } from '../../../i18n';
-import { facetValues, filterRows, INSIGHTS_DIMENSIONS, type InsightsCube, type InsightsDimension, type InsightsFilters } from '../../../types/insightsCube';
+import { facetValues, filterRows, INSIGHTS_FILTER_KEYS, type InsightsCube, type InsightsDimension, type InsightsFilterKey, type InsightsFilters } from '../../../types/insightsCube';
+import type { InsightsClientItem } from '../../../types/insights';
+import { clientDisplayName } from '../../../types/clientAgents';
 import { hasFilters, toggleFilter } from '../insightsViewState';
 import type { InsightsLabels } from '../../../hooks/useInsightsLabels';
 import { InsightsValue } from './InsightsValue';
+import { ClientValue } from './ClientAttributionPanel';
 import styles from '../insights.module.css';
 
 const COUNT = new Intl.NumberFormat('en');
@@ -19,6 +22,8 @@ interface InsightsFilterBarProps {
   labels: InsightsLabels;
   /** The model dimension the console names models by: the call point or the served model. */
   modelDimension: 'call_point' | 'model';
+  /** The client ranking, read under every filter but its own, which is what a client's count is. */
+  clients?: readonly InsightsClientItem[];
   onChange: (filters: InsightsFilters) => void;
   /** Opens a value's detail from its chip. */
   onOpen?: (dimension: InsightsDimension, id: string) => void;
@@ -36,23 +41,32 @@ interface InsightsFilterBarProps {
  * While anything is chosen the bar holds to the top of the scroll, so a narrowing made from a ranking
  * far down the page stays in sight, and a new chip settles in with a short entrance.
  */
-export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filters, labels, modelDimension, onChange, onOpen, onViewRequests, canViewRequests = true }) => {
+export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filters, labels, modelDimension, clients, onChange, onOpen, onViewRequests, canViewRequests = true }) => {
   const t = useT();
   const [isOpen, setIsOpen] = React.useState(false);
-  const [dimension, setDimension] = React.useState<InsightsDimension | null>(null);
+  const [dimension, setDimension] = React.useState<InsightsFilterKey | null>(null);
   const [search, setSearch] = React.useState('');
-  const dimensions = INSIGHTS_DIMENSIONS.filter((item) => item !== (modelDimension === 'model' ? 'call_point' : 'model'));
+  const dimensions = INSIGHTS_FILTER_KEYS.filter((item) => item !== (modelDimension === 'model' ? 'call_point' : 'model'));
+  const clientCategory = (id: string) => clients?.find((item) => item.id === id)?.category;
 
   const facets = React.useMemo(() => {
+    if (dimension === 'client') {
+      // `other` folds many programs together, so it names no one client to narrow to.
+      return (clients ?? []).filter((item) => item.id !== 'other' && item.requests > 0).map((item) => ({ id: item.id, requests: item.requests }));
+    }
     if (!cube || !dimension) return [];
     return facetValues(cube, filterRows(cube, cube.rows, filters, dimension), dimension);
-  }, [cube, dimension, filters]);
+  }, [clients, cube, dimension, filters]);
+  const nameOf = (key: InsightsFilterKey, id: string) => (key === 'client' ? clientDisplayName(id, t) : labels.label(key, id));
   const needle = search.trim().toLowerCase();
   const visible = needle
-    ? facets.filter((facet) => `${labels.label(dimension!, facet.id)} ${facet.id}`.toLowerCase().includes(needle))
+    ? facets.filter((facet) => `${nameOf(dimension!, facet.id)} ${facet.id}`.toLowerCase().includes(needle))
     : facets;
+  const valueOf = (key: InsightsFilterKey, id: string, className: string, hasDetail?: boolean) => (key === 'client'
+    ? <ClientValue id={id} category={clientCategory(id)} className={className} />
+    : <InsightsValue dimension={key} id={id} labels={labels} hasDetail={hasDetail} className={className} />);
 
-  const chips = INSIGHTS_DIMENSIONS.flatMap((item) => (filters[item] ?? []).map((value) => ({ dimension: item, value })));
+  const chips = INSIGHTS_FILTER_KEYS.flatMap((item) => (filters[item] ?? []).map((value) => ({ dimension: item, value })));
 
   const close = (open: boolean) => {
     setIsOpen(open);
@@ -87,7 +101,7 @@ export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filt
                 checked={(filters[dimension] ?? []).includes(facet.id)}
                 onCheckedChange={() => onChange(toggleFilter(filters, dimension, facet.id))}
               />
-              <InsightsValue dimension={dimension} id={facet.id} labels={labels} hasDetail className={styles['filter-value-name']} />
+              {valueOf(dimension, facet.id, styles['filter-value-name'], true)}
               <span className={styles['filter-value-count']}>{COUNT.format(facet.requests)}</span>
             </label>
           );
@@ -98,17 +112,20 @@ export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filt
 
   return (
     <div className={styles['filter-bar']} data-active={chips.length > 0 || undefined} data-testid="insights-filter-bar">
-      {chips.map((chip) => (
+      {chips.map((chip) => {
+        // A client has no detail drawer; neither has traffic that carried no client key.
+        const detail = chip.dimension === 'client' || (chip.dimension === 'key' && labels.isNonKey(chip.value)) ? null : chip.dimension;
+        return (
         <span key={`${chip.dimension}:${chip.value}`} className={styles['filter-chip']}>
           <span className={styles['filter-chip-dim']}>{t(`insights.dim.${chip.dimension}`)}</span>
-          <InsightsValue dimension={chip.dimension} id={chip.value} labels={labels} className={styles['filter-chip-value']} />
-          {onOpen && !(chip.dimension === 'key' && labels.isNonKey(chip.value)) && (
+          {valueOf(chip.dimension, chip.value, styles['filter-chip-value'])}
+          {onOpen && detail && (
             <button
               type="button"
               className={styles['filter-chip-action']}
               aria-label={t('insights.open_detail')}
               data-tip={t('insights.open_detail')}
-              onClick={() => onOpen(chip.dimension, chip.value)}
+              onClick={() => onOpen(detail, chip.value)}
             >
               <RightOutlined />
             </button>
@@ -122,7 +139,8 @@ export const InsightsFilterBar: React.FC<InsightsFilterBarProps> = ({ cube, filt
             <CloseOutlined />
           </button>
         </span>
-      ))}
+        );
+      })}
       <Popover open={isOpen} onOpenChange={(next) => close(next)}>
         <PopoverTrigger
           render={

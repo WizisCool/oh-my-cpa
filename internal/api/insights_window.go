@@ -73,6 +73,9 @@ type insightsWindow struct {
 	// Widened reports that request records behind the retention horizon could not
 	// split an edge bucket, so the window read was widened to whole fact buckets.
 	Widened bool `json:"widened"`
+	// Clipped reports that a client filter started the read at the request-record
+	// horizon: client attribution is kept only as long as the records.
+	Clipped bool `json:"clipped"`
 }
 
 // insightsCompareWindow is the period a window is compared against.

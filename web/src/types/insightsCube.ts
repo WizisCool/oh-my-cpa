@@ -39,8 +39,16 @@ export function isAdditiveMetric(metric: CubeMetric): boolean {
   return metric !== 'latency';
 }
 
-/** Selected values per dimension. A dimension absent or empty is no constraint. */
-export type InsightsFilters = Partial<Record<InsightsDimension, readonly string[]>>;
+/**
+ * What a reader can narrow by: the cube's dimensions, and the client program. Client attribution is
+ * not a cube column - the server reads the cube from its own client rollups when one is chosen - so
+ * the browser-side projections pass over it.
+ */
+export const INSIGHTS_FILTER_KEYS = [...INSIGHTS_DIMENSIONS, 'client'] as const;
+export type InsightsFilterKey = (typeof INSIGHTS_FILTER_KEYS)[number];
+
+/** Selected values per filter key. A key absent or empty is no constraint. */
+export type InsightsFilters = Partial<Record<InsightsFilterKey, readonly string[]>>;
 
 export interface Measures {
   requests: number;

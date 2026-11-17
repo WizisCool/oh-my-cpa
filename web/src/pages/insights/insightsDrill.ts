@@ -40,12 +40,14 @@ export function usageEventsHref(
   const params = new URLSearchParams();
   params.set('from', String(window.from));
   if (!window.open_end) params.set('to', String(window.to));
+  // One program's records replace the page's client filter rather than adding to it.
+  const client = clientAgent?.trim();
+  const scoped = client ? { ...filters, client: undefined } : filters;
   // A chosen key stays chosen even where this window never saw it: the list then opens empty, as
   // the page reads zero, rather than dropping the filter and listing everyone.
-  for (const [name, values] of drillFilters(cube, filters)) {
+  for (const [name, values] of drillFilters(cube, scoped)) {
     for (const value of values) params.append(name, value);
   }
-  const client = clientAgent?.trim();
   if (client && client !== 'other') params.append('client_agent', client);
   return `/usage/events?${params.toString()}`;
 }
@@ -64,6 +66,7 @@ function drillFilters(cube: InsightsCube, filters: InsightsFilters): Array<reado
     ['model', cleanValues(filters.model)],
     ['provider', cleanValues(request.provider)],
     ['auth_index', cleanValues(request.credential)],
+    ['client_agent', cleanValues(filters.client)],
   ];
 }
 

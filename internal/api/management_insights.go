@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -116,6 +117,7 @@ func (h *Handler) insightsRangeFromRequest(ctx context.Context, request *http.Re
 // @Param from query integer false "Custom window start timestamp in Unix milliseconds"
 // @Param to query integer false "Custom window end timestamp in Unix milliseconds"
 // @Param compare query string false "Comparison window mode"
+// @Param client_agent query []string false "Client program filters; the window then starts no earlier than request-record retention" collectionFormat(multi)
 // @Success 200 {object} insightsCubeResponse
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
@@ -140,6 +142,7 @@ func (h *Handler) insightsCube(writer http.ResponseWriter, request *http.Request
 	}
 	zone := h.insightsZone()
 	window := resolved.window
+	clientAgents := insightsClientAgents(request)
 
 	var current repository.UsageFactResult
 	var starts []int64
@@ -149,7 +152,7 @@ func (h *Handler) insightsCube(writer http.ResponseWriter, request *http.Request
 		current, err = h.repo.QueryUsageFacts(ctx, repository.UsageFactQuery{
 			InstanceID: defaultInstanceID(), FromMS: window.FromMS, ToMS: window.ToMS,
 			Calendar:   &repository.UsageCalendar{Location: zone, Unit: window.Bucket.calendarUnit()},
-			Dimensions: insightsCubeDimensions,
+			Dimensions: insightsCubeDimensions, ClientAgents: clientAgents,
 		})
 		if err != nil {
 			writeInternalError(writer, fmt.Errorf("query insights cube: %w", err))
@@ -168,7 +171,8 @@ func (h *Handler) insightsCube(writer http.ResponseWriter, request *http.Request
 		window.Bucket = coarser
 		builder = newInsightsDictionary()
 	}
-	window.Widened = current.FromMS != window.FromMS || current.ToMS != window.ToMS
+	window.Clipped = current.Clipped
+	window.Widened = !current.Clipped && (current.FromMS != window.FromMS || current.ToMS != window.ToMS)
 	window.FromMS, window.ToMS = current.FromMS, current.ToMS
 
 	response := insightsCubeResponse{
@@ -180,14 +184,18 @@ func (h *Handler) insightsCube(writer http.ResponseWriter, request *http.Request
 		prevBucketMS, prevCalendar, prevBucket := compareBucketSpec(resolved.compare.FromMS, resolved.compare.ToMS, zone)
 		previous, errPrevious := h.repo.QueryUsageFacts(ctx, repository.UsageFactQuery{
 			InstanceID: defaultInstanceID(), FromMS: resolved.compare.FromMS, ToMS: resolved.compare.ToMS,
-			BucketMS: prevBucketMS, Calendar: prevCalendar, Dimensions: insightsCubeDimensions,
+			BucketMS: prevBucketMS, Calendar: prevCalendar, Dimensions: insightsCubeDimensions, ClientAgents: clientAgents,
 		})
 		if errPrevious != nil {
 			writeInternalError(writer, fmt.Errorf("query insights comparison: %w", errPrevious))
 			return
 		}
-		response.Compare = &insightsCompareWindow{FromMS: previous.FromMS, ToMS: previous.ToMS}
-		if prevCalendar != nil {
+		// A client read's comparison reaching behind the request-record horizon has
+		// no records left to compare with; an empty period would read as zero usage.
+		if previous.Clipped {
+			response.Compare = nil
+		} else if prevCalendar != nil {
+			response.Compare = &insightsCompareWindow{FromMS: previous.FromMS, ToMS: previous.ToMS}
 			prevStarts := prevBucket.bucketStarts(previous.FromMS, previous.ToMS, zone)
 			response.PreviousRows = builder.bucketedRows(previous.Rows, prevStarts, prevBucket, zone)
 			for len(response.PreviousRows) > maxInsightsCubeRows && (prevBucket == insightsBucketHour || prevBucket == insightsBucketDay) {
@@ -200,7 +208,7 @@ func (h *Handler) insightsCube(writer http.ResponseWriter, request *http.Request
 				}
 				previousCoarse, errCoarse := h.repo.QueryUsageFacts(ctx, repository.UsageFactQuery{
 					InstanceID: defaultInstanceID(), FromMS: resolved.compare.FromMS, ToMS: resolved.compare.ToMS,
-					Calendar: prevCalendar, Dimensions: insightsCubeDimensions,
+					Calendar: prevCalendar, Dimensions: insightsCubeDimensions, ClientAgents: clientAgents,
 				})
 				if errCoarse != nil {
 					writeInternalError(writer, fmt.Errorf("query insights comparison: %w", errCoarse))
@@ -211,6 +219,7 @@ func (h *Handler) insightsCube(writer http.ResponseWriter, request *http.Request
 				response.PreviousRows = builder.bucketedRows(previousCoarse.Rows, prevStarts, prevBucket, zone)
 			}
 		} else {
+			response.Compare = &insightsCompareWindow{FromMS: previous.FromMS, ToMS: previous.ToMS}
 			firstStart := (previous.FromMS / prevBucketMS) * prevBucketMS
 			for _, row := range previous.Rows {
 				bucketIdx := (row.StartMS - firstStart) / prevBucketMS
@@ -438,6 +447,19 @@ type insightsRhythmCell struct {
 	CostNanos   int64 `json:"cost_nanos"`
 }
 
+// insightsClientAgents reads the client program filter, each value once. It is
+// not one of the dimension filters: client attribution is read from its own
+// rollups, so it changes where a read comes from rather than narrowing a column.
+func insightsClientAgents(request *http.Request) []string {
+	var agents []string
+	for _, value := range request.URL.Query()["client_agent"] {
+		if trimmed := strings.TrimSpace(value); trimmed != "" && !slices.Contains(agents, trimmed) {
+			agents = append(agents, trimmed)
+		}
+	}
+	return agents
+}
+
 // insightsRhythmFilters reads the filter vocabulary the request list already uses.
 // A raw client key is fingerprinted, so the key itself is never a query value.
 func (h *Handler) insightsRhythmFilters(request *http.Request) map[repository.UsageDimension][]string {
@@ -486,6 +508,7 @@ func (h *Handler) insightsRhythmFilters(request *http.Request) map[repository.Us
 // @Param model_alias query []string false "Call point filters" collectionFormat(multi)
 // @Param provider query []string false "Provider filters" collectionFormat(multi)
 // @Param auth_index query []string false "Credential auth_index filters" collectionFormat(multi)
+// @Param client_agent query []string false "Client program filters; the window then starts no earlier than request-record retention" collectionFormat(multi)
 // @Success 200 {object} insightsRhythmResponse
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
@@ -513,13 +536,14 @@ func (h *Handler) insightsRhythm(writer http.ResponseWriter, request *http.Reque
 	result, err := h.repo.QueryUsageFacts(ctx, repository.UsageFactQuery{
 		InstanceID: defaultInstanceID(), FromMS: window.FromMS, ToMS: window.ToMS,
 		Calendar: &repository.UsageCalendar{Location: zone, Unit: repository.UsageCalendarHour},
-		Filters:  h.insightsRhythmFilters(request),
+		Filters:  h.insightsRhythmFilters(request), ClientAgents: insightsClientAgents(request),
 	})
 	if err != nil {
 		writeInternalError(writer, fmt.Errorf("query insights rhythm: %w", err))
 		return
 	}
-	window.Widened = result.FromMS != window.FromMS || result.ToMS != window.ToMS
+	window.Clipped = result.Clipped
+	window.Widened = !result.Clipped && (result.FromMS != window.FromMS || result.ToMS != window.ToMS)
 	window.FromMS, window.ToMS, window.Bucket = result.FromMS, result.ToMS, insightsBucketHour
 	cells := make([]insightsRhythmCell, 7*24)
 	for index := range cells {

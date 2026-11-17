@@ -198,6 +198,23 @@ describe('insights page', () => {
     expect(search.has('ua')).toBe(false);
   });
 
+  it('narrows the whole page to a chosen client and keeps the other clients ranked', async () => {
+    mount('/insights');
+    const clients = await screen.findByTestId('insights-ranking-client');
+    await waitFor(() => expect(within(clients).getByText('Claude Code')).toBeTruthy());
+    const row = within(within(clients).getAllByRole('listitem')[0]!).getByRole('button', { pressed: false });
+    fireEvent.click(row);
+    await waitFor(() => expect(new URLSearchParams(lastSearch).getAll('client')).toEqual(['claude-code']));
+    await waitFor(() => expect(api.requests.some((request) => request.path === '/management/insights/cube'
+      && request.query.getAll('client_agent').join() === 'claude-code')).toBe(true));
+    await waitFor(() => expect(api.requests.some((request) => request.path === '/management/insights/rhythm'
+      && request.query.getAll('client_agent').join() === 'claude-code')).toBe(true));
+    expect(api.requests.filter((request) => request.path === '/management/insights/clients')
+      .every((request) => !request.query.has('client_agent'))).toBe(true);
+    expect(within(screen.getByTestId('insights-filter-bar')).getByText('Claude Code')).toBeTruthy();
+    await waitFor(() => expect(within(within(clients).getAllByRole('listitem')[0]!).getByRole('button', { pressed: true })).toBeTruthy());
+  });
+
   it('offers a retry when the client attribution fails to load', async () => {
     api.on('GET', '/management/insights/clients', () => json({ error: 'records unavailable' }, 500));
     const client = createTestQueryClient();
@@ -336,6 +353,38 @@ describe('insights page', () => {
     const clients = api.requests.find((request) => request.path === '/management/insights/clients');
     expect(rhythm?.query.getAll('auth_index')).toEqual(['c1']);
     expect(clients?.query.getAll('auth_index')).toEqual(['c1']);
+  });
+
+  it('ranks clients over every credential of a connection while one client narrows the cube', async () => {
+    // The connection served by c1 and c2; the chosen client only ever used c1.
+    const c2Row = row(1, 1, 1, 4, 400);
+    c2Row[5] = 1;
+    const allClients: InsightsCubeResponse = {
+      ...CUBE,
+      dims: { ...CUBE.dims, credentials: [{ auth_index: 'c1', auth_type: 'oauth' }, { auth_index: 'c2', auth_type: 'oauth' }] },
+      rows: [...CUBE.rows, c2Row],
+    };
+    api.on('GET', '/management/insights/cube', (request) => (request.query.has('client_agent') ? CUBE : allClients));
+    mount('/insights?provider=codex&client=claude-code');
+    await waitFor(() => expect(api.requests.some((request) => request.path === '/management/insights/clients')).toBe(true));
+    const rhythm = await waitFor(() => {
+      const found = api.requests.find((request) => request.path === '/management/insights/rhythm');
+      expect(found).toBeTruthy();
+      return found!;
+    });
+    const clients = api.requests.filter((request) => request.path === '/management/insights/clients');
+    expect(rhythm.query.getAll('auth_index')).toEqual(['c1']);
+    expect(rhythm.query.getAll('client_agent')).toEqual(['claude-code']);
+    expect(clients.map((request) => request.query.getAll('auth_index'))).toEqual([['c1', 'c2']]);
+    expect(clients[0]!.query.has('client_agent')).toBe(false);
+    // A client's request list reads like its ranking row: every credential of the connection.
+    const panel = await screen.findByTestId('insights-ranking-client');
+    await waitFor(() => expect(within(panel).getByText('Claude Code')).toBeTruthy());
+    const viewRequests = within(within(panel).getAllByRole('listitem')[1]!).getByRole('button', { name: 'View requests' });
+    await waitFor(() => expect((viewRequests as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(viewRequests);
+    await waitFor(() => expect(lastPath).toBe('/usage/events'));
+    expect(new URLSearchParams(lastSearch).getAll('auth_index')).toEqual(['c1', 'c2']);
   });
 });
 
