@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { flushSync } from 'react-dom';
 import { isMotionReduced } from '@/utils/motionPreference';
+import { useBarGlide } from './barGlide';
 
 type MorphScope = HTMLElement & {
   startViewTransition?: (update: () => void) => { ready: Promise<void> };
@@ -16,26 +17,46 @@ type MorphScope = HTMLElement & {
  * stays interactive. Where scoped transitions are missing, or motion is reduced, the new value
  * simply lands.
  *
+ * A stacked bar chart whose next drawing keeps its buckets and some of its series passes `canGlide`
+ * and draws its segments with `glideStackShape`: then the segments travel to their new boxes
+ * (`barGlide.tsx`) instead of the whole chart cross-fading, which reads as the same bars changing
+ * rather than as one picture replacing another.
+ *
  * The chart renders `shown`, not `value`, and puts `scopeRef` on its own box. Charts using this
  * turn their library's update animation off.
  */
 export function useChartMorph<T, E extends HTMLElement = HTMLDivElement>(
   value: T,
   isSame: (next: T, current: T) => boolean = Object.is,
+  canGlide?: (next: T, current: T) => boolean,
 ) {
   const scopeRef = React.useRef<E | null>(null);
   const [shown, setShown] = React.useState(value);
+  const glide = useBarGlide(scopeRef);
 
   React.useEffect(() => {
     if (isSame(value, shown)) return;
     const scope = scopeRef.current as MorphScope | null;
-    if (!scope?.startViewTransition || isMotionReduced() || !scope.isConnected) {
+    if (!scope?.isConnected || isMotionReduced()) {
+      setShown(value);
+      return;
+    }
+    if (canGlide?.(value, shown)) {
+      glide.arm();
+      setShown(value);
+      return;
+    }
+    if (!scope.startViewTransition) {
       setShown(value);
       return;
     }
     // A newer value skips the running fade and starts from wherever it had got to.
     scope.startViewTransition(() => flushSync(() => setShown(value))).ready.catch(() => {});
-  }, [value, shown, isSame]);
+  }, [value, shown, isSame, canGlide, glide]);
+
+  React.useLayoutEffect(() => {
+    glide.settle();
+  }, [shown, glide]);
 
   return { shown, scopeRef };
 }
@@ -61,8 +82,11 @@ export function isSameDrawing<T extends object>(next: T, current: T): boolean {
  * as stable functions that always call the newest one passed, so a handler is never stale and never
  * by itself a reason to re-render the marks.
  */
-export function useMorphedProps<T extends object>(props: T): { shown: T; scopeRef: React.RefObject<HTMLDivElement | null> } {
-  const { shown, scopeRef } = useChartMorph(props, isSameDrawing);
+export function useMorphedProps<T extends object>(
+  props: T,
+  canGlide?: (next: T, current: T) => boolean,
+): { shown: T; scopeRef: React.RefObject<HTMLDivElement | null> } {
+  const { shown, scopeRef } = useChartMorph(props, isSameDrawing, canGlide);
   const latest = React.useRef<Record<string, unknown>>(props as Record<string, unknown>);
   React.useLayoutEffect(() => {
     latest.current = props as Record<string, unknown>;

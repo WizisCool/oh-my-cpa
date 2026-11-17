@@ -32,7 +32,6 @@ interface ClientAttributionPanelProps {
   /** The request list for one client, inside the page's window and filters. */
   hrefFor: (clientAgent: string) => string;
   onNavigate: (href: string) => void;
-  className?: string;
 }
 
 function ClientMark({ item }: { item: InsightsClientItem }) {
@@ -52,7 +51,7 @@ function ClientMark({ item }: { item: InsightsClientItem }) {
  * them says how much of it the ranking covers rather than letting the missing part read as idle.
  */
 export const ClientAttributionPanel: React.FC<ClientAttributionPanelProps> = ({
-  data, metric, isLoading, isUncaptured, error, onRetry, isPlaceholder = false, limit = 8, canViewRequests = true, hrefFor, onNavigate, className,
+  data, metric, isLoading, isUncaptured, error, onRetry, isPlaceholder = false, limit = 8, canViewRequests = true, hrefFor, onNavigate,
 }) => {
   const t = useT();
   const { style } = useTokenDisplayStyle();
@@ -70,7 +69,6 @@ export const ClientAttributionPanel: React.FC<ClientAttributionPanelProps> = ({
 
   return (
     <Panel
-      className={className}
       data-testid="insights-ranking-client"
       title={(
         <PanelTitle
@@ -117,7 +115,7 @@ export const ClientAttributionPanel: React.FC<ClientAttributionPanelProps> = ({
                   <ToolButton
                     variant="ghost"
                     size="sm"
-                    className={styles['ranking-open']}
+                    className={clsx(styles['ranking-open'], styles['ranking-open-tool'])}
                     icon={<RightOutlined />}
                     label={t('insights.view_requests')}
                     disabled={isPlaceholder || !canViewRequests}

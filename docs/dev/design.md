@@ -422,7 +422,14 @@ the motion short of its end and snap the rest.
 Charts are the exception. A chart's marks are hundreds of SVG nodes, so a new dataset is rendered
 once inside an element-scoped view transition ([`useChartMorph`](../../web/src/charts/useChartMorph.ts))
 that cross-fades the chart on the compositor, and the chart library's own tween stays off. Where
-scoped transitions are missing or motion is reduced, the new data simply lands.
+scoped transitions are missing or motion is reduced, the new data simply lands. A stacked bar chart
+whose next drawing keeps its buckets and some of its series (a series picked out of the stack, a
+legend toggle, another metric, a revision) glides instead
+([`barGlide`](../../web/src/charts/barGlide.tsx)): each segment drawn on both sides travels from its
+old box to its new one on one Web Animations transform, an arriving segment fades in where it
+belongs once the others are nearly home, and a leaving one goes at once, so the reader sees the same
+bars change rather than one picture replace another. Another grouping, window or bucket size, or more segments than a frame can move, still
+cross-fades.
 
 The request list is the other exception. Its rows are virtualized and placed by transforms the list
 owns, so a record arriving at the live edge is carried in by the list itself

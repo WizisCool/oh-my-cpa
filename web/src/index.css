@@ -792,6 +792,16 @@
 @starting-style {
   :root:not([data-reduced-motion='true']) .omc-chart-morph :is(.recharts-surface, .omc-sparkline-surface) { opacity: 0; }
 }
+/* A gliding segment (`charts/barGlide.tsx`) transforms about the plot's own origin, the space its
+   boxes are measured in. While the bars glide to a new scale, an axis label that changes arrives in a
+   short fade rather than a cut. */
+.omc-chart-glide [data-glide] { transform-box: view-box; transform-origin: 0 0; }
+:root:not([data-reduced-motion='true']) .omc-chart-glide .recharts-yAxis .recharts-cartesian-axis-tick-value {
+  animation: chart-tick-arrive var(--motion-base) var(--ease-out) backwards;
+}
+@keyframes chart-tick-arrive {
+  from { opacity: 0; }
+}
 .omc-chart-morph::view-transition-group(root) {
   animation-duration: var(--motion-slow);
   animation-timing-function: var(--ease-standard);
@@ -2390,10 +2400,23 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   animation-delay: calc(var(--placeholder-epoch, 0ms) + var(--placeholder-row, 0) * 85ms);
 }
 .placeholder-rhythm-cell.is-mid { background: color-mix(in oklab, var(--fg) 10%, transparent); }
+.placeholder-anatomy { display: flex; flex-direction: column; gap: 18px; }
+.placeholder-anatomy-parts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px 24px; }
+/* The rankings' fixed places, as `insights.module.css` lays them out. */
 .placeholder-insights-rankings {
+  container: placeholder-rankings / inline-size;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 16px;
+}
+.placeholder-insights-rankings > * { grid-column: span 2; min-width: 0; }
+.placeholder-insights-rankings > :nth-child(-n + 2) { grid-column: span 3; }
+@container placeholder-rankings (max-width: 1180px) {
+  .placeholder-insights-rankings > :nth-child(n + 4) { grid-column: span 3; }
+  .placeholder-insights-rankings > :nth-child(3) { grid-column: 1 / -1; }
+}
+@container placeholder-rankings (max-width: 720px) {
+  .placeholder-insights-rankings > :nth-child(n) { grid-column: 1 / -1; }
 }
 .placeholder-ranking-rows { display: flex; flex-direction: column; gap: 14px; }
 .placeholder-ranking-row { display: flex; flex-direction: column; gap: 6px; }
@@ -2507,8 +2530,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 @media (max-width: 900px) {
   .placeholder-routing-workspace,
   .placeholder-workbench,
-  .placeholder-system-grid,
-  .placeholder-insights-rankings {
+  .placeholder-system-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -2517,6 +2539,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .placeholder-phone-only { display: block; }
   .placeholder-stat-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .placeholder-toolbar-search { flex: 1 1 100%; width: 100%; }
+  .placeholder-anatomy-parts { grid-template-columns: minmax(0, 1fr); }
   .placeholder-toolbar-trailing { margin-left: 0; }
   .placeholder-routing-tier { grid-template-columns: 1fr; }
   .placeholder-routing-lens { display: none; }

@@ -1,3 +1,4 @@
+import type React from 'react';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes, useLocation } from 'react-router-dom';
@@ -10,6 +11,7 @@ import type { InsightsClientsResponse, InsightsCubeResponse, InsightsRhythmCell,
 import { RhythmGrid } from '../src/pages/insights/components/RhythmGrid';
 vi.mock('../src/pages/insights/charts/InsightsFlowChart', () => ({ default: () => null }));
 vi.mock('../src/components/dashboard/RollingNumber', () => ({
+  RollingNumberGroup: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   RollingNumber: ({ readout }: { readout?: { number: number; prefix?: string; suffix: string; format: Intl.NumberFormatOptions } }) =>
     <>{readout ? `${readout.prefix ?? ''}${new Intl.NumberFormat('en', readout.format).format(readout.number)}${readout.suffix}` : '—'}</>,
 }));
@@ -110,7 +112,7 @@ describe('insights page', () => {
     mount('/insights?group=key&metric=cache_rate');
     await waitFor(() => expect(within(tile('requests')).getByText('45')).toBeTruthy());
     expect(within(tile('requests')).getByText('125%')).toBeTruthy();
-    expect(tile('tokens').getAttribute('aria-selected')).toBe('true');
+    expect(tile('tokens').getAttribute('aria-pressed')).toBe('true');
 
     const ranking = await screen.findByTestId('insights-ranking-key');
     fireEvent.click(within(ranking).getByText('Design team'));
@@ -123,7 +125,7 @@ describe('insights page', () => {
     expect(api.requests.filter((request) => request.path === '/management/insights/cube')).toHaveLength(1);
 
     fireEvent.click(tile('latency'));
-    await waitFor(() => expect(tile('latency').getAttribute('aria-selected')).toBe('true'));
+    await waitFor(() => expect(tile('latency').getAttribute('aria-pressed')).toBe('true'));
     expect(new URLSearchParams(lastSearch).get('metric')).toBe('latency');
   });
 
@@ -168,6 +170,21 @@ describe('insights page', () => {
 
     fireEvent.click(within(screen.getByTestId('insights-token-scope')).getByText('With cache'));
     await waitFor(() => expect(new URLSearchParams(lastSearch).has('scope')).toBe(false));
+  });
+
+  it('keeps every ranking in its place whether the window holds one key or many', async () => {
+    const order = async () => {
+      const rankings = (await screen.findByTestId('insights-ranking-key')).parentElement!;
+      return [...rankings.children].map((panel) => panel.getAttribute('data-testid'));
+    };
+    const places = ['insights-ranking-model', 'insights-ranking-client', 'insights-ranking-key', 'insights-ranking-provider', 'insights-ranking-credential'];
+    const many = mount('/insights');
+    expect(await order()).toEqual(places);
+    many.unmount();
+
+    api.on('GET', '/management/insights/cube', () => ({ ...CUBE, rows: CUBE.rows.filter((entry) => entry[1] === 0) }));
+    mount('/insights', createTestQueryClient());
+    expect(await order()).toEqual(places);
   });
 
   it('opens a client\'s requests by its normalised identifier', async () => {

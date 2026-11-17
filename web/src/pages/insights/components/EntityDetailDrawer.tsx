@@ -156,7 +156,7 @@ export const EntityDetailDrawer: React.FC<EntityDetailDrawerProps> = ({
               { key: 'cost', label: t('insights.metric.cost'), value: formatMetric('cost', metricValue(total, 'cost'), style) },
             ]}
           />
-          <TokenAnatomyStrip anatomy={anatomy} isCompact />
+          <TokenAnatomyStrip anatomy={anatomy} hasRates={false} />
           <RankingPanel dimension={first} title={t(`insights.dim.${first}`)} groups={rank(first)} metric={metric} labels={labels} selected={[]} limit={5} />
           <RankingPanel dimension={second} title={t(`insights.dim.${second}`)} groups={rank(second)} metric={metric} labels={labels} selected={[]} limit={5} />
           <RhythmGrid data={rhythm} measure={rhythmMeasure} tokenScope={tokenScope} isLoading={isRhythmLoading} isUncaptured={isRhythmUncaptured} error={rhythmError} onRetry={onRhythmRetry} />
