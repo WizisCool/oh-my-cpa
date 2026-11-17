@@ -348,7 +348,7 @@ test('insights cube', () => {
   // ── the view in the URL ───────────────────────────────────────────────────────
 
   assert.equal(writeInsightsView(DEFAULT_INSIGHTS_VIEW).toString(), '', 'a default view is a plain link');
-  const sharedView = { ...DEFAULT_INSIGHTS_VIEW, metric: 'cost' as const, isComparing: false, filters: { key: ['hmac:a', 'hmac:b'], provider: ['codex'] } };
+  const sharedView = { ...DEFAULT_INSIGHTS_VIEW, metric: 'cost' as const, isComparing: false, filters: { key: ['hmac:a', 'hmac:b'], provider: ['codex'], client: ['claude-code'] } };
   assert.deepEqual(readInsightsView(writeInsightsView(sharedView)), sharedView, 'a written view reads back as it was');
   assert.deepEqual(readInsightsView(new URLSearchParams('metric=nonsense&group=x&key=hmac:a&key=hmac:a')),
     { ...DEFAULT_INSIGHTS_VIEW, filters: { key: ['hmac:a'] } }, 'an unknown value falls back and a repeated filter is one value');
@@ -874,6 +874,9 @@ test('insights token anatomy, net scope, request drill-down and export', () => {
   assert.equal(query.text, undefined);
   // The `other` bucket names no one program, so it narrows nothing.
   assert.ok(!usageEventsHref(cube, {}, 'other').includes('client_agent'));
+  // The page's client filter reaches the list; one program's own link replaces it rather than adding.
+  assert.deepEqual(new URLSearchParams(usageEventsHref(cube, { client: ['claude-code', 'opencode'] }).split('?')[1]).getAll('client_agent'), ['claude-code', 'opencode']);
+  assert.deepEqual(new URLSearchParams(usageEventsHref(cube, { client: ['claude-code'] }, 'opencode').split('?')[1]).getAll('client_agent'), ['opencode']);
   // A provider filter becomes the credentials that served it; a window following the clock stays open.
   const open = { ...cube, window: { ...cube.window, open_end: true } };
   const providerQuery = new URLSearchParams(usageEventsHref(open, { provider: ['codex'] }).split('?')[1]);

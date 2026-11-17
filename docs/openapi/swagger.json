@@ -5092,6 +5092,16 @@
             "description": "Comparison window mode",
             "name": "compare",
             "in": "query"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "collectionFormat": "multi",
+            "description": "Client program filters; the window then starts no earlier than request-record retention",
+            "name": "client_agent",
+            "in": "query"
           }
         ],
         "responses": {
@@ -5204,6 +5214,16 @@
             "collectionFormat": "multi",
             "description": "Credential auth_index filters",
             "name": "auth_index",
+            "in": "query"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "collectionFormat": "multi",
+            "description": "Client program filters; the window then starts no earlier than request-record retention",
+            "name": "client_agent",
             "in": "query"
           }
         ],
@@ -18732,6 +18752,10 @@
       "properties": {
         "bucket": {
           "$ref": "#/definitions/api.insightsBucket"
+        },
+        "clipped": {
+          "description": "Clipped reports that a client filter started the read at the request-record\nhorizon: client attribution is kept only as long as the records.",
+          "type": "boolean"
         },
         "from": {
           "type": "integer"

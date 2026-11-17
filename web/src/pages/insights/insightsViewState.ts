@@ -8,12 +8,12 @@
 
 import { INSIGHTS_BUCKETS, type InsightsBucketChoice } from '../../types/insights';
 import {
-  INSIGHTS_DIMENSIONS,
+  INSIGHTS_FILTER_KEYS,
   INSIGHTS_METRICS,
   TOKEN_SCOPES,
   rowValue,
   type InsightsCube,
-  type InsightsDimension,
+  type InsightsFilterKey,
   type InsightsFilters,
   type InsightsMetric,
   type TokenScope,
@@ -43,7 +43,7 @@ function oneOf<T extends string>(values: readonly T[], raw: string | null, fallb
 
 export function readInsightsView(search: URLSearchParams): InsightsViewState {
   const filters: InsightsFilters = {};
-  for (const dimension of INSIGHTS_DIMENSIONS) {
+  for (const dimension of INSIGHTS_FILTER_KEYS) {
     const values = search.getAll(dimension).filter(Boolean);
     if (values.length > 0) filters[dimension] = [...new Set(values)];
   }
@@ -65,14 +65,14 @@ export function writeInsightsView(view: InsightsViewState): URLSearchParams {
   if (view.bucket !== DEFAULT_INSIGHTS_VIEW.bucket) search.set('bucket', view.bucket);
   if (!view.isComparing) search.set('compare', 'off');
   if (view.tokenScope !== DEFAULT_INSIGHTS_VIEW.tokenScope) search.set('scope', view.tokenScope);
-  for (const dimension of INSIGHTS_DIMENSIONS) {
+  for (const dimension of INSIGHTS_FILTER_KEYS) {
     for (const value of view.filters[dimension] ?? []) search.append(dimension, value);
   }
   return search;
 }
 
 /** Adds or removes one value of one dimension's filter. */
-export function toggleFilter(filters: InsightsFilters, dimension: InsightsDimension, value: string): InsightsFilters {
+export function toggleFilter(filters: InsightsFilters, dimension: InsightsFilterKey, value: string): InsightsFilters {
   const current = filters[dimension] ?? [];
   const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
   const result = { ...filters };
@@ -82,7 +82,7 @@ export function toggleFilter(filters: InsightsFilters, dimension: InsightsDimens
 }
 
 export function hasFilters(filters: InsightsFilters): boolean {
-  return INSIGHTS_DIMENSIONS.some((dimension) => (filters[dimension]?.length ?? 0) > 0);
+  return INSIGHTS_FILTER_KEYS.some((dimension) => (filters[dimension]?.length ?? 0) > 0);
 }
 
 /**

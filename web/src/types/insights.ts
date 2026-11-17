@@ -66,6 +66,8 @@ export interface InsightsWindow {
   timezone: string;
   /** Request records behind the retention horizon could not split an edge, so the window was widened. */
   widened: boolean;
+  /** A client filter started the read at the request-record horizon, which client attribution shares. */
+  clipped?: boolean;
 }
 
 export interface InsightsCompareWindow {

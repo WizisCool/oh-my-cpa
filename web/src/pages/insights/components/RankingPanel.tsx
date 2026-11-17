@@ -103,14 +103,14 @@ export const RankingPanel: React.FC<RankingPanelProps> = ({
               const isSelected = selected.includes(group.id);
               const width = top > 0 && group.value !== null ? Math.max(2, (group.value / top) * 100) : 0;
               return (
-                <FilterItem as="li" key={group.id} data-dimmed={isNarrowed && !isSelected ? 'true' : undefined}>
+                <FilterItem as="li" key={group.id} data-selected={isSelected || undefined} data-dimmed={isNarrowed && !isSelected ? 'true' : undefined}>
                   <RowElement
                     {...(onSelect ? {
                       type: 'button' as const,
                       'aria-pressed': isSelected,
                       onClick: () => onSelect(dimension, group.id),
                     } : {})}
-                    className={clsx(styles['ranking-row'], onSelect && styles['ranking-row-interactive'], isSelected && styles['ranking-row-selected'])}
+                    className={clsx(styles['ranking-row'], onSelect && styles['ranking-row-interactive'])}
                   >
                     <InsightsValue dimension={dimension} id={group.id} labels={labels} hasDetail />
                     <span className={styles['ranking-value']} data-tip={formatMetricExact(ranking, group.value)}>

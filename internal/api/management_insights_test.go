@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -499,6 +500,54 @@ func TestInsightsClientsAggregatesAgentsFiltersAndRetentionCoverage(t *testing.T
 		t.Fatalf("unknown group = %+v", byID[usage.ClientAgentUnknown])
 	}
 
+	// A client filter narrows the cube and the rhythm to that program's generation
+	// requests; the unattributed request is "unknown" and the warmup never counts.
+	clientRequests := func(query string) (int64, insightsCubeResponse) {
+		t.Helper()
+		response, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/insights/cube?"+query)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("cube %s status %d: %s", query, response.StatusCode, payload)
+		}
+		var cube insightsCubeResponse
+		if err := json.Unmarshal(payload, &cube); err != nil {
+			t.Fatal(err)
+		}
+		column := slices.Index(cube.Columns, "requests")
+		var requests int64
+		for _, row := range cube.Rows {
+			requests += row[column]
+		}
+		response, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/insights/rhythm?"+query)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("rhythm %s status %d: %s", query, response.StatusCode, payload)
+		}
+		var rhythm insightsRhythmResponse
+		if err := json.Unmarshal(payload, &rhythm); err != nil {
+			t.Fatal(err)
+		}
+		var rhythmRequests int64
+		for _, cell := range rhythm.Cells {
+			rhythmRequests += cell.Requests
+		}
+		if rhythmRequests != requests {
+			t.Fatalf("%s: rhythm requests %d, cube %d", query, rhythmRequests, requests)
+		}
+		return requests, cube
+	}
+	assertClientRequests := func(stage string) {
+		t.Helper()
+		for query, want := range map[string]int64{
+			"preset=today&client_agent=" + usage.ClientAgentClaudeCode:                                                2,
+			"preset=today&client_agent=" + usage.ClientAgentClaudeCode + "&client_agent=" + usage.ClientAgentOpenCode: 3,
+			"preset=today&client_agent=" + usage.ClientAgentUnknown:                                                   1,
+		} {
+			if got, _ := clientRequests(query); got != want {
+				t.Fatalf("%s %s: requests = %d, want %d", stage, query, got, want)
+			}
+		}
+	}
+	assertClientRequests("unfolded")
+
 	// Cross-dimensional filtering narrows to matching model/provider records.
 	response, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/insights/clients?preset=today&model=gpt-5")
 	if response.StatusCode != http.StatusOK {
@@ -532,6 +581,7 @@ func TestInsightsClientsAggregatesAgentsFiltersAndRetentionCoverage(t *testing.T
 	if !reflect.DeepEqual(foldedFiltered, filtered) {
 		t.Fatalf("folded filtered clients = %+v, want unfolded %+v", foldedFiltered, filtered)
 	}
+	assertClientRequests("folded")
 
 	// Detail retention pruning leaves permanent usage_facts intact while lowering retained_requests honestly.
 	oldDay := now.Add(-40 * 24 * time.Hour)
@@ -557,6 +607,16 @@ func TestInsightsClientsAggregatesAgentsFiltersAndRetentionCoverage(t *testing.T
 	}
 	if retention.Coverage.RetainedRequests != 6 || retention.Coverage.TotalRequests != 7 {
 		t.Fatalf("retention coverage = %+v, want exact retained=6 and total=7", retention.Coverage)
+	}
+	// Past retention a client read starts at the horizon and says so; the old
+	// codex request lives on only in the permanent facts.
+	// Its comparison period lies wholly behind the horizon, so it is withheld rather
+	// than read as zero usage.
+	if requests, cube := clientRequests("preset=90d&client_agent=" + usage.ClientAgentCodexCLI); requests != 0 || !cube.Window.Clipped || cube.Window.Widened || cube.Window.FromMS != retentionCutoff || cube.Compare != nil || len(cube.PreviousRows) != 0 {
+		t.Fatalf("clipped client read = %d %+v compare %+v, want 0 requests from the horizon %d and no comparison", requests, cube.Window, cube.Compare, retentionCutoff)
+	}
+	if _, cube := clientRequests("preset=90d"); cube.Window.Clipped || cube.Compare == nil {
+		t.Fatalf("unfiltered read must neither clip nor drop its comparison: %+v %+v", cube.Window, cube.Compare)
 	}
 
 	// Empty window returns empty slice rather than null.

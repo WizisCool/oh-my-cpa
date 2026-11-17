@@ -181,6 +181,25 @@ var usageClientFactMeasures = []string{
 	"cost_nanos", "priced_requests", "costed_requests",
 }
 
+// usageClientFactProjection reads a client fact row under usageFactMeasures'
+// names and order. Client facts hold the normalised accounting only, so the
+// normalised partitions stand in for the raw columns and every row is canonical.
+var usageClientFactProjection = func() string {
+	sources := []string{
+		"requests", "failures", "prompt_tokens", "completion_tokens", "reasoning_tokens",
+		"effective_cache_read_tokens", "effective_cache_read_tokens", "cache_creation_tokens", "effective_total_tokens",
+		"latency_sum_ms", "ttft_sum_ms", "ttft_count", "cost_nanos", "priced_requests",
+		"costed_requests", "requests", "0",
+		"0", "0", "0",
+		"prompt_tokens", "completion_tokens", "effective_cache_read_tokens", "effective_total_tokens",
+	}
+	columns := make([]string, len(sources))
+	for index, source := range sources {
+		columns[index] = source + " AS " + usageFactMeasures[index]
+	}
+	return strings.Join(columns, ", ")
+}()
+
 // buildStagedUsageEventsArm builds a single-MATERIALIZED pipeline over usage_events
 // so protocol classification executes at most once per legacy row with non-zero
 // cache/reasoning, while integer arithmetic stays streaming without extra temp B-trees.
@@ -447,6 +466,10 @@ type UsageFactQuery struct {
 	// Filters keep only rows whose dimension value is one of the listed values.
 	// An empty list for a dimension is no constraint.
 	Filters map[UsageDimension][]string
+	// ClientAgents keeps only the generation requests of these client programs.
+	// Client attribution is rolled up beside the request records and pruned with
+	// them, so such a read starts no earlier than the request-record horizon.
+	ClientAgents []string
 }
 
 // UsageFactRow is one group's usage inside one bucket.
@@ -472,6 +495,9 @@ type UsageFactResult struct {
 	// request records, so a caller can say how much of a window was pre-aggregated.
 	FactRequests   int64
 	DetailRequests int64
+	// Clipped reports that a client read started at the request-record horizon
+	// rather than at the requested FromMS.
+	Clipped bool
 }
 
 // Totals sums every row of the read.
@@ -738,6 +764,18 @@ func (r *Repository) QueryUsageFacts(ctx context.Context, query UsageFactQuery) 
 	if err != nil {
 		return result, err
 	}
+	isClientRead := len(query.ClientAgents) > 0
+	if isClientRead && horizonMS > 0 && query.FromMS < horizonMS {
+		result.Clipped = true
+		if query.ToMS < horizonMS {
+			result.FromMS, result.ToMS, result.BucketMS = query.FromMS, query.ToMS, query.BucketMS
+			if query.Calendar != nil {
+				result.BucketMS = 0
+			}
+			return result, nil
+		}
+		query.FromMS = horizonMS
+	}
 	var grid *calendarGrid
 	bucketMS := query.BucketMS
 	isDailyUsable := bucketMS == 0 || bucketMS%DayBucketMS == 0
@@ -753,7 +791,8 @@ func (r *Repository) QueryUsageFacts(ctx context.Context, query UsageFactQuery) 
 		isDailyUsable = query.Calendar.Unit != UsageCalendarHour && compiled.isZeroOffset()
 	}
 	plan := planUsageFactRead(horizonMS, query.FromMS, query.ToMS, bucketMS, isDailyUsable)
-	if grid != nil && !isDailyUsable && grid.unit != UsageCalendarHour {
+	// The local-day grain has no client counterpart; the fine table answers instead.
+	if grid != nil && !isDailyUsable && grid.unit != UsageCalendarHour && !isClientRead {
 		planLocalDays(&plan, grid.location)
 	}
 	hasLocalMarker := false
@@ -883,6 +922,21 @@ func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *cal
 	}
 
 	filterClause, filterArgs := usageFilterClause(query.Filters)
+	factFilter, eventFilter := filterClause, filterClause
+	fineTable, dailyTable := usageFactsFineTable, usageFactsDailyTable
+	factMeasures := strings.Join(usageFactMeasures, ", ")
+	if len(query.ClientAgents) > 0 {
+		// Client facts count generation requests only and fold an unattributed one as
+		// "unknown", so the request-record arms read the same way.
+		in := " IN (" + strings.TrimSuffix(strings.Repeat("?, ", len(query.ClientAgents)), ", ") + ")"
+		factFilter += " AND client_agent" + in
+		eventFilter += " AND generate = 1 AND (CASE WHEN client_agent = '' THEN 'unknown' ELSE client_agent END)" + in
+		for _, agent := range query.ClientAgents {
+			filterArgs = append(filterArgs, agent)
+		}
+		fineTable, dailyTable = usageClientFactsFineTable, usageClientFactsDailyTable
+		factMeasures = usageClientFactProjection
+	}
 	withFilters := func(args ...any) []any { return append(args, filterArgs...) }
 
 	var parts []string
@@ -892,9 +946,9 @@ func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *cal
 			return
 		}
 		parts = append(parts, `
-			SELECT 1 AS from_facts, `+keySelect+aligned("bucket_start_ms")+` AS aligned, `+strings.Join(usageFactMeasures, ", ")+`
+			SELECT 1 AS from_facts, `+keySelect+aligned("bucket_start_ms")+` AS aligned, `+factMeasures+`
 			FROM `+table+`
-			WHERE instance_id = ? AND bucket_start_ms >= ? AND bucket_start_ms < ?`+filterClause)
+			WHERE instance_id = ? AND bucket_start_ms >= ? AND bucket_start_ms < ?`+factFilter)
 		args = append(args, withFilters(query.InstanceID, fromMS, toMS)...)
 	}
 	// Each arm over usage_events names its index. The planner cannot know that the
@@ -902,7 +956,7 @@ func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *cal
 	// and the wrong choice turns the dashboard's five-second poll into a scan of
 	// every retained record.
 	eventArm := func(index, predicate string, predicateArgs ...any) {
-		parts = append(parts, buildStagedUsageEventsArm(keySelect, keyPass, aligned("timestamp_ms"), "INDEXED BY "+index, "instance_id = ? AND "+predicate+filterClause))
+		parts = append(parts, buildStagedUsageEventsArm(keySelect, keyPass, aligned("timestamp_ms"), "INDEXED BY "+index, "instance_id = ? AND "+predicate+eventFilter))
 		args = append(args, withFilters(append([]any{query.InstanceID}, predicateArgs...)...)...)
 	}
 	const checkpoint = `(SELECT COALESCE((SELECT last_usage_event_id FROM usage_aggregation_checkpoints WHERE name = '` + CheckpointFacts + `'), 0))`
@@ -936,9 +990,9 @@ func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *cal
 			args = append(args, plan.localMarker)
 		}
 	} else if plan.fineFrom < plan.fineTo {
-		factArm(usageFactsDailyTable, plan.dailyFrom, plan.dailyTo)
-		factArm(usageFactsFineTable, plan.fineFrom, plan.dailyFrom)
-		factArm(usageFactsFineTable, plan.dailyTo, plan.fineTo)
+		factArm(dailyTable, plan.dailyFrom, plan.dailyTo)
+		factArm(fineTable, plan.fineFrom, plan.dailyFrom)
+		factArm(fineTable, plan.dailyTo, plan.fineTo)
 	}
 	if plan.fineFrom < plan.fineTo {
 		// Folded records on the sub-bucket edges, which no whole fact bucket covers.
