@@ -359,7 +359,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
         tiles={OUTCOME_TILES.map(({ outcome, tone }) => ({
           key: outcome,
           label: outcome === 'all' ? t('audit.stat_all') : t(`audit.outcome_${outcome}`),
-          count: hasCounts ? facets.outcomes[outcome] : undefined,
+          value: hasCounts ? facets.outcomes[outcome] : undefined,
           tone,
         }))}
       />

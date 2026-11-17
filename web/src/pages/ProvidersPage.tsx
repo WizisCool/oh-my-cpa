@@ -320,7 +320,7 @@ export const ProvidersPage: React.FC = () => {
           tiles={STATUS_TILES.map((tile) => ({
             key: tile.key,
             label: t(tile.labelKey),
-            count: hasList ? overview.statusCounts[tile.key] : undefined,
+            value: hasList ? overview.statusCounts[tile.key] : undefined,
             tone: tile.tone,
             hint: tile.key === 'attention' ? t('pro.stat_attention_hint', { n: SUCCESS_RATE_HEALTHY_PERCENT }) : undefined,
           }))}
