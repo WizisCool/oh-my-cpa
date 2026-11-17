@@ -1125,12 +1125,12 @@ func ResolveHistoricalClientAttribution(storedID, userAgent, endpoint string) Cl
 	}
 	live := ClassifyClientAgent(userAgent, endpoint)
 	rawPrefix := ""
-	if live.ID == normalized {
+	if live.ID == normalized || (live.ID == ClientAgentCodexCLI && isLegacyCodexAlias(normalized)) {
 		rawPrefix = live.RawPrefix
 	} else if normalized == ClientAgentQwenCode {
 		minimized := minimizedFromRedacted(redactUserAgentIfNeeded(userAgent))
 		rawPrefix = rawPrefixFromMinimized(minimized, "claude-cli/0.")
-	} else if (normalized == "codex" || normalized == ClientAgentCodexCLI) && equalASCIIFold(trimASCIIWhitespace(userAgent), "codex") {
+	} else if (normalized == ClientAgentCodexCLI || isLegacyCodexAlias(normalized)) && equalASCIIFold(trimASCIIWhitespace(userAgent), "codex") {
 		minimized := minimizedFromRedacted(redactUserAgentIfNeeded(userAgent))
 		rawPrefix = rawPrefixFromMinimized(minimized, "codex")
 	}
@@ -1138,6 +1138,26 @@ func ResolveHistoricalClientAttribution(storedID, userAgent, endpoint string) Cl
 		ID:        normalized,
 		RawPrefix: rawPrefix,
 		Category:  category,
+	}
+}
+
+func isLegacyCodexAlias(id string) bool {
+	switch id {
+	case "codex",
+		"codex-desktop",
+		"codex_desktop",
+		"codex_chatgpt_desktop",
+		"codex-chatgpt-desktop",
+		"codex_app",
+		"codex-app",
+		"codex_vscode",
+		"codex_vscode_copilot",
+		"codex_atlas",
+		"codex_sdk_ts",
+		"codexapp":
+		return true
+	default:
+		return false
 	}
 }
 

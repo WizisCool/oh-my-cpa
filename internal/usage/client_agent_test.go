@@ -479,6 +479,12 @@ func TestPersistedClientAttributionAndZeroReadFallback(t *testing.T) {
 	if histCodexStored := ResolveHistoricalClientAttribution("codex", "Codex", "POST /v1/responses"); histCodexStored.ID != "codex" || histCodexStored.RawPrefix != "Codex" {
 		t.Fatalf("ResolveHistoricalClientAttribution persisted codex + minimized Codex = %+v", histCodexStored)
 	}
+	if histAlias := ResolveHistoricalClientAttribution("codex_chatgpt_desktop", "codex_chatgpt_desktop/1.0.0", "POST /v1/responses"); histAlias.ID != "codex_chatgpt_desktop" || histAlias.RawPrefix != "codex_chatgpt_desktop" {
+		t.Fatalf("ResolveHistoricalClientAttribution persisted codex_chatgpt_desktop = %+v", histAlias)
+	}
+	if histUnrelated := ResolveHistoricalClientAttribution("custom-sdk", "codex_chatgpt_desktop/1.0.0", "POST /v1/responses"); histUnrelated.ID != "custom-sdk" || histUnrelated.RawPrefix != "" {
+		t.Fatalf("ResolveHistoricalClientAttribution unrelated stored id = %+v", histUnrelated)
+	}
 	if histCodexCanonical := ResolveHistoricalClientAttribution(ClientAgentCodexCLI, "Codex", "POST /v1/responses"); histCodexCanonical.ID != ClientAgentCodexCLI || histCodexCanonical.RawPrefix != "Codex" {
 		t.Fatalf("ResolveHistoricalClientAttribution canonical codex-cli + minimized Codex = %+v", histCodexCanonical)
 	}
@@ -573,6 +579,7 @@ func TestRedactionFastPathEquivalenceAndZeroAllocHotPath(t *testing.T) {
 		_ = ClassifyClientAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Maka/0.1.11 Electron/43.2.0", "POST /v1/chat/completions")
 		_ = ClassifyClientAgent("AsyncOpenAI/Python 1.55.0", "POST /v1/chat/completions")
 		_ = ResolveHistoricalClientAttribution("", "Codex", "POST /v1/responses")
+		_ = ResolveHistoricalClientAttribution("codex_chatgpt_desktop", "codex_chatgpt_desktop/1.0.0", "POST /v1/responses")
 		for _, id := range canonicalIDs {
 			_, _ = PersistedClientAttribution(id, "hindsight", "hindsight/1.2.0", "POST /v1/chat/completions")
 			_ = ClientAgentFromPersisted(id)

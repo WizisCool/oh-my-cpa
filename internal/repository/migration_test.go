@@ -2169,3 +2169,63 @@ func TestMigration066To070PreservesMinimizedCodexDesktopAttribution(t *testing.T
 		t.Fatalf("ListUsageEvents(client_agent=codex-cli) = %d items (err=%v), want 2", len(eventsPage.Items), err)
 	}
 }
+
+func TestMigration068To070PreservesCodexAliasPrefix(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, "file:mig068_to_070_codex_alias?mode=memory&cache=shared", withMigrationsUntil(68))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances
+		(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+		VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 'unknown', 0, 0)`); err != nil {
+		t.Fatal(err)
+	}
+	dayStart := int64(1700006400000) // UTC midnight
+	if _, err := db.SQL.ExecContext(ctx, `
+		INSERT INTO usage_events (
+			instance_id, event_key, api_group_key, provider, endpoint, model, generate,
+			client_agent, user_agent, timestamp_ms, created_at_ms, input_tokens, output_tokens, total_tokens, pricing_status
+		) VALUES
+			('default', 'hist-068-chatgpt-desktop', 'hmac:k1', 'codex', 'POST /v1/responses', 'gpt-5', 1,
+			 'codex_chatgpt_desktop', 'codex_chatgpt_desktop/1.0.0', ?, 0, 100, 25, 125, 'unpriced'),
+			('default', 'hist-068-tail', 'hmac:k1', 'codex', 'POST /v1/responses', 'gpt-5', 1,
+			 'codex', 'Codex', ?, 0, 60, 15, 75, 'unpriced');
+		UPDATE usage_aggregation_checkpoints SET last_usage_event_id = 1 WHERE name = 'facts'`,
+		dayStart+1000, dayStart+2000); err != nil {
+		t.Fatal(err)
+	}
+
+	repo := New(db)
+	db.migrateUntil = 0
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate(068->070) failed: %v", err)
+	}
+
+	var storedAgent, storedPrefix string
+	if err := db.SQL.QueryRowContext(ctx, `SELECT client_agent, client_prefix FROM usage_events WHERE event_key = 'hist-068-chatgpt-desktop'`).Scan(&storedAgent, &storedPrefix); err != nil {
+		t.Fatal(err)
+	}
+	if storedAgent != usage.ClientAgentCodexCLI || storedPrefix != "codex_chatgpt_desktop" {
+		t.Fatalf("hist-068-chatgpt-desktop = (%q, %q), want (%q, %q)", storedAgent, storedPrefix, usage.ClientAgentCodexCLI, "codex_chatgpt_desktop")
+	}
+	if err := db.SQL.QueryRowContext(ctx, `SELECT client_agent, client_prefix FROM usage_events WHERE event_key = 'hist-068-tail'`).Scan(&storedAgent, &storedPrefix); err != nil {
+		t.Fatal(err)
+	}
+	if storedAgent != usage.ClientAgentCodexCLI || storedPrefix != "Codex" {
+		t.Fatalf("hist-068-tail = (%q, %q), want (%q, %q)", storedAgent, storedPrefix, usage.ClientAgentCodexCLI, "Codex")
+	}
+
+	res, err := repo.QueryUsageClientAgents(ctx, "default", dayStart, dayStart+DayBucketMS-1, nil)
+	if err != nil {
+		t.Fatalf("QueryUsageClientAgents failed: %v", err)
+	}
+	if res.RetainedRequests != 2 || len(res.Items) != 1 {
+		t.Fatalf("QueryUsageClientAgents = %+v, want RetainedRequests=2 and 1 unified item", res)
+	}
+	if got := res.Items[0]; got.ID != usage.ClientAgentCodexCLI || got.Requests != 2 || got.TotalTokens != 200 || got.RawPrefix == "" {
+		t.Fatalf("QueryUsageClientAgents item = %+v, want unified codex-cli with retained prefix", got)
+	}
+}
