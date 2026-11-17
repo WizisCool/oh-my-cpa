@@ -268,26 +268,26 @@
 /* A phone tile is half the row (`dashboardGrid.css`), so its figure and caption shrink to fit. */
 @media (max-width: 640px) {
   .tile-value { --kpi-figure-size: 1em; margin-top: 4px; font-size: 24px; }
-  .tile-label { font-size: var(--text-sm); }
+  .tile-label, .model-lens-tab.model-lens-tab { font-size: var(--text-sm); }
   .tile-split { gap: 10px; padding-left: 10px; }
 }
 /* The trend's shared chart legend wraps rather than scrolls: a legend that scrolls hides the very
    series the reader is looking for, and six entries in a two-column card is at most two rows. It opens
    at the top of the body, level with the usage bar beside it. */
 .model-trend-legend { margin: 0 0 8px; }
+/* The legend keeps its two rows whether the names fill one or two, so a regrouping whose names are
+   shorter or longer never resizes the plot under it. */
+.model-trend-legend { align-content: flex-start; min-height: calc(2 * 26px + 6px); }
 .model-series-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
 .model-series-mark { flex: none; }
 .model-series-mark-folded { color: var(--muted); }
+.model-series-client-mark { display: inline-flex; }
 .model-series-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* The head is one line like every card's beside it - the title with its sum, the grouping toggle
-   opposite - so the two cards in a row share their head's height and rule. A head too narrow for
-   the sum lets it wrap under the title. */
+/* The head is one line like every card's beside it - the subject, and opposite it the naming
+   toggle or the sum - so the two cards in a row share their head's height and rule. */
 /* The toggle is taller than a title line, so the head trims its padding to keep the shared 48px. */
-.model-trend-card:has(.model-view-toggle) [data-slot="panel-head"],
-.model-usage-card [data-slot="panel-head"] { padding-block: 8px; }
+.model-trend-card:has(.model-view-toggle) [data-slot="panel-head"] { padding-block: 8px; }
 .model-usage-card [data-slot="panel-head"] { container: modelhead / inline-size; }
-.model-usage-title { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 12px; row-gap: 2px; min-width: 0; }
-.model-usage-card .tile-label { white-space: nowrap; }
 .model-usage-total {
   display: flex;
   align-items: baseline;
@@ -328,7 +328,7 @@
 .model-usage-segment:last-child { border-start-end-radius: var(--radius-sm); border-end-end-radius: var(--radius-sm); }
 .model-usage-bar[data-has-mark] .model-usage-segment:not([data-marked]) { opacity: 0.35; }
 :root:not([data-reduced-motion='true']) .model-usage-bar { animation: usage-bar-sweep var(--motion-slow) var(--ease-out) backwards; }
-:root:not([data-reduced-motion='true']) .model-usage-segment { transition: flex-grow var(--motion-slow) var(--ease-out), opacity var(--motion-base) var(--ease-standard); }
+:root:not([data-reduced-motion='true']) .model-usage-segment { transition: flex-grow var(--motion-slow) var(--ease-standard), background-color var(--motion-slow) var(--ease-standard), opacity var(--motion-base) var(--ease-standard); }
 @keyframes usage-bar-sweep { from { clip-path: inset(0 100% 0 0); } }
 /* Under the bar, the ranking is plain text in one grid: a name column that takes the slack and
    three figure columns sharing a right edge. The columns live on the list rather than on each row,
@@ -344,6 +344,9 @@
   grid-auto-rows: 40px;
   align-content: start;
   gap: 2px 20px;
+  /* The slot holds the longest ranking - five groups and the remainder - whatever is in it, so a
+     regrouping or a quieter window never changes the card's height or moves the board below. */
+  min-height: calc(6 * 40px + 5 * 2px);
   margin: 0 -8px;
   padding: 0;
   list-style: none;
@@ -405,8 +408,66 @@
   .model-usage-list { column-gap: 12px; }
 }
 
-/* The grouping toggle sits in the card's header row, opposite the title. */
+/* The naming toggle sits in the trend card's header row, opposite the title. */
 .model-view-toggle { flex: none; }
+
+/* ── the lens tabs: the usage card's title ───────────────────────────────────
+   What the card counts is its subject, so the choice between models and clients is set as the
+   heading. The tabs stand the full height of the head and sit on its rule, which becomes their
+   rail: the underline runs along the line the head already draws, and glides on the console's
+   selection thumb. The first label keeps the title's inset, so the head reads as a title still. */
+.has-lens [data-slot="panel-head"] { align-items: stretch; padding-block: 0; }
+.has-lens [data-slot="panel-head-title"] { display: flex; }
+.has-lens [data-slot="panel-head-extra"] { align-self: center; }
+.model-lens { display: flex; }
+.model-lens-list.model-lens-list {
+  /* Two labels never overflow, and a scroll container here would draw a scrollbar under them. */
+  overflow: visible;
+  width: auto;
+  align-items: stretch;
+  gap: 4px;
+  margin-inline-start: -12px;
+  margin-block-end: calc(-1 * var(--hairline));
+  border-bottom: 0;
+}
+/* The labels speak in the tile titles' voice - the trend's title beside them included - and only
+   the chosen one is lit. */
+.model-lens-tab.model-lens-tab {
+  min-height: 0;
+  padding-block: 0;
+  border-radius: 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+  font-weight: 500;
+  letter-spacing: .02em;
+}
+.model-lens-tab.model-lens-tab:hover { background: transparent; color: var(--fg-2); }
+.model-lens-tab.model-lens-tab[data-active] { font-weight: 500; color: var(--fg); }
+/* The window's sum and, under the client lens, where attribution starts, opposite the subject. */
+.model-usage-head-figures { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.model-usage-since { color: var(--muted); font-size: var(--text-sm); font-weight: 400; white-space: nowrap; }
+
+/* A new grouping is a new ranking: its rows rise into place one after another while the bar above
+   re-divides, so the regrouping reads as one movement down the card. A poll of the same grouping
+   keeps its rows and moves nothing. */
+:root:not([data-reduced-motion='true']) .model-usage-list .model-usage-row {
+  animation: model-row-arrive var(--motion-slow) var(--ease-out) calc(var(--row-index, 0) * 28ms) backwards;
+}
+@keyframes model-row-arrive { from { opacity: 0; transform: translateY(4px); } }
+/* The legend's names arrive the same way, a beat ahead of the rows. */
+:root:not([data-reduced-motion='true']) .model-trend-legend > li {
+  animation: model-row-arrive var(--motion-slow) var(--ease-out) backwards;
+}
+.model-trend-legend > li:nth-child(2) { animation-delay: 20ms; }
+.model-trend-legend > li:nth-child(3) { animation-delay: 40ms; }
+.model-trend-legend > li:nth-child(4) { animation-delay: 60ms; }
+.model-trend-legend > li:nth-child(5) { animation-delay: 80ms; }
+.model-trend-legend > li:nth-child(6) { animation-delay: 100ms; }
+/* While the next grouping is read, the one on screen stays and recedes a little, so the switch is
+   acknowledged at once without a skeleton; it returns as the new ranking lands. The recession waits
+   a moment, so a read served from cache never flickers. */
+:is(.model-trend-card, .model-usage-card) > [data-slot="panel-body"] { transition: opacity var(--motion-base) var(--ease-standard); }
+:is(.model-trend-card, .model-usage-card)[data-pending] > [data-slot="panel-body"] { opacity: 0.55; transition-delay: 120ms; }
 .model-alert { margin-top: 12px; }
 /* The stale warning opens the body above the legend or the usage bar, so its space is below it. */
 .model-stale-alert { margin-bottom: 12px; }

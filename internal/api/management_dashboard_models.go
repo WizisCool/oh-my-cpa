@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
 // dashboardModelTopN is how many named models the panels carry before the remainder is
@@ -32,6 +33,10 @@ type dashboardModelsResponse struct {
 	TokenTotal int64 `json:"total_tokens"`
 	// Models is ranked by token volume, descending, with the folded group last.
 	Models []dashboardModelUsage `json:"models"`
+	// CoveredFromMS is set when the client view starts later than the window:
+	// client attribution is kept only as long as the request records, so the
+	// groups and their series begin at that horizon instead of at window.from.
+	CoveredFromMS *int64 `json:"covered_from,omitempty"`
 	// Errors reports what could not be read, so a panel can say its numbers are partial
 	// rather than presenting a short list as the whole picture.
 	Errors []string `json:"partial_errors"`
@@ -41,8 +46,12 @@ type dashboardModelUsage struct {
 	// Model is the group's key, meaningful only when Folded is false. In the
 	// model view it is the upstream model name; in the call view it is the call
 	// point: the client-requested alias, or the upstream model when no alias
-	// was requested.
+	// was requested; in the client view it is the client program's identifier.
 	Model string `json:"model"`
+	// Category is the client program's kind (agent, sdk or unknown), sent in
+	// the client view only so the panel can draw a glyph for a client without
+	// its own mark.
+	Category string `json:"category,omitempty" enums:"agent,sdk,unknown"`
 	// Folded marks the aggregate group holding every model outside the top N. It is a
 	// separate discriminator rather than a reserved display name: a deployment may
 	// legitimately serve a model whose name collides with whatever label the group would
@@ -83,14 +92,16 @@ type dashboardModelPoint struct {
 // The window is resolved by the same `Handler.dashboardWindow` the tiles use, so the two
 // surfaces cannot disagree about what "last 24 hours" means.
 //
-// `group_by` selects the grouping: `model` (the upstream model name, the original view) or
-// `call` (the call point the client requested). The call view is what a deployment's own
-// vocabulary names: one call point served by several upstream variants is one group here,
-// because the split between them is the gateway's routing detail rather than a difference
-// the caller chose. An unrecognised value is a 400 rather than a silent fallback, so a
-// typo cannot quietly change what the numbers mean.
+// `group_by` selects the grouping: `model` (the upstream model name, the original view),
+// `call` (the call point the client requested) or `client` (the client program that sent the
+// request). The call view is what a deployment's own vocabulary names: one call point served by
+// several upstream variants is one group here, because the split between them is the gateway's
+// routing detail rather than a difference the caller chose. The client view counts generation
+// requests only and reaches back no further than the request records, the only place client
+// attribution is kept. An unrecognised value is a 400 rather than a silent fallback, so a typo
+// cannot quietly change what the numbers mean.
 // @Summary Get dashboard model breakdown
-// @Description Return token, request, and cost breakdown grouped by upstream model or client call point.
+// @Description Return token, request, and cost breakdown grouped by upstream model, client call point, or client program.
 // @Tags Dashboard
 // @Produce json
 // @Security CookieAuth
@@ -98,7 +109,7 @@ type dashboardModelPoint struct {
 // @Param from query integer false "Custom window start timestamp in Unix milliseconds"
 // @Param to query integer false "Custom window end timestamp in Unix milliseconds"
 // @Param open_end query boolean false "Whether custom window tracks current time"
-// @Param group_by query string false "Grouping mode" Enums(model, call)
+// @Param group_by query string false "Grouping mode" Enums(model, call, client)
 // @Success 200 {object} dashboardModelsResponse
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
@@ -129,24 +140,47 @@ func (h *Handler) dashboardModels(writer http.ResponseWriter, request *http.Requ
 		// client keeps reading the grouping it always did.
 		group = "model"
 	}
-	if group != "model" && group != "call" {
+	dimension, known := dashboardModelGroupings[group]
+	if !known {
 		writeError(writer, http.StatusBadRequest, "unsupported group_by value")
 		return
 	}
 
 	response := dashboardModelsResponse{Window: window, Models: []dashboardModelUsage{}, Errors: []string{}}
 	apiKey := h.resolveDashboardAPIKey(request)
-	rows, err := h.repo.QueryUsageModelBuckets(ctx, defaultInstanceID(), window.FromMS, window.ToMS, window.BucketMS,
-		repository.UsageModelBucketOptions{IsGroupedByCallPoint: group == "call", APIGroupKey: apiKey})
+	buckets, err := h.repo.QueryUsageModelBuckets(ctx, defaultInstanceID(), window.FromMS, window.ToMS, window.BucketMS,
+		repository.UsageModelBucketOptions{GroupBy: dimension, APIGroupKey: apiKey})
 	if err != nil {
 		writeInternalError(writer, fmt.Errorf("query usage model buckets: %w", err))
 		return
 	}
 
-	models := buildModelUsage(window, rows)
+	// A clipped client read lays its series on the grid it actually read, so the trend starts
+	// where attribution does instead of drawing the unattributed past as a stretch of zeros.
+	grid := window
+	if buckets.CoveredFromMS > window.FromMS && buckets.CoveredFromMS <= window.ToMS {
+		grid.FromMS = buckets.CoveredFromMS
+		response.CoveredFromMS = &buckets.CoveredFromMS
+	}
+	models := buildModelUsage(grid, buckets.Rows)
+	if dimension == repository.UsageDimensionClientAgent {
+		for index := range models.groups {
+			if !models.groups[index].Folded {
+				models.groups[index].Category = string(usage.ClientAgentCategoryForID(models.groups[index].Model))
+			}
+		}
+	}
 	response.TokenTotal = models.total
 	response.Models = models.groups
 	writeJSON(writer, http.StatusOK, response)
+}
+
+// dashboardModelGroupings maps the `group_by` values the panels send to the dimension each
+// one partitions by.
+var dashboardModelGroupings = map[string]repository.UsageDimension{
+	"model":  repository.UsageDimensionModel,
+	"call":   repository.UsageDimensionCallPoint,
+	"client": repository.UsageDimensionClientAgent,
 }
 
 // modelUsage is the ranked, grid-filled form of the repository's rows.

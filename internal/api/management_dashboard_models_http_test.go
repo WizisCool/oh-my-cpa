@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
@@ -379,6 +380,66 @@ func TestDashboardModelsCallViewMergesCallPointsAcrossUpstreamModels(t *testing.
 	}
 	if model.Models[2].Model != "deepseek-flash" || model.Models[2].Tokens != 100 {
 		t.Fatalf("model view third = %#v, want the other upstream variant at 100", model.Models[2])
+	}
+}
+
+// TestDashboardModelsClientViewRanksClientPrograms pins the client view: groups are keyed by the
+// client program and carry its kind, and a window reaching behind the request-record horizon starts
+// its series there and says so, rather than drawing the unattributed past as zeros.
+func TestDashboardModelsClientViewRanksClientPrograms(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	now := time.Now().UTC()
+	claudeUA, codexUA := "claude-cli/2.0.14 (external, cli)", "codex_cli_rs/0.47.1"
+	clientEvent := func(id string, userAgent *string, at time.Time, tokens int64) usage.Event {
+		event := modelEventFor(id, "gpt-5", at, tokens)
+		event.Endpoint, event.UserAgent, event.Generate = "POST /v1/responses", userAgent, true
+		return event
+	}
+	if _, err := repo.InsertUsageEvents(context.Background(), []usage.Event{
+		clientEvent("client-a", &claudeUA, now.Add(-time.Minute), 400),
+		clientEvent("client-b", &codexUA, now.Add(-2*time.Minute), 100),
+		clientEvent("client-c", nil, now.Add(-3*time.Minute), 50),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	read := func() dashboardModelsResponse {
+		response, payload := getJSON(t, client, baseURL+modelsPath+"?preset=24h&group_by=client")
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d body %s", response.StatusCode, payload)
+		}
+		var body dashboardModelsResponse
+		if err := json.Unmarshal(payload, &body); err != nil {
+			t.Fatal(err)
+		}
+		return body
+	}
+
+	body := read()
+	if got := describeGroups(body.Models); got != "claude-code=400 codex-cli=100 unknown=50" {
+		t.Fatalf("client view groups = %s", got)
+	}
+	if body.Models[0].Category != "agent" || body.Models[2].Category != "unknown" {
+		t.Fatalf("client categories = %q, %q", body.Models[0].Category, body.Models[2].Category)
+	}
+	if body.CoveredFromMS != nil {
+		t.Fatalf("covered_from = %d, want absent with no horizon", *body.CoveredFromMS)
+	}
+
+	horizon := now.Add(-time.Hour).UnixMilli()
+	if _, err := repo.SQL().ExecContext(context.Background(), `
+		INSERT INTO data_lifecycle_state (policy, horizon_ms, deleted_rows, last_run_at_ms)
+		VALUES (?, ?, 0, ?)`, repository.LifecycleUsageDetail, horizon, now.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	clipped := read()
+	if clipped.CoveredFromMS == nil || *clipped.CoveredFromMS < horizon {
+		t.Fatalf("covered_from = %v, want the horizon %d", clipped.CoveredFromMS, horizon)
+	}
+	if first := clipped.Models[0].Series[0].TimeMS; first > *clipped.CoveredFromMS || *clipped.CoveredFromMS-first >= clipped.Window.BucketMS {
+		t.Fatalf("series starts at %d, want the bucket holding covered_from %d", first, *clipped.CoveredFromMS)
+	}
+	if clipped.Window.FromMS >= horizon {
+		t.Fatalf("window.from = %d, want the requested window kept", clipped.Window.FromMS)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -267,11 +268,20 @@ const (
 	// carries, so the provider label alone cannot say which configured provider
 	// answered.
 	UsageDimensionServingKey UsageDimension = "serving_key"
+	// UsageDimensionClientAgent is the normalised client program behind a
+	// generation request, `unknown` when its User-Agent named none. Client
+	// attribution is rolled up beside the request records rather than into the
+	// permanent facts, so a read that names it is a client read: it counts
+	// generation requests only and starts no earlier than the request-record
+	// horizon.
+	UsageDimensionClientAgent UsageDimension = "client_agent"
 )
 
 // usageDimensionExpressions maps a dimension to its SQL expression. The
 // expressions only use columns present on both the fact tables and usage_events;
-// model_alias is nullable on the latter, hence the COALESCE.
+// model_alias is nullable on the latter, hence the COALESCE. client_agent is the
+// exception: of the fact tables only the client ones carry it, which is why
+// naming it turns the read into a client read (see UsageFactQuery.isClientRead).
 var usageDimensionExpressions = map[UsageDimension]string{
 	UsageDimensionKey:        `api_group_key`,
 	UsageDimensionModel:      `model`,
@@ -280,6 +290,9 @@ var usageDimensionExpressions = map[UsageDimension]string{
 	UsageDimensionCredential: `TRIM(auth_index)`,
 	UsageDimensionAuthType:   `auth_type`,
 	UsageDimensionServingKey: `CASE WHEN auth_type = 'apikey' THEN TRIM(auth_index) ELSE '' END`,
+	// A request record without an attribution folds as "unknown", the label its
+	// client fact row carries.
+	UsageDimensionClientAgent: `CASE WHEN client_agent = '' THEN 'unknown' ELSE client_agent END`,
 }
 
 // UsageCalendarUnit is a civil bucket on the deployment's calendar.
@@ -470,6 +483,15 @@ type UsageFactQuery struct {
 	// Client attribution is rolled up beside the request records and pruned with
 	// them, so such a read starts no earlier than the request-record horizon.
 	ClientAgents []string
+}
+
+// isClientRead reports whether the read is answered from the client facts:
+// it narrows to client programs or partitions by them.
+func (query UsageFactQuery) isClientRead() bool {
+	if len(query.ClientAgents) > 0 || len(query.Filters[UsageDimensionClientAgent]) > 0 {
+		return true
+	}
+	return slices.Contains(query.Dimensions, UsageDimensionClientAgent)
 }
 
 // UsageFactRow is one group's usage inside one bucket.
@@ -764,7 +786,7 @@ func (r *Repository) QueryUsageFacts(ctx context.Context, query UsageFactQuery) 
 	if err != nil {
 		return result, err
 	}
-	isClientRead := len(query.ClientAgents) > 0
+	isClientRead := query.isClientRead()
 	if isClientRead && horizonMS > 0 && query.FromMS < horizonMS {
 		result.Clipped = true
 		if query.ToMS < horizonMS {
@@ -925,14 +947,19 @@ func buildUsageFactStatement(plan usageFactPlan, query UsageFactQuery, grid *cal
 	factFilter, eventFilter := filterClause, filterClause
 	fineTable, dailyTable := usageFactsFineTable, usageFactsDailyTable
 	factMeasures := strings.Join(usageFactMeasures, ", ")
-	if len(query.ClientAgents) > 0 {
+	if query.isClientRead() {
 		// Client facts count generation requests only and fold an unattributed one as
-		// "unknown", so the request-record arms read the same way.
-		in := " IN (" + strings.TrimSuffix(strings.Repeat("?, ", len(query.ClientAgents)), ", ") + ")"
-		factFilter += " AND client_agent" + in
-		eventFilter += " AND generate = 1 AND (CASE WHEN client_agent = '' THEN 'unknown' ELSE client_agent END)" + in
-		for _, agent := range query.ClientAgents {
-			filterArgs = append(filterArgs, agent)
+		// "unknown", so the request-record arms read the same way. A fact row with an
+		// empty client_agent holds the non-generation requests, which carry no usage.
+		factFilter += " AND client_agent <> ''"
+		eventFilter += " AND generate = 1"
+		if len(query.ClientAgents) > 0 {
+			in := " IN (" + strings.TrimSuffix(strings.Repeat("?, ", len(query.ClientAgents)), ", ") + ")"
+			factFilter += " AND client_agent" + in
+			eventFilter += " AND " + usageDimensionExpressions[UsageDimensionClientAgent] + in
+			for _, agent := range query.ClientAgents {
+				filterArgs = append(filterArgs, agent)
+			}
 		}
 		fineTable, dailyTable = usageClientFactsFineTable, usageClientFactsDailyTable
 		factMeasures = usageClientFactProjection

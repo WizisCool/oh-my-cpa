@@ -4642,7 +4642,7 @@
             "CookieAuth": []
           }
         ],
-        "description": "Return token, request, and cost breakdown grouped by upstream model or client call point.",
+        "description": "Return token, request, and cost breakdown grouped by upstream model, client call point, or client program.",
         "produces": [
           "application/json"
         ],
@@ -4678,7 +4678,8 @@
           {
             "enum": [
               "model",
-              "call"
+              "call",
+              "client"
             ],
             "type": "string",
             "description": "Grouping mode",
@@ -18001,6 +18002,15 @@
     "api.dashboardModelUsage": {
       "type": "object",
       "properties": {
+        "category": {
+          "description": "Category is the client program's kind (agent, sdk or unknown), sent in\nthe client view only so the panel can draw a glyph for a client without\nits own mark.",
+          "type": "string",
+          "enum": [
+            "agent",
+            "sdk",
+            "unknown"
+          ]
+        },
         "cost_usd": {
           "description": "CostUSD is the group's priced spend at request-time prices. It is null\nrather than zero when the group carried no priced request, so a client\ncan tell \"unpriced\" from \"free\" the way the cost tile already does.",
           "type": "number"
@@ -18010,7 +18020,7 @@
           "type": "boolean"
         },
         "model": {
-          "description": "Model is the group's key, meaningful only when Folded is false. In the\nmodel view it is the upstream model name; in the call view it is the call\npoint: the client-requested alias, or the upstream model when no alias\nwas requested.",
+          "description": "Model is the group's key, meaningful only when Folded is false. In the\nmodel view it is the upstream model name; in the call view it is the call\npoint: the client-requested alias, or the upstream model when no alias\nwas requested; in the client view it is the client program's identifier.",
           "type": "string"
         },
         "priced_requests": {
@@ -18035,6 +18045,10 @@
     "api.dashboardModelsResponse": {
       "type": "object",
       "properties": {
+        "covered_from": {
+          "description": "CoveredFromMS is set when the client view starts later than the window:\nclient attribution is kept only as long as the request records, so the\ngroups and their series begin at that horizon instead of at window.from.",
+          "type": "integer"
+        },
         "models": {
           "description": "Models is ranked by token volume, descending, with the folded group last.",
           "type": "array",

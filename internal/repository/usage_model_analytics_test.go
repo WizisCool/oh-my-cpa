@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -44,7 +46,7 @@ func TestQueryUsageModelBucketsGroupsByModelAndBucket(t *testing.T) {
 		bucket int64
 	}
 	got := map[key]int64{}
-	for _, row := range rows {
+	for _, row := range rows.Rows {
 		got[key{row.Model, row.StartMS}] += row.Tokens
 	}
 	want := map[key]int64{
@@ -67,7 +69,7 @@ func TestQueryUsageModelBucketsGroupsByModelAndBucket(t *testing.T) {
 	// the contract.
 	seen := map[string]bool{}
 	previous := ""
-	for _, row := range rows {
+	for _, row := range rows.Rows {
 		if row.Model != previous {
 			if seen[row.Model] {
 				t.Fatalf("model %s appears in more than one run", row.Model)
@@ -97,7 +99,7 @@ func TestQueryUsageModelBucketsIgnoresTheRollup(t *testing.T) {
 			t.Fatal(err)
 		}
 		var total int64
-		for _, row := range rows {
+		for _, row := range rows.Rows {
 			total += row.Tokens
 		}
 		return total
@@ -149,8 +151,8 @@ func TestQueryUsageModelBucketsIsScopedToTheInstanceAndWindow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 1 || rows[0].Model != "alpha" || rows[0].Tokens != 10 {
-		t.Fatalf("scoped query = %#v, want only alpha/10", rows)
+	if len(rows.Rows) != 1 || rows.Rows[0].Model != "alpha" || rows.Rows[0].Tokens != 10 {
+		t.Fatalf("scoped query = %#v, want only alpha/10", rows.Rows)
 	}
 }
 
@@ -212,12 +214,12 @@ func TestQueryUsageModelBucketsGroupsCallPointsAcrossUpstreamModels(t *testing.T
 	insertCallPointEvent(t, repo, "c-4", "glm-5.3-flash", &blank, base, 50, nil)
 
 	callRows, err := repo.QueryUsageModelBuckets(context.Background(), "default",
-		base.UnixMilli(), base.Add(time.Minute).UnixMilli(), time.Minute.Milliseconds(), UsageModelBucketOptions{IsGroupedByCallPoint: true})
+		base.UnixMilli(), base.Add(time.Minute).UnixMilli(), time.Minute.Milliseconds(), UsageModelBucketOptions{GroupBy: UsageDimensionCallPoint})
 	if err != nil {
 		t.Fatal(err)
 	}
 	callTokens := map[string]int64{}
-	for _, row := range callRows {
+	for _, row := range callRows.Rows {
 		callTokens[row.Model] += row.Tokens
 	}
 	if len(callTokens) != 3 {
@@ -236,7 +238,7 @@ func TestQueryUsageModelBucketsGroupsCallPointsAcrossUpstreamModels(t *testing.T
 		t.Fatal(err)
 	}
 	modelTokens := map[string]int64{}
-	for _, row := range modelRows {
+	for _, row := range modelRows.Rows {
 		modelTokens[row.Model] += row.Tokens
 	}
 	if len(modelTokens) != 4 {
@@ -261,10 +263,10 @@ func TestQueryUsageModelBucketsCarriesPricedCostsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 1 {
-		t.Fatalf("got %d rows, want 1", len(rows))
+	if len(rows.Rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows.Rows))
 	}
-	row := rows[0]
+	row := rows.Rows[0]
 	if row.CostNanos == nil || *row.CostNanos != 3_500_000_000 {
 		t.Fatalf("cost = %v, want 3500000000 (priced rows only)", row.CostNanos)
 	}
@@ -273,5 +275,62 @@ func TestQueryUsageModelBucketsCarriesPricedCostsOnly(t *testing.T) {
 	}
 	if row.Requests != 3 || row.Tokens != 60 {
 		t.Fatalf("requests/tokens = %d/%d, want 3/60 (unpriced still counts as usage)", row.Requests, row.Tokens)
+	}
+}
+
+func TestQueryUsageModelBucketsGroupsByClientProgram(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	base := time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
+	claudeUA, codexUA := "claude-cli/2.0.14 (external, cli)", "codex_cli_rs/0.47.1"
+	clientEvent := func(id string, userAgent *string, at time.Time, tokens int64, isGenerate bool) usage.Event {
+		event := modelEventAt("default", id, "gpt-5", at, tokens)
+		event.Endpoint, event.UserAgent, event.Generate = "POST /v1/responses", userAgent, isGenerate
+		return event
+	}
+	// The first bucket is folded into the client facts before the second arrives, so the read
+	// has to compose both sources and must not count the folded records twice.
+	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{
+		clientEvent("c-1", &claudeUA, base, 100, true),
+		clientEvent("c-2", &codexUA, base, 200, true),
+		clientEvent("c-3", nil, base, 30, true),
+		// A non-generation request carries no client usage, whoever sent it.
+		clientEvent("c-4", &claudeUA, base, 999, false),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AggregateUsageFacts(ctx, 5000); err != nil {
+		t.Fatal(err)
+	}
+	var foldedRows int
+	if err := repo.SQL().QueryRowContext(ctx, `SELECT COUNT(1) FROM `+usageClientFactsFineTable).Scan(&foldedRows); err != nil || foldedRows == 0 {
+		t.Fatalf("client facts hold %d rows (err=%v), want the first bucket folded", foldedRows, err)
+	}
+	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{
+		clientEvent("c-5", &claudeUA, base.Add(15*time.Minute), 50, true),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	buckets, err := repo.QueryUsageModelBuckets(ctx, "default", base.UnixMilli(), base.Add(30*time.Minute).UnixMilli(),
+		(15 * time.Minute).Milliseconds(), UsageModelBucketOptions{GroupBy: UsageDimensionClientAgent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int64{}
+	for _, row := range buckets.Rows {
+		got[fmt.Sprintf("%s@%d", row.Model, row.StartMS)] += row.Tokens
+	}
+	want := map[string]int64{
+		fmt.Sprintf("%s@%d", usage.ClientAgentClaudeCode, base.UnixMilli()):                     100,
+		fmt.Sprintf("%s@%d", usage.ClientAgentClaudeCode, base.Add(15*time.Minute).UnixMilli()): 50,
+		fmt.Sprintf("%s@%d", usage.ClientAgentCodexCLI, base.UnixMilli()):                       200,
+		fmt.Sprintf("%s@%d", usage.ClientAgentUnknown, base.UnixMilli()):                        30,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("client groups = %#v, want %#v", got, want)
+	}
+	if buckets.CoveredFromMS != base.UnixMilli() {
+		t.Fatalf("covered from %d, want the requested start %d", buckets.CoveredFromMS, base.UnixMilli())
 	}
 }

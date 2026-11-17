@@ -8,6 +8,10 @@
  */
 
 import { formatTokens, formatTokensFull, type ModelChartView, type TokenNumberStyle } from './tokenDisplay';
+import type { ClientCategory } from './clientAgents';
+
+/** What the panels group by: one of the two model views, or the client program. */
+export type DashboardModelGrouping = ModelChartView | 'client';
 
 /** One bucket of one group's token volume. */
 export interface DashboardModelPoint {
@@ -25,8 +29,11 @@ export interface DashboardModelPoint {
  * keeps such a model out of the remainder.
  */
 export interface DashboardModelUsage {
+  /** The group's key: the call point, the upstream model, or the client program's identifier. */
   model: string;
   folded: boolean;
+  /** The client program's kind, sent in the client grouping only. */
+  category?: ClientCategory;
   tokens: number;
   requests: number;
   /**
@@ -67,6 +74,11 @@ export interface DashboardModelsResponse {
   total_tokens: number;
   /** Ranked by token volume, descending, with the folded remainder last when there is one. */
   models: DashboardModelUsage[];
+  /**
+   * Where the client grouping actually starts, when that is later than `window.from`: client
+   * attribution is kept only as long as the request records, and the series begin there.
+   */
+  covered_from?: number;
   partial_errors: string[];
 }
 
@@ -91,16 +103,16 @@ export const DASHBOARD_MODELS_QUERY_KEY = 'dashboard-models';
 export const DASHBOARD_MODELS_REFRESH_MS = 60_000;
 
 /**
- * Appends the grouping view to a serialized dashboard query.
+ * Appends the grouping to a serialized dashboard query.
  *
  * `model` is what the endpoint answers without the parameter, so the original
- * view keeps its URL shape and only the call view adds one. The view travels
- * with the query rather than living beside it, because a ranking read in one
- * grouping cannot be patched or compared against a ranking read in the other.
+ * view keeps its URL shape and only the other groupings add one. The grouping
+ * travels with the query rather than living beside it, because a ranking read in
+ * one grouping cannot be patched or compared against a ranking read in another.
  */
-export function withGroupBy(query: string, view: ModelChartView): string {
-  if (view === 'call') return query ? `${query}&group_by=call` : 'group_by=call';
-  return query;
+export function withGroupBy(query: string, grouping: DashboardModelGrouping): string {
+  if (grouping === 'model') return query;
+  return query ? `${query}&group_by=${grouping}` : `group_by=${grouping}`;
 }
 
 /**
