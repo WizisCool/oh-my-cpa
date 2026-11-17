@@ -150,6 +150,81 @@ describe('routing', () => {
     }
   });
 
+  it('filters the Insights cube by client_agent in agreement with insights-clients and marks filtered rhythm uncaptured', async (t) => {
+    const dayMs = 86_400_000;
+    t.mock.method(Date, 'now', () => REFERENCE_MS + 10 * dayMs + 3_600_000);
+    const { default: worker } = await import('./worker.mjs');
+    const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
+
+    for (const preset of ['24h', '7d', '30d', '90d', 'all']) {
+      const clientsPayload = JSON.parse(DATASET.responses[`insights-clients-${preset}`].body);
+      for (const client of clientsPayload.clients) {
+        const cubeRes = await worker.fetch(
+          request(`/api/v1/management/insights/cube?preset=${preset}&client_agent=${encodeURIComponent(client.id)}`),
+          env,
+        );
+        assert.equal(cubeRes.status, 200, `${preset}/${client.id}`);
+        const cube = await cubeRes.json();
+        const reqCol = cube.columns.indexOf('requests');
+        const tokCol = cube.columns.indexOf('total_tokens');
+        const costCol = cube.columns.indexOf('cost_nanos');
+        const sum = (col) => cube.rows.reduce((acc, row) => acc + row[col], 0);
+        assert.equal(sum(reqCol), client.requests, `${preset}/${client.id} requests`);
+        assert.equal(sum(tokCol), client.total_tokens, `${preset}/${client.id} tokens`);
+        assert.equal(sum(costCol), client.cost_nanos, `${preset}/${client.id} cost`);
+        assert.equal(cube.coverage.fact_requests, client.requests, `${preset}/${client.id} coverage`);
+        if (preset !== 'all') {
+          assert.ok(cube.previous_rows.length > 0, `${preset}/${client.id} retains comparison rows`);
+        }
+
+        const rhythmRes = await worker.fetch(
+          request(`/api/v1/management/insights/rhythm?preset=${preset}&client_agent=${encodeURIComponent(client.id)}`),
+          env,
+        );
+        assert.equal(rhythmRes.status, 404, `rhythm ${preset}/${client.id}`);
+        assert.equal((await rhythmRes.json()).code, 'demo_uncaptured');
+      }
+    }
+
+    // Multiple clients combine additively; an unknown client returns an empty cube.
+    const multiRes = await worker.fetch(
+      request('/api/v1/management/insights/cube?preset=7d&client_agent=claude-code&client_agent=opencode'),
+      env,
+    );
+    assert.equal(multiRes.status, 200);
+    const multi = await multiRes.json();
+    const reqCol = multi.columns.indexOf('requests');
+    assert.equal(multi.rows.reduce((acc, row) => acc + row[reqCol], 0), 325 + 810);
+
+    const unknownRes = await worker.fetch(
+      request('/api/v1/management/insights/cube?preset=7d&client_agent=nonexistent-client'),
+      env,
+    );
+    assert.equal(unknownRes.status, 200);
+    const unknown = await unknownRes.json();
+    assert.equal(unknown.rows.length, 0);
+    assert.equal(unknown.previous_rows.length, 0);
+
+    // When the usage-events mapping is missing or incomplete for an active client, answer demo_uncaptured rather than 0 rows.
+    const { filterInsightsCube } = await import('./filters.mjs');
+    const capturedCube7d = JSON.parse(DATASET.responses['insights-cube-7d'].body);
+    assert.equal(
+      filterInsightsCube(capturedCube7d, new URL('https://demo.example/api/v1/management/insights/cube?preset=7d&client_agent=claude-code'), { dataset: { responses: {} } }),
+      undefined,
+    );
+    assert.equal(
+      filterInsightsCube(capturedCube7d, new URL('https://demo.example/api/v1/management/insights/cube?preset=7d&client_agent=claude-code'), {
+        dataset: {
+          responses: {
+            'usage-events': { body: JSON.stringify({ items: [] }) },
+            'insights-clients-7d': DATASET.responses['insights-clients-7d'],
+          },
+        },
+      }),
+      undefined,
+    );
+  });
+
   it('refuses Insights windows and granularities absent from the capture', async (t) => {
     t.mock.method(Date, 'now', () => Date.UTC(2026, 9, 24, 12));
     const { default: worker } = await import('./worker.mjs');
@@ -602,7 +677,7 @@ describe('usage-events client_agent search and call-point fallback parity', () =
       items: [
         { id: 3, timestamp_ms: 6000, model: 'gpt-4o', model_alias: '', provider: 'openai', api_group_key: 'hmac:a', user_agent: '', failed: false, pricing_status: 'priced' },
         { id: 2, timestamp_ms: 5000, model: 'gpt-5', model_alias: '', provider: 'codex', api_group_key: 'claude', client_agent: 'claude-code', user_agent: 'claude-cli/2.1.3', failed: false, pricing_status: 'priced' },
-        { id: 1, timestamp_ms: 4000, model: 'gpt-5', model_alias: 'fast', provider: 'codex', api_group_key: 'hmac:a', client_agent: 'hindsight', user_agent: 'hindsight/1.2.0', failed: false, pricing_status: 'priced' },
+        { id: 1, timestamp_ms: 4000, model: 'gpt-5', model_alias: 'fast', provider: 'codex', api_group_key: 'hmac:a', client_agent: ' hindsight ', user_agent: 'hindsight/1.2.0', failed: false, pricing_status: 'priced' },
       ],
     };
     const byQuery = filterUsageEvents(sample, new URL('https://demo.example/api/v1/usage/events?q=claude-code'), 0);
@@ -619,6 +694,9 @@ describe('usage-events client_agent search and call-point fallback parity', () =
 
     const byAlias = filterUsageEvents(sample, new URL('https://demo.example/api/v1/usage/events?model_alias=fast'), 0);
     assert.deepEqual(byAlias.items.map((row) => row.id), [1]);
+
+    const byTrimmedAgent = filterUsageEvents(sample, new URL('https://demo.example/api/v1/usage/events?client_agent=%20hindsight%20'), 0);
+    assert.deepEqual(byTrimmedAgent.items.map((row) => row.id), [1]);
   });
 });
 

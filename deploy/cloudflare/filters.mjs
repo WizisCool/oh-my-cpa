@@ -127,9 +127,107 @@ const FILTERS = new Map([
   ['/api/v1/management/audit/events', filterAuditEvents],
   ['/api/v1/management/audit/summary', summarizeAuditEvents],
   ['/api/v1/management/service-logs', filterServiceLogs],
+  ['/api/v1/management/insights/cube', filterInsightsCube],
   ['/api/v1/usage/events', filterUsageEvents],
   ['/api/v1/usage/facets', filterUsageFacets],
 ]);
+
+function normalizeClientAgent(value) {
+  return String(value ?? '').trim() || 'unknown';
+}
+
+/**
+ * Narrows a captured Insights cube by `client_agent`. Each synthetic gateway key in the
+ * demo fixture belongs to one client program, so resolving `client_agent -> api_group_key`
+ * from the captured request list slices both `rows` and `previous_rows` without storing
+ * duplicate per-client cubes. Returns `undefined` when the mapping capture is missing or
+ * incomplete for an active client so the Worker can answer `demo_uncaptured` instead of
+ * fabricating an empty window.
+ */
+export function filterInsightsCube(decoded, url, { dataset } = {}) {
+  if (!decoded || !Array.isArray(decoded.rows) || !Array.isArray(decoded.columns)) return decoded;
+  const clientAgents = [...new Set(
+    url.searchParams.getAll('client_agent').map((value) => value.trim()).filter(Boolean),
+  )];
+  if (clientAgents.length === 0) return decoded;
+
+  const keyColumn = decoded.columns.indexOf('key');
+  const requestsColumn = decoded.columns.indexOf('requests');
+  if (keyColumn < 0) return decoded;
+
+  let events;
+  try {
+    events = JSON.parse(dataset?.responses?.['usage-events']?.body ?? 'null')?.items;
+  } catch {
+    events = undefined;
+  }
+  if (!Array.isArray(events)) return undefined;
+
+  const keysByClient = new Map();
+  for (const item of events) {
+    if (!item?.api_group_key) continue;
+    const agent = normalizeClientAgent(item.client_agent);
+    let set = keysByClient.get(agent);
+    if (!set) {
+      set = new Set();
+      keysByClient.set(agent, set);
+    }
+    set.add(item.api_group_key);
+  }
+
+  let activeClients;
+  const preset = String(decoded.window?.preset || url.searchParams.get('preset') || '7d').trim().toLowerCase();
+  try {
+    const clientsBody = JSON.parse(dataset?.responses?.[`insights-clients-${preset}`]?.body ?? 'null');
+    if (Array.isArray(clientsBody?.clients)) {
+      activeClients = new Set(clientsBody.clients.filter((c) => c?.requests > 0).map((c) => normalizeClientAgent(c.id)));
+    }
+  } catch {
+    activeClients = undefined;
+  }
+
+  const wantedFingerprints = new Set();
+  for (const agent of clientAgents) {
+    const matched = keysByClient.get(agent);
+    if (matched && matched.size > 0) {
+      for (const key of matched) wantedFingerprints.add(key);
+    } else if (activeClients?.has(agent)) {
+      // The client has traffic in this preset, yet the bounded usage-events page lacked its key.
+      return undefined;
+    }
+  }
+
+  const keys = Array.isArray(decoded.dims?.keys) ? decoded.dims.keys : [];
+  const wantedKeyIndices = new Set();
+  for (let index = 0; index < keys.length; index += 1) {
+    if (wantedFingerprints.has(keys[index]?.id)) {
+      wantedKeyIndices.add(index);
+    }
+  }
+
+  const rows = decoded.rows.filter((row) => wantedKeyIndices.has(row[keyColumn]));
+  const prevRows = Array.isArray(decoded.previous_rows) ? decoded.previous_rows : [];
+  const prevOffset = prevRows.length > 0 && prevRows[0].length < decoded.columns.length ? 1 : 0;
+  const prevKeyColumn = keyColumn - prevOffset;
+  const previousRows = prevKeyColumn >= 0
+    ? prevRows.filter((row) => wantedKeyIndices.has(row[prevKeyColumn]))
+    : [];
+
+  const factRequests = requestsColumn >= 0
+    ? rows.reduce((sum, row) => sum + (Number(row[requestsColumn]) || 0), 0)
+    : (decoded.coverage?.fact_requests ?? 0);
+
+  return {
+    ...decoded,
+    rows,
+    previous_rows: previousRows,
+    coverage: {
+      ...(decoded.coverage ?? {}),
+      fact_requests: factRequests,
+      detail_requests: 0,
+    },
+  };
+}
 
 /**
  * Filters captured usage events against query parameters (`q`, `result`, `model`,
@@ -305,7 +403,7 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
   const reasoning = new Set(params.getAll('reasoning').filter(Boolean));
   const serviceTiers = new Set(params.getAll('service_tier').filter(Boolean));
   const resolvedTiers = new Set(params.getAll('resolved_service_tier').filter(Boolean));
-  const clientAgents = new Set(params.getAll('client_agent').filter(Boolean));
+  const clientAgents = new Set(params.getAll('client_agent').map((v) => v.trim()).filter(Boolean));
   const cost = (params.get('cost') ?? 'all').toLowerCase();
   const transport = (params.get('transport') ?? 'all').toLowerCase();
   const minLatency = params.has('min_latency_ms') ? Number(params.get('min_latency_ms')) : null;
@@ -341,7 +439,7 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
     if (reasoning.size > 0 && !reasoning.has(item.reasoning_effort ?? '')) return false;
     if (serviceTiers.size > 0 && !serviceTiers.has(item.service_tier ?? '')) return false;
     if (resolvedTiers.size > 0 && !resolvedTiers.has(item.resolved_service_tier ?? '')) return false;
-    if (clientAgents.size > 0 && !clientAgents.has(item.client_agent || 'unknown')) return false;
+    if (clientAgents.size > 0 && !clientAgents.has(normalizeClientAgent(item.client_agent))) return false;
     if (ua && !String(item.user_agent ?? '').toLowerCase().includes(ua)) return false;
     if (cost === 'priced' && item.pricing_status !== 'priced') return false;
     if (cost === 'unpriced' && item.pricing_status === 'priced') return false;
@@ -363,7 +461,7 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
         item.source,
         item.auth_index,
         item.user_agent,
-        item.client_agent || 'unknown',
+        normalizeClientAgent(item.client_agent),
       ].map((v) => String(v ?? '').toLowerCase()).join(' ');
       if (!hay.includes(q)) return false;
     }
