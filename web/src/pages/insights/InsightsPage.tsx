@@ -255,6 +255,8 @@ export const InsightsPage: React.FC = () => {
     if (!needsAllClientsCube) return cube;
     return allClientsCubeQuery.data ? attributeServingProviders(decodeInsightsCube(allClientsCubeQuery.data), servingProvider) : undefined;
   }, [allClientsCubeQuery.data, cube, needsAllClientsCube, servingProvider]);
+  // A failed read of the connection's credentials outlives a later read that no longer needs it.
+  const allClientsCubeError = needsAllClientsCube ? allClientsCubeQuery.error : null;
   const clientsRequestFilters = React.useMemo(() => requestFilterValues(allClientsCube, clientsFilters), [allClientsCube, clientsFilters]);
   const clientsQueryString = rhythmParams(range, clientsFilters, clientsRequestFilters);
   const areClientFiltersReady = isRangeReady && (!(view.filters.provider?.length) || Boolean(allClientsCube));
@@ -629,13 +631,15 @@ export const InsightsPage: React.FC = () => {
   const metricName = t(`insights.metric.${metric}`);
   const clientPanel = (
     <ClientAttributionPanel
-      data={clientsQuery.data}
+      // A ranking kept from the previous filters would read under credentials that could not be
+      // resolved for these, so the failure replaces it rather than sitting behind it.
+      data={allClientsCubeError ? undefined : clientsQuery.data}
       metric={metric}
       isLoading={clientsQuery.isLoading || allClientsCubeQuery.isLoading}
       isUncaptured={apiErrorCode(clientsQuery.error) === 'demo_uncaptured'}
       // The ranking cannot be read until the connection's credentials are, so their failure is its own.
-      error={allClientsCubeQuery.error ?? clientsQuery.error}
-      onRetry={() => void (allClientsCubeQuery.error ? allClientsCubeQuery.refetch() : clientsQuery.refetch())}
+      error={allClientsCubeError ?? clientsQuery.error}
+      onRetry={() => void (allClientsCubeError ? allClientsCubeQuery.refetch() : clientsQuery.refetch())}
       // Either read still on the previous window or filters would build a link from mismatched halves.
       isPlaceholder={clientsQuery.isPlaceholderData || cubeQuery.isPlaceholderData}
       limit={rankingLimit}
