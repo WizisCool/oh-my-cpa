@@ -22,6 +22,21 @@ func TestClassifyClientAgent(t *testing.T) {
 			wantID: ClientAgentHermes, wantCat: ClientAgentCategoryAgent, wantPrefix: "hermes-agent",
 		},
 		{
+			name: "hermes agent camelcase attribution user agent",
+			ua:   "HermesAgent/0.9.2", endpoint: "POST /v1/chat/completions",
+			wantID: ClientAgentHermes, wantCat: ClientAgentCategoryAgent, wantPrefix: "HermesAgent",
+		},
+		{
+			name: "hermes agent custom codex endpoint compatibility user agent",
+			ua:   "codex_cli_rs/0.0.0 (Hermes Agent)", endpoint: "POST /v1/responses",
+			wantID: ClientAgentHermes, wantCat: ClientAgentCategoryAgent, wantPrefix: "",
+		},
+		{
+			name: "hermes agent parenthetical comment after sdk user agent",
+			ua:   "OpenAI/Python 1.55.0 (Hermes Agent)", endpoint: "POST /v1/chat/completions",
+			wantID: ClientAgentHermes, wantCat: ClientAgentCategoryAgent, wantPrefix: "",
+		},
+		{
 			name: "deepseek harness cli and mandatory attribution url",
 			ua:   "deepseek-harness/0.2.1-rc.3 (+https://github.com/deepseek-ai/deepseek-harness)", endpoint: "POST /v1/chat/completions",
 			wantID: ClientAgentDeepSeekHarness, wantCat: ClientAgentCategoryAgent, wantPrefix: "deepseek-harness",
@@ -355,6 +370,16 @@ func TestResolveClientAgentPrefersPersistedIdentity(t *testing.T) {
 		t.Fatalf("ResolveClientAgent persisted qwen-code = %+v", qwen)
 	}
 
+	hermesCodex := ResolveClientAgent(ClientAgentHermes, "codex_cli_rs/0.0.0", "POST /v1/responses")
+	if hermesCodex.ID != ClientAgentHermes || hermesCodex.Category != ClientAgentCategoryAgent || hermesCodex.RawPrefix != "" {
+		t.Fatalf("ResolveClientAgent persisted hermes over codex_cli_rs = %+v", hermesCodex)
+	}
+
+	// Bare "Hermes" without version or trailing "Agent" must stay guarded against false positives.
+	if bareHermes := ClassifyClientAgent("Hermes", "POST /v1/chat/completions"); bareHermes.ID != ClientAgentUnknown {
+		t.Fatalf("ClassifyClientAgent(\"Hermes\") = %+v, want unknown", bareHermes)
+	}
+
 	if id := ResolveClientAgentID(ClientAgentGrokBuild, "grok-shell/0.2.106", "POST /v1/responses"); id != ClientAgentGrokBuild {
 		t.Fatalf("ResolveClientAgentID persisted grok-build = %q", id)
 	}
@@ -423,6 +448,8 @@ func TestRedactionFastPathEquivalenceAndZeroAllocHotPath(t *testing.T) {
 	if allocs := testing.AllocsPerRun(200, func() {
 		_ = ClassifyClientAgent("claude-cli/2.1.14 (external, cli)", "POST /v1/messages")
 		_ = ClassifyClientAgent("codex_cli_rs/0.47.0 (Mac OS 15.1; arm64)", "POST /v1/responses")
+		_ = ClassifyClientAgent("codex_cli_rs/0.0.0 (Hermes Agent)", "POST /v1/responses")
+		_ = ClassifyClientAgent("HermesAgent/0.9.2", "POST /v1/chat/completions")
 		_ = ClassifyClientAgent("hindsight/1.2.0", "POST /v1/chat/completions")
 		_ = ClassifyClientAgent("QwenCode/0.2.1", "POST /v1/chat/completions")
 		_ = ClassifyClientAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Maka/0.1.11 Electron/43.2.0", "POST /v1/chat/completions")

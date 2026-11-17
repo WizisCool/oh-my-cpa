@@ -323,6 +323,7 @@ var agentMarkerAliases = map[string]string{
 	"hermes":           ClientAgentHermes,
 	"hermes-agent":     ClientAgentHermes,
 	"hermes_agent":     ClientAgentHermes,
+	"hermesagent":      ClientAgentHermes,
 	"kilo-code":        ClientAgentKiloCode,
 	"kilo_code":        ClientAgentKiloCode,
 	"kilo":             ClientAgentKiloCode,
@@ -501,6 +502,7 @@ var agentMarkerAliases = map[string]string{
 var unambiguousAgentHeads = map[string]string{
 	"hermes-agent":         ClientAgentHermes,
 	"hermes_agent":         ClientAgentHermes,
+	"hermesagent":          ClientAgentHermes,
 	"hermes-cli":           ClientAgentHermes,
 	"nous-hermes":          ClientAgentHermes,
 	"kilo-code":            ClientAgentKiloCode,
@@ -896,6 +898,7 @@ func ClassifyClientAgent(userAgent, endpoint string) ClientAgentMatch {
 		}
 
 		// 3. Native CLI, IDE, desktop, and autonomous agent tokens.
+		prevHead := ""
 		for pos := 0; ; {
 			token, next, ok := nextUAToken(redacted, pos)
 			if !ok {
@@ -903,6 +906,10 @@ func ClassifyClientAgent(userAgent, endpoint string) ClientAgentMatch {
 			}
 			pos = next
 			head, tail, hasSlash := strings.Cut(token, "/")
+
+			if equalASCIIFold(prevHead, "hermes") && equalASCIIFold(head, "agent") {
+				return agentMatch(ClientAgentHermes, minimized, "")
+			}
 
 			switch {
 			case equalASCIIFold(head, "claude-cli"):
@@ -918,6 +925,14 @@ func ClassifyClientAgent(userAgent, endpoint string) ClientAgentMatch {
 					return agentMatch(ClientAgentClaudeCode, minimized, "claude-cli/2.")
 				}
 				return agentMatch(ClientAgentClaudeCode, minimized, head)
+
+			case equalASCIIFold(head, "codex_cli_rs"):
+				// Hermes Agent identifies itself as "codex_cli_rs/0.0.0 (Hermes Agent)" on
+				// custom/proxied Codex Responses endpoints instead of "HermesAgent/<ver>".
+				if hasHermesAgentMarker(redacted[pos:]) {
+					return agentMatch(ClientAgentHermes, minimized, "")
+				}
+				return agentMatch(ClientAgentCodexCLI, minimized, head)
 
 			case hasPrefixASCIIFold(head, "geminicli-"):
 				return agentMatch(ClientAgentGeminiCLI, minimized, head)
@@ -949,6 +964,7 @@ func ClassifyClientAgent(userAgent, endpoint string) ClientAgentMatch {
 					return agentMatch(canonical, minimized, head)
 				}
 			}
+			prevHead = head
 		}
 	}
 
@@ -1341,6 +1357,22 @@ func rawPrefixFromMinimized(minimized, candidate string) string {
 		return minimized[:len(candidate)]
 	}
 	return ""
+}
+
+func hasHermesAgentMarker(rest string) bool {
+	prevHead := ""
+	for pos := 0; ; {
+		token, next, ok := nextUAToken(rest, pos)
+		if !ok {
+			return false
+		}
+		pos = next
+		head, _, _ := strings.Cut(token, "/")
+		if equalASCIIFold(prevHead, "hermes") && equalASCIIFold(head, "agent") {
+			return true
+		}
+		prevHead = head
+	}
 }
 
 func nextUAToken(ua string, pos int) (string, int, bool) {
