@@ -46,6 +46,9 @@ type LifecycleRule struct {
 	// absorbed it. The facts are the only thing left once the record is gone, so
 	// deleting first would lose its usage for good.
 	IsGatedByUsageFacts bool
+	// IsDerivedRollup marks rolling summary tables pruned alongside the policy's
+	// primary detail rows without adding rollup row counts to DeletedRows.
+	IsDerivedRollup bool
 }
 
 // TableLifecycle is one table's declared lifetime.
@@ -73,6 +76,10 @@ var TABLE_LIFECYCLES = map[string]TableLifecycle{
 	"credential_warmup_runs":     {Kind: LifecycleOwnerBounded, Reason: "newest 50 request receipts per warmup task, trimmed on write; rows of the retired per-credential warmup are neither read nor trimmed"},
 	"usage_events": {Kind: LifecycleRolling, Reason: "request records; their usage survives in the facts",
 		Rules: []LifecycleRule{{Policy: LifecycleUsageDetail, Expired: `timestamp_ms < ?`, IsGatedByUsageFacts: true}}},
+	"usage_client_facts_15m": {Kind: LifecycleRolling, Reason: "quarter-hour client attribution rollups bound to retained request records",
+		Rules: []LifecycleRule{{Policy: LifecycleUsageDetail, Expired: `bucket_start_ms < ?`, IsDerivedRollup: true}}},
+	"usage_client_facts_daily": {Kind: LifecycleRolling, Reason: "daily client attribution rollups bound to retained request records",
+		Rules: []LifecycleRule{{Policy: LifecycleUsageDetail, Expired: `bucket_start_ms < ?`, IsDerivedRollup: true}}},
 	"error_events": {Kind: LifecycleRolling, Reason: "error detail shown beside request records",
 		Rules: []LifecycleRule{{Policy: LifecycleUsageDetail, Expired: `timestamp_ms < ?`}}},
 	"ingest_gaps": {Kind: LifecycleRolling, Reason: "coverage notes about request records of the same age",
@@ -135,14 +142,16 @@ const lifecycleBatchRows = 2000
 
 // LifecycleReport is what one RunLifecycle pass did.
 type LifecycleReport struct {
-	// Deleted counts rows removed per table.
+	// Deleted counts primary rows removed per rolling table.
 	Deleted map[string]int64
+	// DeletedRollups counts derived summary rows pruned alongside primary records.
+	DeletedRollups map[string]int64
 	// IsComplete is false when the pass stopped at its batch budget with expired
 	// rows still present; the next pass continues where it stopped.
 	IsComplete bool
 }
 
-// Total sums the rows the pass removed.
+// Total sums the primary rows the pass removed.
 func (report LifecycleReport) Total() int64 {
 	var total int64
 	for _, deleted := range report.Deleted {
@@ -165,7 +174,7 @@ func (report LifecycleReport) Total() int64 {
 // every row it expected: nothing above that horizon is deleted until the next
 // pass, by which time the read is long finished.
 func (r *Repository) RunLifecycle(ctx context.Context, cutoffs map[string]int64, maxBatches int) (LifecycleReport, error) {
-	report := LifecycleReport{Deleted: map[string]int64{}, IsComplete: true}
+	report := LifecycleReport{Deleted: map[string]int64{}, DeletedRollups: map[string]int64{}, IsComplete: true}
 	if r == nil || r.SQL() == nil {
 		return report, errors.New("repository is not initialized")
 	}
@@ -212,8 +221,12 @@ func (r *Repository) RunLifecycle(ctx context.Context, cutoffs map[string]int64,
 				if err != nil {
 					return report, err
 				}
-				report.Deleted[table] += deleted
-				deletedByPolicy[rule.Policy] += deleted
+				if rule.IsDerivedRollup {
+					report.DeletedRollups[table] += deleted
+				} else {
+					report.Deleted[table] += deleted
+					deletedByPolicy[rule.Policy] += deleted
+				}
 				if deleted < lifecycleBatchRows {
 					break
 				}

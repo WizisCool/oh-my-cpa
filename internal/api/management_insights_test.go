@@ -512,10 +512,28 @@ func TestInsightsClientsAggregatesAgentsFiltersAndRetentionCoverage(t *testing.T
 		t.Fatalf("filtered clients = %+v", filtered)
 	}
 
-	// Detail retention pruning leaves permanent usage_facts intact while lowering retained_requests honestly.
+	// Folded client attribution rollups must match unfolded records identically.
 	if _, err := repo.AggregateUsageFacts(context.Background(), 100); err != nil {
 		t.Fatal(err)
 	}
+	_, foldedAllPayload := getJSON(t, client, baseURL+"/omc/api/v1/management/insights/clients?preset=today")
+	var foldedAll insightsClientsResponse
+	if err := json.Unmarshal(foldedAllPayload, &foldedAll); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(foldedAll, all) {
+		t.Fatalf("folded today clients = %+v, want unfolded %+v", foldedAll, all)
+	}
+	_, foldedFilteredPayload := getJSON(t, client, baseURL+"/omc/api/v1/management/insights/clients?preset=today&model=gpt-5")
+	var foldedFiltered insightsClientsResponse
+	if err := json.Unmarshal(foldedFilteredPayload, &foldedFiltered); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(foldedFiltered, filtered) {
+		t.Fatalf("folded filtered clients = %+v, want unfolded %+v", foldedFiltered, filtered)
+	}
+
+	// Detail retention pruning leaves permanent usage_facts intact while lowering retained_requests honestly.
 	oldDay := now.Add(-40 * 24 * time.Hour)
 	seedEvents(t, repo, now, []repository.UsageDecoded{
 		{Event: makeEvent("old-1", "sk-alpha-secret-0001", "gpt-5", "codex", "POST /v1/responses", "codex_cli_rs/0.47.0", oldDay, 300, 100, 80, 0, nil, true)},
@@ -523,8 +541,11 @@ func TestInsightsClientsAggregatesAgentsFiltersAndRetentionCoverage(t *testing.T
 	if _, err := repo.AggregateUsageFacts(context.Background(), 100); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.SQL().Exec(`DELETE FROM usage_events WHERE event_key = 'old-1'`); err != nil {
-		t.Fatal(err)
+	retentionCutoff := time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC).UnixMilli()
+	for pass := 0; pass < 2; pass++ {
+		if _, err := repo.RunLifecycle(context.Background(), map[string]int64{repository.LifecycleUsageDetail: retentionCutoff}, 10); err != nil {
+			t.Fatal(err)
+		}
 	}
 	response, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/insights/clients?preset=90d")
 	if response.StatusCode != http.StatusOK {

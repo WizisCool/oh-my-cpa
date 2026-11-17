@@ -577,5 +577,37 @@ func foldPricedCorrections(ctx context.Context, tx *sql.Tx, ids []int64) error {
 		QuarterHourBucketMS, string(encoded)); err != nil {
 		return fmt.Errorf("stage priced usage corrections: %w", err)
 	}
-	return foldUsageBuffer(ctx, tx, fromMS.Int64, toMS.Int64)
+	if err := foldUsageBuffer(ctx, tx, fromMS.Int64, toMS.Int64); err != nil {
+		return err
+	}
+	if err := resetClientUsageFoldBuffer(ctx, tx); err != nil {
+		return err
+	}
+	defer func() { _, _ = tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_client_fold_15m`) }()
+	clientMeasures := make([]string, 0, len(usageClientFactMeasures))
+	for _, measure := range usageClientFactMeasures {
+		switch measure {
+		case "cost_nanos":
+			clientMeasures = append(clientMeasures, "SUM(cost_nanos)")
+		case "priced_requests", "costed_requests":
+			clientMeasures = append(clientMeasures, "COUNT(1)")
+		default:
+			clientMeasures = append(clientMeasures, "0")
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO temp._omc_usage_client_fold_15m (instance_id, bucket_start_ms, `+usageClientFactDimensions+`, `+strings.Join(usageClientFactMeasures, ", ")+`)
+		SELECT instance_id, (timestamp_ms / ?1) * ?1, api_group_key, model, COALESCE(model_alias, ''),
+		       auth_index, provider, auth_type,
+		       CASE WHEN client_agent = '' THEN 'unknown' ELSE client_agent END, client_prefix,
+		       `+strings.Join(clientMeasures, ", ")+`
+		FROM usage_events
+		WHERE id IN (SELECT value FROM json_each(?2)) AND generate = 1
+		GROUP BY instance_id, (timestamp_ms / ?1) * ?1, api_group_key, model, COALESCE(model_alias, ''),
+		         auth_index, provider, auth_type,
+		         CASE WHEN client_agent = '' THEN 'unknown' ELSE client_agent END, client_prefix`,
+		QuarterHourBucketMS, string(encoded)); err != nil {
+		return fmt.Errorf("stage priced client usage corrections: %w", err)
+	}
+	return foldClientUsageBuffer(ctx, tx)
 }

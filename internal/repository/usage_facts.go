@@ -26,8 +26,10 @@ const QuarterHourBucketMS int64 = 15 * 60 * 1000
 const LifecycleUsageDetail = "usage_detail"
 
 const (
-	usageFactsFineTable  = "usage_facts_15m"
-	usageFactsDailyTable = "usage_facts_daily"
+	usageFactsFineTable        = "usage_facts_15m"
+	usageFactsDailyTable       = "usage_facts_daily"
+	usageClientFactsFineTable  = "usage_client_facts_15m"
+	usageClientFactsDailyTable = "usage_client_facts_daily"
 	// usageFactsLocalTable holds whole local days in the one zone its checkpoint
 	// marker names; see migration 047.
 	usageFactsLocalTable = "usage_facts_local_daily"
@@ -39,6 +41,9 @@ const (
 // usageFactDimensions are the columns a fact row is keyed on besides its bucket.
 // usage_events carries the same names, so one expression groups either source.
 const usageFactDimensions = `api_group_key, model, model_alias, auth_index, provider, auth_type`
+
+// usageClientFactDimensions extends usageFactDimensions with persisted client attribution.
+const usageClientFactDimensions = usageFactDimensions + `, client_agent, client_prefix`
 
 // Per-event additive token partition SQL shared by unfolded usage_events reads,
 // 15-minute fact folding, historical upgrade reconstruction, and caller agent
@@ -166,6 +171,14 @@ var usageFactMeasures = []string{
 	"costed_requests", "canonical_requests", "unresolved_accounting_requests",
 	"raw_input_tokens", "raw_output_tokens", "raw_total_tokens",
 	"prompt_tokens", "completion_tokens", "effective_cache_read_tokens", "effective_total_tokens",
+}
+
+// usageClientFactMeasures lists the additive columns rolled into usage_client_facts_*.
+var usageClientFactMeasures = []string{
+	"retained_requests", "requests", "failures", "prompt_tokens", "completion_tokens",
+	"reasoning_tokens", "effective_cache_read_tokens", "cache_creation_tokens",
+	"effective_total_tokens", "latency_sum_ms", "ttft_sum_ms", "ttft_count",
+	"cost_nanos", "priced_requests", "costed_requests",
 }
 
 // buildStagedUsageEventsArm builds a single-MATERIALIZED pipeline over usage_events
@@ -1007,16 +1020,28 @@ func (r *Repository) AggregateUsageFacts(ctx context.Context, batchSize int) (in
 	}
 
 	measureColumns := strings.Join(usageFactMeasures, ", ")
+	clientMeasureColumns := strings.Join(usageClientFactMeasures, ", ")
+	if err := resetUsageStageBuffer(ctx, tx); err != nil {
+		return 0, err
+	}
+	defer func() { _, _ = tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_stage_15m`) }()
 	if err := resetUsageFoldBuffer(ctx, tx); err != nil {
 		return 0, err
 	}
 	defer func() { _, _ = tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_fold_15m`) }()
+	if err := resetClientUsageFoldBuffer(ctx, tx); err != nil {
+		return 0, err
+	}
+	defer func() { _, _ = tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_client_fold_15m`) }()
 
 	_, err = tx.ExecContext(ctx, `
 		WITH s1 AS MATERIALIZED (
 			SELECT instance_id, (timestamp_ms / ?1) * ?1 AS bucket_start_ms,
 			       api_group_key, model, COALESCE(model_alias, '') AS model_alias,
 			       auth_index, provider, auth_type,
+			       generate,
+			       CASE WHEN generate = 1 THEN CASE WHEN client_agent = '' THEN 'unknown' ELSE client_agent END ELSE '' END AS client_agent,
+			       CASE WHEN generate = 1 THEN client_prefix ELSE '' END AS client_prefix,
 			       failed, input_tokens, output_tokens, reasoning_tokens,
 			       cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
 			       latency_ms, ttft_ms, cost_nanos, pricing_status,
@@ -1027,8 +1052,9 @@ func (r *Repository) AggregateUsageFacts(ctx context.Context, batchSize int) (in
 			FROM usage_events
 			WHERE id > ?2 AND id <= ?3
 		)
-		INSERT INTO temp._omc_usage_fold_15m (instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`)
+		INSERT INTO temp._omc_usage_stage_15m (instance_id, bucket_start_ms, `+usageClientFactDimensions+`, generate, `+measureColumns+`)
 		SELECT instance_id, bucket_start_ms, api_group_key, model, model_alias, auth_index, provider, auth_type,
+		       client_agent, client_prefix, generate,
 		       COUNT(1), SUM(failed), SUM(input_tokens), SUM(output_tokens), SUM(reasoning_tokens),
 		       SUM(cached_tokens), SUM(cache_read_tokens), SUM(cache_creation_tokens), SUM(total_tokens),
 		       SUM(latency_ms), SUM(COALESCE(ttft_ms, 0)), SUM(ttft_ms IS NOT NULL),
@@ -1045,13 +1071,51 @@ func (r *Repository) AggregateUsageFacts(ctx context.Context, batchSize int) (in
 				)
 			)
 		)
-		GROUP BY instance_id, bucket_start_ms, api_group_key, model, model_alias, auth_index, provider, auth_type`,
+		GROUP BY instance_id, bucket_start_ms, api_group_key, model, model_alias, auth_index, provider, auth_type, client_agent, client_prefix, generate`,
 		QuarterHourBucketMS, lastID, highID.Int64)
 	if err != nil {
 		return 0, fmt.Errorf("stage usage fold batch: %w", err)
 	}
 
+	factSums := make([]string, 0, len(usageFactMeasures))
+	for _, measure := range usageFactMeasures {
+		factSums = append(factSums, "SUM("+measure+")")
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO temp._omc_usage_fold_15m (instance_id, bucket_start_ms, `+usageFactDimensions+`, `+measureColumns+`)
+		SELECT instance_id, bucket_start_ms, `+usageFactDimensions+`, `+strings.Join(factSums, ", ")+`
+		FROM temp._omc_usage_stage_15m
+		GROUP BY instance_id, bucket_start_ms, `+usageFactDimensions); err != nil {
+		return 0, fmt.Errorf("stage usage facts fold batch: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO temp._omc_usage_client_fold_15m (instance_id, bucket_start_ms, `+usageClientFactDimensions+`, `+clientMeasureColumns+`)
+		SELECT instance_id, bucket_start_ms, `+usageClientFactDimensions+`,
+		       SUM(requests),
+		       SUM(CASE WHEN generate = 1 THEN requests ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN failures ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN prompt_tokens ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN completion_tokens ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN reasoning_tokens ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN effective_cache_read_tokens ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN cache_creation_tokens ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN effective_total_tokens ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN latency_sum_ms ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN ttft_sum_ms ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN ttft_count ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN cost_nanos ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN priced_requests ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN costed_requests ELSE 0 END)
+		FROM temp._omc_usage_stage_15m
+		GROUP BY instance_id, bucket_start_ms, `+usageClientFactDimensions); err != nil {
+		return 0, fmt.Errorf("stage client usage fold batch: %w", err)
+	}
+
 	if err := foldUsageBuffer(ctx, tx, minTS.Int64, maxTS.Int64); err != nil {
+		return 0, err
+	}
+	if err := foldClientUsageBuffer(ctx, tx); err != nil {
 		return 0, err
 	}
 
@@ -1072,6 +1136,21 @@ func (r *Repository) AggregateUsageFacts(ctx context.Context, batchSize int) (in
 	return absorbed, nil
 }
 
+// resetUsageStageBuffer prepares the connection-local TEMP table that stages
+// one raw batch once before populating both usage_facts_* and usage_client_facts_*.
+func resetUsageStageBuffer(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TEMP TABLE IF NOT EXISTS _omc_usage_stage_15m AS
+		SELECT instance_id, bucket_start_ms, `+usageClientFactDimensions+`, 0 AS generate, `+strings.Join(usageFactMeasures, ", ")+`
+		FROM `+usageFactsFineTable+`, (SELECT '' AS client_agent, '' AS client_prefix) WHERE 0`); err != nil {
+		return fmt.Errorf("prepare temp usage stage buffer: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_stage_15m`); err != nil {
+		return fmt.Errorf("reset temp usage stage buffer: %w", err)
+	}
+	return nil
+}
+
 // resetUsageFoldBuffer readies the connection-local TEMP table a fold stages its
 // 15-minute rows in. Because every civil UTC offset is a multiple of 15 minutes,
 // 15m, UTC-daily and local-daily all roll up from those rows.
@@ -1084,6 +1163,55 @@ func resetUsageFoldBuffer(ctx context.Context, tx *sql.Tx) error {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_fold_15m`); err != nil {
 		return fmt.Errorf("reset temp usage fold buffer: %w", err)
+	}
+	return nil
+}
+
+// resetClientUsageFoldBuffer prepares the connection-local TEMP table that
+// stages 15-minute client attribution rows before folding into 15m and daily grains.
+func resetClientUsageFoldBuffer(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TEMP TABLE IF NOT EXISTS _omc_usage_client_fold_15m AS
+		SELECT instance_id, bucket_start_ms, `+usageClientFactDimensions+`, `+strings.Join(usageClientFactMeasures, ", ")+`
+		FROM `+usageClientFactsFineTable+` WHERE 0`); err != nil {
+		return fmt.Errorf("prepare temp client usage fold buffer: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_client_fold_15m`); err != nil {
+		return fmt.Errorf("reset temp client usage fold buffer: %w", err)
+	}
+	return nil
+}
+
+// foldClientUsageBuffer adds the staged 15-minute client attribution rows into
+// both usage_client_facts_15m and usage_client_facts_daily inside one transaction.
+func foldClientUsageBuffer(ctx context.Context, tx *sql.Tx) error {
+	updates := make([]string, 0, len(usageClientFactMeasures))
+	sums := make([]string, 0, len(usageClientFactMeasures))
+	for _, measure := range usageClientFactMeasures {
+		updates = append(updates, measure+" = "+measure+" + excluded."+measure)
+		sums = append(sums, "SUM("+measure+")")
+	}
+	updateSet := strings.Join(updates, ", ")
+	sumSelect := strings.Join(sums, ", ")
+	measureColumns := strings.Join(usageClientFactMeasures, ", ")
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO `+usageClientFactsFineTable+` (instance_id, bucket_start_ms, `+usageClientFactDimensions+`, `+measureColumns+`)
+		SELECT instance_id, bucket_start_ms, `+usageClientFactDimensions+`, `+measureColumns+`
+		FROM temp._omc_usage_client_fold_15m
+		WHERE true
+		ON CONFLICT DO UPDATE SET `+updateSet); err != nil {
+		return fmt.Errorf("fold usage into %s: %w", usageClientFactsFineTable, err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO `+usageClientFactsDailyTable+` (instance_id, bucket_start_ms, `+usageClientFactDimensions+`, `+measureColumns+`)
+		SELECT instance_id, (bucket_start_ms / ?1) * ?1, `+usageClientFactDimensions+`, `+sumSelect+`
+		FROM temp._omc_usage_client_fold_15m
+		GROUP BY instance_id, (bucket_start_ms / ?1) * ?1, `+usageClientFactDimensions+`
+		ON CONFLICT DO UPDATE SET `+updateSet,
+		DayBucketMS); err != nil {
+		return fmt.Errorf("fold usage into %s: %w", usageClientFactsDailyTable, err)
 	}
 	return nil
 }

@@ -472,6 +472,8 @@ func migrationHook(version int) func(context.Context, *sql.Tx, *DB) error {
 		return backfillUsageClientAgentsTx
 	case 68:
 		return repairUsageFactsPartitionsAndClientAgentTx
+	case 69:
+		return backfillAndRollupClientAttributionTx
 	}
 	return nil
 }

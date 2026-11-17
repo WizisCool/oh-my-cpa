@@ -199,9 +199,11 @@ type Event struct {
 	ClientIP       *string
 	XForwardedFor  *string
 	UserAgent      *string
-	// ClientAgent is the canonical low-cardinality caller agent or SDK family
-	// resolved at ingestion before UserAgent and Endpoint are minimized.
+	// ClientAgent and ClientPrefix are the canonical low-cardinality caller agent
+	// or SDK family and its drill-down User-Agent prefix, resolved at ingestion
+	// before UserAgent and Endpoint are minimized.
 	ClientAgent          string
+	ClientPrefix         string
 	Model                string
 	ModelAlias           *string
 	ReasoningEffort      string
@@ -269,6 +271,7 @@ func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time
 		timestamp = observedAt
 	}
 	groupKey, groupLabel := apiGroupIdentity(payload, fingerprinter)
+	clientMatch := ClassifyClientAgent(valueOf(payload.UserAgent), payload.Endpoint)
 	event := Event{
 		InstanceID:    boundedSafe(instanceID, 256),
 		EventKey:      requestID,
@@ -287,7 +290,8 @@ func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time
 		ClientIP:             normalizePointer(payload.ClientIP, security.NormalizeClientIP),
 		XForwardedFor:        normalizePointer(payload.XForwardedFor, security.NormalizeForwardedFor),
 		UserAgent:            security.MinimizeUserAgent(valueOf(payload.UserAgent)),
-		ClientAgent:          ClassifyClientAgent(valueOf(payload.UserAgent), payload.Endpoint).PersistedID(),
+		ClientAgent:          clientMatch.PersistedID(),
+		ClientPrefix:         clientMatch.RawPrefix,
 		Model:                orUnknown(boundedSafe(payload.Model, 256)),
 		ModelAlias:           cleanBoundedString(payload.Alias, 256),
 		ReasoningEffort:      boundedSafe(payload.ReasoningEffort, 128),

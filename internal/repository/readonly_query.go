@@ -80,6 +80,8 @@ var QUERY_READABLE_TABLES = map[string][]string{
 	"schema_migrations":             nil,
 	"sqlite_sequence":               nil,
 	"usage_aggregation_checkpoints": nil,
+	"usage_client_facts_15m":        nil,
+	"usage_client_facts_daily":      nil,
 	"usage_events":                  nil,
 	"usage_facts_15m":               nil,
 	"usage_facts_daily":             nil,

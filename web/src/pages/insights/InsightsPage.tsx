@@ -214,10 +214,11 @@ export const InsightsPage: React.FC = () => {
   // the page's provider filter names the connection.
   const requestFilters = React.useMemo(() => requestFilterValues(cube, view.filters), [cube, view.filters]);
   const rhythmQueryString = rhythmParams(range, view.filters, requestFilters);
+  const areRequestFiltersReady = isRangeReady && (!(view.filters.provider?.length) || Boolean(cube));
   const rhythmQuery = useQuery({
     queryKey: ['insights-rhythm', rhythmQueryString],
     queryFn: () => api.getInsightsRhythm(rhythmQueryString),
-    enabled: isRangeReady,
+    enabled: areRequestFiltersReady,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     refetchOnWindowFocus: isPollingActive,
@@ -229,7 +230,7 @@ export const InsightsPage: React.FC = () => {
   const clientsQuery = useQuery({
     queryKey: ['insights-clients', rhythmQueryString],
     queryFn: () => api.getInsightsClients(rhythmQueryString),
-    enabled: isRangeReady,
+    enabled: areRequestFiltersReady,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     refetchOnWindowFocus: isPollingActive,
@@ -262,15 +263,16 @@ export const InsightsPage: React.FC = () => {
     if (cubeQuery.isStale && !cubeQuery.isFetching) {
       void cubeQuery.refetch();
     }
-    if (rhythmQuery.isStale && !rhythmQuery.isFetching) {
+    if (areRequestFiltersReady && rhythmQuery.isStale && !rhythmQuery.isFetching) {
       void rhythmQuery.refetch();
     }
-    if (clientsQuery.isStale && !clientsQuery.isFetching) {
+    if (areRequestFiltersReady && clientsQuery.isStale && !clientsQuery.isFetching) {
       void clientsQuery.refetch();
     }
   }, [
     isRouteActive,
     isRangeReady,
+    areRequestFiltersReady,
     cubeQuery.isStale,
     cubeQuery.isFetching,
     cubeQuery.refetch,

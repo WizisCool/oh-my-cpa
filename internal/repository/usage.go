@@ -454,7 +454,7 @@ func (r *Repository) PendingUsageInboxCount(ctx context.Context) (int64, error) 
 const usageEventInsertPrefix = `
 		INSERT INTO usage_events (
 			instance_id, event_key, api_group_key, api_group_label, api_key_mask, provider, endpoint, auth_type, request_id,
-			client_ip, x_forwarded_for, user_agent, client_agent, model, model_alias, reasoning_effort,
+			client_ip, x_forwarded_for, user_agent, client_agent, client_prefix, model, model_alias, reasoning_effort,
 			service_tier, effective_service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
@@ -464,11 +464,11 @@ const usageEventInsertPrefix = `
 			billed_service_tier, billed_service_tier_source, token_accounting, structured_usage
 		) VALUES `
 
-const usageEventColumnCount = 53
+const usageEventColumnCount = 54
 
 var usageEventPlaceholders = "(" + strings.TrimSuffix(strings.Repeat("?, ", usageEventColumnCount), ", ") + ")"
 
-// 8 rows * 53 columns = 424 bind parameters, dividing the 200-row inbox batch evenly.
+// 8 rows * 54 columns = 432 bind parameters, dividing the 200-row inbox batch evenly.
 const usageEventInsertChunkRows = 8
 
 func appendUsageEventValues(dst []any, event usage.Event, locked lockedPrice, createdMS int64) []any {
@@ -483,7 +483,7 @@ func appendUsageEventValues(dst []any, event usage.Event, locked lockedPrice, cr
 	return append(dst,
 		event.InstanceID, event.EventKey, event.APIGroupKey, event.APIGroupLabel, event.APIKeyMask,
 		event.Provider, event.Endpoint,
-		event.AuthType, event.RequestID, event.ClientIP, event.XForwardedFor, event.UserAgent, event.ClientAgent,
+		event.AuthType, event.RequestID, event.ClientIP, event.XForwardedFor, event.UserAgent, event.ClientAgent, event.ClientPrefix,
 		event.Model, event.ModelAlias, event.ReasoningEffort, event.ServiceTier, event.EffectiveServiceTier,
 		event.ResponseServiceTier, event.ExecutorType, event.TimestampMS, event.Source,
 		event.AuthIndex, boolInt(event.Failed), boolInt(event.Generate), event.LatencyMS,
@@ -712,7 +712,7 @@ func (r *Repository) sanitizeUsageEvent(event usage.Event) usage.Event {
 	event.ClientIP = persistedPointerWith(event.ClientIP, security.NormalizeClientIP)
 	event.XForwardedFor = persistedPointerWith(event.XForwardedFor, security.NormalizeForwardedFor)
 	event.UserAgent = security.MinimizeUserAgent(rawUserAgent)
-	event.ClientAgent = usage.PersistedClientAgent(event.ClientAgent, rawUserAgent, rawEndpoint)
+	event.ClientAgent, event.ClientPrefix = usage.PersistedClientAttribution(event.ClientAgent, event.ClientPrefix, rawUserAgent, rawEndpoint)
 	event.LatencyMS = nonNegative(event.LatencyMS)
 	event.TTFTMS = nonNegativePointer(event.TTFTMS)
 	event.InputTokens = nonNegative(event.InputTokens)
