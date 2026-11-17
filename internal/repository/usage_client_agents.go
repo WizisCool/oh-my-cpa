@@ -122,7 +122,10 @@ func backfillClientAgentColumnAndIndexTx(ctx context.Context, tx *sql.Tx) error 
 			key := [2]string{item.ua, item.endpoint}
 			resolved, ok := cache[key]
 			if !ok {
-				resolved, _ = usage.PersistedClientAttribution("", "", item.ua, item.endpoint)
+				resolved = usage.ResolveHistoricalClientAttribution("", item.ua, item.endpoint).ID
+				if resolved == "" {
+					resolved = usage.ClientAgentUnknown
+				}
 				cache[key] = resolved
 			}
 			byAgent[resolved] = append(byAgent[resolved], item.id)
@@ -951,17 +954,12 @@ func backfillClientAttributionColumnsTx(ctx context.Context, tx *sql.Tx) error {
 			key := [3]string{item.storedAgent, item.ua, item.endpoint}
 			resolved, ok := cache[key]
 			if !ok {
-				if item.storedAgent == "" {
-					agentID, prefix := usage.PersistedClientAttribution("", "", item.ua, item.endpoint)
-					resolved = resolvedPair{agent: agentID, prefix: prefix}
-				} else {
-					match := usage.ResolveHistoricalClientAttribution(item.storedAgent, item.ua, item.endpoint)
-					agentID := match.ID
-					if agentID == "" {
-						agentID = usage.ClientAgentUnknown
-					}
-					resolved = resolvedPair{agent: agentID, prefix: match.RawPrefix}
+				match := usage.ResolveHistoricalClientAttribution(item.storedAgent, item.ua, item.endpoint)
+				agentID := match.ID
+				if agentID == "" {
+					agentID = usage.ClientAgentUnknown
 				}
+				resolved = resolvedPair{agent: agentID, prefix: match.RawPrefix}
 				cache[key] = resolved
 			}
 			if resolved.agent != item.storedAgent {
@@ -1073,6 +1071,144 @@ func backfillClientFactRollupsTx(ctx context.Context, tx *sql.Tx) error {
 		return fmt.Errorf("stage historical client attribution rollups: %w", err)
 	}
 	return foldClientUsageBuffer(ctx, tx)
+}
+
+var legacyCodexClientAgents = []string{
+	"codex",
+	"codex-desktop",
+	"codex_desktop",
+	"codex_chatgpt_desktop",
+	"codex-chatgpt-desktop",
+	"codex_app",
+	"codex-app",
+	"codex_vscode",
+	"codex_vscode_copilot",
+	"codex_atlas",
+	"codex_sdk_ts",
+	"codexapp",
+}
+
+// repairCodexDesktopClientAgentTx merges persisted Codex Desktop and
+// first-party Codex variant identifiers into canonical 'codex-cli' across
+// client attribution rollups and retained usage_events rows.
+func repairCodexDesktopClientAgentTx(ctx context.Context, tx *sql.Tx, _ *DB) error {
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(legacyCodexClientAgents)), ",")
+	legacyArgs := make([]any, len(legacyCodexClientAgents))
+	for i, id := range legacyCodexClientAgents {
+		legacyArgs[i] = id
+	}
+
+	updates := make([]string, 0, len(usageClientFactMeasures))
+	sums := make([]string, 0, len(usageClientFactMeasures))
+	for _, measure := range usageClientFactMeasures {
+		updates = append(updates, measure+" = "+measure+" + excluded."+measure)
+		sums = append(sums, "SUM("+measure+")")
+	}
+	updateSet := strings.Join(updates, ", ")
+	sumSelect := strings.Join(sums, ", ")
+	measureColumns := strings.Join(usageClientFactMeasures, ", ")
+
+	for _, table := range []string{usageClientFactsFineTable, usageClientFactsDailyTable} {
+		var hasRows bool
+		if err := tx.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM `+table+` WHERE client_agent IN (`+placeholders+`) LIMIT 1)`,
+			legacyArgs...,
+		).Scan(&hasRows); err != nil {
+			return fmt.Errorf("check legacy codex rows in %s: %w", table, err)
+		}
+		if !hasRows {
+			continue
+		}
+		mergeArgs := make([]any, 0, 1+len(legacyArgs))
+		mergeArgs = append(mergeArgs, usage.ClientAgentCodexCLI)
+		mergeArgs = append(mergeArgs, legacyArgs...)
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO `+table+` (
+				instance_id, bucket_start_ms, `+usageFactDimensions+`, client_agent, client_prefix, `+measureColumns+`
+			)
+			SELECT instance_id, bucket_start_ms, `+usageFactDimensions+`, ?, client_prefix, `+sumSelect+`
+			FROM `+table+`
+			WHERE client_agent IN (`+placeholders+`)
+			GROUP BY instance_id, bucket_start_ms, `+usageFactDimensions+`, client_prefix
+			ON CONFLICT DO UPDATE SET `+updateSet,
+			mergeArgs...,
+		); err != nil {
+			return fmt.Errorf("merge legacy codex rows in %s: %w", table, err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM `+table+` WHERE client_agent IN (`+placeholders+`)`,
+			legacyArgs...,
+		); err != nil {
+			return fmt.Errorf("delete legacy codex rows in %s: %w", table, err)
+		}
+	}
+
+	var hasPendingEvents bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM usage_events WHERE client_agent IN (`+placeholders+`) LIMIT 1)`,
+		legacyArgs...,
+	).Scan(&hasPendingEvents); err != nil {
+		return fmt.Errorf("check legacy codex usage_events: %w", err)
+	}
+	if !hasPendingEvents {
+		return nil
+	}
+
+	var lastID int64
+	for {
+		scanArgs := make([]any, 0, 2+len(legacyArgs))
+		scanArgs = append(scanArgs, lastID)
+		scanArgs = append(scanArgs, legacyArgs...)
+		scanArgs = append(scanArgs, clientBackfillBatchRows)
+		rows, err := tx.QueryContext(ctx, `
+			SELECT id
+			FROM usage_events
+			WHERE id > ? AND client_agent IN (`+placeholders+`)
+			ORDER BY id ASC
+			LIMIT ?`, scanArgs...)
+		if err != nil {
+			return fmt.Errorf("scan legacy codex usage_events batch: %w", err)
+		}
+		ids := make([]int64, 0, clientBackfillBatchRows)
+		for rows.Next() {
+			var id int64
+			if scanErr := rows.Scan(&id); scanErr != nil {
+				_ = rows.Close()
+				return fmt.Errorf("scan legacy codex usage_events id: %w", scanErr)
+			}
+			ids = append(ids, id)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("iterate legacy codex usage_events batch: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return fmt.Errorf("close legacy codex usage_events batch: %w", err)
+		}
+		if len(ids) == 0 {
+			break
+		}
+		for start := 0; start < len(ids); start += clientBackfillUpdateChunk {
+			chunk := ids[start:min(start+clientBackfillUpdateChunk, len(ids))]
+			updateArgs := make([]any, 0, 1+len(chunk))
+			updateArgs = append(updateArgs, usage.ClientAgentCodexCLI)
+			for _, id := range chunk {
+				updateArgs = append(updateArgs, id)
+			}
+			chunkPlaceholders := strings.TrimSuffix(strings.Repeat("?,", len(chunk)), ",")
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE usage_events SET client_agent = ? WHERE id IN (`+chunkPlaceholders+`)`,
+				updateArgs...,
+			); err != nil {
+				return fmt.Errorf("update legacy codex usage_events chunk: %w", err)
+			}
+		}
+		lastID = ids[len(ids)-1]
+		if len(ids) < clientBackfillBatchRows {
+			break
+		}
+	}
+	return nil
 }
 
 // QueryUsageClientAgents aggregates retained request-record client attribution

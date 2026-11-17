@@ -242,6 +242,66 @@ func TestClassifyClientAgent(t *testing.T) {
 			wantID: ClientAgentCodexCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "codex_cli_rs",
 		},
 		{
+			name: "codex desktop macos chatgpt app user agent",
+			ua:   "Codex Desktop/0.153.4 (Mac OS 26.5.2; arm64) unknown (Codex Desktop; 26.903.61454)", endpoint: "POST /v1/responses",
+			wantID: ClientAgentCodexCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "Codex",
+		},
+		{
+			name: "codex desktop main process user agent",
+			ua:   "Codex Desktop/26.820.60940 (Mac OS; arm64)", endpoint: "POST /v1/chat/completions",
+			wantID: ClientAgentCodexCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "Codex",
+		},
+		{
+			name: "codex desktop windows user agent",
+			ua:   "Codex Desktop/26.1007.71326 (Windows NT 10.0; x64)", endpoint: "POST /v1/responses",
+			wantID: ClientAgentCodexCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "Codex",
+		},
+		{
+			name: "codex desktop unversioned two-word user agent",
+			ua:   "Codex Desktop", endpoint: "POST /v1/responses",
+			wantID: ClientAgentCodexCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "Codex",
+		},
+		{
+			name: "codex desktop embedded inside renderer user agent",
+			ua:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Codex Desktop/26.820.60940", endpoint: "POST /v1/responses",
+			wantID: ClientAgentCodexCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "",
+		},
+		{
+			name: "hermes precedence over codex desktop suffix",
+			ua:   "HermesAgent/0.9.2 (Codex Desktop)", endpoint: "POST /v1/chat/completions",
+			wantID: ClientAgentHermes, wantCat: ClientAgentCategoryAgent, wantPrefix: "HermesAgent",
+		},
+		{
+			name: "codex hyphenated desktop token",
+			ua:   "Codex-Desktop/1.2.0", endpoint: "POST /v1/responses",
+			wantID: ClientAgentCodexCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "Codex-Desktop",
+		},
+		{
+			name: "codex chatgpt desktop originator",
+			ua:   "codex_chatgpt_desktop/1.0.0", endpoint: "POST /v1/responses",
+			wantID: ClientAgentCodexCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "codex_chatgpt_desktop",
+		},
+		{
+			name: "codex vscode and app and atlas and sdk originators",
+			ua:   "codex_vscode/1.0.0", endpoint: "POST /v1/responses",
+			wantID: ClientAgentCodexCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "codex_vscode",
+		},
+		{
+			name: "codex app originator",
+			ua:   "codex_app/0.1.0", endpoint: "POST /v1/responses",
+			wantID: ClientAgentCodexCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "codex_app",
+		},
+		{
+			name: "codex atlas originator",
+			ua:   "codex_atlas/1.0.0", endpoint: "POST /v1/responses",
+			wantID: ClientAgentCodexCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "codex_atlas",
+		},
+		{
+			name: "codex typescript sdk originator",
+			ua:   "codex_sdk_ts/1.0.0", endpoint: "POST /v1/responses",
+			wantID: ClientAgentCodexCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "codex_sdk_ts",
+		},
+		{
 			name: "codex acp extension",
 			ua:   "acp-extension-codex/0.4.0", endpoint: "POST /v1/responses",
 			wantID: ClientAgentCodexCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "acp-extension-codex",
@@ -413,6 +473,24 @@ func TestPersistedClientAttributionAndZeroReadFallback(t *testing.T) {
 	if hermesCodex.ID != ClientAgentHermes || hermesCodex.Category != ClientAgentCategoryAgent || hermesCodex.RawPrefix != "" {
 		t.Fatalf("ResolveHistoricalClientAttribution persisted hermes over codex_cli_rs = %+v", hermesCodex)
 	}
+	if histCodex := ResolveHistoricalClientAttribution("", "Codex", "POST /v1/responses"); histCodex.ID != ClientAgentCodexCLI || histCodex.Category != ClientAgentCategoryAgent || histCodex.RawPrefix != "Codex" {
+		t.Fatalf("ResolveHistoricalClientAttribution historical minimized Codex = %+v", histCodex)
+	}
+	if histCodexStored := ResolveHistoricalClientAttribution("codex", "Codex", "POST /v1/responses"); histCodexStored.ID != "codex" || histCodexStored.RawPrefix != "Codex" {
+		t.Fatalf("ResolveHistoricalClientAttribution persisted codex + minimized Codex = %+v", histCodexStored)
+	}
+	if histAlias := ResolveHistoricalClientAttribution("codex_chatgpt_desktop", "codex_chatgpt_desktop/1.0.0", "POST /v1/responses"); histAlias.ID != "codex_chatgpt_desktop" || histAlias.RawPrefix != "codex_chatgpt_desktop" {
+		t.Fatalf("ResolveHistoricalClientAttribution persisted codex_chatgpt_desktop = %+v", histAlias)
+	}
+	if histUnrelated := ResolveHistoricalClientAttribution("custom-sdk", "codex_chatgpt_desktop/1.0.0", "POST /v1/responses"); histUnrelated.ID != "custom-sdk" || histUnrelated.RawPrefix != "" {
+		t.Fatalf("ResolveHistoricalClientAttribution unrelated stored id = %+v", histUnrelated)
+	}
+	if histCodexCanonical := ResolveHistoricalClientAttribution(ClientAgentCodexCLI, "Codex", "POST /v1/responses"); histCodexCanonical.ID != ClientAgentCodexCLI || histCodexCanonical.RawPrefix != "Codex" {
+		t.Fatalf("ResolveHistoricalClientAttribution canonical codex-cli + minimized Codex = %+v", histCodexCanonical)
+	}
+	if histUnknown := ResolveHistoricalClientAttribution(ClientAgentUnknown, "Codex", "POST /v1/responses"); histUnknown.ID != ClientAgentUnknown || histUnknown.RawPrefix != "" {
+		t.Fatalf("ResolveHistoricalClientAttribution persisted unknown stays unknown = %+v", histUnknown)
+	}
 	if id, prefix := PersistedClientAttribution(ClientAgentHermes, "", "codex_cli_rs/0.0.0", "POST /v1/responses"); id != ClientAgentHermes || prefix != "" {
 		t.Fatalf("PersistedClientAttribution persisted hermes over codex_cli_rs = (%q, %q)", id, prefix)
 	}
@@ -430,7 +508,7 @@ func TestPersistedClientAttributionAndZeroReadFallback(t *testing.T) {
 	}
 
 	// Unversioned guarded short tokens must not bypass the version gate via persistence.
-	for _, bare := range []string{"amp", "void", "pi", "other", "unknown"} {
+	for _, bare := range []string{"amp", "void", "pi", "codex", "Codex", "omp", "dsh", "agy", "other", "unknown"} {
 		classified := ClassifyClientAgent(bare, "POST /v1/messages")
 		if classified.ID != ClientAgentUnknown || classified.Category != ClientAgentCategoryUnknown {
 			t.Fatalf("ClassifyClientAgent(%q) = %+v, want unknown", bare, classified)
@@ -492,12 +570,16 @@ func TestRedactionFastPathEquivalenceAndZeroAllocHotPath(t *testing.T) {
 	if allocs := testing.AllocsPerRun(200, func() {
 		_ = ClassifyClientAgent("claude-cli/2.1.14 (external, cli)", "POST /v1/messages")
 		_ = ClassifyClientAgent("codex_cli_rs/0.47.0 (Mac OS 15.1; arm64)", "POST /v1/responses")
+		_ = ClassifyClientAgent("Codex Desktop/0.153.4 (Mac OS 26.5.2; arm64) unknown (Codex Desktop; 26.903.61454)", "POST /v1/responses")
+		_ = ClassifyClientAgent("codex_chatgpt_desktop/1.0.0", "POST /v1/responses")
 		_ = ClassifyClientAgent("codex_cli_rs/0.0.0 (Hermes Agent)", "POST /v1/responses")
 		_ = ClassifyClientAgent("HermesAgent/0.9.2", "POST /v1/chat/completions")
 		_ = ClassifyClientAgent("hindsight/1.2.0", "POST /v1/chat/completions")
 		_ = ClassifyClientAgent("QwenCode/0.2.1", "POST /v1/chat/completions")
 		_ = ClassifyClientAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Maka/0.1.11 Electron/43.2.0", "POST /v1/chat/completions")
 		_ = ClassifyClientAgent("AsyncOpenAI/Python 1.55.0", "POST /v1/chat/completions")
+		_ = ResolveHistoricalClientAttribution("", "Codex", "POST /v1/responses")
+		_ = ResolveHistoricalClientAttribution("codex_chatgpt_desktop", "codex_chatgpt_desktop/1.0.0", "POST /v1/responses")
 		for _, id := range canonicalIDs {
 			_, _ = PersistedClientAttribution(id, "hindsight", "hindsight/1.2.0", "POST /v1/chat/completions")
 			_ = ClientAgentFromPersisted(id)

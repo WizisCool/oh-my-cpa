@@ -128,7 +128,22 @@ test('request export', () => {
       }),
     ).join('\n');
 
-  const open = build(effectiveMasks([], []));
+  const openSheet = buildRequestSheet({
+    rows: events,
+    masks: effectiveMasks([], []),
+    colWidths: {},
+    caption: 'caption',
+    t: (key) => key,
+    tokenStyle: 'en-compact',
+    tpsMode: 'exclude_ttft',
+    credentials,
+  });
+  assert.deepEqual(openSheet.rows[0].cells.client.lines, [[
+    { kind: 'mark', mark: { iconId: 'Codex' } },
+    { kind: 'text', text: 'Codex', tone: 'fg2', size: 12, weight: 500, isMono: false },
+  ]], 'a Codex client draws its brand mark before the Codex label');
+
+  const open = sheetStrings(openSheet).join('\n');
   for (const value of [ACCOUNT, PROVIDER_KEY, 'laptop key', 'req-oauth', 'claude-opus']) {
     assert.ok(open.includes(value), `an unredacted sheet draws ${value}`);
   }
