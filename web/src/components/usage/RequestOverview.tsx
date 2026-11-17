@@ -2,8 +2,9 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { useT } from '../../i18n';
 import type { MessageKey } from '../../i18n/catalog';
-import { ApiOutlined, ArrowRightOutlined, KeyOutlined, SafetyCertificateOutlined, SwapOutlined, ThunderboltFilled } from '../icons';
+import { ArrowRightOutlined, DesktopOutlined, KeyOutlined, SafetyCertificateOutlined, SwapOutlined, ThunderboltFilled } from '../icons';
 import { ProviderBrandIcon } from '../LobeIcon';
+import { ClientMark } from '../common/ClientMark';
 import { CopyButton } from '../common/CopyButton';
 import { Tooltip } from '../common/Tooltip';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
@@ -21,6 +22,7 @@ import {
   requestTransport,
   type EventTokensPerSecondResult,
 } from '../../types/usageEventMetrics';
+import { clientDisplayName, eventClientId } from '../../types/clientAgents';
 import { requestFailureCause, tokenComposition, type TokenSegmentKey } from '../../types/requestDetailSummary';
 import './RequestList.css';
 import { EffortTag, Tag } from '../common/Tag';
@@ -62,16 +64,20 @@ export function RequestOverview({
   onShowDiagnostics,
 }: RequestOverviewProps) {
   const t = useT();
+  const clientId = eventClientId(event);
   return (
     <div className="req-overview">
       {event.failed && <FailureSummary event={event} onShowDiagnostics={onShowDiagnostics} />}
       <section className="req-card" aria-label={t('events.summary_route')}>
         <h3 className="req-card-title">{t('events.summary_route')}</h3>
         <ol className="req-route">
+          {/* The route starts at the program that sent the request, named as the list's client
+              column names it; the User-Agent it was recognised from is the exact value behind it. */}
           <RouteNode
-            icon={<ApiOutlined />}
-            label={t('events.caller')}
-            value={caller}
+            icon={<ClientMark id={clientId} category={event.client_agent_category} fallback={<DesktopOutlined />} />}
+            label={t('events.col_client')}
+            value={clientId && clientDisplayName(clientId, t)}
+            tip={event.user_agent?.trim() || undefined}
           />
           <li className="req-route-link" aria-hidden><ArrowRightOutlined /></li>
           <RouteNode
@@ -90,23 +96,34 @@ export function RequestOverview({
       </section>
       <TimingCard event={event} rate={rate} durationScaleStyle={durationScaleStyle} />
       <TokenCard event={event} tokenStyle={tokenStyle} />
-      <SettingsCard event={event} />
+      <SettingsCard event={event} caller={caller} />
     </div>
   );
 }
 
-function RouteNode({ icon, label, value, badge }: { icon: React.ReactNode; label: string; value?: string; badge?: string }) {
+function RouteNode({ icon, label, value, badge, tip }: {
+  icon: React.ReactNode;
+  label: string;
+  value?: string;
+  badge?: string;
+  /** The exact value behind a normalised one; without it, a truncated value completes itself. */
+  tip?: string;
+}) {
   const t = useT();
   return (
     <li className="req-route-node">
       <span className="req-route-icon" aria-hidden>{icon}</span>
       <span className="req-route-text">
         <span className="req-route-label">{label}</span>
-        <strong className={value ? undefined : 'terminal-muted'} data-tip={value} data-tip-overflow="">
-          {value || t('events.not_captured')}
-        </strong>
+        {/* A badge reads as part of the value, beside the name, the way the list's provider cell
+            prints it; the name gives way before the badge does. */}
+        <span className="req-route-value">
+          <strong className={value ? undefined : 'terminal-muted'} data-tip={tip ?? value} data-tip-overflow={tip ? undefined : ''}>
+            {value || t('events.not_captured')}
+          </strong>
+          {badge && <Tag size="small" className="req-route-badge">{badge}</Tag>}
+        </span>
       </span>
-      {badge && <Tag size="small" className="req-route-badge">{badge}</Tag>}
     </li>
   );
 }
@@ -240,7 +257,7 @@ function TokenCard({ event, tokenStyle }: { event: DetailEvent; tokenStyle: Toke
   );
 }
 
-function SettingsCard({ event }: { event: DetailEvent }) {
+function SettingsCard({ event, caller }: { event: DetailEvent; caller?: string }) {
   const t = useT();
   const callModel = event.model_alias || event.model;
   const isRouted = Boolean(event.model_alias && event.model && event.model_alias !== event.model);
@@ -306,9 +323,19 @@ function SettingsCard({ event }: { event: DetailEvent }) {
           <dt>{t('events.transport')}</dt>
           <dd>{transport ? t(`events.transport_${transport}`) : missing}</dd>
         </div>
+        {/* The second row is where the request came in: the endpoint, the key it asked with and
+            the address it connected from. */}
         <div>
           <dt>{t('events.endpoint')}</dt>
           <dd className="req-settings-mono">{event.endpoint || missing}</dd>
+        </div>
+        <div>
+          <dt>{t('events.caller')}</dt>
+          <dd className="req-settings-mono">{caller || missing}</dd>
+        </div>
+        <div>
+          <dt>{t('events.client_ip')}</dt>
+          <dd className="req-settings-mono">{event.client_ip?.trim() || missing}</dd>
         </div>
       </dl>
     </section>
