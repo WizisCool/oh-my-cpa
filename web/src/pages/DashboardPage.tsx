@@ -45,7 +45,7 @@ import {
   CREDENTIAL_FILES_QUERY_KEY,
   CREDENTIAL_QUOTA_QUERY_KEY,
 } from '../components/dashboard/CredentialQuota';
-import { ModelTrendPanel, ModelUsagePanel, ModelSeriesFocusProvider, DASHBOARD_MODELS_QUERY_KEY } from '../components/dashboard/ModelUsagePanels';
+import { ModelTrendPanel, ModelUsagePanel, ModelPanelsProvider, DASHBOARD_MODELS_QUERY_KEY } from '../components/dashboard/ModelUsagePanels';
 import { DashboardBoard, preloadDashboardBoardEditor } from '../components/dashboard/DashboardBoard';
 import {
   CredentialQuotaPlaceholder,
@@ -505,6 +505,7 @@ export const DashboardPage: React.FC = () => {
   }
 
   const hasModelUsageHidden = layout.some((item) => item.id === 'model_usage' && item.hidden);
+  const hasModelTrendHidden = layout.some((item) => item.id === 'model_trend' && item.hidden);
   const previousPreset = previousCalendarPreset(range.preset);
   const isQuietOpenCalendar = Boolean(
     data
@@ -782,7 +783,7 @@ export const DashboardPage: React.FC = () => {
               query={query}
               range={range}
               enabled={rangeReady}
-              hasViewToggle={hasModelUsageHidden}
+              hasLensTabs={hasModelUsageHidden}
             />
           </DeferredPanel>
         );
@@ -793,7 +794,7 @@ export const DashboardPage: React.FC = () => {
             immediate={isArranging}
             fallback={<ModelUsagePlaceholder />}
           >
-            <ModelUsagePanel query={query} range={range} enabled={rangeReady} />
+            <ModelUsagePanel query={query} range={range} enabled={rangeReady} hasViewToggle={hasModelTrendHidden} />
           </DeferredPanel>
         );
       case 'token_activity':
@@ -886,7 +887,7 @@ export const DashboardPage: React.FC = () => {
         />
       )}
 
-      <ModelSeriesFocusProvider>
+      <ModelPanelsProvider>
         <RollingNumberGroup>
           <LoadingRegion isLoading={!data}>
             <DashboardBoard
@@ -898,7 +899,7 @@ export const DashboardPage: React.FC = () => {
             />
           </LoadingRegion>
         </RollingNumberGroup>
-      </ModelSeriesFocusProvider>
+      </ModelPanelsProvider>
 
       {data && !data.coverage.has_usage && data.partial_errors.length === 0 && (
         <div className="terminal-panel dashboard-empty">

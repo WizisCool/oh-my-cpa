@@ -789,6 +789,11 @@
 :root:not([data-reduced-motion='true']) .omc-chart-morph :is(.recharts-surface, .omc-sparkline-surface) {
   transition: opacity var(--motion-slow) var(--ease-out);
 }
+/* A stack drawn as one rank-stable path per rank (`ModelTokenTrend`) slides its shapes to the next
+   drawing in script; its colour follows its rank on the same roll. */
+:root:not([data-reduced-motion='true']) .omc-stack .omc-stack-series {
+  transition: fill var(--motion-slow) var(--ease-standard), fill-opacity var(--motion-slow) var(--ease-standard);
+}
 @starting-style {
   :root:not([data-reduced-motion='true']) .omc-chart-morph :is(.recharts-surface, .omc-sparkline-surface) { opacity: 0; }
 }

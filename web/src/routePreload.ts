@@ -53,6 +53,7 @@ import {
   DEFAULT_MODEL_CHART_VIEW,
   parseModelChartView,
 } from './types/tokenDisplay';
+import { MODEL_VIEW_PREFERENCE } from './types/tokenDisplayContext';
 import { getAppConfig } from './types/config';
 
 function readCachedPreferences(ctx: RoutePrefetchContext): Record<string, unknown> | undefined {
@@ -63,7 +64,7 @@ async function prefetchDashboardData(ctx: RoutePrefetchContext): Promise<void> {
   const prefs = readCachedPreferences(ctx);
   if (!prefs) return;
   const range = parseDashboardRange(prefs[DASHBOARD_RANGE_PREFERENCE]) ?? DEFAULT_DASHBOARD_RANGE;
-  const modelView = parseModelChartView(prefs.omc_model_chart_view) ?? DEFAULT_MODEL_CHART_VIEW;
+  const modelView = parseModelChartView(prefs[MODEL_VIEW_PREFERENCE]) ?? DEFAULT_MODEL_CHART_VIEW;
   const query = dashboardRangeParams(range);
   await Promise.allSettled([
     dashboardWindowSwr.prefetch(ctx.queryClient, query),

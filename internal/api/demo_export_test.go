@@ -240,6 +240,7 @@ func demoExportCases() []demoExportCase {
 			demoExportCase{Name: "dashboard-tail-" + preset, Path: "/api/v1/management/dashboard/tail?" + window},
 			demoExportCase{Name: "dashboard-models-call-" + preset, Path: "/api/v1/management/dashboard/models?" + window + "&group_by=call"},
 			demoExportCase{Name: "dashboard-models-model-" + preset, Path: "/api/v1/management/dashboard/models?" + window + "&group_by=model"},
+			demoExportCase{Name: "dashboard-models-client-" + preset, Path: "/api/v1/management/dashboard/models?" + window + "&group_by=client"},
 			demoExportCase{Name: "dashboard-providers-" + preset, Path: "/api/v1/management/dashboard/providers?" + window},
 			demoExportCase{Name: "client-key-usage-" + preset, Path: "/api/v1/management/client-key-usage?" + window},
 		)
@@ -267,6 +268,7 @@ func demoExportCases() []demoExportCase {
 		demoExportCase{Name: "dashboard-tail-all", Path: "/api/v1/management/dashboard/tail?" + allTime},
 		demoExportCase{Name: "dashboard-models-call-all", Path: "/api/v1/management/dashboard/models?" + allTime + "&group_by=call"},
 		demoExportCase{Name: "dashboard-models-model-all", Path: "/api/v1/management/dashboard/models?" + allTime + "&group_by=model"},
+		demoExportCase{Name: "dashboard-models-client-all", Path: "/api/v1/management/dashboard/models?" + allTime + "&group_by=client"},
 		demoExportCase{Name: "dashboard-providers-all", Path: "/api/v1/management/dashboard/providers?" + allTime},
 	)
 	// The static replay serves relative presets and all-time as closed snapshots.

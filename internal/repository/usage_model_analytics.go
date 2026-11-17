@@ -7,17 +7,21 @@ import (
 )
 
 // UsageModelBucketOptions selects how the aggregation partitions rows.
-//
-// It is a struct rather than a boolean parameter so the next grouping question
-// - by provider, by credential - lands here as a field with a name, not as a
-// second positional bool nobody can read at the call site.
 type UsageModelBucketOptions struct {
-	// IsGroupedByCallPoint partitions by call point instead of upstream model. A
-	// call point is the client-facing identity: the model alias a client
-	// requested when there is one, the upstream model name otherwise.
-	IsGroupedByCallPoint bool
+	// GroupBy is the dimension the groups are keyed on: the upstream model (the
+	// zero value), the call point a client requested, or the client program.
+	GroupBy UsageDimension
 	// APIGroupKey narrows analytics to a single client key fingerprint.
 	APIGroupKey string
+}
+
+// UsageModelBuckets is one grouped read and the part of the window it covers.
+type UsageModelBuckets struct {
+	Rows []UsageModelBucketRow
+	// CoveredFromMS is where the read actually started. It is later than the
+	// requested start when a client read reached behind the request-record
+	// horizon, where no client attribution is kept.
+	CoveredFromMS int64
 }
 
 // UsageModelBucketRow is one model's traffic inside one bucket of the requested grid.
@@ -56,32 +60,48 @@ type UsageModelBucketRow struct {
 //
 // Rows are ordered by group then bucket as part of the contract, not as a convenience: the
 // caller's fold walks one group at a time and never builds a map of maps.
-func (r *Repository) QueryUsageModelBuckets(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64, opts UsageModelBucketOptions) ([]UsageModelBucketRow, error) {
+func (r *Repository) QueryUsageModelBuckets(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64, opts UsageModelBucketOptions) (UsageModelBuckets, error) {
 	if bucketMS <= 0 {
-		return nil, fmt.Errorf("invalid model analytics bucket width %d", bucketMS)
+		return UsageModelBuckets{}, fmt.Errorf("invalid model analytics bucket width %d", bucketMS)
 	}
 	if toMS < fromMS {
-		return nil, errors.New("model analytics window is negative")
+		return UsageModelBuckets{}, errors.New("model analytics window is negative")
 	}
 	// The grouping key follows the view the panel is drawing. The alias is the
 	// identity in the call view, not a display rewrite: it partitions the rows, so
 	// one call point served by two upstream models still reads as a single line.
-	dimension := UsageDimensionModel
-	if opts.IsGroupedByCallPoint {
-		dimension = UsageDimensionCallPoint
+	dimension := opts.GroupBy
+	switch dimension {
+	case "":
+		dimension = UsageDimensionModel
+	case UsageDimensionModel, UsageDimensionCallPoint, UsageDimensionClientAgent:
+	default:
+		return UsageModelBuckets{}, fmt.Errorf("unsupported model analytics grouping %q", dimension)
 	}
 	facts, err := r.QueryUsageFacts(ctx, UsageFactQuery{
 		InstanceID: instanceID, FromMS: fromMS, ToMS: toMS, BucketMS: bucketMS,
 		Dimensions: []UsageDimension{dimension}, Filters: ClientKeyFilter(opts.APIGroupKey),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("read usage model buckets: %w", err)
+		return UsageModelBuckets{}, fmt.Errorf("read usage model buckets: %w", err)
 	}
-	result := make([]UsageModelBucketRow, 0, len(facts.Rows))
+	result := UsageModelBuckets{Rows: make([]UsageModelBucketRow, 0, len(facts.Rows)), CoveredFromMS: fromMS}
+	switch {
+	case facts.Clipped && facts.HorizonMS > toMS:
+		result.CoveredFromMS = facts.HorizonMS
+	case facts.Clipped:
+		result.CoveredFromMS = facts.FromMS
+	}
 	for _, fact := range facts.Rows {
 		costNanos, pricedRequests := fact.CostNanos, fact.CostedRequests
-		result = append(result, UsageModelBucketRow{
-			Model: fact.Keys[0], StartMS: fact.StartMS, Tokens: fact.TotalTokens, Requests: fact.Requests,
+		// Client facts keep only the normalised total, so a client row reads that total from
+		// request records too; otherwise a request would change size when it is folded.
+		tokens := fact.TotalTokens
+		if dimension == UsageDimensionClientAgent {
+			tokens = fact.Accounting.EffectiveTotalTokens
+		}
+		result.Rows = append(result.Rows, UsageModelBucketRow{
+			Model: fact.Keys[0], StartMS: fact.StartMS, Tokens: tokens, Requests: fact.Requests,
 			CostNanos: &costNanos, PricedRequests: &pricedRequests,
 		})
 	}

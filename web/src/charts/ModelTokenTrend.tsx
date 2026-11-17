@@ -11,11 +11,13 @@ import { useTimeZone } from '../utils/TimeZoneProvider';
 import { useTheme } from '../theme/ThemeContext';
 import { ChartSurface } from './ChartSurface';
 import { buildModelTrendSeries, buildModelTrendTooltipRows } from './modelTrendData';
-import { seriesColorRange, seriesDomainKey, seriesGroupLabel } from './chartTheme';
+import { seriesColorRange, seriesDomainKey } from './chartTheme';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 import type { DashboardModelUsage } from '../types/dashboardModels';
 import { RADIUS } from '../theme/radius';
 import { useChartMorph } from './useChartMorph';
+import { MOTION_ROLL } from '../theme/themeConfig';
+import { isMotionReduced } from '../utils/motionPreference';
 
 interface TrendRow {
   t: string;
@@ -26,8 +28,8 @@ interface TrendRow {
 export interface ModelTokenTrendProps {
   groups: DashboardModelUsage[];
   focusedKey?: string | null;
-  foldedLabel: string;
-  unnamedLabel: string;
+  /** Names a group in the tooltip and the accessible label, the way the card's legend names it. */
+  labelOf: (entry: { folded: boolean; model: string }) => string;
   /** The tooltip's last row: the whole bar, every model together. */
   totalLabel: string;
   tokenUnitLabel?: string;
@@ -37,11 +39,26 @@ export interface ModelTokenTrendProps {
 }
 
 /**
- * The plot takes its groups through `useChartMorph`, so a new set is one render of the bars inside
- * a cross-fade; the arrival itself re-renders only this shell, not the plot with the old data.
+ * Whether two rankings lie on one bucket grid, so each bar can travel to its new split in place:
+ * as many buckets, starting within half a bucket of each other. Two reads of one sliding window
+ * taken moments apart are the same grid even when their instants differ by those moments.
+ */
+function isSameGrid(next: DashboardModelUsage[], current: DashboardModelUsage[]): boolean {
+  const a = next[0]?.series ?? [];
+  const b = current[0]?.series ?? [];
+  if (a.length !== b.length || a.length === 0) return false;
+  const bucket = a.length > 1 ? a[1]!.t - a[0]!.t : Infinity;
+  return Math.abs(a[0]!.t - b[0]!.t) < bucket / 2;
+}
+
+/**
+ * The plot takes its groups through `useChartMorph`. A ranking on the same grid - a regrouping, a
+ * poll - lands at once and the stack layer slides each bar to its new split; a new grid is one
+ * render inside a cross-fade. The arrival itself re-renders only this shell, not the plot with the
+ * old data.
  */
 export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({ groups, ...rest }) => {
-  const { shown, scopeRef } = useChartMorph(groups);
+  const { shown, scopeRef } = useChartMorph(groups, Object.is, isSameGrid);
   return (
     <div ref={scopeRef} className="model-trend omc-chart-morph">
       <TrendPlot groups={shown} {...rest} />
@@ -52,8 +69,7 @@ export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({ groups, ...re
 const TrendPlot = React.memo<ModelTokenTrendProps>(({
   groups,
   focusedKey = null,
-  foldedLabel,
-  unnamedLabel,
+  labelOf: groupLabelOf,
   totalLabel,
   tokenUnitLabel = '',
   height,
@@ -69,9 +85,8 @@ const TrendPlot = React.memo<ModelTokenTrendProps>(({
   const range = React.useMemo(() => seriesColorRange(theme.palette, groups), [theme.palette, groups]);
 
   const labelOf = React.useCallback(
-    (key: string) =>
-      seriesGroupLabel({ folded: key === 'folded', model: key.replace(/^model:/, '') }, foldedLabel, unnamedLabel),
-    [foldedLabel, unnamedLabel],
+    (key: string) => groupLabelOf({ folded: key === 'folded', model: key.replace(/^model:/, '') }),
+    [groupLabelOf],
   );
 
   const labelFormat =
@@ -124,7 +139,7 @@ const TrendPlot = React.memo<ModelTokenTrendProps>(({
         <ChartContainer
           config={config}
           role="img"
-          aria-label={groups.map((group) => seriesGroupLabel(group, foldedLabel, unnamedLabel)).join(', ')}
+          aria-label={groups.map(groupLabelOf).join(', ')}
           className="h-full w-full"
           style={height ? { height } : undefined}
           initialDimension={{ width: 480, height: height ?? 210 }}
@@ -198,12 +213,31 @@ const BAR_GAP = 0.22;
 const MAX_BAR_WIDTH = 28;
 
 /**
- * StackLayer draws the stacked segments: one path per model holding all of its segments, rather
+ * The rank slots the stack always draws: the endpoint's top five and the folded remainder. Fewer
+ * groups leave the upper slots empty rather than removing them, so every drawing has the same paths.
+ */
+const STACK_SLOTS = 6;
+
+/** The radius of a corner drawn square; see the stack layer's note on shape. */
+const SQUARE_CORNER = 0.01;
+
+/**
+ * StackLayer draws the stacked segments: one path per rank holding all of its segments, rather
  * than one component per segment. A grouping of five models over a day is a hundred and fifty
  * segments; drawn by the chart library each was a component rendered twice per data change, and
- * a new grouping took two dropped frames to land. Five paths are computed and painted at once.
+ * a new grouping took two dropped frames to land. Six paths are computed and painted at once.
  *
- * Each bucket's top segment takes the bar's cap, whichever model that is in that bucket.
+ * Each bucket's top segment takes the bar's cap, whichever rank that is in that bucket.
+ *
+ * **Every drawing has one shape.** A path belongs to a rank, not to a group, and it always draws
+ * one segment per bucket with the same commands: an empty rank, or a rank with nothing in a bucket,
+ * draws a zero-height segment where its slot would start, and a segment without the cap draws its
+ * corners at a radius too small to see. Two drawings on one grid therefore differ only in their
+ * numbers, which is what lets each path be interpolated: a regrouping or a poll slides each bar's
+ * split to the new one on the roll - the bars keep their heights where the totals agree - instead of
+ * swapping one picture for another. The move is played explicitly, from the drawing on screen (or
+ * wherever a running move has got to) to the new one, so it does not depend on when the browser
+ * happens to recompute styles. Where `d` cannot be animated the new drawing simply lands.
  */
 function StackLayer({
   data,
@@ -221,51 +255,79 @@ function StackLayer({
   const plot = usePlotArea();
   const xScale = useXAxisScale();
   const yScale = useYAxisScale();
-  const paths = React.useMemo(() => {
-    const out = new Map<string, string>(order.map((id) => [id, '']));
+  const layerRef = React.useRef<SVGGElement | null>(null);
+  const drawnRef = React.useRef<string[] | null>(null);
+  const movesRef = React.useRef(new WeakMap<Element, Animation>());
+  const slots = React.useMemo(() => Array.from({ length: Math.max(STACK_SLOTS, order.length) }, (_, rank) => order[rank]), [order]);
+  const drawing = React.useMemo(() => {
+    const out = slots.map(() => '');
     if (!plot || !xScale || !yScale || data.length === 0) return out;
     const band = plot.width / data.length;
     const width = Math.min(band * (1 - BAR_GAP), MAX_BAR_WIDTH);
+    const value = (row: TrendRow, id: string | undefined) => (id === undefined ? 0 : Math.max(0, Number(row[id]) || 0));
     for (const row of data) {
       const start = Number(xScale(row.t));
       if (!Number.isFinite(start)) continue;
       const left = start + (band - width) / 2;
       const right = left + width;
-      let cap = '';
-      for (const id of order) if (Number(row[id]) > 0) cap = id;
+      let cap = -1;
+      slots.forEach((id, rank) => {
+        if (value(row, id) > 0) cap = rank;
+      });
       let base = 0;
-      for (const id of order) {
-        const value = Number(row[id]) || 0;
-        if (value <= 0) continue;
+      slots.forEach((id, rank) => {
         const bottom = Number(yScale(base));
-        const top = Number(yScale(base + value));
-        base += value;
-        if (!Number.isFinite(top) || !Number.isFinite(bottom) || bottom - top <= 0) continue;
-        const r = id === cap ? Math.min(RADIUS.xs, width / 2, bottom - top) : 0;
-        out.set(
-          id,
-          out.get(id)! +
-            (r > 0
-              ? `M${left},${bottom}V${top + r}A${r},${r} 0 0 1 ${left + r},${top}H${right - r}A${r},${r} 0 0 1 ${right},${top + r}V${bottom}Z`
-              : `M${left},${bottom}V${top}H${right}V${bottom}Z`),
-        );
-      }
+        base += value(row, id);
+        const top = Number(yScale(base));
+        if (!Number.isFinite(top) || !Number.isFinite(bottom)) return;
+        // A square corner is drawn as an arc too small to see rather than one of zero radius: a
+        // browser reduces a zero-radius arc to a line, which would break the shared shape.
+        const r = Math.max(SQUARE_CORNER, rank === cap ? Math.min(RADIUS.xs, width / 2, bottom - top) : 0);
+        out[rank] += `M${left},${bottom}V${top + r}A${r},${r} 0 0 1 ${left + r},${top}H${right - r}A${r},${r} 0 0 1 ${right},${top + r}V${bottom}Z`;
+      });
     }
     return out;
-  }, [data, order, plot, xScale, yScale]);
+  }, [data, slots, plot, xScale, yScale]);
+  // A new data set renders once before the chart has rebuilt its scales, which would draw nothing;
+  // the layer keeps its last drawing through that render, so the bars never blink out and the move
+  // runs from the old drawing to the new one rather than from an empty one.
+  const isDrawn = drawing.some(Boolean);
+  const [lastDrawing, setLastDrawing] = React.useState(drawing);
+  if (isDrawn && drawing !== lastDrawing) setLastDrawing(drawing);
+  const paths = isDrawn ? drawing : lastDrawing;
+
+  React.useLayoutEffect(() => {
+    const previous = drawnRef.current;
+    drawnRef.current = paths;
+    if (!previous || isMotionReduced()) return;
+    layerRef.current?.querySelectorAll('path').forEach((element, rank) => {
+      const from = previous[rank];
+      const to = paths[rank];
+      if (!from || !to || from === to || !hasSameShape(from, to) || typeof element.animate !== 'function') return;
+      const isMoving = movesRef.current.get(element)?.playState === 'running';
+      const start = isMoving ? getComputedStyle(element).getPropertyValue('d') : `path("${from}")`;
+      movesRef.current.get(element)?.cancel();
+      movesRef.current.set(element, element.animate([{ d: start }, { d: `path("${to}")` }], { duration: MOTION_ROLL.duration, easing: MOTION_ROLL.easing }));
+    });
+  }, [paths]);
 
   return (
-    <g className="omc-stack">
-      {order.map((id) => (
+    <g ref={layerRef} className="omc-stack">
+      {slots.map((id, rank) => (
         <path
-          key={id}
-          d={paths.get(id) || undefined}
-          fill={colorOf(id)}
-          fillOpacity={focusedKey !== null && focusedKey !== id ? 0.28 : 1}
+          key={rank}
+          d={paths[rank] || undefined}
+          fill={id === undefined ? 'transparent' : colorOf(id)}
+          fillOpacity={id !== undefined && focusedKey !== null && focusedKey !== id ? 0.28 : 1}
           className="omc-stack-series cursor-pointer"
-          onClick={() => onPick(id)}
+          onClick={id === undefined ? undefined : () => onPick(id)}
         />
       ))}
     </g>
   );
+}
+
+/** Whether two drawings share their commands, which is what lets one be interpolated into the other. */
+function hasSameShape(from: string, to: string): boolean {
+  return from.replace(/[^A-Za-z]/g, '') === to.replace(/[^A-Za-z]/g, '');
 }

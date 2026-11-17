@@ -8,7 +8,7 @@ import {
   type CredentialQuotaPanelProps,
 } from '../src/components/dashboard/CredentialQuota';
 import {
-  ModelSeriesFocusProvider,
+  ModelPanelsProvider,
   ModelTrendPanel,
   ModelUsagePanel,
 } from '../src/components/dashboard/ModelUsagePanels';
@@ -693,10 +693,10 @@ describe('dashboard model panels and heatmap alignment states', () => {
         <ThemeProvider>
           <TokenDisplayProvider>
             <CurrencyDisplayProvider>
-              <ModelSeriesFocusProvider>
+              <ModelPanelsProvider>
                 <ModelTrendPanel query="preset=1h" range={{ preset: '1h' }} enabled />
                 <ModelUsagePanel query="preset=1h" range={{ preset: '1h' }} enabled />
-              </ModelSeriesFocusProvider>
+              </ModelPanelsProvider>
             </CurrencyDisplayProvider>
           </TokenDisplayProvider>
         </ThemeProvider>
@@ -729,10 +729,10 @@ describe('dashboard model panels and heatmap alignment states', () => {
           <ThemeProvider>
             <TokenDisplayProvider>
               <CurrencyDisplayProvider>
-                <ModelSeriesFocusProvider>
+                <ModelPanelsProvider>
                   <ModelTrendPanel query="preset=24h" range={{ preset: '24h' }} enabled />
                   <ModelUsagePanel query="preset=24h" range={{ preset: '24h' }} enabled />
-                </ModelSeriesFocusProvider>
+                </ModelPanelsProvider>
               </CurrencyDisplayProvider>
             </TokenDisplayProvider>
           </ThemeProvider>
@@ -748,6 +748,90 @@ describe('dashboard model panels and heatmap alignment states', () => {
       } finally {
         nextView.unmount();
       }
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it('switches both cards to the client lens from the usage card title and back', async () => {
+    const api = installOmcApi();
+    const window = { from: NOW_MS - HOUR_MS, to: NOW_MS, bucket_ms: 60_000, minutes: 60 };
+    const group = (model: string, extra: Record<string, unknown> = {}) => ({
+      model, folded: false, tokens: 1200, requests: 4, priced_requests: 4, cost_usd: 0.12,
+      series: [{ t: NOW_MS - 60_000, tokens: 1200 }], ...extra,
+    });
+    api.on('GET', '/management/dashboard/models', (request) => ({
+      window,
+      total_tokens: 1200,
+      models: [
+        request.query.get('group_by') === 'client' ? group('claude-code', { category: 'agent' }) : group('gpt-5'),
+        group('', { folded: true }),
+      ],
+      partial_errors: [],
+    }));
+    const t = makeT('en');
+
+    const view = renderWithOmc(
+      <MemoryRouter>
+        <ThemeProvider>
+          <TokenDisplayProvider>
+            <CurrencyDisplayProvider>
+              <ModelPanelsProvider>
+                <ModelTrendPanel query="preset=1h" range={{ preset: '1h' }} enabled />
+                <ModelUsagePanel query="preset=1h" range={{ preset: '1h' }} enabled />
+              </ModelPanelsProvider>
+            </CurrencyDisplayProvider>
+          </TokenDisplayProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+    try {
+      const legend = await screen.findByTestId('model-trend-legend');
+      fireEvent.click(within(legend).getByRole('button', { name: /gpt-5/ }));
+      expect(screen.getByRole('radiogroup', { name: t('dash.models.view_toggle_label') })).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('tab', { name: t('dash.models.lens_clients') }));
+      // The model ranking stays on screen, and clickable, until the client one lands. A choice made
+      // in it belongs to the models, even where the client ranking has a group of the same key.
+      fireEvent.click(within(screen.getByTestId('model-trend-legend')).getByRole('button', { name: t('dash.models.folded') }));
+      const clientEntry = await waitFor(() => within(screen.getByTestId('model-trend-legend')).getByRole('button', { name: /Claude Code/ }));
+      expect(clientEntry.getAttribute('aria-pressed')).toBe('false');
+      expect(within(screen.getByTestId('model-trend-legend')).getByRole('button', { name: t('dash.clients.folded') }).getAttribute('aria-pressed')).toBe('false');
+      expect(screen.queryByRole('radiogroup', { name: t('dash.models.view_toggle_label') })).toBeNull();
+      expect(api.requests.some((request) => request.query.get('group_by') === 'client')).toBe(true);
+
+      fireEvent.click(screen.getByRole('tab', { name: t('dash.models.lens_models') }));
+      await waitFor(() => expect(screen.getAllByText('gpt-5').length).toBeGreaterThan(0));
+      expect(screen.getByRole('radiogroup', { name: t('dash.models.view_toggle_label') })).toBeTruthy();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it('speaks for the chosen lens when its read fails with no ranking held', async () => {
+    const api = installOmcApi();
+    api.on('GET', '/management/dashboard/models', () => {
+      throw new Error('models unavailable');
+    });
+    const t = makeT('en');
+
+    const view = renderWithOmc(
+      <MemoryRouter>
+        <ThemeProvider>
+          <TokenDisplayProvider>
+            <CurrencyDisplayProvider>
+              <ModelPanelsProvider>
+                <ModelUsagePanel query="preset=1h" range={{ preset: '1h' }} enabled />
+              </ModelPanelsProvider>
+            </CurrencyDisplayProvider>
+          </TokenDisplayProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+    try {
+      await within(view.container).findByText(t('dash.models.error'));
+      fireEvent.click(screen.getByRole('tab', { name: t('dash.models.lens_clients') }));
+      await within(view.container).findByText(t('dash.clients.error'));
     } finally {
       view.unmount();
     }
