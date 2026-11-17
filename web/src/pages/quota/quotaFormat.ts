@@ -1,6 +1,6 @@
 import dayjs from '../../utils/time';
 import type { TFunc } from '../../i18n';
-import type { QuotaItem, QuotaMetric, QuotaWindow } from '../../types/quota';
+import type { CodexResetCredit, QuotaItem, QuotaMetric, QuotaWindow } from '../../types/quota';
 import { formatUsd } from '../../types/pricingDisplay';
 import { quotaWindowFullName, quotaWindowKindOf } from './quotaWindowSelection';
 
@@ -232,4 +232,25 @@ export function formatQuotaMoney(amount: number | undefined, currency?: string):
   } catch {
     return `${amount.toFixed(2)} ${currency}`;
   }
+}
+
+function creditSortTimestamp(ms: number | undefined): number {
+  return ms != null && Number.isFinite(ms) && ms > 0 ? ms : Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * Available Codex reset credits ordered soonest-expiring first so an operator can plan manual
+ * redemptions without missing an earlier expiry; undated entries trail deterministically.
+ */
+export function orderCodexResetCredits(credits: readonly CodexResetCredit[] | undefined): CodexResetCredit[] {
+  return (credits ?? [])
+    .filter((credit) => !credit.status || credit.status === 'available')
+    .slice()
+    .sort((left, right) => {
+      const expDiff = creditSortTimestamp(left.expires_at_ms) - creditSortTimestamp(right.expires_at_ms);
+      if (expDiff !== 0) return expDiff;
+      const grantDiff = creditSortTimestamp(left.granted_at_ms) - creditSortTimestamp(right.granted_at_ms);
+      if (grantDiff !== 0) return grantDiff;
+      return left.id.localeCompare(right.id);
+    });
 }
