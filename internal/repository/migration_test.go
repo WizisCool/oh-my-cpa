@@ -1717,6 +1717,67 @@ func TestMigration068RepairsPartial067SchemaAndFactPartitions(t *testing.T) {
 		}
 	})
 
+	t.Run("expired canonical zero cache_read preserved and asymmetric daily exact total preserved", func(t *testing.T) {
+		db, err := Open(ctx, "file:mig068_expired_zero_cr_and_daily_max?mode=memory&cache=shared", withMigrationsUntil(66))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances
+			(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+			VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 'unknown', 0, 0)`); err != nil {
+			t.Fatal(err)
+		}
+		// 1) Canonical zero-base row with expired event (no usage_events row) and cached_tokens=100,
+		//    cache_read_tokens=0, effective_total_tokens=120: must keep effective_cache_read_tokens=0.
+		// 2) Expired mixed-Claude tuple: fine lacks all 4 partition cols (reconstructs total=2100),
+		//    while daily lacks only base cols and holds exact effective_total_tokens=2200:
+		//    daily total must remain 2200, not drop to 2100.
+		if _, err := db.SQL.ExecContext(ctx, `
+			ALTER TABLE usage_events ADD COLUMN client_agent TEXT NOT NULL DEFAULT '';
+			ALTER TABLE usage_facts_daily ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN effective_cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			INSERT INTO schema_migrations(version, applied_at) VALUES (67, 1000);
+			INSERT INTO usage_facts_15m(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, canonical_requests, cached_tokens, cache_read_tokens, total_tokens)
+			VALUES
+				('default', 0, 'group', 'zero-base-expired', 'openai', 1, 1, 100, 0, 120),
+				('default', 900000, 'group', 'claude-mixed-expired', 'claude', 2, 1, 0, 200, 2100);
+			UPDATE usage_facts_15m SET input_tokens = 1900, output_tokens = 200 WHERE model = 'claude-mixed-expired';
+			INSERT INTO usage_facts_daily(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, canonical_requests, cached_tokens, cache_read_tokens, total_tokens, effective_total_tokens)
+			VALUES
+				('default', 0, 'group', 'zero-base-expired', 'openai', 1, 1, 100, 0, 120, 120),
+				('default', 0, 'group', 'claude-mixed-expired', 'claude', 2, 1, 0, 200, 2100, 2200);
+			UPDATE usage_facts_daily SET input_tokens = 1900, output_tokens = 200 WHERE model = 'claude-mixed-expired';
+		`); err != nil {
+			t.Fatal(err)
+		}
+
+		db.migrateUntil = 0
+		if err := db.Migrate(ctx); err != nil {
+			t.Fatalf("Migrate(068) failed: %v", err)
+		}
+
+		for _, table := range []string{"usage_facts_15m", "usage_facts_daily"} {
+			var p, c, cr, tot int64
+			if err := db.SQL.QueryRowContext(ctx, `SELECT prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens FROM `+table+` WHERE model = 'zero-base-expired'`).Scan(&p, &c, &cr, &tot); err != nil {
+				t.Fatal(err)
+			}
+			if p != 0 || c != 0 || cr != 0 || tot != 120 {
+				t.Fatalf("%s zero-base-expired = %d/%d/%d/%d, want 0/0/0/120", table, p, c, cr, tot)
+			}
+		}
+		var dailyMixedTotal int64
+		if err := db.SQL.QueryRowContext(ctx, `SELECT effective_total_tokens FROM usage_facts_daily WHERE model = 'claude-mixed-expired'`).Scan(&dailyMixedTotal); err != nil || dailyMixedTotal != 2200 {
+			t.Fatalf("daily claude-mixed-expired effective_total_tokens = %d (err=%v), want 2200", dailyMixedTotal, err)
+		}
+	})
+
 	t.Run("asymmetric columns per table, retained exact zero cache_read, and nonzero total reconciliation", func(t *testing.T) {
 		db, err := Open(ctx, "file:mig068_asymmetric_reconcile?mode=memory&cache=shared", withMigrationsUntil(66))
 		if err != nil {

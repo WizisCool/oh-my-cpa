@@ -172,6 +172,7 @@ type historicalFactPartitionSQL struct {
 
 func buildHistoricalFactPartitionSQL() historicalFactPartitionSQL {
 	factCrExpr := `(CASE
+		WHEN canonical_requests = requests AND requests > 0 THEN MAX(cache_read_tokens, 0)
 		WHEN canonical_requests > 0 AND canonical_requests < requests THEN MAX(cache_read_tokens, cached_tokens, 0)
 		WHEN cache_read_tokens > 0 THEN cache_read_tokens
 		ELSE MAX(cached_tokens, 0)
@@ -324,7 +325,9 @@ func missingBaseRowPredicate(includeTotalOnly bool) string {
 		totalOnly = `total_tokens > 0`
 	}
 	return `prompt_tokens = 0 AND completion_tokens = 0 AND effective_cache_read_tokens = 0
-		AND (input_tokens > 0 OR output_tokens > 0 OR reasoning_tokens > 0 OR cached_tokens > 0 OR cache_read_tokens > 0 OR cache_creation_tokens > 0 OR ` + totalOnly + `)`
+		AND (input_tokens > 0 OR output_tokens > 0 OR reasoning_tokens > 0 OR cache_read_tokens > 0 OR cache_creation_tokens > 0
+			OR (cached_tokens > 0 AND NOT (canonical_requests = requests AND requests > 0))
+			OR ` + totalOnly + `)`
 }
 
 func backfillFineHistoricalPartitionsTx(ctx context.Context, tx *sql.Tx, includeTotalOnly bool) error {
@@ -455,7 +458,7 @@ func backfillDailyHistoricalPartitionsTx(ctx context.Context, tx *sql.Tx, includ
 			SET prompt_tokens = rolled.prompt_tokens,
 			    completion_tokens = rolled.completion_tokens,
 			    effective_cache_read_tokens = rolled.effective_cache_read_tokens,
-			    effective_total_tokens = rolled.effective_total_tokens
+			    effective_total_tokens = MAX(d.effective_total_tokens, rolled.effective_total_tokens)
 			FROM temp._omc_mig068_daily_rollup AS rolled
 			WHERE d.prompt_tokens = 0
 			  AND d.completion_tokens = 0
