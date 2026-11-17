@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 	"github.com/oh-my-cpa/oh-my-cpa/migrations"
@@ -1890,4 +1891,100 @@ func TestMigration068RepairsPartial067SchemaAndFactPartitions(t *testing.T) {
 			t.Fatalf("expected valid local daily cache preserved on clean 067 upgrade, got %d (err=%v)", localCount, err)
 		}
 	})
+}
+
+func TestMigration069BackfillsClientPrefixAndPopulatesClientRollups(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, "file:mig069_client_rollup?mode=memory&cache=shared", withMigrationsUntil(68))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances
+		(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+		VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 'unknown', 0, 0)`); err != nil {
+		t.Fatal(err)
+	}
+	dayStart := int64(1700006400000) // UTC midnight
+	if _, err := db.SQL.ExecContext(ctx, `
+		INSERT INTO usage_events (
+			instance_id, event_key, api_group_key, provider, endpoint, model, generate,
+			client_agent, user_agent, timestamp_ms, created_at_ms, input_tokens, output_tokens, total_tokens, pricing_status
+		) VALUES
+			('default', 'folded-claude', 'hmac:k1', 'claude', 'POST /v1/messages', 'claude-sonnet', 1,
+			 'claude-code', 'claude-cli/2.1.14', ?, 0, 100, 40, 140, 'unpriced'),
+			('default', 'folded-qwen', 'hmac:k1', 'openai', 'POST /v1/messages', 'qwen-coder', 1,
+			 'qwen-code', 'claude-cli/0.1.5', ?, 0, 200, 50, 250, 'unpriced'),
+			('default', 'folded-warmup', 'hmac:k1', 'codex', 'GET /v1/realtime', 'gpt-5', 0,
+			 'codex-cli', 'codex_cli_rs/0.47.0', ?, 0, 0, 0, 0, 'unpriced'),
+			('default', 'tail-pi', 'hmac:k1', 'codex', 'POST /v1/responses', 'gpt-5', 1,
+			 '', 'pi/1.5.0', ?, 0, 300, 60, 360, 'unpriced');
+		UPDATE usage_aggregation_checkpoints SET last_usage_event_id = 3 WHERE name = 'facts';
+	`, dayStart+1000, dayStart+2000, dayStart+3000, dayStart+DayBucketMS+1000); err != nil {
+		t.Fatal(err)
+	}
+
+	db.migrateUntil = 0
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate(069) failed: %v", err)
+	}
+
+	var claudePrefix, qwenPrefix, piAgent, piPrefix string
+	if err := db.SQL.QueryRowContext(ctx, `SELECT client_prefix FROM usage_events WHERE event_key = 'folded-claude'`).Scan(&claudePrefix); err != nil || claudePrefix != "claude-cli/2." {
+		t.Fatalf("folded-claude client_prefix = %q (err=%v), want claude-cli/2.", claudePrefix, err)
+	}
+	if err := db.SQL.QueryRowContext(ctx, `SELECT client_prefix FROM usage_events WHERE event_key = 'folded-qwen'`).Scan(&qwenPrefix); err != nil || qwenPrefix != "claude-cli/0." {
+		t.Fatalf("folded-qwen client_prefix = %q (err=%v), want claude-cli/0.", qwenPrefix, err)
+	}
+	if err := db.SQL.QueryRowContext(ctx, `SELECT client_agent, client_prefix FROM usage_events WHERE event_key = 'tail-pi'`).Scan(&piAgent, &piPrefix); err != nil || piAgent != usage.ClientAgentPi || piPrefix != "pi" {
+		t.Fatalf("tail-pi = (%q, %q) (err=%v), want (pi, pi)", piAgent, piPrefix, err)
+	}
+
+	var dailyRows int
+	if err := db.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_client_facts_daily`).Scan(&dailyRows); err != nil || dailyRows != 3 {
+		t.Fatalf("expected 3 daily client rollup rows (claude-code, qwen-code, warmup), got %d (err=%v)", dailyRows, err)
+	}
+
+	repo := New(db)
+	res, err := repo.QueryUsageClientAgents(ctx, "default", dayStart, dayStart+2*DayBucketMS-1, nil)
+	if err != nil {
+		t.Fatalf("QueryUsageClientAgents failed: %v", err)
+	}
+	if res.RetainedRequests != 4 || len(res.Items) != 3 {
+		t.Fatalf("QueryUsageClientAgents = %+v, want RetainedRequests=4 and 3 items", res)
+	}
+	byID := map[string]UsageClientAgentRow{}
+	for _, item := range res.Items {
+		byID[item.ID] = item
+	}
+	if byID[usage.ClientAgentClaudeCode].RawPrefix != "claude-cli/2." || byID[usage.ClientAgentQwenCode].RawPrefix != "claude-cli/0." || byID[usage.ClientAgentPi].RawPrefix != "pi" {
+		t.Fatalf("unexpected prefixes after 069 upgrade: %+v", byID)
+	}
+
+	// Verify foldPricedCorrections propagates repriced cost into client rollups after AggregateUsageFacts.
+	if folded, err := repo.AggregateUsageFacts(ctx, 100); err != nil || folded != 1 {
+		t.Fatalf("AggregateUsageFacts = %d err=%v", folded, err)
+	}
+	if err := repo.UpsertModelPrices(ctx, []pricing.ModelPrice{{
+		Model:            "claude-sonnet",
+		PromptPricePer1M: 10,
+		CompletionPer1M:  20,
+		PriceMultiplier:  1,
+		Source:           pricing.SourceOpenRouter,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if priced, err := repo.PriceUnpricedUsage(ctx, "claude-sonnet", time.Now().UnixMilli()+1000); err != nil || priced != 1 {
+		t.Fatalf("PriceUnpricedUsage = %d err=%v", priced, err)
+	}
+	afterReprice, err := repo.QueryUsageClientAgents(ctx, "default", dayStart, dayStart+2*DayBucketMS-1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range afterReprice.Items {
+		if item.ID == usage.ClientAgentClaudeCode && (item.CostNanos <= 0 || item.PricedRequests != 1 || item.CostedRequests != 1) {
+			t.Fatalf("expected repriced cost propagated to client rollup, got %+v", item)
+		}
+	}
 }

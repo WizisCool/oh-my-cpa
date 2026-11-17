@@ -1018,37 +1018,50 @@ func ClassifyClientAgent(userAgent, endpoint string) ClientAgentMatch {
 	return sdkMatch(slug, minimized, firstHead)
 }
 
-// ResolveClientAgentID resolves the persisted or fallback canonical ID without
-// computing drill-down prefixes. Returns "" when the caller is unknown so wire
-// event DTOs can omit empty attribution via omitempty.
-func ResolveClientAgentID(storedID, userAgent, endpoint string) string {
+// PersistedClientAttribution resolves the persisted (client_agent, client_prefix)
+// columns stored on usage_events.
+//
+// When storedID is already non-empty (for example, pre-classified by DecodeEvent
+// before UserAgent minimization and Endpoint query stripping), it normalizes
+// storedID and storedPrefix without re-running User-Agent classification. When
+// storedID is empty, it classifies (rawUserAgent, rawEndpoint) once.
+func PersistedClientAttribution(storedID, storedPrefix, rawUserAgent, rawEndpoint string) (string, string) {
 	if storedID != "" {
 		if storedID == ClientAgentUnknown {
-			return ""
+			return ClientAgentUnknown, ""
 		}
+		var normalized string
 		if isCleanClientAgentSlug(storedID) {
-			return storedID
+			normalized = storedID
+		} else {
+			normalized = NormalizeClientAgentID(storedID)
 		}
-		if normalized := NormalizeClientAgentID(storedID); normalized != "" && normalized != ClientAgentUnknown {
-			return normalized
+		if normalized == "" || normalized == ClientAgentUnknown {
+			return ClientAgentUnknown, ""
 		}
+		return normalized, sanitizeClientPrefix(storedPrefix)
 	}
-	return ClassifyClientAgent(userAgent, endpoint).PersistedID()
+	match := ClassifyClientAgent(rawUserAgent, rawEndpoint)
+	if id := match.PersistedID(); id != "" {
+		return id, match.RawPrefix
+	}
+	return ClientAgentUnknown, ""
 }
 
-// PersistedClientAgent resolves the non-empty column value stored in
-// usage_events.client_agent (a canonical/fallback slug or "unknown"), keeping
-// indexed equality filters and read projections identical.
-func PersistedClientAgent(storedID, userAgent, endpoint string) string {
-	if resolved := ResolveClientAgentID(storedID, userAgent, endpoint); resolved != "" {
-		return resolved
+// ClientAgentFromPersisted projects a persisted usage_events.client_agent value
+// for read DTOs without running User-Agent classification, mapping empty and
+// "unknown" values to "" so wire payloads omit unidentified callers.
+func ClientAgentFromPersisted(storedID string) string {
+	if storedID == "" || storedID == ClientAgentUnknown {
+		return ""
 	}
-	return ClientAgentUnknown
+	return storedID
 }
 
-// ResolveClientAgent combines a persisted client_agent column value with a
-// read-time fallback over minimized user_agent and endpoint for pre-migration rows.
-func ResolveClientAgent(storedID, userAgent, endpoint string) ClientAgentMatch {
+// ResolveHistoricalClientAttribution resolves legacy rows during database
+// migration backfill when client_agent or client_prefix has not been persisted
+// yet. Runtime read paths must use ClientAgentFromPersisted instead.
+func ResolveHistoricalClientAttribution(storedID, userAgent, endpoint string) ClientAgentMatch {
 	if storedID == ClientAgentUnknown {
 		return ClientAgentMatch{
 			ID:       ClientAgentUnknown,
@@ -1086,6 +1099,14 @@ func ResolveClientAgent(storedID, userAgent, endpoint string) ClientAgentMatch {
 		RawPrefix: rawPrefix,
 		Category:  category,
 	}
+}
+
+func sanitizeClientPrefix(raw string) string {
+	redacted := redactUserAgentIfNeeded(raw)
+	if redacted == "" || strings.Contains(redacted, security.RedactedValue) {
+		return ""
+	}
+	return minimizedFromRedacted(redacted)
 }
 
 // ClientAgentCategoryForID returns the category of a normalized client agent ID.

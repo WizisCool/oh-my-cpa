@@ -321,6 +321,22 @@ describe('insights page', () => {
     expect(await screen.findByText('Insights could not be loaded')).toBeTruthy();
     expect(screen.getByText(/hour buckets cover at most 14 days/)).toBeTruthy();
   });
+
+  it('waits for the cube before fetching rhythm and clients when a provider filter is active', async () => {
+    const cube = api.hold('GET', '/management/insights/cube');
+    mount('/insights?provider=codex');
+    await cube.arrived;
+    expect(api.requests.filter((request) => request.path === '/management/insights/rhythm')).toHaveLength(0);
+    expect(api.requests.filter((request) => request.path === '/management/insights/clients')).toHaveLength(0);
+
+    cube.release(CUBE);
+    await waitFor(() => expect(api.requests.filter((request) => request.path === '/management/insights/rhythm')).toHaveLength(1));
+    await waitFor(() => expect(api.requests.filter((request) => request.path === '/management/insights/clients')).toHaveLength(1));
+    const rhythm = api.requests.find((request) => request.path === '/management/insights/rhythm');
+    const clients = api.requests.find((request) => request.path === '/management/insights/clients');
+    expect(rhythm?.query.getAll('auth_index')).toEqual(['c1']);
+    expect(clients?.query.getAll('auth_index')).toEqual(['c1']);
+  });
 });
 
 describe('insights rhythm token scope', () => {

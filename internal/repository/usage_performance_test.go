@@ -463,10 +463,10 @@ func BenchmarkUsageClientAgents(b *testing.B) {
 		WITH RECURSIVE seq(k) AS (VALUES(1) UNION ALL SELECT k+1 FROM seq WHERE k <= 100000)
 		INSERT INTO usage_events (
 			instance_id, event_key, api_group_key, generate, timestamp_ms, created_at_ms,
-			client_agent, user_agent, input_tokens, output_tokens, total_tokens, cost_nanos, pricing_status
+			client_agent, client_prefix, user_agent, input_tokens, output_tokens, total_tokens, cost_nanos, pricing_status
 		)
 		SELECT
-			'default', 'event-'||k, 'group', 1, 1700000000000 + ((k - 1) % 90) * ?, 1700000000000,
+			'default', 'event-'||k, 'group', 1, 1700006400000 + ((k - 1) % 90) * ?, 1700000000000,
 			CASE k % 8
 				WHEN 0 THEN 'pi'
 				WHEN 1 THEN 'claude-code'
@@ -476,6 +476,16 @@ func BenchmarkUsageClientAgents(b *testing.B) {
 				WHEN 5 THEN 'opencode'
 				WHEN 6 THEN 'openai-sdk'
 				ELSE 'node-http'
+			END,
+			CASE k % 8
+				WHEN 0 THEN 'pi'
+				WHEN 1 THEN 'claude-cli/2.'
+				WHEN 2 THEN 'codex_cli_rs'
+				WHEN 3 THEN 'hindsight'
+				WHEN 4 THEN 'Oh-My-CPA'
+				WHEN 5 THEN 'opencode'
+				WHEN 6 THEN 'OpenAI'
+				ELSE 'node'
 			END,
 			CASE k % 8
 				WHEN 0 THEN 'pi/1.5.' || (k % 25)
@@ -492,11 +502,11 @@ func BenchmarkUsageClientAgents(b *testing.B) {
 		b.Fatal(err)
 	}
 	for _, days := range []int64{7, 30} {
-		b.Run(fmt.Sprintf("%dd", days), func(b *testing.B) {
+		b.Run(fmt.Sprintf("%dd-unfolded", days), func(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				res, err := repo.QueryUsageClientAgents(ctx, "default", 1700000000000, 1700000000000+days*dayMS-1, nil)
+				res, err := repo.QueryUsageClientAgents(ctx, "default", 1700006400000, 1700006400000+days*dayMS-1, nil)
 				if err != nil || len(res.Items) < 8 {
 					b.Fatalf("items=%d err=%v", len(res.Items), err)
 				}
@@ -509,8 +519,8 @@ func BenchmarkUsageClientAgents(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			page, err := repo.ListUsageEvents(ctx, UsageEventFilter{
 				InstanceID:   "default",
-				FromMS:       1700000000000,
-				ToMS:         1700000000000 + 30*dayMS - 1,
+				FromMS:       1700006400000,
+				ToMS:         1700006400000 + 30*dayMS - 1,
 				ClientAgents: []string{"hindsight"},
 				Limit:        50,
 			})
@@ -519,6 +529,38 @@ func BenchmarkUsageClientAgents(b *testing.B) {
 			}
 		}
 	})
+	for {
+		folded, err := repo.AggregateUsageFacts(ctx, 20000)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if folded < 20000 {
+			break
+		}
+	}
+	if _, err := repo.SQL().Exec(`
+		WITH RECURSIVE seq(k) AS (VALUES(1) UNION ALL SELECT k+1 FROM seq WHERE k <= 200)
+		INSERT INTO usage_events (
+			instance_id, event_key, api_group_key, generate, timestamp_ms, created_at_ms,
+			client_agent, client_prefix, input_tokens, output_tokens, total_tokens, cost_nanos, pricing_status
+		)
+		SELECT 'default', 'tail-'||k, 'group', 1, 1700006400000 + (k % 90) * ?, 1700000000000,
+		       'claude-code', 'claude-cli/2.', 900, 300, 1200, 150000, 'priced'
+		FROM seq`, dayMS); err != nil {
+		b.Fatal(err)
+	}
+	for _, days := range []int64{30, 90} {
+		b.Run(fmt.Sprintf("%dd-folded", days), func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				res, err := repo.QueryUsageClientAgents(ctx, "default", 1700006400000, 1700006400000+days*dayMS-1, nil)
+				if err != nil || len(res.Items) < 8 {
+					b.Fatalf("items=%d err=%v", len(res.Items), err)
+				}
+			}
+		})
+	}
 }
 
 func BenchmarkUsageClientAgentsCachedClaude(b *testing.B) {

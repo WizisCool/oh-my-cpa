@@ -122,7 +122,7 @@ func backfillClientAgentColumnAndIndexTx(ctx context.Context, tx *sql.Tx) error 
 			key := [2]string{item.ua, item.endpoint}
 			resolved, ok := cache[key]
 			if !ok {
-				resolved = usage.PersistedClientAgent("", item.ua, item.endpoint)
+				resolved, _ = usage.PersistedClientAttribution("", "", item.ua, item.endpoint)
 				cache[key] = resolved
 			}
 			byAgent[resolved] = append(byAgent[resolved], item.id)
@@ -874,11 +874,211 @@ func repairUsageFactsPartitionsAndClientAgentTx(ctx context.Context, tx *sql.Tx,
 	return backfillClientAgentColumnAndIndexTx(ctx, tx)
 }
 
-// QueryUsageClientAgents scans retained usage_events inside [fromMS, toMS]
-// under the shared Insights dimension filters: every retained record contributes
-// to RetainedRequests (matching permanent usage_facts population), while
-// generating records fold per-request additive token partitions into caller
-// agent / SDK groups.
+// backfillAndRollupClientAttributionTx executes migration 069's data backfill:
+//  1. Persists client_prefix (and any remaining client_agent) on retained rows
+//     so runtime reads never inspect User-Agent or endpoint headers.
+//  2. Populates usage_client_facts_15m and usage_client_facts_daily for all
+//     retained records already absorbed up to the facts checkpoint.
+func backfillAndRollupClientAttributionTx(ctx context.Context, tx *sql.Tx, _ *DB) error {
+	if err := backfillClientAttributionColumnsTx(ctx, tx); err != nil {
+		return err
+	}
+	return backfillClientFactRollupsTx(ctx, tx)
+}
+
+func backfillClientAttributionColumnsTx(ctx context.Context, tx *sql.Tx) error {
+	var hasPending bool
+	if err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM usage_events
+			WHERE client_agent = ''
+			   OR (client_agent <> 'unknown' AND client_prefix = '' AND user_agent IS NOT NULL AND user_agent <> '')
+			LIMIT 1
+		)`).Scan(&hasPending); err != nil {
+		return fmt.Errorf("check pending client attribution rows: %w", err)
+	}
+	if !hasPending {
+		return nil
+	}
+
+	type pendingRow struct {
+		id          int64
+		storedAgent string
+		ua          string
+		endpoint    string
+	}
+	type resolvedPair struct {
+		agent  string
+		prefix string
+	}
+	cache := make(map[[3]string]resolvedPair, 256)
+	var lastID int64
+	for {
+		rows, err := tx.QueryContext(ctx, `
+			SELECT id, client_agent, COALESCE(user_agent, ''), endpoint
+			FROM usage_events
+			WHERE id > ?
+			  AND (client_agent = ''
+			       OR (client_agent <> 'unknown' AND client_prefix = '' AND user_agent IS NOT NULL AND user_agent <> ''))
+			ORDER BY id ASC
+			LIMIT ?`, lastID, clientBackfillBatchRows)
+		if err != nil {
+			return fmt.Errorf("scan client attribution backfill batch: %w", err)
+		}
+		batch := make([]pendingRow, 0, clientBackfillBatchRows)
+		for rows.Next() {
+			var item pendingRow
+			if scanErr := rows.Scan(&item.id, &item.storedAgent, &item.ua, &item.endpoint); scanErr != nil {
+				_ = rows.Close()
+				return fmt.Errorf("scan client attribution backfill row: %w", scanErr)
+			}
+			batch = append(batch, item)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("iterate client attribution backfill batch: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return fmt.Errorf("close client attribution backfill batch: %w", err)
+		}
+		if len(batch) == 0 {
+			break
+		}
+
+		prefixOnly := make(map[string][]int64, 16)
+		agentAndPrefix := make(map[resolvedPair][]int64, 16)
+		for _, item := range batch {
+			key := [3]string{item.storedAgent, item.ua, item.endpoint}
+			resolved, ok := cache[key]
+			if !ok {
+				if item.storedAgent == "" {
+					agentID, prefix := usage.PersistedClientAttribution("", "", item.ua, item.endpoint)
+					resolved = resolvedPair{agent: agentID, prefix: prefix}
+				} else {
+					match := usage.ResolveHistoricalClientAttribution(item.storedAgent, item.ua, item.endpoint)
+					agentID := match.ID
+					if agentID == "" {
+						agentID = usage.ClientAgentUnknown
+					}
+					resolved = resolvedPair{agent: agentID, prefix: match.RawPrefix}
+				}
+				cache[key] = resolved
+			}
+			if resolved.agent != item.storedAgent {
+				agentAndPrefix[resolved] = append(agentAndPrefix[resolved], item.id)
+			} else if resolved.prefix != "" {
+				prefixOnly[resolved.prefix] = append(prefixOnly[resolved.prefix], item.id)
+			}
+		}
+
+		for prefix, ids := range prefixOnly {
+			for start := 0; start < len(ids); start += clientBackfillUpdateChunk {
+				chunk := ids[start:min(start+clientBackfillUpdateChunk, len(ids))]
+				args := make([]any, 0, 1+len(chunk))
+				args = append(args, prefix)
+				for _, id := range chunk {
+					args = append(args, id)
+				}
+				placeholders := strings.TrimSuffix(strings.Repeat("?,", len(chunk)), ",")
+				if _, err := tx.ExecContext(ctx, `UPDATE usage_events SET client_prefix = ? WHERE id IN (`+placeholders+`)`, args...); err != nil {
+					return fmt.Errorf("update historical client_prefix chunk: %w", err)
+				}
+			}
+		}
+		for pair, ids := range agentAndPrefix {
+			for start := 0; start < len(ids); start += clientBackfillUpdateChunk {
+				chunk := ids[start:min(start+clientBackfillUpdateChunk, len(ids))]
+				args := make([]any, 0, 2+len(chunk))
+				args = append(args, pair.agent, pair.prefix)
+				for _, id := range chunk {
+					args = append(args, id)
+				}
+				placeholders := strings.TrimSuffix(strings.Repeat("?,", len(chunk)), ",")
+				if _, err := tx.ExecContext(ctx, `UPDATE usage_events SET client_agent = ?, client_prefix = ? WHERE id IN (`+placeholders+`)`, args...); err != nil {
+					return fmt.Errorf("update historical client attribution chunk: %w", err)
+				}
+			}
+		}
+
+		lastID = batch[len(batch)-1].id
+		if len(batch) < clientBackfillBatchRows {
+			break
+		}
+	}
+	return nil
+}
+
+func backfillClientFactRollupsTx(ctx context.Context, tx *sql.Tx) error {
+	var checkpointID int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT last_usage_event_id FROM usage_aggregation_checkpoints WHERE name = ?), 0)`, CheckpointFacts).Scan(&checkpointID); err != nil {
+		return fmt.Errorf("read checkpoint for client attribution rollup backfill: %w", err)
+	}
+	if checkpointID <= 0 {
+		return nil
+	}
+	var hasRows bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM usage_events WHERE id <= ? LIMIT 1)`, checkpointID).Scan(&hasRows); err != nil {
+		return fmt.Errorf("check retained rows for client attribution rollup backfill: %w", err)
+	}
+	if !hasRows {
+		return nil
+	}
+
+	if err := resetClientUsageFoldBuffer(ctx, tx); err != nil {
+		return err
+	}
+	defer func() { _, _ = tx.ExecContext(ctx, `DELETE FROM temp._omc_usage_client_fold_15m`) }()
+
+	if _, err := tx.ExecContext(ctx, `
+		WITH s1 AS MATERIALIZED (
+			SELECT instance_id, (timestamp_ms / ?1) * ?1 AS bucket_start_ms,
+			       api_group_key, model, COALESCE(model_alias, '') AS model_alias,
+			       auth_index, provider, auth_type,
+			       generate,
+			       CASE WHEN generate = 1 THEN CASE WHEN client_agent = '' THEN 'unknown' ELSE client_agent END ELSE '' END AS client_agent,
+			       CASE WHEN generate = 1 THEN client_prefix ELSE '' END AS client_prefix,
+			       failed, latency_ms, ttft_ms, cost_nanos, pricing_status,
+			       `+eventStage1Cols+`
+			FROM usage_events
+			WHERE id <= ?2
+		)
+		INSERT INTO temp._omc_usage_client_fold_15m (instance_id, bucket_start_ms, `+usageClientFactDimensions+`, `+strings.Join(usageClientFactMeasures, ", ")+`)
+		SELECT instance_id, bucket_start_ms, `+usageClientFactDimensions+`,
+		       COUNT(1),
+		       SUM(generate),
+		       SUM(CASE WHEN generate = 1 THEN failed ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN _pr ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN _comp ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN _rr ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN _cr ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN _cw ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN `+stageTotalExpr+` ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN latency_ms ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN COALESCE(ttft_ms, 0) ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN (ttft_ms IS NOT NULL) ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN COALESCE(cost_nanos, 0) ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN (pricing_status = 'priced') ELSE 0 END),
+		       SUM(CASE WHEN generate = 1 THEN (cost_nanos IS NOT NULL) ELSE 0 END)
+		FROM (
+			SELECT *, `+stagePromptFromPBCompExpr+` AS _pr
+			FROM (
+				SELECT *, `+stageCompFromPBExpr+` AS _comp
+				FROM (
+					SELECT *, `+stagePromptBaseExpr+` AS _pb FROM s1
+				)
+			)
+		)
+		GROUP BY instance_id, bucket_start_ms, `+usageClientFactDimensions,
+		QuarterHourBucketMS, checkpointID); err != nil {
+		return fmt.Errorf("stage historical client attribution rollups: %w", err)
+	}
+	return foldClientUsageBuffer(ctx, tx)
+}
+
+// QueryUsageClientAgents aggregates retained request-record client attribution
+// inside [fromMS, toMS] from pre-aggregated daily and quarter-hour client fact
+// tables, adding only sub-bucket edges and unfolded tail rows from usage_events.
+// Read paths never re-classify User-Agent or endpoint headers.
 func (r *Repository) QueryUsageClientAgents(
 	ctx context.Context,
 	instanceID string,
@@ -898,55 +1098,130 @@ func (r *Repository) QueryUsageClientAgents(
 		}
 	}
 
-	filterClause, filterArgs := usageFilterClause(filters)
-	args := make([]any, 0, 3+len(filterArgs))
-	args = append(args, instanceID, fromMS, toMS)
-	args = append(args, filterArgs...)
+	horizonMS, err := r.LifecycleHorizonMS(ctx, LifecycleUsageDetail)
+	if err != nil {
+		return result, err
+	}
+	if horizonMS > 0 && toMS < horizonMS {
+		return result, nil
+	}
+	effectiveFrom := fromMS
+	if horizonMS > 0 && effectiveFrom < horizonMS {
+		effectiveFrom = horizonMS
+	}
+	plan := planUsageFactRead(horizonMS, effectiveFrom, toMS, 0, true)
 
-	statement := `
-		WITH s1 AS MATERIALIZED (
-			SELECT generate, client_agent,
-			       COALESCE(user_agent, '') AS user_agent_nn,
-			       CASE WHEN client_agent = '' THEN endpoint ELSE '' END AS endpoint_hint,
-			       failed, latency_ms, ttft_ms, cost_nanos,
-			       (pricing_status = 'priced') AS is_priced,
-			       ` + eventStage1Cols + `
-			FROM usage_events INDEXED BY idx_usage_events_instance_time
-			WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?` + filterClause + `
-		)
-		SELECT
-			generate,
-			client_agent,
-			CASE WHEN client_agent = '' THEN user_agent_nn ELSE COALESCE(MAX(NULLIF(user_agent_nn, '')), '') END AS sample_ua,
-			endpoint_hint,
-			COUNT(1),
-			COALESCE(SUM(failed), 0),
-			COALESCE(SUM(_pr), 0),
-			COALESCE(SUM(_comp), 0),
-			COALESCE(SUM(_rr), 0),
-			COALESCE(SUM(_cr), 0),
-			COALESCE(SUM(_cw), 0),
-			COALESCE(SUM(` + stageTotalExpr + `), 0),
-			COALESCE(SUM(latency_ms), 0),
-			COALESCE(SUM(ttft_ms), 0),
-			COUNT(ttft_ms),
-			COALESCE(SUM(cost_nanos), 0),
-			COALESCE(SUM(is_priced), 0),
-			COUNT(cost_nanos)
-		FROM (
-			SELECT *, ` + stagePromptFromPBCompExpr + ` AS _pr
+	filterClause, filterArgs := usageFilterClause(filters)
+	withFilters := func(base ...any) []any { return append(base, filterArgs...) }
+
+	checkpointID, err := r.UsageCheckpoint(ctx, CheckpointFacts)
+	if err != nil {
+		return result, err
+	}
+
+	var parts []string
+	var args []any
+	factArm := func(table string, armFrom, armTo int64) {
+		if armFrom >= armTo {
+			return
+		}
+		parts = append(parts, `
+			SELECT client_agent, client_prefix, `+strings.Join(usageClientFactMeasures, ", ")+`
+			FROM `+table+`
+			WHERE instance_id = ? AND bucket_start_ms >= ? AND bucket_start_ms < ?`+filterClause)
+		args = append(args, withFilters(instanceID, armFrom, armTo)...)
+	}
+	eventArm := func(index, predicate string, predicateArgs ...any) {
+		parts = append(parts, `
+			SELECT client_agent, client_prefix,
+			       COUNT(1) AS retained_requests,
+			       SUM(generate) AS requests,
+			       SUM(CASE WHEN generate = 1 THEN failed ELSE 0 END) AS failures,
+			       SUM(CASE WHEN generate = 1 THEN _pr ELSE 0 END) AS prompt_tokens,
+			       SUM(CASE WHEN generate = 1 THEN _comp ELSE 0 END) AS completion_tokens,
+			       SUM(CASE WHEN generate = 1 THEN _rr ELSE 0 END) AS reasoning_tokens,
+			       SUM(CASE WHEN generate = 1 THEN _cr ELSE 0 END) AS effective_cache_read_tokens,
+			       SUM(CASE WHEN generate = 1 THEN _cw ELSE 0 END) AS cache_creation_tokens,
+			       SUM(CASE WHEN generate = 1 THEN `+stageTotalExpr+` ELSE 0 END) AS effective_total_tokens,
+			       SUM(CASE WHEN generate = 1 THEN latency_ms ELSE 0 END) AS latency_sum_ms,
+			       SUM(CASE WHEN generate = 1 THEN COALESCE(ttft_ms, 0) ELSE 0 END) AS ttft_sum_ms,
+			       SUM(CASE WHEN generate = 1 THEN (ttft_ms IS NOT NULL) ELSE 0 END) AS ttft_count,
+			       SUM(CASE WHEN generate = 1 THEN COALESCE(cost_nanos, 0) ELSE 0 END) AS cost_nanos,
+			       SUM(CASE WHEN generate = 1 THEN is_priced ELSE 0 END) AS priced_requests,
+			       SUM(CASE WHEN generate = 1 THEN (cost_nanos IS NOT NULL) ELSE 0 END) AS costed_requests
 			FROM (
-				SELECT *, ` + stageCompFromPBExpr + ` AS _comp
+				WITH s1 AS MATERIALIZED (
+					SELECT generate,
+					       CASE WHEN generate = 1 THEN CASE WHEN client_agent = '' THEN 'unknown' ELSE client_agent END ELSE '' END AS client_agent,
+					       CASE WHEN generate = 1 THEN client_prefix ELSE '' END AS client_prefix,
+					       failed, latency_ms, ttft_ms, cost_nanos,
+					       (pricing_status = 'priced') AS is_priced,
+					       `+eventStage1Cols+`
+					FROM usage_events INDEXED BY `+index+`
+					WHERE instance_id = ? AND `+predicate+filterClause+`
+				)
+				SELECT *, `+stagePromptFromPBCompExpr+` AS _pr
 				FROM (
-					SELECT *, ` + stagePromptBaseExpr + ` AS _pb FROM s1
+					SELECT *, `+stageCompFromPBExpr+` AS _comp
+					FROM (
+						SELECT *, `+stagePromptBaseExpr+` AS _pb FROM s1
+					)
 				)
 			)
+			GROUP BY client_agent, client_prefix`)
+		args = append(args, withFilters(append([]any{instanceID}, predicateArgs...)...)...)
+	}
+
+	if checkpointID <= 0 {
+		eventArm("idx_usage_events_instance_time",
+			`timestamp_ms >= ? AND timestamp_ms <= ?`, plan.fromMS, plan.toMS)
+	} else {
+		const checkpoint = `(SELECT COALESCE((SELECT last_usage_event_id FROM usage_aggregation_checkpoints WHERE name = '` + CheckpointFacts + `'), 0))`
+		if plan.fineFrom < plan.fineTo {
+			if plan.dailyFrom < plan.dailyTo {
+				factArm(usageClientFactsDailyTable, plan.dailyFrom, plan.dailyTo)
+				factArm(usageClientFactsFineTable, plan.fineFrom, plan.dailyFrom)
+				factArm(usageClientFactsFineTable, plan.dailyTo, plan.fineTo)
+			} else {
+				factArm(usageClientFactsFineTable, plan.fineFrom, plan.fineTo)
+			}
+			if plan.fromMS < plan.fineFrom {
+				eventArm("idx_usage_events_instance_time",
+					`timestamp_ms >= ? AND timestamp_ms < ? AND id <= `+checkpoint, plan.fromMS, plan.fineFrom)
+			}
+			if plan.fineTo <= plan.toMS {
+				eventArm("idx_usage_events_instance_time",
+					`timestamp_ms >= ? AND timestamp_ms <= ? AND id <= `+checkpoint, plan.fineTo, plan.toMS)
+			}
+		} else {
+			eventArm("idx_usage_events_instance_time",
+				`timestamp_ms >= ? AND timestamp_ms <= ? AND id <= `+checkpoint, plan.fromMS, plan.toMS)
+		}
+		eventArm("idx_usage_events_instance_id",
+			`id > `+checkpoint+` AND timestamp_ms >= ? AND timestamp_ms <= ?`, plan.fromMS, plan.toMS)
+	}
+
+	statement := `
+		SELECT client_agent, client_prefix,
+		       COALESCE(SUM(retained_requests), 0),
+		       COALESCE(SUM(requests), 0),
+		       COALESCE(SUM(failures), 0),
+		       COALESCE(SUM(prompt_tokens), 0),
+		       COALESCE(SUM(completion_tokens), 0),
+		       COALESCE(SUM(reasoning_tokens), 0),
+		       COALESCE(SUM(effective_cache_read_tokens), 0),
+		       COALESCE(SUM(cache_creation_tokens), 0),
+		       COALESCE(SUM(effective_total_tokens), 0),
+		       COALESCE(SUM(latency_sum_ms), 0),
+		       COALESCE(SUM(ttft_sum_ms), 0),
+		       COALESCE(SUM(ttft_count), 0),
+		       COALESCE(SUM(cost_nanos), 0),
+		       COALESCE(SUM(priced_requests), 0),
+		       COALESCE(SUM(costed_requests), 0)
+		FROM (` + strings.Join(parts, `
+			UNION ALL`) + `
 		)
-		GROUP BY
-			generate,
-			client_agent,
-			CASE WHEN client_agent = '' THEN user_agent_nn ELSE '' END,
-			endpoint_hint`
+		GROUP BY client_agent, client_prefix`
 
 	rows, err := r.SQL().QueryContext(ctx, statement, args...)
 	if err != nil {
@@ -956,12 +1231,12 @@ func (r *Repository) QueryUsageClientAgents(
 
 	groups := make(map[string]*clientAgentAccumulator, 16)
 	for rows.Next() {
-		var generate int
-		var storedAgent, sampleUA, endpointHint string
+		var storedAgent, clientPrefix string
+		var retainedRequests int64
 		var item UsageClientAgentRow
 		if errScan := rows.Scan(
-			&generate,
-			&storedAgent, &sampleUA, &endpointHint,
+			&storedAgent, &clientPrefix,
+			&retainedRequests,
 			&item.Requests, &item.Failures,
 			&item.InputTokens, &item.OutputTokens, &item.ReasoningTokens,
 			&item.CacheReadTokens, &item.CacheCreationTokens,
@@ -970,28 +1245,33 @@ func (r *Repository) QueryUsageClientAgents(
 		); errScan != nil {
 			return result, fmt.Errorf("scan usage client agent row: %w", errScan)
 		}
+		result.RetainedRequests += retainedRequests
+		if item.Requests <= 0 {
+			continue
+		}
 		item.CachedTokens = item.CacheReadTokens
 		uncached := max(item.InputTokens-item.CacheReadTokens-item.CacheCreationTokens, 0)
 		item.NetTokens = uncached + item.OutputTokens
-		result.RetainedRequests += item.Requests
-		if generate != 1 {
-			continue
+
+		agentID := usage.ClientAgentFromPersisted(storedAgent)
+		if agentID == "" {
+			agentID = usage.ClientAgentUnknown
 		}
-		match := usage.ResolveClientAgent(storedAgent, sampleUA, endpointHint)
-		acc, exists := groups[match.ID]
+		category := usage.ClientAgentCategoryForID(agentID)
+		acc, exists := groups[agentID]
 		if !exists {
 			acc = &clientAgentAccumulator{
 				row: UsageClientAgentRow{
-					ID:       match.ID,
-					Category: string(match.Category),
+					ID:       agentID,
+					Category: string(category),
 				},
 				prefixRequests: map[string]int64{},
 			}
-			groups[match.ID] = acc
+			groups[agentID] = acc
 		}
 		acc.row.add(item)
-		if match.RawPrefix != "" {
-			acc.prefixRequests[match.RawPrefix] += item.Requests
+		if clientPrefix != "" && agentID != usage.ClientAgentUnknown {
+			acc.prefixRequests[clientPrefix] += item.Requests
 		}
 	}
 	if err := rows.Err(); err != nil {

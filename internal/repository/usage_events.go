@@ -430,7 +430,7 @@ func (r *Repository) queryUsageEventRows(ctx context.Context, query string, args
 			&row.ResponseModel, &row.ModelSubstituted, &row.FailStatusCode, &accounting); errScan != nil {
 			return nil, fmt.Errorf("scan usage event: %w", errScan)
 		}
-		row.ClientAgent = usage.ResolveClientAgentID(storedClientAgent, pointerValue(row.UserAgent), row.Endpoint)
+		row.ClientAgent = usage.ClientAgentFromPersisted(storedClientAgent)
 		var errAccounting error
 		row.Accounting, errAccounting = decodeStoredTokenAccounting(accounting)
 		if errAccounting != nil {
@@ -590,7 +590,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 	}
 	row.Failed = failed == 1
 	row.Generate = generate == 1
-	row.ClientAgent = usage.ResolveClientAgentID(storedClientAgent, pointerValue(row.UserAgent), row.Endpoint)
+	row.ClientAgent = usage.ClientAgentFromPersisted(storedClientAgent)
 	row.IsNativeKey = isNativeKey.Valid && isNativeKey.Int64 != 0
 	if streamVal.Valid {
 		isStream := streamVal.Int64 == 1
