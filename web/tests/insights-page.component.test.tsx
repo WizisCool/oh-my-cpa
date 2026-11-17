@@ -127,6 +127,12 @@ describe('insights page', () => {
     fireEvent.click(tile('latency'));
     await waitFor(() => expect(tile('latency').getAttribute('aria-pressed')).toBe('true'));
     expect(new URLSearchParams(lastSearch).get('metric')).toBe('latency');
+
+    // The change line keeps its place when the comparison is turned off, so nothing below it moves.
+    const parts = tile('requests').children.length;
+    fireEvent.click(screen.getByTestId('insights-compare'));
+    await waitFor(() => expect(within(tile('requests')).queryByText('125%')).toBeNull());
+    expect(tile('requests').children).toHaveLength(parts);
   });
 
   it('isolates a series from the legend or chart click and resets on background click', async () => {

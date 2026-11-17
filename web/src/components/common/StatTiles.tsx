@@ -17,7 +17,7 @@ export interface StatTile<K extends string> {
   value: number | React.ReactNode | undefined;
   /** `neutral` draws the label as plain text: the tile that means "everything" carries no verdict. */
   tone?: StatusTone;
-  /** A quiet line under the reading, such as its change against an earlier window. */
+  /** A quiet line under the reading, such as its change against an earlier window; `null` keeps its place empty. */
   foot?: React.ReactNode;
   /** What the tile counts, when its label alone does not say. */
   hint?: React.ReactNode;

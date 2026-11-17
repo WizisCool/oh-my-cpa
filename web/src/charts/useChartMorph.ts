@@ -14,8 +14,8 @@ type MorphScope = HTMLElement & {
  * in a stacked bar - so a change of grouping stuttered for a third of a second. Here the chart
  * renders the new `value` once, inside an element-scoped view transition: the browser snapshots
  * the scope before and after and fades one into the other on the GPU, while the rest of the page
- * stays interactive. Where scoped transitions are missing, or motion is reduced, the new value
- * simply lands.
+ * stays interactive. Where motion is reduced the new value simply lands, and so does a cross-fade
+ * where scoped transitions are missing.
  *
  * A stacked bar chart whose next drawing keeps its buckets and some of its series passes `canGlide`
  * and draws its segments with `glideStackShape`: then the segments travel to their new boxes

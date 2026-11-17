@@ -58,7 +58,8 @@ export const MetricTiles: React.FC<MetricTilesProps> = ({ current, baseline, met
           {readout ? <RollingNumber readout={readout} /> : formatMetric(measured, value, style)}
         </span>
       ),
-      foot: comparison === null ? undefined : (
+      // Without a comparison the foot stays mounted and empty, so turning one on moves nothing.
+      foot: comparison === null ? null : (
         <>
           <span className={styles['tile-change']} data-trend={changeTrend(comparison)} {...tipCard(changeCard)}>
             {comparison.kind !== 'change' || changeText === null ? (
