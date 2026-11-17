@@ -334,6 +334,10 @@ func TestUsageEventListOmitsDiagnosticFields(t *testing.T) {
 	if got := list.Items[0]["user_agent"]; got != "secret-client/9.9" {
 		t.Fatalf("list user_agent = %v, want minimized product label", got)
 	}
+	// The list names the client by its normalised identifier and says what kind it is.
+	if got, category := list.Items[0]["client_agent"], list.Items[0]["client_agent_category"]; got != "secret-client" || category != "sdk" {
+		t.Fatalf("list client = %v/%v, want secret-client/sdk", got, category)
+	}
 	// The caller key reaches the console as a display mask only: the raw key is
 	// never stored, and the mask is not the identity used for grouping.
 	if got := list.Items[0]["api_key_mask"]; got != "sk-12345••••••••7890" {

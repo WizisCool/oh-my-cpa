@@ -5,16 +5,15 @@ import { Panel } from '../../../components/common/Panel';
 import { PanelTitle } from '../../../components/common/PanelTitle';
 import { EmptyState } from '../../../components/common/EmptyState';
 import { ToolButton } from '../../../components/common/ToolButton';
-import { LobeIcon } from '../../../components/LobeIcon';
 import { LoadFailure } from '../../../components/feedback';
-import { CodeOutlined, CodeSandboxOutlined, GlobalOutlined, RightOutlined } from '../../../components/icons';
+import { RightOutlined } from '../../../components/icons';
 import { useT } from '../../../i18n';
-import type { InsightsClientItem, InsightsClientsResponse } from '../../../types/insights';
+import type { InsightsClientsResponse } from '../../../types/insights';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import { rankGroups, rankingMetric, type CubeMetric, type Measures } from '../../../types/insightsCube';
 import { formatShare } from '../../../types/insightsFormat';
-import { ownClientMark } from './ClientMarks';
-import { clientCoverageShare, clientIconId, clientMeasures, clientProductName, isLocalizedClient } from '../../../types/clientAgents';
+import { ClientMark } from '../../../components/common/ClientMark';
+import { clientCoverageShare, clientDisplayName, clientMeasures } from '../../../types/clientAgents';
 import styles from '../insights.module.css';
 
 interface ClientAttributionPanelProps {
@@ -32,17 +31,6 @@ interface ClientAttributionPanelProps {
   /** The request list for one client, inside the page's window and filters. */
   hrefFor: (clientAgent: string) => string;
   onNavigate: (href: string) => void;
-}
-
-function ClientMark({ item }: { item: InsightsClientItem }) {
-  const own = ownClientMark(item.id);
-  if (own) return own;
-  const iconId = clientIconId(item.id);
-  if (iconId) return <LobeIcon iconId={iconId} size={16} />;
-  if (item.id === 'browser') return <GlobalOutlined />;
-  if (item.category === 'agent') return <CodeSandboxOutlined />;
-  if (item.category === 'sdk') return <CodeOutlined />;
-  return null;
 }
 
 /**
@@ -65,7 +53,7 @@ export const ClientAttributionPanel: React.FC<ClientAttributionPanelProps> = ({
   }, [data, metric]);
   const coverage = data ? clientCoverageShare(data.coverage) : null;
   const top = groups[0]?.value ?? 0;
-  const nameOf = (id: string) => (isLocalizedClient(id) ? t(`insights.client.${id}`) : clientProductName(id)!);
+  const nameOf = (id: string) => clientDisplayName(id, t);
 
   return (
     <Panel
@@ -98,7 +86,7 @@ export const ClientAttributionPanel: React.FC<ClientAttributionPanelProps> = ({
               <li key={group.id}>
                 <div className={styles['ranking-row']}>
                   <span className={styles['value']} data-tip={item.raw_prefix?.trim() || group.id}>
-                    <span className={styles['value-mark']} aria-hidden="true"><ClientMark item={item} /></span>
+                    <span className={styles['value-mark']} aria-hidden="true"><ClientMark id={item.id} category={item.category} /></span>
                     <span className={clsx(styles['value-name'], item.category === 'unknown' && styles['is-muted'])}>{nameOf(group.id)}</span>
                   </span>
                   <span className={styles['ranking-value']} data-tip={formatMetricExact(ranking, group.value)}>

@@ -276,6 +276,7 @@ export default {
   "events.col_tokens": "消耗",
   "events.col_cache_rate": "快取率",
   "events.col_key": "Key",
+  "events.col_client": "客戶端",
   "events.col_ua": "UA",
   "events.col_resizer": "調整列寬 (可雙擊重置)",
   "events.reset_columns": "恢復預設列寬",

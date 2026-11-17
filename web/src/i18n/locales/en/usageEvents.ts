@@ -276,6 +276,7 @@ export default {
   'events.col_tokens': 'Tokens',
   'events.col_cache_rate': 'Cache Rate',
   'events.col_key': 'Key',
+  'events.col_client': 'Client',
   'events.col_ua': 'UA',
   'events.col_resizer': 'Resize column (double-click to reset)',
   'events.reset_columns': 'Reset Columns',

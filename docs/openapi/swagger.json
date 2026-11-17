@@ -17136,6 +17136,15 @@
         "client_agent": {
           "type": "string"
         },
+        "client_agent_category": {
+          "description": "the glyph for a client without brand artwork",
+          "type": "string",
+          "enum": [
+            "agent",
+            "sdk",
+            "unknown"
+          ]
+        },
         "client_ip": {
           "type": "string"
         },
@@ -20760,6 +20769,15 @@
         },
         "client_agent": {
           "type": "string"
+        },
+        "client_agent_category": {
+          "description": "the glyph for a client without brand artwork",
+          "type": "string",
+          "enum": [
+            "agent",
+            "sdk",
+            "unknown"
+          ]
         },
         "cost_usd": {
           "type": "number"

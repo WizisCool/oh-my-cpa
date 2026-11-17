@@ -273,6 +273,7 @@ export default {
   'events.col_tokens': '消耗',
   'events.col_cache_rate': '缓存率',
   'events.col_key': 'Key',
+  'events.col_client': '客户端',
   'events.col_ua': 'UA',
   'events.col_resizer': '调整列宽 (可双击重置)',
   'events.reset_columns': '恢复默认列宽',

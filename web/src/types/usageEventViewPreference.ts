@@ -18,7 +18,7 @@ export const USAGE_EVENTS_VIEW_PREFERENCE = 'usage_events_view';
  * through three credentials has three source lines, and a provider with one
  * credential has no credential worth naming - so one mode keeps the provider
  * context and separates the credential underneath it. `ua` is the client the
- * request came from, which answers "which tool is doing this" and is orthogonal
+ * request came from (kept under its first name, which saved views carry), which answers "which tool is doing this" and is orthogonal
  * to both.
  */
 export const EVENT_GROUPING_VALUES = ['time', 'source', 'ua'] as const;

@@ -29,14 +29,6 @@ export function eventResultLabelKey(event: Pick<UsageEvent, 'failed'>): MessageK
   return event.failed ? 'events.filter_failed' : 'events.filter_success';
 }
 
-/** The client label for the list's UA column. The stored value is the one the
- *  ingestion/persistence path already reduced to a short product label, so the
- *  list shows it verbatim; a record captured without one reads as an em dash. */
-export function eventUserAgentLabel(event: Pick<UsageEvent, 'user_agent'>): string {
-  const value = event.user_agent?.trim();
-  return value || '—';
-}
-
 /** The caller key for the list's Key column.
  *
  *  Only an `api_key` group is a caller key, and the operator-assigned alias is

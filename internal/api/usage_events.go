@@ -63,6 +63,7 @@ type usageEventResponse struct {
 	Source                    string `json:"source,omitempty"`
 	UserAgent                 string `json:"user_agent,omitempty"`
 	ClientAgent               string `json:"client_agent,omitempty"`
+	ClientAgentCategory       string `json:"client_agent_category,omitempty" enums:"agent,sdk,unknown"` // the glyph for a client without brand artwork
 	Model                     string `json:"model"`
 	ModelAlias                string `json:"model_alias,omitempty"`
 	ReasoningEffort           string `json:"reasoning_effort,omitempty"`
@@ -125,6 +126,9 @@ func projectUsageEvent(row repository.UsageEventRow) usageEventResponse {
 		item.UserAgent = *row.UserAgent
 	}
 	item.ClientAgent = row.ClientAgent
+	if row.ClientAgent != "" {
+		item.ClientAgentCategory = string(usage.ClientAgentCategoryForID(row.ClientAgent))
+	}
 	item.Model = row.Model
 	item.ReasoningEffort = row.ReasoningEffort
 	item.ServiceTier = row.ServiceTier

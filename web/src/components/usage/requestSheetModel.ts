@@ -13,7 +13,8 @@ import {
   type ProviderLookupEntry,
   type ProviderResolutionArchive,
 } from '../../types/usageEventIdentity';
-import { eventKeyLabel, eventResultLabelKey, eventUserAgentLabel } from '../../types/usageEventLabels';
+import { eventKeyLabel, eventResultLabelKey } from '../../types/usageEventLabels';
+import { clientDisplayName, clientIconId, eventClientId } from '../../types/clientAgents';
 import {
   eventCacheRate,
   eventTokensPerSecond,
@@ -199,6 +200,13 @@ const text = (
   isMono = false,
 ): SheetSegment => ({ kind: 'text', text: value, tone, size, weight, isMono });
 
+/** The client as the list names it: its catalog mark, where it has one, before its name. */
+function clientLine(clientId: string | undefined, t: TFunc): SheetLine {
+  if (!clientId) return [text('—', 'muted', 12)];
+  const iconId = clientIconId(clientId);
+  const name = text(clientDisplayName(clientId, t), 'fg2', 12, 500);
+  return iconId ? [{ kind: 'mark', mark: { iconId } }, name] : [name];
+}
 
 /** buildRequestSheet lays the selected records out as the sheet the painter draws. */
 export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
@@ -350,7 +358,7 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
         ],
       },
       key: { lines: [[text(eventKeyLabel(event), 'fg2', 12, 500)]] },
-      ua: { lines: [[text(eventUserAgentLabel(event), 'muted', 11)]] },
+      client: { lines: [clientLine(eventClientId(event), input.t)] },
     };
 
     for (const column of REQUEST_COLUMNS) {

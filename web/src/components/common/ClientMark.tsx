@@ -1,5 +1,8 @@
 import React from 'react';
-import { BrandArtwork } from '../../../components/common/BrandArtwork';
+import { BrandArtwork } from './BrandArtwork';
+import { LobeIcon } from '../LobeIcon';
+import { CodeOutlined, CodeSandboxOutlined, GlobalOutlined } from '../icons';
+import { clientIconId, type ClientCategory } from '../../types/clientAgents';
 
 /** Hindsight's six-tentacle eye, from the product's own vector mark; the gradient id is per instance. */
 function HindsightMark() {
@@ -31,7 +34,7 @@ function NodeJsMark() {
 }
 
 /** Marks for clients the icon catalog does not carry; null when the client has none. */
-export function ownClientMark(id: string): React.ReactNode {
+function ownClientMark(id: string): React.ReactNode {
   switch (id) {
     case 'oh-my-cpa':
       return <BrandArtwork shape="mark" height={16} />;
@@ -42,4 +45,19 @@ export function ownClientMark(id: string): React.ReactNode {
     default:
       return null;
   }
+}
+
+/**
+ * The mark a client is recognised by: its own artwork, the icon catalog's, or a glyph for its kind.
+ * Renders nothing for a client the server could not attribute.
+ */
+export function ClientMark({ id, category }: { id: string; category?: ClientCategory }) {
+  const own = ownClientMark(id);
+  if (own) return own;
+  const iconId = clientIconId(id);
+  if (iconId) return <LobeIcon iconId={iconId} size={16} />;
+  if (id === 'browser') return <GlobalOutlined />;
+  if (category === 'agent') return <CodeSandboxOutlined />;
+  if (category === 'sdk') return <CodeOutlined />;
+  return null;
 }
