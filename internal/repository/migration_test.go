@@ -1235,3 +1235,598 @@ func TestMigration067ZeroUncachedSurplusAndPartialTotalAnthropic(t *testing.T) {
 		t.Fatalf("expected sanitized endpoint GET /v1/models and client_agent codex-cli, got endpoint=%q client_agent=%q", storedEndpoint, storedClient)
 	}
 }
+
+func TestMigration068RepairsPartial067SchemaAndFactPartitions(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("early 067 draft without fact partitions or index", func(t *testing.T) {
+		cipher, err := crypto.New("01234567890123456789012345678901")
+		if err != nil {
+			t.Fatal(err)
+		}
+		directory := t.TempDir()
+		db, err := Open(ctx, filepath.Join(directory, "drifted-067.db"), withMigrationsUntil(66),
+			WithMigrationBackup(cipher, filepath.Join(directory, "backups"), 3))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances
+			(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+			VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 'unknown', 0, 0)`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.SQL.ExecContext(ctx, `
+			ALTER TABLE usage_events ADD COLUMN client_agent TEXT NOT NULL DEFAULT '';
+			INSERT INTO schema_migrations(version, applied_at) VALUES (67, 1000);
+			INSERT INTO usage_events(instance_id, event_key, api_group_key, provider, model, endpoint, user_agent, timestamp_ms, created_at_ms,
+				input_tokens, output_tokens, cached_tokens, cache_read_tokens, total_tokens, token_accounting)
+			VALUES
+			('default', 'ev-qwen', 'group', 'openai', 'gpt-5', 'POST /v1/messages', 'claude-cli/0.1.5', 1000, 1000, 1000, 100, 900, 0, 1100, NULL),
+			('default', 'ev-empty', 'group', 'openai', 'gpt-5', 'POST /v1/chat/completions', NULL, 2000, 2000, 1000, 100, 900, 900, 1100,
+				'{"version":2,"status":"complete","raw_tokens":{"input_tokens":1000,"output_tokens":100,"cached_tokens":900,"cache_read_tokens":900,"total_tokens":1100},"token_breakdown":{"schema_version":2,"quality":"complete","total_tokens":1100,"input":{"total_tokens":1000,"uncached_tokens":100,"cache_read_tokens":900,"cache_write_tokens":0},"output":{"total_tokens":100,"non_reasoning_tokens":100,"reasoning_tokens":0},"unclassified_tokens":0}}');
+			INSERT INTO usage_facts_15m(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, cached_tokens, cache_read_tokens, total_tokens, canonical_requests)
+			VALUES ('default', 0, 'group', 'gpt-5', 'openai', 2, 2000, 200, 1800, 900, 2200, 1);
+			INSERT INTO usage_facts_daily(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, cached_tokens, cache_read_tokens, total_tokens, canonical_requests)
+			VALUES ('default', 0, 'group', 'gpt-5', 'openai', 2, 2000, 200, 1800, 900, 2200, 1);
+			UPDATE usage_aggregation_checkpoints SET last_usage_event_id = 2 WHERE name = 'facts';
+			INSERT INTO usage_events(instance_id, event_key, api_group_key, provider, model, endpoint, user_agent, timestamp_ms, created_at_ms,
+				input_tokens, output_tokens, cached_tokens, cache_read_tokens, total_tokens, token_accounting)
+			VALUES ('default', 'ev-tail', 'group', 'openai', 'gpt-5', 'POST /v1/responses', 'codex_cli_rs/0.47.0', 3000, 3000, 1000, 100, 900, 0, 1100, NULL);
+			INSERT INTO usage_facts_local_daily(instance_id, zone, day_wall_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, cached_tokens, cache_read_tokens, total_tokens, canonical_requests)
+			VALUES ('default', 'Asia/Kuala_Lumpur', 0, 'group', 'gpt-5', 'openai', 2, 2000, 200, 1800, 900, 2200, 1);
+			INSERT INTO usage_aggregation_checkpoints(name, last_usage_event_id, stats_updated_at_ms, created_at_ms, updated_at_ms)
+			VALUES ('facts_local:Asia/Kuala_Lumpur', 2, 0, 0, 0);
+		`); err != nil {
+			t.Fatal(err)
+		}
+
+		repo := New(db)
+		if _, err := repo.QueryUsageFacts(ctx, UsageFactQuery{InstanceID: "default", FromMS: 0, ToMS: QuarterHourBucketMS - 1, BucketMS: QuarterHourBucketMS}); err == nil || !strings.Contains(err.Error(), "prompt_tokens") {
+			t.Fatalf("expected QueryUsageFacts to fail on drifted 067 schema before repair, got %v", err)
+		}
+
+		db.migrateUntil = 0
+		if err := db.Migrate(ctx); err != nil {
+			t.Fatalf("Migrate(068) failed: %v", err)
+		}
+
+		for _, table := range []string{"usage_facts_15m", "usage_facts_daily"} {
+			var prompt, completion, read, effTotal, requests int64
+			if err := db.SQL.QueryRowContext(ctx, `SELECT prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens, requests FROM `+table).Scan(&prompt, &completion, &read, &effTotal, &requests); err != nil {
+				t.Fatal(err)
+			}
+			if prompt != 2000 || completion != 200 || read != 1800 || effTotal != 2200 || requests != 2 {
+				t.Fatalf("%s repaired partitions = %d/%d/%d/%d req=%d, want 2000/200/1800/2200 req=2", table, prompt, completion, read, effTotal, requests)
+			}
+		}
+
+		if folded, err := repo.AggregateUsageFacts(ctx, 100); err != nil || folded != 1 {
+			t.Fatalf("AggregateUsageFacts after repair = folded=%d err=%v, want folded=1", folded, err)
+		}
+		if rebuilt, err := repo.EnsureLocalUsageFacts(ctx); err != nil || !rebuilt {
+			t.Fatalf("EnsureLocalUsageFacts after repair = rebuilt=%v err=%v", rebuilt, err)
+		}
+		factsRes, err := repo.QueryUsageFacts(ctx, UsageFactQuery{InstanceID: "default", FromMS: 0, ToMS: 10000})
+		if err != nil {
+			t.Fatalf("QueryUsageFacts after repair: %v", err)
+		}
+		var sumReq, sumP, sumC, sumR, sumTot int64
+		for _, row := range factsRes.Rows {
+			sumReq += row.Requests
+			sumP += row.Accounting.PromptTokens
+			sumC += row.Accounting.CompletionTokens
+			sumR += row.Accounting.EffectiveCacheReadTokens
+			sumTot += row.Accounting.EffectiveTotalTokens
+		}
+		if sumReq != 3 || sumP != 3000 || sumC != 300 || sumR != 2700 || sumTot != 3300 {
+			t.Fatalf("QueryUsageFacts totals = req=%d p=%d c=%d r=%d tot=%d, want 3/3000/300/2700/3300",
+				sumReq, sumP, sumC, sumR, sumTot)
+		}
+
+		var idxCount int
+		if err := db.SQL.QueryRowContext(ctx, `SELECT COUNT(1) FROM sqlite_master WHERE type='index' AND name='idx_usage_events_instance_client_time'`).Scan(&idxCount); err != nil || idxCount != 1 {
+			t.Fatalf("expected idx_usage_events_instance_client_time rebuilt, count=%d err=%v", idxCount, err)
+		}
+		var qwenAgent, emptyAgent, codexAgent string
+		if err := db.SQL.QueryRowContext(ctx, `SELECT client_agent FROM usage_events WHERE event_key='ev-qwen'`).Scan(&qwenAgent); err != nil || qwenAgent != usage.ClientAgentQwenCode {
+			t.Fatalf("ev-qwen client_agent = %q (err=%v), want %q", qwenAgent, err, usage.ClientAgentQwenCode)
+		}
+		if err := db.SQL.QueryRowContext(ctx, `SELECT client_agent FROM usage_events WHERE event_key='ev-empty'`).Scan(&emptyAgent); err != nil || emptyAgent != usage.ClientAgentUnknown {
+			t.Fatalf("ev-empty client_agent = %q (err=%v), want %q", emptyAgent, err, usage.ClientAgentUnknown)
+		}
+		if err := db.SQL.QueryRowContext(ctx, `SELECT client_agent FROM usage_events WHERE event_key='ev-tail'`).Scan(&codexAgent); err != nil || codexAgent != usage.ClientAgentCodexCLI {
+			t.Fatalf("ev-tail client_agent = %q (err=%v), want %q", codexAgent, err, usage.ClientAgentCodexCLI)
+		}
+
+		clients, err := repo.QueryUsageClientAgents(ctx, "default", 0, 10000, nil)
+		if err != nil || clients.RetainedRequests != 3 || len(clients.Items) != 3 {
+			t.Fatalf("QueryUsageClientAgents = %+v err=%v", clients, err)
+		}
+	})
+
+	t.Run("partial 067 draft missing effective_total_tokens and index", func(t *testing.T) {
+		db, err := Open(ctx, "file:mig068_partial_cols?mode=memory&cache=shared", withMigrationsUntil(66))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances
+			(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+			VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 'unknown', 0, 0)`); err != nil {
+			t.Fatal(err)
+		}
+		// Simulate an intermediate 067 draft that added 3 partition columns without
+		// effective_total_tokens and skipped creating the client_agent index.
+		if _, err := db.SQL.ExecContext(ctx, `
+			ALTER TABLE usage_events ADD COLUMN client_agent TEXT NOT NULL DEFAULT '';
+			ALTER TABLE usage_facts_15m ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_15m ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_15m ADD COLUMN effective_cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN effective_cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN effective_cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+			INSERT INTO schema_migrations(version, applied_at) VALUES (67, 1000);
+			-- Expired mixed Claude bucket whose exact prompt=2000 differs from the
+			-- aggregate estimate (1900) when canonical_requests=1 < requests=2.
+			INSERT INTO usage_facts_15m(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, canonical_requests, input_tokens, output_tokens, cache_read_tokens, total_tokens,
+				prompt_tokens, completion_tokens, effective_cache_read_tokens)
+			VALUES ('default', 0, 'group', 'claude-sonnet', 'claude', 2, 1, 1900, 200, 200, 2100, 2000, 200, 200);
+			INSERT INTO usage_facts_daily(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, canonical_requests, input_tokens, output_tokens, cache_read_tokens, total_tokens,
+				prompt_tokens, completion_tokens, effective_cache_read_tokens)
+			VALUES ('default', 0, 'group', 'claude-sonnet', 'claude', 2, 1, 1900, 200, 200, 2100, 2000, 200, 200);
+			-- Two 15m buckets under one day where MAX(total, prompt+comp) differs across grains:
+			-- fine yields 200 + 200 = 400, whereas daily standalone MAX(300, 300) would yield 300.
+			INSERT INTO usage_facts_15m(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, total_tokens, prompt_tokens, completion_tokens, effective_cache_read_tokens)
+			VALUES
+				('default', 0, 'group', 'gpt-5', 'openai', 1, 200, 0, 100, 200, 0, 0),
+				('default', 900000, 'group', 'gpt-5', 'openai', 1, 100, 0, 200, 100, 0, 0);
+			INSERT INTO usage_facts_daily(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, total_tokens, prompt_tokens, completion_tokens, effective_cache_read_tokens)
+			VALUES ('default', 0, 'group', 'gpt-5', 'openai', 2, 300, 0, 300, 300, 0, 0);
+		`); err != nil {
+			t.Fatal(err)
+		}
+
+		db.migrateUntil = 0
+		if err := db.Migrate(ctx); err != nil {
+			t.Fatalf("Migrate(068) failed: %v", err)
+		}
+
+		for _, table := range []string{"usage_facts_15m", "usage_facts_daily"} {
+			var prompt, comp, cr, effTotal int64
+			if err := db.SQL.QueryRowContext(ctx, `SELECT prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens FROM `+table+` WHERE model = 'claude-sonnet'`).Scan(&prompt, &comp, &cr, &effTotal); err != nil {
+				t.Fatal(err)
+			}
+			if prompt != 2000 || comp != 200 || cr != 200 || effTotal != 2200 {
+				t.Fatalf("%s mixed partitions = %d/%d/%d/%d, want preserved 2000/200/200/2200", table, prompt, comp, cr, effTotal)
+			}
+		}
+		var fineGPTSum, dailyGPTTotal int64
+		if err := db.SQL.QueryRowContext(ctx, `SELECT COALESCE(SUM(effective_total_tokens), 0) FROM usage_facts_15m WHERE model = 'gpt-5'`).Scan(&fineGPTSum); err != nil || fineGPTSum != 400 {
+			t.Fatalf("fine gpt-5 effective_total_tokens sum = %d (err=%v), want 400", fineGPTSum, err)
+		}
+		if err := db.SQL.QueryRowContext(ctx, `SELECT effective_total_tokens FROM usage_facts_daily WHERE model = 'gpt-5'`).Scan(&dailyGPTTotal); err != nil || dailyGPTTotal != 400 {
+			t.Fatalf("daily gpt-5 effective_total_tokens rolled up = %d (err=%v), want 400", dailyGPTTotal, err)
+		}
+		var idxCount int
+		if err := db.SQL.QueryRowContext(ctx, `SELECT COUNT(1) FROM sqlite_master WHERE type='index' AND name='idx_usage_events_instance_client_time'`).Scan(&idxCount); err != nil || idxCount != 1 {
+			t.Fatalf("expected idx_usage_events_instance_client_time ensured even with 0 pending rows, count=%d err=%v", idxCount, err)
+		}
+	})
+
+	t.Run("partial 067 draft with effective_total_tokens but missing base partition columns", func(t *testing.T) {
+		db, err := Open(ctx, "file:mig068_missing_base_cols?mode=memory&cache=shared", withMigrationsUntil(66))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances
+			(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+			VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 'unknown', 0, 0)`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.SQL.ExecContext(ctx, `
+			ALTER TABLE usage_events ADD COLUMN client_agent TEXT NOT NULL DEFAULT '';
+			ALTER TABLE usage_facts_15m ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			INSERT INTO schema_migrations(version, applied_at) VALUES (67, 1000);
+			INSERT INTO usage_facts_15m(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, total_tokens, effective_total_tokens)
+			VALUES
+				('default', 0, 'group', 'gpt-5', 'openai', 1, 500, 100, 600, 600),
+				('default', 900000, 'group', 'legacy-total', '', 1, 0, 0, 600, 600);
+			INSERT INTO usage_facts_daily(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, total_tokens, effective_total_tokens)
+			VALUES
+				('default', 0, 'group', 'gpt-5', 'openai', 1, 500, 100, 600, 600),
+				('default', 0, 'group', 'legacy-total', '', 1, 0, 0, 600, 600);
+		`); err != nil {
+			t.Fatal(err)
+		}
+
+		db.migrateUntil = 0
+		if err := db.Migrate(ctx); err != nil {
+			t.Fatalf("Migrate(068) failed: %v", err)
+		}
+
+		for _, table := range []string{"usage_facts_15m", "usage_facts_daily"} {
+			var prompt, comp, cr, effTotal int64
+			if err := db.SQL.QueryRowContext(ctx, `SELECT prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens FROM `+table+` WHERE model = 'gpt-5'`).Scan(&prompt, &comp, &cr, &effTotal); err != nil {
+				t.Fatal(err)
+			}
+			if prompt != 500 || comp != 100 || cr != 0 || effTotal != 600 {
+				t.Fatalf("%s repaired gpt-5 partitions = %d/%d/%d/%d, want 500/100/0/600", table, prompt, comp, cr, effTotal)
+			}
+			if err := db.SQL.QueryRowContext(ctx, `SELECT prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens FROM `+table+` WHERE model = 'legacy-total'`).Scan(&prompt, &comp, &cr, &effTotal); err != nil {
+				t.Fatal(err)
+			}
+			if prompt != 600 || comp != 0 || cr != 0 || effTotal != 600 {
+				t.Fatalf("%s repaired total-only unknown-provider = %d/%d/%d/%d, want 600/0/0/600", table, prompt, comp, cr, effTotal)
+			}
+		}
+	})
+
+	t.Run("partial 067 draft missing only effective_cache_read_tokens", func(t *testing.T) {
+		db, err := Open(ctx, "file:mig068_missing_cache_read?mode=memory&cache=shared", withMigrationsUntil(66))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances
+			(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+			VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 'unknown', 0, 0)`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.SQL.ExecContext(ctx, `
+			ALTER TABLE usage_events ADD COLUMN client_agent TEXT NOT NULL DEFAULT '';
+			ALTER TABLE usage_facts_15m ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_15m ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_15m ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			INSERT INTO schema_migrations(version, applied_at) VALUES (67, 1000);
+			INSERT INTO usage_facts_15m(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, cached_tokens, cache_read_tokens, total_tokens,
+				prompt_tokens, completion_tokens, effective_total_tokens)
+			VALUES
+				('default', 0, 'group', 'claude-sonnet', 'claude', 1, 100, 100, 0, 900, 1100, 1000, 100, 1100),
+				('default', 900000, 'group', 'gpt-unpart', 'openai', 1, 500, 100, 300, 0, 600, 0, 0, 0);
+			INSERT INTO usage_facts_daily(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, cached_tokens, cache_read_tokens, total_tokens,
+				prompt_tokens, completion_tokens, effective_total_tokens)
+			VALUES
+				('default', 0, 'group', 'claude-sonnet', 'claude', 1, 100, 100, 0, 900, 1100, 1000, 100, 1100),
+				('default', 0, 'group', 'gpt-unpart', 'openai', 1, 500, 100, 300, 0, 600, 0, 0, 0);
+		`); err != nil {
+			t.Fatal(err)
+		}
+
+		db.migrateUntil = 0
+		if err := db.Migrate(ctx); err != nil {
+			t.Fatalf("Migrate(068) failed: %v", err)
+		}
+
+		for _, table := range []string{"usage_facts_15m", "usage_facts_daily"} {
+			var prompt, comp, cr, effTotal int64
+			if err := db.SQL.QueryRowContext(ctx, `SELECT prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens FROM `+table+` WHERE model = 'claude-sonnet'`).Scan(&prompt, &comp, &cr, &effTotal); err != nil {
+				t.Fatal(err)
+			}
+			if prompt != 1000 || comp != 100 || cr != 900 || effTotal != 1100 {
+				t.Fatalf("%s repaired cache_read = %d/%d/%d/%d, want 1000/100/900/1100", table, prompt, comp, cr, effTotal)
+			}
+			if err := db.SQL.QueryRowContext(ctx, `SELECT prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens FROM `+table+` WHERE model = 'gpt-unpart'`).Scan(&prompt, &comp, &cr, &effTotal); err != nil {
+				t.Fatal(err)
+			}
+			if prompt != 500 || comp != 100 || cr != 300 || effTotal != 600 {
+				t.Fatalf("%s unpartitioned alongside missing cache_read = %d/%d/%d/%d, want 500/100/300/600", table, prompt, comp, cr, effTotal)
+			}
+		}
+	})
+
+	t.Run("asymmetric fine missing all base cols while daily already holds total-only row", func(t *testing.T) {
+		db, err := Open(ctx, "file:mig068_asym_total_only?mode=memory&cache=shared", withMigrationsUntil(66))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances
+			(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+			VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 'unknown', 0, 0)`); err != nil {
+			t.Fatal(err)
+		}
+		// Fine lacks all 3 base columns (has effective_total_tokens); daily already has all 4 columns
+		// and an already-valid total-only row.
+		if _, err := db.SQL.ExecContext(ctx, `
+			ALTER TABLE usage_events ADD COLUMN client_agent TEXT NOT NULL DEFAULT '';
+			ALTER TABLE usage_facts_15m ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN effective_cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN effective_cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			INSERT INTO schema_migrations(version, applied_at) VALUES (67, 1000);
+			INSERT INTO usage_facts_15m(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, total_tokens, effective_total_tokens)
+			VALUES ('default', 0, 'group', 'legacy-total', '', 1, 0, 0, 600, 600);
+			INSERT INTO usage_facts_daily(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, total_tokens,
+				prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens)
+			VALUES ('default', 0, 'group', 'legacy-total', '', 1, 0, 0, 600, 600, 0, 0, 600);
+		`); err != nil {
+			t.Fatal(err)
+		}
+
+		db.migrateUntil = 0
+		if err := db.Migrate(ctx); err != nil {
+			t.Fatalf("Migrate(068) failed: %v", err)
+		}
+
+		for _, table := range []string{"usage_facts_15m", "usage_facts_daily"} {
+			var p, c, cr, tot int64
+			if err := db.SQL.QueryRowContext(ctx, `SELECT prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens FROM `+table).Scan(&p, &c, &cr, &tot); err != nil {
+				t.Fatal(err)
+			}
+			if p != 600 || c != 0 || cr != 0 || tot != 600 {
+				t.Fatalf("%s asymmetric total-only = %d/%d/%d/%d, want 600/0/0/600", table, p, c, cr, tot)
+			}
+		}
+	})
+
+	t.Run("fine partial completion repaired before daily full base rollup", func(t *testing.T) {
+		db, err := Open(ctx, "file:mig068_fine_before_daily?mode=memory&cache=shared", withMigrationsUntil(66))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances
+			(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+			VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 'unknown', 0, 0)`); err != nil {
+			t.Fatal(err)
+		}
+		// Fine lacks only completion_tokens; daily lacks all base columns.
+		// Fine completion=100 must be repaired before daily rolls up from 15m.
+		if _, err := db.SQL.ExecContext(ctx, `
+			ALTER TABLE usage_events ADD COLUMN client_agent TEXT NOT NULL DEFAULT '';
+			ALTER TABLE usage_facts_15m ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_15m ADD COLUMN effective_cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_15m ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			INSERT INTO schema_migrations(version, applied_at) VALUES (67, 1000);
+			INSERT INTO usage_facts_15m(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, total_tokens, prompt_tokens, effective_total_tokens)
+			VALUES ('default', 0, 'group', 'gpt-5', 'openai', 1, 500, 100, 600, 500, 600);
+			INSERT INTO usage_facts_daily(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, total_tokens)
+			VALUES ('default', 0, 'group', 'gpt-5', 'openai', 1, 500, 100, 600);
+		`); err != nil {
+			t.Fatal(err)
+		}
+
+		db.migrateUntil = 0
+		if err := db.Migrate(ctx); err != nil {
+			t.Fatalf("Migrate(068) failed: %v", err)
+		}
+
+		for _, table := range []string{"usage_facts_15m", "usage_facts_daily"} {
+			var p, c, cr, tot int64
+			if err := db.SQL.QueryRowContext(ctx, `SELECT prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens FROM `+table).Scan(&p, &c, &cr, &tot); err != nil {
+				t.Fatal(err)
+			}
+			if p != 500 || c != 100 || cr != 0 || tot != 600 {
+				t.Fatalf("%s fine-before-daily = %d/%d/%d/%d, want 500/100/0/600", table, p, c, cr, tot)
+			}
+		}
+	})
+
+	t.Run("asymmetric fine missing effective_total_tokens reconciles existing daily nonzero total and preserves zero-base canonical daily rollup", func(t *testing.T) {
+		db, err := Open(ctx, "file:mig068_total_reconcile_and_zero_daily?mode=memory&cache=shared", withMigrationsUntil(66))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances
+			(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+			VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 'unknown', 0, 0)`); err != nil {
+			t.Fatal(err)
+		}
+		// 1) Fine lacks effective_total_tokens while daily already holds nonzero 300;
+		//    fine repairs to 200+200=400 and reconciliation must raise daily from 300 to 400.
+		// 2) Fine and daily hold retained canonical zero-base row with cached_tokens=100,
+		//    cache_read_tokens=0, total_tokens=120; daily rollup copies cr=0 and standalone
+		//    fallback must not overwrite cr to 100.
+		if _, err := db.SQL.ExecContext(ctx, `
+			ALTER TABLE usage_events ADD COLUMN client_agent TEXT NOT NULL DEFAULT '';
+			ALTER TABLE usage_facts_15m ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_15m ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_15m ADD COLUMN effective_cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN effective_cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN effective_cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			INSERT INTO schema_migrations(version, applied_at) VALUES (67, 1000);
+			INSERT INTO usage_facts_15m(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, total_tokens, prompt_tokens, completion_tokens, effective_cache_read_tokens)
+			VALUES
+				('default', 0, 'group', 'gpt-5', 'openai', 1, 200, 0, 100, 200, 0, 0),
+				('default', 900000, 'group', 'gpt-5', 'openai', 1, 100, 0, 200, 100, 0, 0);
+			INSERT INTO usage_facts_daily(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, total_tokens,
+				prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens)
+			VALUES ('default', 0, 'group', 'gpt-5', 'openai', 2, 300, 0, 300, 300, 0, 0, 300);
+			INSERT INTO usage_events(instance_id, event_key, api_group_key, provider, model, timestamp_ms, created_at_ms,
+				input_tokens, output_tokens, cached_tokens, cache_read_tokens, total_tokens, token_accounting)
+			VALUES ('default', 'ev-zero-base', 'group', 'openai', 'zero-base', 1000, 1000, 0, 0, 100, 0, 120,
+				'{"version":2,"status":"complete","raw_tokens":{"input_tokens":0,"output_tokens":0,"cached_tokens":100,"cache_read_tokens":0,"total_tokens":120},"token_breakdown":{"schema_version":2,"quality":"complete","total_tokens":120,"input":{"total_tokens":0,"uncached_tokens":0,"cache_read_tokens":0,"cache_write_tokens":0},"output":{"total_tokens":0,"non_reasoning_tokens":0,"reasoning_tokens":0},"unclassified_tokens":120}}');
+			INSERT INTO usage_facts_15m(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, canonical_requests, cached_tokens, total_tokens, prompt_tokens, completion_tokens, effective_cache_read_tokens)
+			VALUES ('default', 0, 'group', 'zero-base', 'openai', 1, 1, 100, 120, 0, 0, 0);
+			INSERT INTO usage_facts_daily(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, canonical_requests, cached_tokens, total_tokens,
+				prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens)
+			VALUES ('default', 0, 'group', 'zero-base', 'openai', 1, 1, 100, 120, 0, 0, 0, 120);
+			UPDATE usage_aggregation_checkpoints SET last_usage_event_id = 1 WHERE name = 'facts';
+		`); err != nil {
+			t.Fatal(err)
+		}
+
+		db.migrateUntil = 0
+		if err := db.Migrate(ctx); err != nil {
+			t.Fatalf("Migrate(068) failed: %v", err)
+		}
+
+		var dailyGPTTotal int64
+		if err := db.SQL.QueryRowContext(ctx, `SELECT effective_total_tokens FROM usage_facts_daily WHERE model = 'gpt-5'`).Scan(&dailyGPTTotal); err != nil || dailyGPTTotal != 400 {
+			t.Fatalf("daily gpt-5 effective_total_tokens = %d (err=%v), want 400", dailyGPTTotal, err)
+		}
+		for _, table := range []string{"usage_facts_15m", "usage_facts_daily"} {
+			var p, c, cr, tot int64
+			if err := db.SQL.QueryRowContext(ctx, `SELECT prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens FROM `+table+` WHERE model = 'zero-base'`).Scan(&p, &c, &cr, &tot); err != nil {
+				t.Fatal(err)
+			}
+			if p != 0 || c != 0 || cr != 0 || tot != 120 {
+				t.Fatalf("%s zero-base canonical = %d/%d/%d/%d, want 0/0/0/120", table, p, c, cr, tot)
+			}
+		}
+	})
+
+	t.Run("asymmetric columns per table, retained exact zero cache_read, and nonzero total reconciliation", func(t *testing.T) {
+		db, err := Open(ctx, "file:mig068_asymmetric_reconcile?mode=memory&cache=shared", withMigrationsUntil(66))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		if _, err := db.SQL.ExecContext(ctx, `INSERT INTO cpa_instances
+			(id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+			VALUES ('default', 'Default', 'http://127.0.0.1:8317', '', x'00', x'00', 'unknown', 0, 0)`); err != nil {
+			t.Fatal(err)
+		}
+		// Asymmetric schema across tables:
+		// - usage_facts_15m lacks prompt_tokens + effective_cache_read_tokens (has completion_tokens, effective_total_tokens)
+		// - usage_facts_daily lacks completion_tokens + effective_cache_read_tokens (has prompt_tokens, effective_total_tokens)
+		// - usage_facts_local_daily lacks effective_cache_read_tokens
+		if _, err := db.SQL.ExecContext(ctx, `
+			ALTER TABLE usage_events ADD COLUMN client_agent TEXT NOT NULL DEFAULT '';
+			ALTER TABLE usage_facts_15m ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_15m ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_daily ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE usage_facts_local_daily ADD COLUMN effective_total_tokens INTEGER NOT NULL DEFAULT 0;
+			INSERT INTO schema_migrations(version, applied_at) VALUES (67, 1000);
+			-- Row 1: retained OpenAI event with cached_tokens=100, cache_read_tokens=0 (exact cache_read must remain 0, not 100).
+			INSERT INTO usage_events(instance_id, event_key, api_group_key, provider, model, timestamp_ms, created_at_ms,
+				input_tokens, output_tokens, cached_tokens, cache_read_tokens, total_tokens, token_accounting)
+			VALUES ('default', 'ev-zero-cr', 'group', 'openai', 'gpt-5', 1000, 1000, 100, 20, 100, 0, 120,
+				'{"version":2,"status":"complete","raw_tokens":{"input_tokens":100,"output_tokens":20,"cached_tokens":100,"cache_read_tokens":0,"total_tokens":120},"token_breakdown":{"schema_version":2,"quality":"complete","total_tokens":120,"input":{"total_tokens":100,"uncached_tokens":100,"cache_read_tokens":0,"cache_write_tokens":0},"output":{"total_tokens":20,"non_reasoning_tokens":20,"reasoning_tokens":0},"unclassified_tokens":0}}');
+			INSERT INTO usage_facts_15m(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, canonical_requests, input_tokens, output_tokens, cached_tokens, cache_read_tokens, total_tokens,
+				completion_tokens, effective_total_tokens)
+			VALUES ('default', 0, 'group', 'gpt-5', 'openai', 1, 1, 100, 20, 100, 0, 120, 20, 120);
+			INSERT INTO usage_facts_daily(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, canonical_requests, input_tokens, output_tokens, cached_tokens, cache_read_tokens, total_tokens,
+				prompt_tokens, effective_total_tokens)
+			VALUES ('default', 0, 'group', 'gpt-5', 'openai', 1, 1, 100, 20, 100, 0, 120, 100, 120);
+			UPDATE usage_aggregation_checkpoints SET last_usage_event_id = 1 WHERE name = 'facts';
+			-- Row 2: expired Claude row missing prompt_tokens on 15m and completion_tokens on daily,
+			-- with nonzero effective_total_tokens=200 that must be reconciled up to 1100.
+			INSERT INTO usage_facts_15m(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, cache_read_tokens, total_tokens,
+				completion_tokens, effective_total_tokens)
+			VALUES ('default', 900000, 'group', 'claude-sonnet', 'claude', 1, 100, 100, 900, 200, 100, 200);
+			INSERT INTO usage_facts_daily(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, cache_read_tokens, total_tokens,
+				prompt_tokens, effective_total_tokens)
+			VALUES ('default', 0, 'group', 'claude-sonnet', 'claude', 1, 100, 100, 900, 200, 1000, 200);
+		`); err != nil {
+			t.Fatal(err)
+		}
+
+		db.migrateUntil = 0
+		if err := db.Migrate(ctx); err != nil {
+			t.Fatalf("Migrate(068) failed: %v", err)
+		}
+
+		for _, table := range []string{"usage_facts_15m", "usage_facts_daily"} {
+			var p, c, cr, tot int64
+			if err := db.SQL.QueryRowContext(ctx, `SELECT prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens FROM `+table+` WHERE model = 'gpt-5'`).Scan(&p, &c, &cr, &tot); err != nil {
+				t.Fatal(err)
+			}
+			if p != 100 || c != 20 || cr != 0 || tot != 120 {
+				t.Fatalf("%s retained exact zero cache_read = %d/%d/%d/%d, want 100/20/0/120", table, p, c, cr, tot)
+			}
+			if err := db.SQL.QueryRowContext(ctx, `SELECT prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens FROM `+table+` WHERE model = 'claude-sonnet'`).Scan(&p, &c, &cr, &tot); err != nil {
+				t.Fatal(err)
+			}
+			if p != 1000 || c != 100 || cr != 900 || tot != 1100 {
+				t.Fatalf("%s reconciled claude = %d/%d/%d/%d, want 1000/100/900/1100", table, p, c, cr, tot)
+			}
+		}
+	})
+
+	t.Run("clean 067 upgrade preserves valid local daily cache", func(t *testing.T) {
+		db, err := Open(ctx, "file:mig068_clean_067?mode=memory&cache=shared", withMigrationsUntil(67))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		if _, err := db.SQL.ExecContext(ctx, `
+			INSERT INTO usage_facts_15m(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, cached_tokens, total_tokens,
+				prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens)
+			VALUES ('default', 0, 'group', 'gpt-5', 'openai', 1, 500, 100, 300, 600, 500, 100, 300, 600);
+			INSERT INTO usage_facts_daily(instance_id, bucket_start_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, cached_tokens, total_tokens,
+				prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens)
+			VALUES ('default', 0, 'group', 'gpt-5', 'openai', 1, 500, 100, 300, 600, 500, 100, 300, 600);
+			INSERT INTO usage_facts_local_daily(instance_id, zone, day_wall_ms, api_group_key, model, provider,
+				requests, input_tokens, output_tokens, cached_tokens, total_tokens,
+				prompt_tokens, completion_tokens, effective_cache_read_tokens, effective_total_tokens)
+			VALUES ('default', 'UTC', 0, 'group', 'gpt-5', 'openai', 1, 500, 100, 300, 600, 500, 100, 300, 600);
+			INSERT INTO usage_aggregation_checkpoints(name, last_usage_event_id, stats_updated_at_ms, created_at_ms, updated_at_ms)
+			VALUES ('facts_local:UTC', 1, 0, 0, 0);
+		`); err != nil {
+			t.Fatal(err)
+		}
+
+		db.migrateUntil = 0
+		if err := db.Migrate(ctx); err != nil {
+			t.Fatalf("Migrate(068) on clean 067 failed: %v", err)
+		}
+
+		var localCount int
+		if err := db.SQL.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_facts_local_daily`).Scan(&localCount); err != nil || localCount != 1 {
+			t.Fatalf("expected valid local daily cache preserved on clean 067 upgrade, got %d (err=%v)", localCount, err)
+		}
+	})
+}
