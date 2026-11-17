@@ -33,11 +33,11 @@ const DEMO_HEADER = 'X-OMCPA-Demo';
 const UNCAPTURED_CODE = 'demo_uncaptured';
 
 /**
- * The Insights rhythm's filters. The cube is filtered in the browser, so every filter
- * works on it; the rhythm is filtered on the server, and the dataset holds it for the
- * whole deployment only, so a filtered ask is told so rather than answered for everyone.
+ * The Insights rhythm's filters. The cube supports dimension filters in the browser and
+ * `client_agent` via the Worker filter; the rhythm and clients views are captured for
+ * the whole deployment only, so a filtered ask is told so rather than answered for everyone.
  */
-const RHYTHM_FILTERS = ['api_key', 'model_alias', 'model', 'provider', 'auth_index'];
+const RHYTHM_FILTERS = ['api_key', 'model_alias', 'model', 'provider', 'auth_index', 'client_agent'];
 
 const WEEK_MS = 7 * 86_400_000;
 const INSIGHTS_REPLAY_PRESETS = new Set(['24h', '7d', '30d', '90d', 'all']);
@@ -251,7 +251,14 @@ function serve(entry, nowMs, url) {
         { status: 404, headers: { ...JSON_HEADERS, 'Content-Type': entry.content_type } },
       );
     }
-    const decoded = rebase(applyQueryFilters(identity, url, { deltaMs, dataset: DATASET }), deltaMs);
+    const filtered = applyQueryFilters(identity, url, { deltaMs, dataset: DATASET });
+    if (filtered === undefined) {
+      return new Response(
+        JSON.stringify({ error: 'this Insights filter is not captured in the demonstration', code: UNCAPTURED_CODE }),
+        { status: 404, headers: JSON_HEADERS },
+      );
+    }
+    const decoded = rebase(filtered, deltaMs);
     // Replays are closed snapshots: their final bucket does not extend to the visitor's now.
     if (isInsights) decoded.window.open_end = false;
     // Insights captures are taken by preset name and already carry it.
