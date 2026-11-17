@@ -665,17 +665,40 @@
   white-space: nowrap;
   max-width: 100%;
 }
-/* Column 10: UA (ingestion-minimized client product label) */
-.req-col-ua {
+/* Column 10: the client, a mark before its name, read like the caller key beside it */
+.req-col-client {
   align-items: flex-start;
 }
-.req-ua-val {
-  font-size: var(--text-xs);
+.req-client {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.req-client-mark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
   color: var(--muted);
+}
+.req-client-mark:empty {
+  display: none;
+}
+.req-client-name {
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--fg-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
+}
+.req-client-name.is-empty {
+  color: var(--muted);
+  font-weight: 400;
 }
 .req-mobile-label {
   display: none;
@@ -924,7 +947,7 @@
   }
 
   /* The detail drawer carries these. */
-  .req-col-ua,
+  .req-col-client,
   .req-ttft-val,
   .req-tokens-total,
   .req-tokens-breakdown,

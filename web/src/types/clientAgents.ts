@@ -7,12 +7,17 @@
  * apart. A client without artwork in the local icon catalog takes a terminal or SDK glyph.
  */
 
+import type { TFunc } from '../i18n/catalog';
 import type { InsightsClientItem } from './insights';
+import type { UsageEvent } from './usageEvents';
 import { normalizeMeasures, type Measures } from './insightsCube';
 
 /** Identifiers whose name is a translation rather than a product spelling. */
 export const LOCALIZED_CLIENTS = ['browser', 'unknown', 'other'] as const;
 export type LocalizedClient = (typeof LOCALIZED_CLIENTS)[number];
+
+/** Whether the server recognised the client as a coding agent or an SDK. */
+export type ClientCategory = 'agent' | 'sdk' | 'unknown';
 
 const CLIENT_NAMES: Readonly<Record<string, string>> = {
   hermes: 'Hermes Agent',
@@ -226,9 +231,20 @@ export function clientProductName(id: string): string | undefined {
   return hasOwn(CLIENT_NAMES, id) ? CLIENT_NAMES[id] : readableClientId(id);
 }
 
+/** A client's name as the console spells it: the product's own spelling, or a translation. */
+export function clientDisplayName(id: string, t: TFunc): string {
+  return isLocalizedClient(id) ? t(`insights.client.${id}`) : clientProductName(id)!;
+}
+
 function readableClientId(id: string): string {
   const words = id.split(/[-_\s]+/).filter(Boolean);
   return words.length === 0 ? id : words.map((word) => word[0].toUpperCase() + word.slice(1)).join(' ');
+}
+
+/** The client a request record names, or undefined when it came without a recognisable User-Agent. */
+export function eventClientId(event: Pick<UsageEvent, 'client_agent'>): string | undefined {
+  const id = event.client_agent?.trim();
+  return id && id !== 'unknown' ? id : undefined;
 }
 
 export function clientIconId(id: string): string | undefined {

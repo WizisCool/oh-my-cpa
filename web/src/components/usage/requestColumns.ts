@@ -11,7 +11,7 @@ export type RequestColumnId =
   | 'cost'
   | 'cache'
   | 'key'
-  | 'ua';
+  | 'client';
 
 export interface RequestColumnDefinition {
   id: RequestColumnId;
@@ -173,8 +173,10 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     foldOrder: 2,
   },
   {
-    id: 'ua',
-    labelKey: 'events.col_ua',
+    // The client program named by its mark and product name; the User-Agent it was read from is
+    // the cell's tooltip.
+    id: 'client',
+    labelKey: 'events.col_client',
     align: 'left',
     defaultWidth: 120,
     minWidth: 80,

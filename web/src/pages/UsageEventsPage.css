@@ -135,7 +135,7 @@
    the list's measured width, and names them here; the grid template it sends
    alongside has no track for them. Matching on the container keeps a fold off
    the rows' render path: no row re-renders when a column goes or returns. */
-.request-stream[data-folded-columns~='ua'] :is(.req-th-ua, .req-col-ua),
+.request-stream[data-folded-columns~='client'] :is(.req-th-client, .req-col-client),
 .request-stream[data-folded-columns~='key'] :is(.req-th-key, .req-col-key),
 .request-stream[data-folded-columns~='tps'] :is(.req-th-tps, .req-col-tps),
 .request-stream[data-folded-columns~='cache'] :is(.req-th-cache, .req-col-cache),
@@ -200,7 +200,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.request-group-title span {
+.request-group-client {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.request-group-client > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.request-group-title > span {
   flex-shrink: 0;
   color: var(--muted);
   font-size: var(--text-xs);

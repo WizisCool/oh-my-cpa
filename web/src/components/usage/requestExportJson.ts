@@ -12,7 +12,7 @@ import { maskKeyText } from '../../utils/maskKey';
 import type { RequestMaskId } from './requestSelection';
 
 /** Bumped when a field is renamed or changes meaning, so a script can tell which shape it is reading. */
-export const REQUEST_EXPORT_SCHEMA = 'omc.requests.v1';
+export const REQUEST_EXPORT_SCHEMA = 'omc.requests.v2';
 
 export interface RequestExportDocument {
   schema: typeof REQUEST_EXPORT_SCHEMA;
@@ -139,7 +139,10 @@ export function buildRequestExport(input: RequestExportInput): RequestExportDocu
       put('api_key_alias', event.api_key_alias);
       put('api_key_mask', event.api_key_mask);
     }
-    if (!masks.has('ua')) put('user_agent', event.user_agent);
+    if (!masks.has('client')) {
+      put('client_agent', event.client_agent);
+      put('user_agent', event.user_agent);
+    }
     return record;
   });
 

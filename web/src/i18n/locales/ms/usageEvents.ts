@@ -276,6 +276,7 @@ export default {
   "events.col_tokens": "Token",
   "events.col_cache_rate": "Kadar Cache",
   "events.col_key": "Kunci",
+  "events.col_client": "Pelanggan",
   "events.col_ua": "UA",
   "events.col_resizer": "Ubah saiz lajur (klik dua kali untuk menetapkan semula)",
   "events.reset_columns": "Tetapkan Semula Lajur",

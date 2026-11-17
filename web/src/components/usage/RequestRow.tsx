@@ -37,8 +37,9 @@ import {
 import {
   eventKeyLabel,
   eventResultLabelKey,
-  eventUserAgentLabel,
 } from '../../types/usageEventLabels';
+import { clientDisplayName, eventClientId } from '../../types/clientAgents';
+import { ClientMark } from '../common/ClientMark';
 import { requestColumnAlignClass } from './requestColumns';
 import { ModelMark } from '../ModelMark';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
@@ -173,7 +174,8 @@ export const RequestRow = React.memo<RequestRowProps>(
     const isFastTier = isFastTierEvent(event);
 
     const keyLabel = eventKeyLabel(event);
-    const uaLabel = eventUserAgentLabel(event);
+    const clientId = eventClientId(event);
+    const userAgent = event.user_agent?.trim();
     const resultLabel = t(eventResultLabelKey(event));
     const copyRequestId = () => {
       if (!event.request_id) return;
@@ -571,13 +573,20 @@ export const RequestRow = React.memo<RequestRowProps>(
           </span>
         </div>
 
-        {/* Column 12: user agent, already reduced to a client product label
-            at ingestion */}
-        <div className={`req-col req-col-ua ${requestColumnAlignClass('ua')}`}>
-          <span className="req-mobile-label">{t('events.col_ua')}</span>
-          <span className="req-ua-val" data-request-tooltip={uaLabel} data-request-tooltip-overflow="">
-            {uaLabel}
-          </span>
+        {/* Column 12: the client program, by its mark and name; the User-Agent
+            it was recognised from is the exact value behind it */}
+        <div className={`req-col req-col-client ${requestColumnAlignClass('client')}`}>
+          <span className="req-mobile-label">{t('events.col_client')}</span>
+          {clientId ? (
+            <span className="req-client" data-request-tooltip={userAgent || undefined}>
+              <span className="req-client-mark" aria-hidden="true">
+                <ClientMark id={clientId} category={event.client_agent_category} />
+              </span>
+              <span className="req-client-name">{clientDisplayName(clientId, t)}</span>
+            </span>
+          ) : (
+            <span className="req-client-name is-empty">—</span>
+          )}
         </div>
 
         {/* Row Action Chevron */}

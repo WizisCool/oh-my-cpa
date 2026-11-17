@@ -7,7 +7,7 @@ import type {
 /**
  * The bucket a record lands in when the dimension it is grouped by is absent.
  *
- * A record with no source or no user agent still belongs in the list, and
+ * A record with no source or no client still belongs in the list, and
  * "unknown" is a fact about it worth being able to see, so it gets a bucket of
  * its own rather than being dropped or folded into a named one.
  */
@@ -107,15 +107,4 @@ export function formatEventSourceGroupTitle(
   hasMultipleAuthSources: boolean,
 ): string {
   return hasMultipleAuthSources ? `${providerLabel} / ${credentialLabel}` : providerLabel;
-}
-
-/**
- * eventUserAgentGroupKey buckets records by the client they came from.
- *
- * The stored value is already the short product label the persistence path
- * reduced the raw header to, so it is used verbatim; nothing here re-parses a
- * header or expands what was deliberately minimised.
- */
-export function eventUserAgentGroupKey(event: Pick<UsageEvent, 'user_agent'>): string {
-  return event.user_agent?.trim().toLowerCase() || UNKNOWN_EVENT_GROUP;
 }

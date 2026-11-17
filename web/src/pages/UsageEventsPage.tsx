@@ -28,7 +28,6 @@ import {
   UNKNOWN_EVENT_GROUP,
   eventCredentialIdentity,
   eventProviderIdentity,
-  eventUserAgentGroupKey,
   formatEventSourceGroupTitle,
   providersWithMultipleAuthSources,
 } from '../types/usageEventGrouping';
@@ -40,7 +39,8 @@ import { useRequestListScroll } from '../components/usage/useRequestListScroll';
 import { useUsageEventSync } from '../components/usage/useUsageEventSync';
 import { isListStale, isViewChange } from '../components/usage/pollingPolicy';
 import { chipDisplayValue } from '../components/usage/chipDisplay';
-import { clientProductName, isLocalizedClient } from '../types/clientAgents';
+import { clientDisplayName, eventClientId } from '../types/clientAgents';
+import { ClientMark } from '../components/common/ClientMark';
 import { RequestRow } from '../components/usage/RequestRow';
 import { RequestTooltipLayer } from '../components/usage/RequestTooltip';
 import { useProviderBranding } from '../hooks/useProviderBranding';
@@ -455,7 +455,7 @@ export const UsageEventsPage: React.FC = () => {
           substituted: t('events.served_substituted'),
           matched: t('events.served_matched'),
         },
-        clientAgentName: (value) => (isLocalizedClient(value) ? t(`insights.client.${value}`) : clientProductName(value) ?? value),
+        clientAgentName: (value) => clientDisplayName(value, t),
         transportLabels: {
           websocket: t('events.transport_websocket'),
           sse: t('events.transport_sse'),
@@ -511,18 +511,23 @@ export const UsageEventsPage: React.FC = () => {
     if (grouping === 'time') return undefined;
     return {
       key: (event: UsageEvent) => {
-        if (grouping === 'ua') return eventUserAgentGroupKey(event);
+        if (grouping === 'ua') return eventClientId(event) ?? UNKNOWN_EVENT_GROUP;
         const provider = eventProviderIdentity(event, providerName, unknownProviderLabel).key;
         const credential = eventCredentialIdentity(event, credentials, unknownCredentialLabel).key;
         return JSON.stringify([provider, credential]);
       },
       title: (_key: string, items: UsageEvent[]) => {
         if (grouping === 'ua') {
-          const label = eventUserAgentGroupKey(items[0]);
+          const clientId = eventClientId(items[0]);
           return (
             <div className="request-group-title">
-              <strong>
-                {label === UNKNOWN_EVENT_GROUP ? t('events.unknown_ua') : items[0].user_agent?.trim()}
+              <strong className="request-group-client">
+                {clientId ? (
+                  <span className="req-client-mark" aria-hidden="true">
+                    <ClientMark id={clientId} category={items[0].client_agent_category} />
+                  </span>
+                ) : null}
+                <span>{clientId ? clientDisplayName(clientId, t) : t('events.unknown_ua')}</span>
               </strong>
               <span>{t('events.record_count', { n: items.length })}</span>
             </div>

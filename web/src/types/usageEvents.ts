@@ -2,6 +2,7 @@ import type { StructuredUsageDetails } from './structuredUsage';
 import type { MessageKey } from '../i18n/catalog';
 import type { TokenAccounting, TokenAccountingStatus } from './tokenAccounting';
 import type { RequestCostBreakdown } from './pricing';
+import type { ClientCategory } from './clientAgents';
 
 /**
  * Request-record types shared by the dashboard drill-down, the event table and
@@ -60,6 +61,7 @@ export interface UsageEvent {
   user_agent?: string | null;
   /** The client program normalised from the User-Agent at ingestion (`claude-code`, `python-httpx`, …). */
   client_agent?: string;
+  client_agent_category?: ClientCategory;
   source?: string;
   model: string;
   model_alias?: string;
