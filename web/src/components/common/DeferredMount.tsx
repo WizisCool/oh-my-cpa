@@ -1,20 +1,9 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { useT } from '../../i18n';
+import { isModuleLoadFailure } from '../../utils/chunkRecovery';
 import { Notice } from '../feedback';
 import { SuspenseFallback } from './PageLoading';
-
-const MODULE_LOAD_FAILURES = [
-  /Failed to fetch dynamically imported module/i,
-  /error loading dynamically imported module/i,
-  /Importing a module script failed/i,
-  /Failed to load module script/i,
-  /Unable to preload CSS/i,
-];
-
-function isModuleLoadFailure(error: unknown): boolean {
-  return error instanceof Error && MODULE_LOAD_FAILURES.some((pattern) => pattern.test(error.message));
-}
 
 interface OptionalSurfaceBoundaryProps {
   fallback: React.ReactNode;

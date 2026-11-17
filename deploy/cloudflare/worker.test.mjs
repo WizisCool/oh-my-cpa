@@ -621,3 +621,59 @@ describe('usage-events client_agent search and call-point fallback parity', () =
     assert.deepEqual(byAlias.items.map((row) => row.id), [1]);
   });
 });
+
+describe('static asset and SPA shell cache policy', () => {
+  it('never caches 404 asset responses as immutable and marks the HTML shell no-store', async () => {
+    const { default: worker } = await import('./worker.mjs');
+    const seen = [];
+    const env = {
+      ASSETS: {
+        fetch: (req) => {
+          const url = new URL(req.url);
+          seen.push({
+            path: url.pathname,
+            ifNoneMatch: req.headers.get('if-none-match'),
+            ifModifiedSince: req.headers.get('if-modified-since'),
+          });
+          if (url.pathname === '/') {
+            return new Response('<html></html>', {
+              status: 200,
+              headers: {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'public, max-age=0, must-revalidate',
+              },
+            });
+          }
+          if (url.pathname === '/assets/chunk.js') {
+            return new Response('export default 1;', {
+              status: 200,
+              headers: {
+                'Content-Type': 'text/javascript; charset=utf-8',
+                'Cache-Control': 'public, max-age=31536000, immutable',
+              },
+            });
+          }
+          return new Response('Not Found', {
+            status: 404,
+            headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
+          });
+        },
+      },
+    };
+
+    const html = await worker.fetch(new Request('https://demo.example/', {
+      headers: { 'If-None-Match': '"old"', 'If-Modified-Since': 'Tue, 17 Nov 2026 00:00:00 GMT' },
+    }), env);
+    assert.equal(html.status, 200);
+    assert.equal(html.headers.get('Cache-Control'), 'no-store');
+    assert.deepEqual(seen[0], { path: '/', ifNoneMatch: null, ifModifiedSince: null });
+
+    const okAsset = await worker.fetch(request('/assets/chunk.js'), env);
+    assert.equal(okAsset.status, 200);
+    assert.equal(okAsset.headers.get('Cache-Control'), 'public, max-age=31536000, immutable');
+
+    const missingAsset = await worker.fetch(request('/assets/retired-chunk.js'), env);
+    assert.equal(missingAsset.status, 404);
+    assert.equal(missingAsset.headers.get('Cache-Control'), 'no-store');
+  });
+});
