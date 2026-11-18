@@ -19,9 +19,12 @@ COPY --from=web /src/web/dist/ ./internal/web/dist/
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=v0.1.0-dev
+ARG REVISION=unknown
+ARG BUILT_AT=
 RUN --mount=type=cache,target=/root/.cache/go-build \
+    BUILT_AT_VALUE="${BUILT_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
-    -ldflags="-s -w -X github.com/oh-my-cpa/oh-my-cpa/internal/config.BuildVersion=${VERSION}" \
+    -ldflags="-s -w -X github.com/oh-my-cpa/oh-my-cpa/internal/config.BuildVersion=${VERSION} -X github.com/oh-my-cpa/oh-my-cpa/internal/config.BuildCommit=${REVISION} -X github.com/oh-my-cpa/oh-my-cpa/internal/config.BuiltAt=${BUILT_AT_VALUE}" \
     -o /out/oh-my-cpa ./cmd/oh-my-cpa
 
 # Certificates, timezone data and account files are architecture-independent. Preparing

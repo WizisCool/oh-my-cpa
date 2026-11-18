@@ -42,8 +42,9 @@ try {
       }),
     });
     let spawnError;
+    let stderrOutput = '';
     processHandle.on('error', error => { spawnError = error; });
-    processHandle.stderr.resume();
+    processHandle.stderr.on('data', chunk => { stderrOutput += chunk.toString(); });
     const exited = new Promise(resolve => processHandle.once('close', resolve));
     const origin = `http://127.0.0.1:${port}`;
     const base = `${origin}${basePath === '/' ? '' : basePath}`;
@@ -58,6 +59,8 @@ try {
         } catch { /* Startup is observed through HTTP readiness, not a fixed wait. */ }
         return false;
       }, { label: 'packaged executable HTTP readiness' });
+      const firstLogLine = stderrOutput.split(/\r?\n/, 1)[0] ?? '';
+      assert.match(firstLogLine, new RegExp(`^Oh My CPA Version: ${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}, Commit: [0-9a-f]{8}, BuiltAt: \\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$`));
       assert.equal(health.database_status, 'ok');
       assert.equal(health.version, tag);
       assert.equal(health.status, 'degraded');

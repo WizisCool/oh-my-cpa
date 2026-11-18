@@ -12,6 +12,9 @@ const ARCHIVE_DOCUMENTS = ['LICENSE', 'README.md', 'README.zh-CN.md', 'docs/inst
   'docs/operate/keys.md', 'docs/operate/ports-storage.md', 'docs/operate/time-zone.md', 'docs/operate/updates.md',
   'docs/reference/environment.md', 'docs/ops/sqlite-operations.md'];
 const PLAN = createNativePlan('v0.1.2', '0.1.2', '0.1.2');
+const FIXTURE_COMMIT = 'a'.repeat(40);
+const FIXTURE_BUILT_AT = new Date(1720000000 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+const PLAN_WITH_METADATA = createNativePlan('v0.1.2', '0.1.2', '0.1.2', { commit: FIXTURE_COMMIT, builtAt: FIXTURE_BUILT_AT });
 function runWithDirectory(run) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-release-test-'));
   try { run(directory); } finally { fs.rmSync(directory, { recursive: true, force: true }); }
@@ -27,6 +30,11 @@ test('native matrix is exactly CPA OS/architecture coverage with stable names an
     assert.equal(target.archive, `oh-my-cpa_0.1.2_${target.goos}_${target.goarch}.${target.goos === 'windows' ? 'zip' : 'tar.gz'}`);
     assert.ok(target.buildArgs.includes('timetzdata'));
     assert.ok(target.buildArgs.includes('-s -w -X github.com/oh-my-cpa/oh-my-cpa/internal/config.BuildVersion=v0.1.2'));
+  }
+  for (const target of PLAN_WITH_METADATA) {
+    assert.ok(target.buildArgs.includes(
+      `-s -w -X github.com/oh-my-cpa/oh-my-cpa/internal/config.BuildVersion=v0.1.2 -X github.com/oh-my-cpa/oh-my-cpa/internal/config.BuildCommit=${FIXTURE_COMMIT} -X github.com/oh-my-cpa/oh-my-cpa/internal/config.BuiltAt=${FIXTURE_BUILT_AT}`,
+    ));
   }
   for (const tag of ['v0.1.2-rc.1', 'v01.1.2', '0.1.2', 'v0.1.2\nbad']) {
     assert.throws(() => createNativePlan(tag, '0.1.2', '0.1.2'));
@@ -145,7 +153,7 @@ test('native builder embeds once before all Go targets, cleans stale files and p
   const commands = [];
   const execute = (command, args, options) => {
     commands.push({ command, args, options });
-    if (command === 'git') return '1720000000\n';
+    if (command === 'git') return `1720000000 ${FIXTURE_COMMIT}\n`;
     if (command === 'pnpm') {
       const consoleDirectory = path.join(root, 'internal/web/dist');
       fs.mkdirSync(path.join(consoleDirectory, 'assets'), { recursive: true });
@@ -156,7 +164,7 @@ test('native builder embeds once before all Go targets, cleans stale files and p
     if (command === 'go' && args[0] === 'build') {
       assert.ok(fs.existsSync(path.join(root, 'internal/web/dist/index.html')));
       assert.equal(options.env.CGO_ENABLED, '0');
-      const target = PLAN.find(target => target.goos === options.env.GOOS && target.goarch === options.env.GOARCH);
+      const target = PLAN_WITH_METADATA.find(target => target.goos === options.env.GOOS && target.goarch === options.env.GOARCH);
       assert.ok(target);
       assert.ok(args.includes('timetzdata'));
       assert.deepEqual(args.slice(0, target.buildArgs.length), target.buildArgs);
@@ -203,7 +211,7 @@ test('split native web, per-target, and finalize steps produce the same verified
   const commands = [];
   const execute = (command, args, options) => {
     commands.push({ command, args, options });
-    if (command === 'git') return '1720000000\n';
+    if (command === 'git') return `1720000000 ${FIXTURE_COMMIT}\n`;
     if (command === 'pnpm') {
       const consoleDirectory = path.join(root, 'internal/web/dist');
       fs.mkdirSync(path.join(consoleDirectory, 'assets'), { recursive: true });

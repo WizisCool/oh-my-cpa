@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,17 @@ function executeDocker(...args) {
     // child_process errors echo argv, which can contain freshly generated container secrets.
     throw new Error(`Docker ${args[0]} failed (status ${error.status ?? error.code ?? 'unknown'})`);
   }
+}
+
+function readContainerStderr(container) {
+  const result = spawnSync('docker', ['logs', container], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  if (result.error) throw new Error(`Docker logs failed: ${result.error.message}`);
+  if (result.status !== 0) throw new Error(`Docker logs failed (status ${result.status ?? 'unknown'})`);
+  return (result.stderr ?? '').trim();
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function waitForHealthy(container, since) {
@@ -40,6 +51,11 @@ export async function verifyDockerImage(image, version) {
   const metadata = JSON.parse(executeDocker('image', 'inspect', image))[0];
   assert.equal(metadata.Config.User, '10001:10001');
   assert.equal(metadata.Config.Labels['org.opencontainers.image.version'], version);
+  const rawRevision = (metadata.Config.Labels['org.opencontainers.image.revision'] ?? '').trim() || 'unknown';
+  const expectedCommit = /^[0-9a-f]{8,}$/i.test(rawRevision) ? rawRevision.slice(0, 8).toLowerCase() : rawRevision;
+  const expectedBuiltAt = process.env.BUILT_AT?.trim();
+  const builtAtPattern = expectedBuiltAt ? escapeRegExp(expectedBuiltAt) : '\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z';
+  const expectedBannerPattern = new RegExp(`^Oh My CPA Version: ${escapeRegExp(version)}, Commit: ${escapeRegExp(expectedCommit)}, BuiltAt: ${builtAtPattern}$`);
   const secret = randomBytes(24).toString('hex');
   // The first case omits OMCPA_BASE_PATH, OMCPA_LISTEN_ADDR and OMCPA_DATA_DIR so
   // the image's own defaults are exercised. The explicit paths prove that an existing
@@ -62,6 +78,8 @@ export async function verifyDockerImage(image, version) {
         '-e', 'OMCPA_UPDATE_CHECK_ON_PAGE_LOAD=false', image);
       executeDocker('start', container);
       await waitForHealthy(container, since);
+      const firstLogLine = readContainerStderr(container).split(/\r?\n/, 1)[0] ?? '';
+      assert.match(firstLogLine, expectedBannerPattern);
       const address = executeDocker('port', container, `${listenPort}/tcp`);
       const basePath = rawPath === null || rawPath === '/' ? '' : `/${rawPath.replace(/^\/+|\/+$/g, '')}`;
       const origin = `http://${address}${basePath}`;
