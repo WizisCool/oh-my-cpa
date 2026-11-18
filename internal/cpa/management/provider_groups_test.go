@@ -166,7 +166,7 @@ func TestEditableOpenAICompatibilityVerifiesIdentityOnCaseFoldFallback(t *testin
 func TestOAuthModelAliasesReadAsCPAAppliesThem(t *testing.T) {
 	gateway := &configGateway{answer: func(method, path string) (int, string) {
 		if method == http.MethodGet && path == "/v8/management/config/oauth/model-alias" {
-			return http.StatusOK, `{"Codex":[{"name":" gpt-5 ","alias":"fast"},{"name":"gpt-5.1","alias":"FAST"},{"name":"same","alias":"same"}],"empty":[]}`
+			return http.StatusOK, `{"Codex":[{"name":" gpt-5 ","alias":"fast"},{"name":"gpt-5.1","alias":"FAST"},{"name":"glm-5","alias":"GLM-5"},{"name":"same","alias":"same"}],"empty":[]}`
 		}
 		return 0, ""
 	}}
@@ -174,7 +174,7 @@ func TestOAuthModelAliasesReadAsCPAAppliesThem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string][]OAuthModelAlias{"codex": {{Name: "gpt-5", Alias: "fast"}}}
+	want := map[string][]OAuthModelAlias{"codex": {{Name: "gpt-5", Alias: "fast"}, {Name: "glm-5", Alias: "GLM-5"}}}
 	if !reflect.DeepEqual(aliases, want) {
 		t.Fatalf("aliases = %#v, want %#v", aliases, want)
 	}

@@ -314,8 +314,8 @@ func ResolveOAuthModelAlias(callPoint string, rules []OAuthModelAlias) string {
 }
 
 // sanitizeOAuthModelAliases mirrors CPA's SanitizeOAuthModelAlias: providers
-// are lower-cased, and an alias without a name, equal to its model or repeated
-// within a provider is ignored. The stored document is what the operator
+// are lower-cased, and an alias without a name, equal to its model verbatim or
+// repeated within a provider is ignored. The stored document is what the operator
 // wrote; this is what the gateway uses.
 func sanitizeOAuthModelAliases(stored map[string][]OAuthModelAlias) map[string][]OAuthModelAlias {
 	providers := make([]string, 0, len(stored))
@@ -343,7 +343,7 @@ func sanitizeOAuthModelAliasList(entries []OAuthModelAlias) []OAuthModelAlias {
 	var clean []OAuthModelAlias
 	for _, entry := range entries {
 		name, alias := strings.TrimSpace(entry.Name), strings.TrimSpace(entry.Alias)
-		if name == "" || alias == "" || strings.EqualFold(name, alias) || seen[strings.ToLower(alias)] {
+		if name == "" || alias == "" || name == alias || seen[strings.ToLower(alias)] {
 			continue
 		}
 		seen[strings.ToLower(alias)] = true

@@ -331,7 +331,7 @@ func normalizeManagementOAuthModelAliases(entries []managementOAuthModelAlias) (
 		if len([]rune(name)) > managementOAuthModelAliasFieldLimit || len([]rune(alias)) > managementOAuthModelAliasFieldLimit || len([]rune(displayName)) > managementOAuthModelAliasFieldLimit {
 			return nil, errors.New("model alias fields are too long")
 		}
-		if strings.EqualFold(name, alias) {
+		if name == alias {
 			return nil, errors.New("model alias must differ from the upstream model name")
 		}
 		aliasKey := strings.ToLower(alias)
