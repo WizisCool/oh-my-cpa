@@ -1598,7 +1598,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_payload_replace_desc',
     yamlPath: ['requests', 'payload', 'replace'],
     type: 'json_editor',
-    keywords: ['payload', 'replace', 'text', 'user', 'replacements', 'positions', 'all'],
+    keywords: ['payload', 'replace', 'text', 'user', 'system', 'developer', 'paths', 'regex', 'replacements', 'positions', 'all'],
   },
   {
     id: 'payloadFilterRules',

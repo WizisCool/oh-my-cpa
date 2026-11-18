@@ -90,7 +90,7 @@ export const ConfigPage: React.FC = () => {
     saveMutation,
     showErrorFeedback,
     handleDiscardChanges,
-    payloadIssues,
+    blockingPayloadIssuesCount,
     stringMapIssues,
     patternRulesIssues,
     firstFieldErrorMessage,
@@ -618,7 +618,7 @@ export const ConfigPage: React.FC = () => {
         isDirty={isDirty}
         isSaving={saveMutation.isPending}
         yamlError={hasYamlErrors}
-        payloadIssuesCount={payloadIssues.length}
+        payloadIssuesCount={blockingPayloadIssuesCount}
         validationError={firstFieldErrorMessage}
         showErrorFeedback={showErrorFeedback}
         onSave={saveConfig}

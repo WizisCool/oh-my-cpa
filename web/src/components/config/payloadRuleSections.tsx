@@ -1,5 +1,6 @@
 import React from 'react';
 import { Select } from '@/components/ui/select';
+import { Segmented } from '@/components/ui/segmented';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -16,18 +17,24 @@ import {
   SettingOutlined,
 } from '../icons';
 import { applyKeyOrder, moveKey, type DropSide } from '../../types/displayOrder';
-import { ComposingTextarea } from './ComposingTextInput';
+import { ComposingTextarea, ComposingTextInput } from './ComposingTextInput';
 
 import {
   appendReplacePositionTokens,
   generateDynamicId,
+  isPayloadReplaceRole,
   isValidJson,
   type FilterParamItem,
   type ParamValueType,
   type PayloadCategoryKey,
   type PayloadModelItem,
   type PayloadProtocol,
+  type PayloadReplacePathItem,
+  type PayloadReplacePathsTarget,
+  type PayloadReplaceRole,
+  type PayloadReplaceRoleTarget,
   type PayloadReplaceTarget,
+  type PayloadReplaceTargetMode,
   type PayloadReplacementItem,
   type RawParamItem,
   type TypedParamItem,
@@ -898,11 +905,10 @@ interface ReplaceEntryRowViewProps {
   entry: PayloadReplacementItem;
   index: number;
   count: number;
-  errorMsg?: string;
-  fromPlaceholder: string;
-  toPlaceholder: string;
+  feedback?: { message: string; severity: 'error' | 'warning' };
   t: PayloadRulesDraft['t'];
-  onUpdate: (index: number, patch: Partial<PayloadReplacementItem>) => void;
+  onChangeKind: (index: number, nextKind: 'literal' | 'regex') => void;
+  onReplaceEntry: (index: number, nextEntry: PayloadReplacementItem) => void;
   onBlur: () => void;
   onStep: (id: string, direction: -1 | 1) => void;
   onRemove: (index: number) => void;
@@ -913,62 +919,126 @@ const ReplaceEntryRowView: React.FC<ReplaceEntryRowViewProps> = ({
   entry,
   index,
   count,
-  errorMsg,
-  fromPlaceholder,
-  toPlaceholder,
+  feedback,
   t,
-  onUpdate,
+  onChangeKind,
+  onReplaceEntry,
   onBlur,
   onStep,
   onRemove,
 }) => {
   const { row, handle } = useReorderRow(entry.id);
-  const handleLabel = entry.from.trim() || t('cfg.payload_replace_entry_label', { n: index + 1 });
-  const isDestError = Boolean(errorMsg) && entry._invalidReason === 'non_string_value';
-  const isSourceError = Boolean(errorMsg) && entry._invalidReason !== 'non_string_value';
+  const rawLeft = entry.kind === 'regex' ? entry.pattern : entry.from;
+  const handleLabel = rawLeft.trim() || t('cfg.payload_replace_entry_label', { n: index + 1 });
+  const isError = feedback?.severity === 'error';
+  const isWarning = feedback?.severity === 'warning';
+  const isDestError = isError && entry._invalidReason === 'non_string_value';
+  const isSourceError = isError && entry._invalidReason !== 'non_string_value';
+  const sourceWarningId = isWarning ? `payload-replace-source-warning-${entry.id}` : undefined;
+  const sourcePlaceholder = entry.kind === 'regex'
+    ? t('cfg.payload_replace_pattern_ph')
+    : t('cfg.payload_replace_from_ph');
+  const destPlaceholder = entry.kind === 'regex'
+    ? t('cfg.payload_replace_regex_to_ph')
+    : t('cfg.payload_replace_to_ph');
 
   return (
     <div {...row} className="payload-replace-row-wrap">
       <div className="payload-replace-row" data-testid={`payload-replace-entry-row-${ruleIndex}-${index}`}>
         <ReorderHandle {...handle} name={handleLabel} variant="inline" />
+        <Select
+          size="small"
+          className="payload-replace-kind-select"
+          value={entry.kind}
+          aria-label={t('cfg.payload_replace_kind_aria', { n: index + 1 })}
+          options={[
+            { value: 'literal', label: t('cfg.payload_replace_kind_literal') },
+            { value: 'regex', label: t('cfg.payload_replace_kind_regex') },
+          ]}
+          onChange={(nextKind) => onChangeKind(index, nextKind as 'literal' | 'regex')}
+          data-testid={`payload-replace-kind-${ruleIndex}-${index}`}
+        />
         <ComposingTextarea
           rows={1}
           autoSize={{ minRows: 1, maxRows: 4 }}
           style={{ minHeight: '28px' }}
-          aria-label={`${fromPlaceholder} ${index + 1}`}
+          aria-label={`${sourcePlaceholder} ${index + 1}`}
+          aria-describedby={sourceWarningId}
           className="config-mono-input payload-replace-from payload-replace-textarea"
-          placeholder={fromPlaceholder}
-          status={isSourceError ? 'error' : undefined}
-          value={entry.from}
+          placeholder={sourcePlaceholder}
+          status={isWarning ? 'warning' : isSourceError ? 'error' : undefined}
+          value={rawLeft}
           spellCheck={false}
-          onCommit={(nextFrom) => {
+          autoCorrect="off"
+          autoCapitalize="none"
+          onCommit={(nextLeft) => {
+            if (entry.kind === 'regex') {
+              const rawRecord = entry._rawEntry && typeof entry._rawEntry === 'object' && !Array.isArray(entry._rawEntry)
+                ? (entry._rawEntry as Record<string, unknown>)
+                : undefined;
+              const hasNonStringDest =
+                entry._invalidReason === 'non_string_value'
+                || (entry._invalidReason === 'non_string_pattern'
+                  && rawRecord !== undefined
+                  && Object.prototype.hasOwnProperty.call(rawRecord, 'replacement')
+                  && typeof rawRecord.replacement !== 'string');
+              if (hasNonStringDest) {
+                const preservedReplacement = rawRecord && Object.prototype.hasOwnProperty.call(rawRecord, 'replacement')
+                  ? rawRecord.replacement
+                  : null;
+                onReplaceEntry(index, {
+                  id: entry.id,
+                  kind: 'regex',
+                  pattern: nextLeft,
+                  replacement: entry.replacement,
+                  _invalidReason: 'non_string_value',
+                  _rawEntry: { pattern: nextLeft, replacement: preservedReplacement },
+                });
+                return;
+              }
+              onReplaceEntry(index, {
+                id: entry.id,
+                kind: 'regex',
+                pattern: nextLeft,
+                replacement: entry.replacement,
+              });
+              return;
+            }
             if (entry._invalidReason === 'non_string_value') {
               const rawEntries = entry._rawEntry && typeof entry._rawEntry === 'object' && !Array.isArray(entry._rawEntry)
                 ? Object.entries(entry._rawEntry as Record<string, unknown>)
                 : [];
               const preservedDest = rawEntries.length > 0 ? rawEntries[0][1] : null;
               const nextRawEntry: Record<string, unknown> = {};
-              Object.defineProperty(nextRawEntry, nextFrom, {
+              Object.defineProperty(nextRawEntry, nextLeft, {
                 value: preservedDest,
                 enumerable: true,
                 writable: true,
                 configurable: true,
               });
-              onUpdate(index, {
-                from: nextFrom,
+              onReplaceEntry(index, {
+                id: entry.id,
+                kind: 'literal',
+                from: nextLeft,
+                to: entry.to,
                 _invalidReason: 'non_string_value',
                 _rawEntry: nextRawEntry,
               });
               return;
             }
-            onUpdate(index, {
-              from: nextFrom,
-              _invalidReason: undefined,
-              _rawEntry: undefined,
+            onReplaceEntry(index, {
+              id: entry.id,
+              kind: 'literal',
+              from: nextLeft,
+              to: entry.to,
             });
           }}
           onBlur={onBlur}
-          data-testid={`payload-replace-from-${ruleIndex}-${index}`}
+          data-testid={
+            entry.kind === 'regex'
+              ? `payload-replace-pattern-${ruleIndex}-${index}`
+              : `payload-replace-from-${ruleIndex}-${index}`
+          }
         />
         <span className="payload-replace-arrow" aria-hidden="true">
           →
@@ -977,19 +1047,43 @@ const ReplaceEntryRowView: React.FC<ReplaceEntryRowViewProps> = ({
           rows={1}
           autoSize={{ minRows: 1, maxRows: 4 }}
           style={{ minHeight: '28px' }}
-          aria-label={`${toPlaceholder} ${index + 1}`}
+          aria-label={`${destPlaceholder} ${index + 1}`}
           className="config-mono-input payload-replace-to payload-replace-textarea"
-          placeholder={toPlaceholder}
+          placeholder={destPlaceholder}
           status={isDestError ? 'error' : undefined}
-          value={entry.to}
+          value={entry.kind === 'regex' ? entry.replacement : entry.to}
           spellCheck={false}
-          onCommit={(nextTo) =>
-            onUpdate(index, {
-              to: nextTo,
-              _invalidReason: undefined,
-              _rawEntry: undefined,
-            })
-          }
+          onCommit={(nextRight) => {
+            if (entry.kind === 'regex') {
+              if (entry._invalidReason === 'non_string_pattern') {
+                const rawRecord = entry._rawEntry && typeof entry._rawEntry === 'object' && !Array.isArray(entry._rawEntry)
+                  ? (entry._rawEntry as Record<string, unknown>)
+                  : {};
+                onReplaceEntry(index, {
+                  id: entry.id,
+                  kind: 'regex',
+                  pattern: entry.pattern,
+                  replacement: nextRight,
+                  _invalidReason: 'non_string_pattern',
+                  _rawEntry: { pattern: rawRecord.pattern ?? null, replacement: nextRight },
+                });
+                return;
+              }
+              onReplaceEntry(index, {
+                id: entry.id,
+                kind: 'regex',
+                pattern: entry.pattern,
+                replacement: nextRight,
+              });
+              return;
+            }
+            onReplaceEntry(index, {
+              id: entry.id,
+              kind: 'literal',
+              from: entry.from,
+              to: nextRight,
+            });
+          }}
           onBlur={onBlur}
           data-testid={`payload-replace-to-${ruleIndex}-${index}`}
         />
@@ -1024,8 +1118,19 @@ const ReplaceEntryRowView: React.FC<ReplaceEntryRowViewProps> = ({
           />
         </div>
       </div>
-      {errorMsg && (
-        <span className="payload-field-error" role="alert">{errorMsg}</span>
+      {feedback && (
+        <span
+          id={sourceWarningId}
+          className={feedback.severity === 'warning' ? 'payload-field-warning' : 'payload-field-error'}
+          role={feedback.severity === 'warning' ? 'status' : 'alert'}
+          data-testid={
+            feedback.severity === 'warning'
+              ? `payload-replace-warning-${ruleIndex}-${index}`
+              : undefined
+          }
+        >
+          {feedback.message}
+        </span>
       )}
     </div>
   );
@@ -1046,14 +1151,41 @@ const ReplaceEntriesList: React.FC<ReplaceEntriesListProps> = ({
   replacements,
   hasInvalidShape = false,
 }) => {
-  const { markTouched, getTargetError, updateReplaceRules, t } = draft;
+  const { markTouched, getTargetError, getTargetFeedback, updateReplaceRules, t } = draft;
 
-  const updateReplacement = (repIdx: number, patch: Partial<PayloadReplacementItem>) => {
+  const replaceEntry = (repIdx: number, nextEntry: PayloadReplacementItem) => {
     updateReplaceRules((rules) => {
       const r = rules[ruleIndex];
       if (!r) return rules;
       const next = [...r.replacements];
-      next[repIdx] = { ...next[repIdx], ...patch };
+      next[repIdx] = nextEntry;
+      rules[ruleIndex] = { ...r, replacements: next };
+      return rules;
+    });
+  };
+
+  const changeEntryKind = (repIdx: number, nextKind: 'literal' | 'regex') => {
+    updateReplaceRules((rules) => {
+      const r = rules[ruleIndex];
+      if (!r) return rules;
+      const current = r.replacements[repIdx];
+      if (!current || (current.kind === nextKind && !current._invalidReason)) return rules;
+      const next = [...r.replacements];
+      if (nextKind === 'regex') {
+        next[repIdx] = {
+          id: current.id,
+          kind: 'regex',
+          pattern: current.kind === 'literal' ? current.from : current.pattern,
+          replacement: current.kind === 'literal' ? current.to : current.replacement,
+        };
+      } else {
+        next[repIdx] = {
+          id: current.id,
+          kind: 'literal',
+          from: current.kind === 'regex' ? current.pattern : current.from,
+          to: current.kind === 'regex' ? current.replacement : current.to,
+        };
+      }
       rules[ruleIndex] = { ...r, replacements: next };
       return rules;
     });
@@ -1066,7 +1198,7 @@ const ReplaceEntriesList: React.FC<ReplaceEntriesListProps> = ({
       rules[ruleIndex] = {
         ...r,
         invalidReplacements: undefined,
-        replacements: [...r.replacements, { id: generateDynamicId('rep'), from: '', to: '' }],
+        replacements: [...r.replacements, { id: generateDynamicId('rep'), kind: 'literal', from: '', to: '' }],
       };
       return rules;
     });
@@ -1114,6 +1246,7 @@ const ReplaceEntriesList: React.FC<ReplaceEntriesListProps> = ({
     [moveRow, rowIds],
   );
 
+  const hasRegexEntry = replacements.some((rep) => rep.kind === 'regex');
   const sectionError = getTargetError(`${ruleId}_replacements`)
     ?? (hasInvalidShape ? t('cfg.payload_replace_list_invalid') : undefined);
 
@@ -1132,11 +1265,10 @@ const ReplaceEntriesList: React.FC<ReplaceEntriesListProps> = ({
               entry={rep}
               index={repIdx}
               count={replacements.length}
-              errorMsg={getTargetError(rep.id)}
-              fromPlaceholder={t('cfg.payload_replace_from_ph')}
-              toPlaceholder={t('cfg.payload_replace_to_ph')}
+              feedback={getTargetFeedback(rep.id)}
               t={t}
-              onUpdate={updateReplacement}
+              onChangeKind={changeEntryKind}
+              onReplaceEntry={replaceEntry}
               onBlur={() => markTouched(rep.id)}
               onStep={stepRow}
               onRemove={removeReplacement}
@@ -1144,6 +1276,12 @@ const ReplaceEntriesList: React.FC<ReplaceEntriesListProps> = ({
           ))}
         </div>
       </RowReorder>
+
+      {hasRegexEntry && (
+        <span className="payload-replace-hint" data-testid={`payload-replace-regex-hint-${ruleIndex}`}>
+          {t('cfg.payload_replace_regex_hint')}
+        </span>
+      )}
 
       {sectionError && (
         <span className="payload-field-error" role="alert">{sectionError}</span>
@@ -1164,27 +1302,252 @@ const ReplaceEntriesList: React.FC<ReplaceEntriesListProps> = ({
   );
 };
 
+interface ReplacePathRowViewProps {
+  ruleIndex: number;
+  item: PayloadReplacePathItem;
+  index: number;
+  count: number;
+  errorMsg?: string;
+  t: PayloadRulesDraft['t'];
+  onUpdate: (index: number, nextPath: string) => void;
+  onBlur: () => void;
+  onStep: (id: string, direction: -1 | 1) => void;
+  onRemove: (index: number) => void;
+}
+
+const ReplacePathRowView: React.FC<ReplacePathRowViewProps> = ({
+  ruleIndex,
+  item,
+  index,
+  count,
+  errorMsg,
+  t,
+  onUpdate,
+  onBlur,
+  onStep,
+  onRemove,
+}) => {
+  const { row, handle } = useReorderRow(item.id);
+  const handleLabel = item.path.trim() || t('cfg.payload_replace_path_label', { n: index + 1 });
+
+  const rowErrorId = errorMsg ? `payload-replace-path-error-${item.id}` : undefined;
+
+  return (
+    <div {...row} className="payload-replace-row-wrap">
+      <div className="payload-replace-path-row" data-testid={`payload-replace-path-row-${ruleIndex}-${index}`}>
+        <ReorderHandle {...handle} name={handleLabel} variant="inline" />
+        <ComposingTextInput
+          size="sm"
+          className="config-mono-input payload-replace-path-input"
+          placeholder={t('cfg.payload_replace_path_ph')}
+          aria-label={`${t('cfg.payload_replace_path_ph')} ${index + 1}`}
+          aria-describedby={rowErrorId}
+          status={errorMsg ? 'error' : undefined}
+          value={item.path}
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="none"
+          onCommit={(nextPath) => onUpdate(index, nextPath)}
+          onBlur={onBlur}
+          data-testid={`payload-replace-path-${ruleIndex}-${index}`}
+        />
+        <div className="payload-replace-actions">
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<ArrowUpOutlined />}
+            disabled={index === 0}
+            aria-label={t('cfg.payload_replace_path_move_up', { n: index + 1 })}
+            onClick={() => onStep(item.id, -1)}
+            data-testid={`payload-replace-path-up-${ruleIndex}-${index}`}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<ArrowDownOutlined />}
+            disabled={index === count - 1}
+            aria-label={t('cfg.payload_replace_path_move_down', { n: index + 1 })}
+            onClick={() => onStep(item.id, 1)}
+            data-testid={`payload-replace-path-down-${ruleIndex}-${index}`}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            danger
+            icon={<DeleteOutlined />}
+            disabled={count <= 1}
+            aria-label={t('cfg.payload_replace_path_remove', { n: index + 1 })}
+            onClick={() => onRemove(index)}
+            data-testid={`payload-replace-path-remove-${ruleIndex}-${index}`}
+          />
+        </div>
+      </div>
+      {errorMsg && (
+        <span id={rowErrorId} className="payload-field-error" role="alert">{errorMsg}</span>
+      )}
+    </div>
+  );
+};
+
+interface ReplacePathsEditorProps {
+  draft: PayloadRulesDraft;
+  ruleIndex: number;
+  paths: PayloadReplacePathItem[];
+}
+
+const ReplacePathsEditor: React.FC<ReplacePathsEditorProps> = ({
+  draft,
+  ruleIndex,
+  paths,
+}) => {
+  const { markTouched, getTargetError, updateReplaceRules, t } = draft;
+
+  const updatePath = (pathIdx: number, nextPath: string) => {
+    updateReplaceRules((rules) => {
+      const r = rules[ruleIndex];
+      if (!r || r.target.mode !== 'paths') return rules;
+      const nextPaths = [...r.target.paths];
+      nextPaths[pathIdx] = { id: nextPaths[pathIdx].id, path: nextPath };
+      rules[ruleIndex] = {
+        ...r,
+        target: { ...r.target, paths: nextPaths },
+      };
+      return rules;
+    });
+  };
+
+  const addPath = () => {
+    updateReplaceRules((rules) => {
+      const r = rules[ruleIndex];
+      if (!r || r.target.mode !== 'paths') return rules;
+      rules[ruleIndex] = {
+        ...r,
+        target: {
+          ...r.target,
+          invalidPaths: undefined,
+          paths: [...r.target.paths, { id: generateDynamicId('rpath'), path: '' }],
+        },
+      };
+      return rules;
+    });
+  };
+
+  const removePath = (pathIdx: number) => {
+    updateReplaceRules((rules) => {
+      const r = rules[ruleIndex];
+      if (!r || r.target.mode !== 'paths') return rules;
+      rules[ruleIndex] = {
+        ...r,
+        target: {
+          ...r.target,
+          paths: r.target.paths.filter((_, idx) => idx !== pathIdx),
+        },
+      };
+      return rules;
+    });
+  };
+
+  const rowIds = React.useMemo(() => paths.map((item) => item.id), [paths]);
+
+  const moveRow = React.useCallback(
+    (key: string, target: string, side: DropSide) => {
+      const nextIds = moveKey(rowIds, key, target, side);
+      if (nextIds === rowIds) return;
+      updateReplaceRules((rules) => {
+        const r = rules[ruleIndex];
+        if (!r || r.target.mode !== 'paths') return rules;
+        rules[ruleIndex] = {
+          ...r,
+          target: {
+            ...r.target,
+            paths: applyKeyOrder(r.target.paths, (item) => item.id, nextIds),
+          },
+        };
+        return rules;
+      });
+    },
+    [rowIds, ruleIndex, updateReplaceRules],
+  );
+
+  const stepRow = React.useCallback(
+    (key: string, direction: -1 | 1) => {
+      const index = rowIds.indexOf(key);
+      const neighbour = rowIds[index + direction];
+      if (index >= 0 && neighbour !== undefined) {
+        moveRow(key, neighbour, direction < 0 ? 'before' : 'after');
+      }
+    },
+    [moveRow, rowIds],
+  );
+
+  return (
+    <div className="payload-replace-paths-wrap">
+      <RowReorder items={rowIds} isEnabled onMove={moveRow} onStep={stepRow}>
+        <div className="payload-replace-list" data-testid={`payload-replace-paths-list-${ruleIndex}`}>
+          {paths.map((item, pathIdx) => (
+            <ReplacePathRowView
+              key={item.id}
+              ruleIndex={ruleIndex}
+              item={item}
+              index={pathIdx}
+              count={paths.length}
+              errorMsg={getTargetError(item.id)}
+              t={t}
+              onUpdate={updatePath}
+              onBlur={() => markTouched(item.id)}
+              onStep={stepRow}
+              onRemove={removePath}
+            />
+          ))}
+        </div>
+      </RowReorder>
+
+      <div className="payload-sub-actions">
+        <Button
+          size="sm"
+          variant="dashed"
+          icon={<PlusOutlined />}
+          onClick={addPath}
+          data-testid={`payload-replace-add-path-${ruleIndex}`}
+        >
+          {t('cfg.payload_replace_path_add')}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 export function renderReplaceTargetSection(
   draft: PayloadRulesDraft,
   ruleIndex: number,
   target: PayloadReplaceTarget,
   ruleId: string,
 ) {
-  const { markTouched, getTargetError, updateReplaceRules, pendingPositions, setPendingPositionsText, t } = draft;
+  const {
+    markTouched,
+    getTargetError,
+    updateReplaceRules,
+    pendingPositions,
+    setPendingPositionsText,
+    REPLACE_ROLE_OPTIONS,
+    t,
+  } = draft;
   const targetId = `${ruleId}_target`;
   const targetError = getTargetError(targetId)
-    ?? (target.invalidRole ? t('cfg.payload_replace_role_invalid') : undefined)
-    ?? (target.invalidAll ? t('cfg.payload_replace_all_invalid') : undefined);
+    ?? (target.mode === 'role'
+      ? (target.invalidRole ? t('cfg.payload_replace_role_invalid') : undefined)
+        ?? (target.invalidAll ? t('cfg.payload_replace_all_invalid') : undefined)
+      : (target.conflictingRoleFields ? t('cfg.payload_replace_paths_conflict') : undefined)
+        ?? (target.invalidPaths ? t('cfg.payload_replace_paths_invalid') : undefined));
+
+  const roleSelectId = `payload-replace-role-${ruleId}`;
   const allSwitchId = `payload-replace-all-${ruleId}`;
   const positionsInputId = `payload-replace-positions-${ruleId}`;
-  const roleTagLabel = target.invalidRole
-    ? (target.invalidRole.present ? `role: ${String(target.invalidRole.value)}` : 'role: —')
-    : t('cfg.payload_replace_role_user');
 
-  const updateTarget = (patch: Partial<PayloadReplaceTarget>) => {
+  const updateRoleTarget = (patch: Partial<PayloadReplaceRoleTarget>) => {
     updateReplaceRules((rules) => {
       const r = rules[ruleIndex];
-      if (!r) return rules;
+      if (!r || r.target.mode !== 'role') return rules;
       rules[ruleIndex] = {
         ...r,
         target: { ...r.target, _rawTarget: undefined, ...patch },
@@ -1193,103 +1556,286 @@ export function renderReplaceTargetSection(
     });
   };
 
+  const updatePathsTarget = (patch: Partial<PayloadReplacePathsTarget>) => {
+    updateReplaceRules((rules) => {
+      const r = rules[ruleIndex];
+      if (!r || r.target.mode !== 'paths') return rules;
+      rules[ruleIndex] = {
+        ...r,
+        target: { ...r.target, ...patch },
+      };
+      return rules;
+    });
+  };
+
+  const switchTargetMode = (nextMode: PayloadReplaceTargetMode) => {
+    if (nextMode === target.mode) return;
+    markTouched(targetId);
+    if (nextMode === 'paths') {
+      const pendingText = pendingPositions[ruleId] ?? '';
+      let savedRoleTarget: PayloadReplaceRoleTarget | undefined;
+      if (target.mode === 'role') {
+        const parsedPending = pendingText.trim()
+          ? appendReplacePositionTokens(pendingText, target.positions, target.invalidPositions)
+          : undefined;
+        const { _savedPathsTarget: _discarded, ...restRole } = target;
+        savedRoleTarget = parsedPending?.changed
+          ? {
+              ...restRole,
+              positions: parsedPending.positions,
+              invalidPositions: parsedPending.invalidPositions.length > 0 ? parsedPending.invalidPositions : undefined,
+            }
+          : restRole;
+      }
+      setPendingPositionsText(ruleId, '');
+      updateReplaceRules((rules) => {
+        const r = rules[ruleIndex];
+        if (!r || r.target.mode !== 'role') return rules;
+        const preservedPaths = r.target._savedPathsTarget;
+        const nextPathsTarget: PayloadReplacePathsTarget = preservedPaths
+          ? {
+              ...preservedPaths,
+              ...(r.target._extra ? { _extra: r.target._extra } : {}),
+              _savedRoleTarget: savedRoleTarget,
+            }
+          : {
+              mode: 'paths',
+              paths: [{ id: generateDynamicId('rpath'), path: '' }],
+              ...(r.target._extra ? { _extra: r.target._extra } : {}),
+              _savedRoleTarget: savedRoleTarget,
+            };
+        rules[ruleIndex] = {
+          ...r,
+          target: nextPathsTarget,
+        };
+        return rules;
+      });
+    } else {
+      updateReplaceRules((rules) => {
+        const r = rules[ruleIndex];
+        if (!r || r.target.mode !== 'paths') return rules;
+        const { _savedRoleTarget, ...restPaths } = r.target;
+        const savedPathsTarget: PayloadReplacePathsTarget = restPaths;
+        if (_savedRoleTarget) {
+          rules[ruleIndex] = {
+            ...r,
+            target: {
+              ..._savedRoleTarget,
+              ...(r.target._extra ? { _extra: r.target._extra } : {}),
+              _savedPathsTarget: savedPathsTarget,
+            },
+          };
+          return rules;
+        }
+        const conflict = r.target.conflictingRoleFields;
+        const recoveredRole = conflict?.hasRole && isPayloadReplaceRole(conflict.role)
+          ? conflict.role
+          : 'user';
+        const recoveredAll = Boolean(conflict?.hasAll && conflict.all === true);
+        const recoveredPositions = Array.isArray(conflict?.positions)
+          ? conflict.positions.filter((p): p is number => typeof p === 'number' && Number.isInteger(p) && p >= 1)
+          : [];
+        rules[ruleIndex] = {
+          ...r,
+          target: {
+            mode: 'role',
+            role: recoveredRole,
+            all: recoveredAll,
+            positions: recoveredPositions,
+            ...(r.target._extra ? { _extra: r.target._extra } : {}),
+            _savedPathsTarget: savedPathsTarget,
+          },
+        };
+        return rules;
+      });
+    }
+  };
+
   return (
     <div className="payload-sub-section">
       <div className="payload-sub-header">
         <span className="payload-sub-title">{t('cfg.payload_replace_target_title')}</span>
-        <div className="payload-replace-role-group">
-          <Tag
-            size="small"
-            tone={target.invalidRole ? 'danger' : undefined}
-            data-testid={`payload-replace-role-tag-${ruleIndex}`}
-          >
-            {roleTagLabel}
-          </Tag>
-          {target.invalidRole && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                markTouched(targetId);
-                updateTarget({ invalidRole: undefined });
-              }}
-              data-testid={`payload-replace-fix-role-${ruleIndex}`}
-            >
-              {t('cfg.payload_replace_set_role_user')}
-            </Button>
-          )}
-        </div>
+        <Segmented
+          size="small"
+          aria-label={t('cfg.payload_replace_mode_aria')}
+          value={target.mode}
+          options={[
+            { value: 'role', label: t('cfg.payload_replace_mode_role') },
+            { value: 'paths', label: t('cfg.payload_replace_mode_paths') },
+          ]}
+          onChange={(val) => switchTargetMode(val as PayloadReplaceTargetMode)}
+          data-testid={`payload-replace-mode-${ruleIndex}`}
+        />
       </div>
 
-      <div className="payload-replace-target-box">
-        <div className="payload-replace-all-row">
-          <label htmlFor={allSwitchId} className="payload-replace-target-label">
-            {t('cfg.payload_replace_target_all')}
-          </label>
-          <div className="payload-replace-role-group">
-            <Switch
-              id={allSwitchId}
-              size="small"
-              checked={target.all}
-              onChange={(checked) => {
-                markTouched(targetId);
-                if (checked) {
-                  setPendingPositionsText(ruleId, '');
-                  updateTarget({ all: true, invalidAll: undefined, positions: [], invalidPositions: undefined });
-                } else {
-                  updateTarget({ all: false, invalidAll: undefined });
+      {target.mode === 'role' ? (
+        <div className="payload-replace-target-box">
+          <div className="payload-replace-role-row">
+            <label htmlFor={roleSelectId} className="payload-replace-target-label">
+              {t('cfg.payload_replace_role_label')}
+            </label>
+            <div className="payload-replace-role-group">
+              <Select
+                id={roleSelectId}
+                size="small"
+                className="payload-replace-role-select"
+                value={target.invalidRole ? undefined : target.role}
+                placeholder={
+                  target.invalidRole
+                    ? (target.invalidRole.present ? String(target.invalidRole.value) : '—')
+                    : undefined
                 }
+                status={target.invalidRole ? 'error' : undefined}
+                options={REPLACE_ROLE_OPTIONS}
+                onChange={(val) => {
+                  markTouched(targetId);
+                  setPendingPositionsText(ruleId, '');
+                  updateRoleTarget({ role: val as PayloadReplaceRole, invalidRole: undefined });
+                }}
+                data-testid={`payload-replace-role-select-${ruleIndex}`}
+              />
+              {target.invalidRole && (
+                <>
+                  <Tag
+                    size="small"
+                    tone="danger"
+                    data-testid={`payload-replace-role-tag-${ruleIndex}`}
+                  >
+                    {target.invalidRole.present ? `role: ${String(target.invalidRole.value)}` : 'role: —'}
+                  </Tag>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      markTouched(targetId);
+                      updateRoleTarget({ role: 'user', invalidRole: undefined });
+                    }}
+                    data-testid={`payload-replace-fix-role-${ruleIndex}`}
+                  >
+                    {t('cfg.payload_replace_set_role_user')}
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="payload-replace-all-row">
+            <label htmlFor={allSwitchId} className="payload-replace-target-label">
+              {t('cfg.payload_replace_target_all')}
+            </label>
+            <div className="payload-replace-role-group">
+              <Switch
+                id={allSwitchId}
+                size="small"
+                checked={target.all}
+                onChange={(checked) => {
+                  markTouched(targetId);
+                  if (checked) {
+                    setPendingPositionsText(ruleId, '');
+                    updateRoleTarget({ all: true, invalidAll: undefined, positions: [], invalidPositions: undefined });
+                  } else {
+                    updateRoleTarget({ all: false, invalidAll: undefined });
+                  }
+                }}
+                data-testid={`payload-replace-all-${ruleIndex}`}
+              />
+              {target.invalidAll && (
+                <>
+                  <Tag size="small" tone="danger" data-testid={`payload-replace-all-tag-${ruleIndex}`}>
+                    {`all: ${String(target.invalidAll.value)}`}
+                  </Tag>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      markTouched(targetId);
+                      updateRoleTarget({ all: false, invalidAll: undefined });
+                    }}
+                    data-testid={`payload-replace-fix-all-${ruleIndex}`}
+                  >
+                    {t('cfg.payload_replace_set_all_false')}
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="payload-replace-positions-row">
+            <label htmlFor={positionsInputId} className="payload-replace-target-label">
+              {t('cfg.payload_replace_positions_label')}
+            </label>
+            <ReplacePositionsInput
+              id={positionsInputId}
+              ruleIndex={ruleIndex}
+              positions={target.positions}
+              invalidPositions={target.invalidPositions}
+              draftText={pendingPositions[ruleId] ?? ''}
+              onDraftTextChange={(text) => setPendingPositionsText(ruleId, text)}
+              disabled={target.all}
+              hasError={Boolean(targetError)}
+              placeholder={t('cfg.payload_replace_positions_ph')}
+              ariaLabel={t('cfg.payload_replace_positions_label')}
+              removeLabel={(pos) => t('cfg.payload_replace_positions_remove', { pos })}
+              onChange={(nextPositions, nextInvalid) => {
+                markTouched(targetId);
+                updateRoleTarget({
+                  positions: nextPositions,
+                  invalidPositions: nextInvalid.length > 0 ? nextInvalid : undefined,
+                });
               }}
-              data-testid={`payload-replace-all-${ruleIndex}`}
+              onBlur={() => markTouched(targetId)}
             />
-            {target.invalidAll && (
-              <>
-                <Tag size="small" tone="danger" data-testid={`payload-replace-all-tag-${ruleIndex}`}>
-                  {`all: ${String(target.invalidAll.value)}`}
-                </Tag>
+          </div>
+          {target.role === 'system' && (
+            <span className="payload-replace-hint">{t('cfg.payload_replace_positions_hint')}</span>
+          )}
+        </div>
+      ) : (
+        <div className="payload-replace-target-box">
+          <div className="payload-replace-paths-header">
+            <span className="payload-replace-target-label">
+              {t('cfg.payload_replace_paths_label')}
+            </span>
+            <div className="payload-replace-role-group">
+              {target.conflictingRoleFields && (
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => {
                     markTouched(targetId);
-                    updateTarget({ all: false, invalidAll: undefined });
+                    updatePathsTarget({ conflictingRoleFields: undefined });
                   }}
-                  data-testid={`payload-replace-fix-all-${ruleIndex}`}
+                  data-testid={`payload-replace-clear-role-fields-${ruleIndex}`}
                 >
-                  {t('cfg.payload_replace_set_all_false')}
+                  {t('cfg.payload_replace_clear_role_fields')}
                 </Button>
-              </>
-            )}
+              )}
+              {target.invalidPaths && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    markTouched(targetId);
+                    updatePathsTarget({
+                      invalidPaths: undefined,
+                      paths: [{ id: generateDynamicId('rpath'), path: '' }],
+                    });
+                  }}
+                  data-testid={`payload-replace-reset-paths-${ruleIndex}`}
+                >
+                  {t('cfg.payload_replace_reset_paths')}
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="payload-replace-positions-row">
-          <label htmlFor={positionsInputId} className="payload-replace-target-label">
-            {t('cfg.payload_replace_positions_label')}
-          </label>
-          <ReplacePositionsInput
-            id={positionsInputId}
-            ruleIndex={ruleIndex}
-            positions={target.positions}
-            invalidPositions={target.invalidPositions}
-            draftText={pendingPositions[ruleId] ?? ''}
-            onDraftTextChange={(text) => setPendingPositionsText(ruleId, text)}
-            disabled={target.all}
-            hasError={Boolean(targetError)}
-            placeholder={t('cfg.payload_replace_positions_ph')}
-            ariaLabel={t('cfg.payload_replace_positions_label')}
-            removeLabel={(pos) => t('cfg.payload_replace_positions_remove', { pos })}
-            onChange={(nextPositions, nextInvalid) => {
-              markTouched(targetId);
-              updateTarget({
-                positions: nextPositions,
-                invalidPositions: nextInvalid.length > 0 ? nextInvalid : undefined,
-              });
-            }}
-            onBlur={() => markTouched(targetId)}
-          />
+          {!target.invalidPaths && (
+            <ReplacePathsEditor draft={draft} ruleIndex={ruleIndex} paths={target.paths} />
+          )}
+
+          <span className="payload-replace-hint">{t('cfg.payload_replace_paths_hint')}</span>
         </div>
-      </div>
+      )}
 
       {targetError && (
         <span className="payload-field-error" role="alert">{targetError}</span>

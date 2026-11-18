@@ -11,6 +11,7 @@ import { describeConfigSaveError } from './configSaveErrors';
 import { ALL_CONFIG_FIELDS, type ConfigFieldDefinition, type ConfigSectionId } from '../../types/configSchema';
 import type { ConfigScalarsResponse } from '../../types/configManagement';
 import {
+  isBlockingPayloadIssue,
   validatePayloadDocument,
   type PayloadValidationIssue,
   type UnresolvedReplacePendingEntry,
@@ -511,7 +512,12 @@ export function useConfigDraft() {
     }
   }, [rawYaml]);
 
-  const hasConfigErrors = hasYamlErrors || payloadIssues.length > 0 || hasFieldIssues;
+  const blockingPayloadIssuesCount = React.useMemo(
+    () => payloadIssues.filter(isBlockingPayloadIssue).length,
+    [payloadIssues],
+  );
+
+  const hasConfigErrors = hasYamlErrors || blockingPayloadIssuesCount > 0 || hasFieldIssues;
 
   /**
    * saveConfig is the single save path for the whole page.
@@ -537,10 +543,11 @@ export function useConfigDraft() {
       toast.error(t('cfg.dirty_bar_yaml_error'));
       return Promise.resolve();
     }
-    if (viewModeRef.current === 'visual' && payloadIssuesRef.current.length > 0) {
+    const blockingPayloadIssues = payloadIssuesRef.current.filter(isBlockingPayloadIssue);
+    if (viewModeRef.current === 'visual' && blockingPayloadIssues.length > 0) {
       setValidateTrigger((v) => v + 1);
       setShowErrorFeedback(true);
-      toast.warning(t('cfg.dirty_bar_payload_issues', { n: payloadIssuesRef.current.length }));
+      toast.warning(t('cfg.dirty_bar_payload_issues', { n: blockingPayloadIssues.length }));
       return Promise.resolve();
     }
     if (firstFieldErrorMessageRef.current) {
@@ -582,7 +589,7 @@ export function useConfigDraft() {
       || Object.keys(patternRulesIssuesRef.current).length > 0;
     if (
       hasYamlErrorsNow()
-      || (viewModeRef.current === 'visual' && payloadIssuesRef.current.length > 0)
+      || (viewModeRef.current === 'visual' && payloadIssuesRef.current.some(isBlockingPayloadIssue))
       || hasCurrentFieldIssues
       || configQuery.isError
     ) {
@@ -753,6 +760,7 @@ export function useConfigDraft() {
     setShowErrorFeedback,
     handleDiscardChanges,
     payloadIssues,
+    blockingPayloadIssuesCount,
     setPayloadIssues,
     updatePayloadIssues,
     hasPendingPayloadEdits,

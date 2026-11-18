@@ -16,6 +16,6 @@
 - **主密钥不可丢失**：`OMCPA_MASTER_KEY` 用于加解密数据库敏感凭据与载荷。
 - **内嵌框架策略**：文档响应声明 `frame-src 'self' blob:` 以同源承载插件页面，反代切勿放宽为允许任意外部域嵌入。
 - **网络安全与反代**：CPA 应处于私网或回环网络内；公网暴露控制台必须配置 HTTPS，且仅将真实直连代理节点列入 `OMCPA_TRUSTED_PROXY_CIDRS`。
-- **网关版本**：强制要求 CPA v8.0.0+。CPA v8 可读取原 v7 格式 `config.yaml`，OMC 首次保存配置时会触发其迁移至 v8 结构，但在此之前会自动将原始 YAML 加密备份以便随时下载或回退（见 [CPA v8 集成契约](cpa-v8-compat.md)）。
+- **网关版本**：强制要求 CPA v8.0.0+。CPA v8 可读取原 v7 格式 `config.yaml`，OMC 首次保存配置时会触发其迁移至 v8 结构，但在此之前会自动将原始 YAML 加密备份以便随时下载或回退（见 [CPA v8 集成契约](cpa-v8-compat.md)）。其中载荷替换规则的 `system`/`developer` 角色、`target.paths` 路径目标及 `{ pattern, replacement }` 正则条目需 CPA v8.0.77+；v8.0.75–v8.0.76 仅支持 `role: user` 与字面量映射，早于 v8.0.75 的版本不支持载荷替换。
 - **子路径与搜索引擎**：配置了 `OMCPA_BASE_PATH` 时反代须完整保留前缀并转发；所有响应默认附带 `X-Robots-Tag: noindex, nofollow, …` 且支持 `/robots.txt` 禁止收录。
 - **容器运行时**：非 root（`10001:10001`）、只读根文件系统，内置健康检查；当 CPA 离线时 `/api/healthz` 返回 `degraded` 而不崩溃退出。

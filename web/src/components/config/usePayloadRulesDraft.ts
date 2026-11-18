@@ -3,12 +3,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { Document } from 'yaml';
 
 import { useT } from '../../i18n';
+import { prefixedKey } from '../../i18n/catalog';
 import {
+  PAYLOAD_REPLACE_ROLES,
   appendReplacePositionTokens,
   areModelItemsEqual,
   buildPayloadProtocolOptions,
+  buildPayloadReplaceRoleOptions,
   buildUnresolvedPendingIssues,
   generateDynamicId,
+  isBlockingPayloadIssue,
   parseFilterRules,
   parseRawRules,
   parseReplaceRules,
@@ -27,6 +31,7 @@ import {
   type PayloadCategoryKey,
   type PayloadFilterRule,
   type PayloadRawRule,
+  type PayloadReplaceRole,
   type PayloadReplaceRule,
   type PayloadModelItem,
   type PayloadTypedRule,
@@ -78,6 +83,19 @@ export function usePayloadRulesDraft({
 
   const PROTOCOL_OPTIONS = React.useMemo(
     () => buildPayloadProtocolOptions(t('cfg.payload_model_default')),
+    [t],
+  );
+
+  const REPLACE_ROLE_OPTIONS = React.useMemo(
+    () =>
+      buildPayloadReplaceRoleOptions(
+        Object.fromEntries(
+          PAYLOAD_REPLACE_ROLES.map((role) => [
+            role,
+            t(prefixedKey('cfg.payload_replace_role_', role) ?? 'cfg.payload_replace_role_user'),
+          ]),
+        ) as Record<PayloadReplaceRole, string>,
+      ),
     [t],
   );
 
@@ -237,7 +255,7 @@ export function usePayloadRulesDraft({
         for (const [ruleId, text] of Object.entries(pendingPositionsRef.current)) {
           if (text.trim() === '') continue;
           const targetRule = validRulesById.get(ruleId);
-          if (targetRule && !targetRule.target.all) {
+          if (targetRule && targetRule.target.mode === 'role' && !targetRule.target.all) {
             nextPending[ruleId] = text;
           } else {
             const prevIdx = previousReplaceRules.findIndex((r) => r.id === ruleId);
@@ -322,8 +340,9 @@ export function usePayloadRulesDraft({
   useEffect(() => {
     if (validateTrigger && validateTrigger > 0) {
       setShowAllErrors(true);
-      if (issues.length > 0) {
-        const firstCat = issues[0].category;
+      const blocking = issues.filter(isBlockingPayloadIssue);
+      if (blocking.length > 0) {
+        const firstCat = blocking[0].category;
         setActivePanels((panels) => (panels.includes(firstCat) ? panels : [...panels, firstCat]));
       }
     }
@@ -332,18 +351,29 @@ export function usePayloadRulesDraft({
   const issuesByTarget = React.useMemo(() => {
     const map = new Map<string, PayloadValidationIssue>();
     for (const issue of issues) {
-      if (!map.has(issue.targetId)) {
+      const existing = map.get(issue.targetId);
+      if (!existing || (existing.severity === 'warning' && issue.severity !== 'warning')) {
         map.set(issue.targetId, issue);
       }
     }
     return map;
   }, [issues]);
 
-  const getTargetError = (targetId: string): string | undefined => {
+  const getTargetFeedback = (
+    targetId: string,
+  ): { message: string; severity: 'error' | 'warning' } | undefined => {
     const issue = issuesByTarget.get(targetId);
     if (!issue) return undefined;
+    if (issue.severity === 'warning') {
+      return { message: t(issue.messageKey), severity: 'warning' };
+    }
     const isVisible = showAllErrors || touchedFields.has(targetId);
-    return isVisible ? t(issue.messageKey) : undefined;
+    return isVisible ? { message: t(issue.messageKey), severity: 'error' } : undefined;
+  };
+
+  const getTargetError = (targetId: string): string | undefined => {
+    const feedback = getTargetFeedback(targetId);
+    return feedback?.severity === 'error' ? feedback.message : undefined;
   };
 
   // Sync back helper
@@ -447,8 +477,8 @@ export function usePayloadRulesDraft({
       {
         id: generateDynamicId('replace_rule'),
         models: [{ id: generateDynamicId('m'), name: '' }],
-        target: { positions: [], all: false },
-        replacements: [{ id: generateDynamicId('rep'), from: '', to: '' }],
+        target: { mode: 'role', role: 'user', positions: [], all: false },
+        replacements: [{ id: generateDynamicId('rep'), kind: 'literal', from: '', to: '' }],
       },
     ]);
   };
@@ -497,7 +527,7 @@ export function usePayloadRulesDraft({
 
     const nextRules = currentRules.map((rule) => {
       const rawText = pendingByRuleId.get(rule.id);
-      if (rawText === undefined || rawText.trim() === '' || rule.target.all) {
+      if (rawText === undefined || rawText.trim() === '' || rule.target.mode !== 'role' || rule.target.all) {
         return rule;
       }
       const parsed = appendReplacePositionTokens(
@@ -781,6 +811,7 @@ export function usePayloadRulesDraft({
     showAllErrors,
     markTouched,
     getTargetError,
+    getTargetFeedback,
     commitCategory,
     advModalState,
     setAdvModalState,
@@ -802,6 +833,7 @@ export function usePayloadRulesDraft({
     addModelToRule,
     deleteModelFromRule,
     PROTOCOL_OPTIONS,
+    REPLACE_ROLE_OPTIONS,
     t,
   };
 }

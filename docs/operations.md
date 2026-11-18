@@ -31,7 +31,11 @@ must keep. Every setting is listed in [Environment variables](reference/environm
   guidance instead. CPA v8 reads an existing v7 `config.yaml` unchanged, so upgrading
   CPA needs no configuration change. The console's first configuration save converts
   such a file to the v8 layout, after keeping an encrypted copy of the original that the
-  configuration page offers for download (see [CPA contract](cpa-v8-compat.md)).
+  configuration page offers for download (see [CPA contract](cpa-v8-compat.md)). Payload
+  replacement `system`/`developer` roles, `target.paths`, and `{ pattern, replacement }`
+  regex entries require CPA v8.0.77 or later; v8.0.75–v8.0.76 support only `role: user`
+  with literal mappings, and versions earlier than v8.0.75 do not support payload
+  replacement.
 - **Gateway configuration**: Omitted request retries and maximum cooldown wait
   both mean `0`; the example's `3` and `30` apply only when explicitly configured.
   Header passthrough forwards filtered upstream response headers to clients.

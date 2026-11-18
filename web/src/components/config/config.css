@@ -725,6 +725,19 @@
   margin-top: 3px;
   font-family: var(--font-mono);
 }
+.payload-field-warning {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--warn);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+.payload-replace-hint {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  line-height: 1.4;
+}
 .payload-adv-kv-header {
   display: flex;
   align-items: center;
@@ -746,11 +759,34 @@
   flex-direction: column;
   gap: 10px;
 }
+.payload-replace-role-row,
+.payload-replace-paths-header,
 .payload-replace-all-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+}
+.payload-replace-role-select {
+  min-width: 168px;
+  max-width: 100%;
+}
+.payload-replace-paths-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.payload-replace-path-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+.payload-replace-path-input {
+  min-width: 0;
 }
 .payload-replace-positions-row {
   display: flex;
@@ -846,10 +882,14 @@
 }
 .payload-replace-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto minmax(0, 1fr) auto;
   gap: 6px;
   align-items: center;
   width: 100%;
+}
+.payload-replace-kind-select {
+  width: 96px !important;
+  flex: 0 0 96px;
 }
 .payload-replace-textarea {
   min-height: 28px;
@@ -1011,22 +1051,30 @@
   .payload-replace-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
-  .payload-replace-from {
+  .payload-replace-kind-select {
     grid-column: 2;
     grid-row: 1;
+    width: auto !important;
+    min-width: 92px;
+    max-width: 140px;
+    justify-self: start;
   }
   .payload-replace-actions {
     grid-column: 3;
     grid-row: 1;
   }
+  .payload-replace-from {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
   .payload-replace-arrow {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 3;
     justify-self: center;
   }
   .payload-replace-to {
     grid-column: 2 / -1;
-    grid-row: 2;
+    grid-row: 3;
   }
 }
 @media (pointer: coarse) and (max-height: 640px) {
