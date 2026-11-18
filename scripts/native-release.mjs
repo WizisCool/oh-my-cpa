@@ -18,14 +18,17 @@ const ARCHIVE_FILES = ['LICENSE', 'README.md', 'README.zh-CN.md', '.env.example'
   'docs/reference/environment.md', 'docs/ops/sqlite-operations.md'];
 export const RELEASE_DIRECTORY = path.join(ROOT, 'tmp/native-release');
 
-export function createNativePlan(tag, packageVersion, webVersion) {
+export function createNativePlan(tag, packageVersion, webVersion, { commit, builtAt } = {}) {
   const { version } = createReleasePlan({ tag, packageVersion, webVersion, image: 'wiziscool/oh-my-cpa' });
+  const ldflags = [`-s -w -X github.com/oh-my-cpa/oh-my-cpa/internal/config.BuildVersion=${tag}`];
+  if (commit) ldflags.push(`-X github.com/oh-my-cpa/oh-my-cpa/internal/config.BuildCommit=${commit}`);
+  if (builtAt) ldflags.push(`-X github.com/oh-my-cpa/oh-my-cpa/internal/config.BuiltAt=${builtAt}`);
   return RELEASE_TARGETS.map(({ goos, goarch }) => ({
     goos, goarch,
     binary: `oh-my-cpa${goos === 'windows' ? '.exe' : ''}`,
     archive: `oh-my-cpa_${version}_${goos}_${goarch}.${goos === 'windows' ? 'zip' : 'tar.gz'}`,
     buildArgs: ['build', '-trimpath', '-buildvcs=false', '-tags', 'timetzdata',
-      '-ldflags', `-s -w -X github.com/oh-my-cpa/oh-my-cpa/internal/config.BuildVersion=${tag}`],
+      '-ldflags', ldflags.join(' ')],
   }));
 }
 
@@ -87,10 +90,21 @@ export function verifyReleaseAssets(directory, plan) {
     'Every release asset must match its SHA-256 checksum');
 }
 
-function readValidatedPlan(tag, root = ROOT) {
+function readValidatedPlan(tag, root = ROOT, buildMetadata = {}) {
   return createNativePlan(tag,
     JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version,
-    JSON.parse(fs.readFileSync(path.join(root, 'web/package.json'), 'utf8')).version);
+    JSON.parse(fs.readFileSync(path.join(root, 'web/package.json'), 'utf8')).version,
+    buildMetadata);
+}
+
+function readGitBuildMetadata(root, execute = execFileSync) {
+  const raw = execute('git', ['show', '-s', '--format=%ct %H', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  const [epochText, commit = ''] = raw.split(/\s+/);
+  const epoch = Number(epochText);
+  assert.ok(Number.isSafeInteger(epoch) && epoch >= 315532800, 'Archive timestamp must be a valid Git commit date');
+  assert.match(commit, /^[a-f0-9]{40}$/i, 'Build commit must be a valid Git commit SHA');
+  const builtAt = new Date(epoch * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  return { epoch, commit, builtAt };
 }
 
 export function buildNativeWeb(tag, { root = ROOT, execute = execFileSync } = {}) {
@@ -126,11 +140,11 @@ function buildTargetArchive(target, epoch, output, { root = ROOT, execute = exec
 
 export function buildNativeTarget(tag, targetSpec, { root = ROOT, execute = execFileSync, skipWebBuild = false } = {}) {
   const output = path.join(root, 'tmp/native-release');
-  const plan = readValidatedPlan(tag, root);
+  readValidatedPlan(tag, root);
+  const { epoch, commit, builtAt } = readGitBuildMetadata(root, execute);
+  const plan = readValidatedPlan(tag, root, { commit, builtAt });
   const target = plan.find(entry => `${entry.goos}/${entry.goarch}` === targetSpec);
   assert.ok(target, `Unsupported native release target: ${targetSpec}`);
-  const epoch = Number(execute('git', ['show', '-s', '--format=%ct', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim());
-  assert.ok(Number.isSafeInteger(epoch) && epoch >= 315532800, 'Archive timestamp must be a valid Git commit date');
   if (!skipWebBuild) execute('pnpm', ['build'], { cwd: root, stdio: 'inherit' });
   validateEmbeddedConsole(path.join(root, 'internal/web/dist'));
   fs.rmSync(output, { recursive: true, force: true });
@@ -153,9 +167,9 @@ export function finalizeNativeRelease(tag, { root = ROOT } = {}) {
 
 export function buildNativeRelease(tag, { root = ROOT, execute = execFileSync } = {}) {
   const output = path.join(root, 'tmp/native-release');
-  const plan = readValidatedPlan(tag, root);
-  const epoch = Number(execute('git', ['show', '-s', '--format=%ct', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim());
-  assert.ok(Number.isSafeInteger(epoch) && epoch >= 315532800, 'Archive timestamp must be a valid Git commit date');
+  readValidatedPlan(tag, root);
+  const { epoch, commit, builtAt } = readGitBuildMetadata(root, execute);
+  const plan = readValidatedPlan(tag, root, { commit, builtAt });
   // Build once before any Go target: concurrent embedding could capture a half-written SPA.
   execute('pnpm', ['build'], { cwd: root, stdio: 'inherit' });
   validateEmbeddedConsole(path.join(root, 'internal/web/dist'));

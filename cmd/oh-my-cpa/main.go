@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/app"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/applog"
@@ -71,14 +73,16 @@ func main() {
 	slog.SetDefault(logger)
 	// A local .env is a developer convenience only: real environment variables
 	// keep precedence, so containers and CI never depend on the file.
-	if applied, err := config.LoadDotEnv(config.DotEnvPath()); err != nil {
+	applied, err := config.LoadDotEnv(config.DotEnvPath())
+	if err != nil {
 		logger.Error("invalid environment file", "path", config.DotEnvPath(), "error", err)
 		os.Exit(2)
-	} else if applied > 0 {
-		logger.Info("loaded environment file", "path", config.DotEnvPath(), "variables", applied)
 	}
 	cfg, err := config.Load()
 	if err != nil {
+		if applied > 0 {
+			logger.Info("loaded environment file", "path", config.DotEnvPath(), "variables", applied)
+		}
 		logger.Error("invalid configuration", "error", err)
 		os.Exit(2)
 	}
@@ -86,6 +90,9 @@ func main() {
 	defer stop()
 
 	if len(os.Args) > 1 && os.Args[1] == "database" {
+		if applied > 0 {
+			logger.Info("loaded environment file", "path", config.DotEnvPath(), "variables", applied)
+		}
 		if cfg.IsDemoMode {
 			logger.Error("database commands are unavailable in demo mode")
 			os.Exit(2)
@@ -95,6 +102,11 @@ func main() {
 			os.Exit(1)
 		}
 		return
+	}
+
+	writeStartupBanner(os.Stderr, serviceLog, config.ResolveBuildInfo(cfg.Version))
+	if applied > 0 {
+		logger.Info("loaded environment file", "path", config.DotEnvPath(), "variables", applied)
 	}
 
 	running, err := app.New(ctx, cfg, logger)
@@ -107,5 +119,21 @@ func main() {
 	if err := running.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("server stopped with error", "error", err)
 		os.Exit(1)
+	}
+}
+
+func writeStartupBanner(stderr io.Writer, serviceLog *applog.Buffer, info config.BuildInfo) {
+	_, _ = fmt.Fprintln(stderr, info.Banner())
+	if serviceLog != nil {
+		serviceLog.Append(applog.Record{
+			LoggedAtMS: time.Now().UnixMilli(),
+			Level:      "info",
+			Message:    "Oh My CPA starting",
+			Attrs: []applog.Attr{
+				{Key: "version", Value: info.Version},
+				{Key: "commit", Value: info.Commit},
+				{Key: "built_at", Value: info.BuiltAt},
+			},
+		})
 	}
 }

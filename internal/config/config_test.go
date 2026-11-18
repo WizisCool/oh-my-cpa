@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"testing"
@@ -404,5 +405,50 @@ func TestLoadUsesBuildVersionUnlessOperatorOverridesIt(t *testing.T) {
 	}
 	if loaded.Version != "v0.2.0-fork" {
 		t.Fatalf("version = %q, want operator override", loaded.Version)
+	}
+}
+
+func TestResolveBuildInfo(t *testing.T) {
+	noBuildInfo := func() (*debug.BuildInfo, bool) { return nil, false }
+
+	injected := resolveBuildInfo(
+		"v0.4.6",
+		"7DF56074abcdef1234567890abcdef1234567890",
+		"2026-11-17T10:10:49+08:00",
+		noBuildInfo,
+	)
+	if want := "Oh My CPA Version: v0.4.6, Commit: 7df56074, BuiltAt: 2026-11-17T02:10:49Z"; injected.Banner() != want {
+		t.Fatalf("injected Banner() = %q, want %q", injected.Banner(), want)
+	}
+
+	vcsClean := resolveBuildInfo("", "unknown", "", func() (*debug.BuildInfo, bool) {
+		return &debug.BuildInfo{
+			Settings: []debug.BuildSetting{
+				{Key: "vcs.revision", Value: "e8bb4f57d6c3de8beee632f53f0c0fa033eb34d0"},
+				{Key: "vcs.time", Value: "2026-11-18T07:08:48Z"},
+				{Key: "vcs.modified", Value: "false"},
+			},
+		}, true
+	})
+	if want := "Oh My CPA Version: " + BuildVersion + ", Commit: e8bb4f57, BuiltAt: 2026-11-18T07:08:48Z"; vcsClean.Banner() != want {
+		t.Fatalf("vcsClean Banner() = %q, want %q", vcsClean.Banner(), want)
+	}
+
+	vcsDirty := resolveBuildInfo("v0.1.0-local", "", "", func() (*debug.BuildInfo, bool) {
+		return &debug.BuildInfo{
+			Settings: []debug.BuildSetting{
+				{Key: "vcs.revision", Value: "e8bb4f57d6c3de8beee632f53f0c0fa033eb34d0"},
+				{Key: "vcs.time", Value: "2026-11-18T07:08:48Z"},
+				{Key: "vcs.modified", Value: "true"},
+			},
+		}, true
+	})
+	if want := "Oh My CPA Version: v0.1.0-local, Commit: e8bb4f57-dirty, BuiltAt: 2026-11-18T07:08:48Z"; vcsDirty.Banner() != want {
+		t.Fatalf("vcsDirty Banner() = %q, want %q", vcsDirty.Banner(), want)
+	}
+
+	missing := resolveBuildInfo("", "unknown", "unknown", noBuildInfo)
+	if want := "Oh My CPA Version: " + BuildVersion + ", Commit: unknown, BuiltAt: unknown"; missing.Banner() != want {
+		t.Fatalf("missing Banner() = %q, want %q", missing.Banner(), want)
 	}
 }

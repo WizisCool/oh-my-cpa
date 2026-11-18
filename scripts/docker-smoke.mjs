@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,13 @@ function executeDocker(...args) {
     // child_process errors echo argv, which can contain freshly generated container secrets.
     throw new Error(`Docker ${args[0]} failed (status ${error.status ?? error.code ?? 'unknown'})`);
   }
+}
+
+function readContainerLogs(container) {
+  const result = spawnSync('docker', ['logs', container], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  if (result.error) throw new Error(`Docker logs failed: ${result.error.message}`);
+  if (result.status !== 0) throw new Error(`Docker logs failed (status ${result.status ?? 'unknown'})`);
+  return `${result.stdout ?? ''}${result.stderr ?? ''}`.trim();
 }
 
 async function waitForHealthy(container, since) {
@@ -62,6 +69,9 @@ export async function verifyDockerImage(image, version) {
         '-e', 'OMCPA_UPDATE_CHECK_ON_PAGE_LOAD=false', image);
       executeDocker('start', container);
       await waitForHealthy(container, since);
+      const containerLogs = readContainerLogs(container);
+      const firstLogLine = containerLogs.split(/\r?\n/, 1)[0] ?? '';
+      assert.match(firstLogLine, new RegExp(`^Oh My CPA Version: ${version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}, Commit: (?:[0-9a-f]{8}|unknown), BuiltAt: \\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$`));
       const address = executeDocker('port', container, `${listenPort}/tcp`);
       const basePath = rawPath === null || rawPath === '/' ? '' : `/${rawPath.replace(/^\/+|\/+$/g, '')}`;
       const origin = `http://${address}${basePath}`;

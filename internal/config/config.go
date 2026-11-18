@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,115 @@ import (
 
 // BuildVersion is injected by release builds; untagged source builds remain incomparable.
 var BuildVersion = "v0.1.0-dev"
+
+// BuildCommit and BuiltAt are injected by release and container builds via -ldflags.
+// Untagged source builds fall back to Go VCS metadata when available.
+var (
+	BuildCommit = ""
+	BuiltAt     = ""
+)
+
+// BuildInfo describes the running Oh My CPA binary for startup diagnostics.
+type BuildInfo struct {
+	Version string
+	Commit  string
+	BuiltAt string
+}
+
+// Banner formats the startup version line printed before service logs.
+func (b BuildInfo) Banner() string {
+	return fmt.Sprintf("Oh My CPA Version: %s, Commit: %s, BuiltAt: %s", b.Version, b.Commit, b.BuiltAt)
+}
+
+// ResolveBuildInfo resolves the running version, commit, and build timestamp from
+// explicit overrides, linker-injected metadata, and Go VCS build settings.
+func ResolveBuildInfo(versionOverride string) BuildInfo {
+	return resolveBuildInfo(versionOverride, BuildCommit, BuiltAt, debug.ReadBuildInfo)
+}
+
+func resolveBuildInfo(versionOverride, commitOverride, builtAtOverride string, readInfo func() (*debug.BuildInfo, bool)) BuildInfo {
+	version := strings.TrimSpace(versionOverride)
+	if version == "" {
+		version = strings.TrimSpace(BuildVersion)
+	}
+	if version == "" {
+		version = "unknown"
+	}
+
+	commit := normalizeCommit(commitOverride)
+	builtAt := normalizeBuiltAt(builtAtOverride)
+
+	if (commit == "" || builtAt == "") && readInfo != nil {
+		if info, ok := readInfo(); ok && info != nil {
+			var vcsRevision, vcsTime string
+			var vcsModified bool
+			for _, setting := range info.Settings {
+				switch setting.Key {
+				case "vcs.revision":
+					vcsRevision = setting.Value
+				case "vcs.time":
+					vcsTime = setting.Value
+				case "vcs.modified":
+					vcsModified = setting.Value == "true"
+				}
+			}
+			if commit == "" && vcsRevision != "" {
+				commit = normalizeCommit(vcsRevision)
+				if commit != "" && vcsModified {
+					commit += "-dirty"
+				}
+			}
+			if builtAt == "" && vcsTime != "" {
+				builtAt = normalizeBuiltAt(vcsTime)
+			}
+		}
+	}
+
+	if commit == "" {
+		commit = "unknown"
+	}
+	if builtAt == "" {
+		builtAt = "unknown"
+	}
+
+	return BuildInfo{
+		Version: version,
+		Commit:  commit,
+		BuiltAt: builtAt,
+	}
+}
+
+func normalizeCommit(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || strings.EqualFold(trimmed, "unknown") {
+		return ""
+	}
+	if len(trimmed) > 8 && isHexString(trimmed) {
+		return strings.ToLower(trimmed[:8])
+	}
+	return trimmed
+}
+
+func isHexString(value string) bool {
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return value != ""
+}
+
+func normalizeBuiltAt(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || strings.EqualFold(trimmed, "unknown") {
+		return ""
+	}
+	if parsed, err := time.Parse(time.RFC3339Nano, trimmed); err == nil {
+		return parsed.UTC().Format(time.RFC3339)
+	}
+	return trimmed
+}
 
 // Config contains process configuration. Secrets are read once at startup and
 // are never included in API responses.

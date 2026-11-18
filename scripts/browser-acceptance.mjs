@@ -276,6 +276,7 @@ try {
   if (identity.version !== fixtureVersion) throw new Error('Acceptance port is served by an unrelated process');
   cancellation.signal.throwIfAborted();
   const redirect = await fetch(appURL, { redirect: 'manual', signal: cancellation.signal });
+  check('startup prints build info banner', appLog.join('').includes(`Oh My CPA Version: ${fixtureVersion}, Commit: `));
   check('fixture startup ignores operator dotenv files', !appLog.join('').includes('loaded environment file'));
   check('/omc redirects to /omc/', redirect.status === 308 && redirect.headers.get('location') === '/omc/', `status=${redirect.status}`);
 
