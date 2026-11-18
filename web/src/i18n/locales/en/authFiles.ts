@@ -185,7 +185,7 @@ export default {
   'af.alias_error_too_many': 'A provider can contain at most 512 model aliases.',
   'af.alias_error_name_alias_required': 'Both the upstream model and client alias are required.',
   'af.alias_error_field_too_long': 'A model alias field is too long.',
-  'af.alias_error_alias_same': 'The client alias must differ from the upstream model name.',
+  'af.alias_error_alias_same': 'The client alias must differ from the upstream model name (case-sensitive).',
   'af.alias_error_alias_duplicate': 'The client alias {alias} is duplicated.',
   'af.batch_refresh': 'Refresh',
   'af.batch_refresh_success': 'Refreshed {n} credentials',

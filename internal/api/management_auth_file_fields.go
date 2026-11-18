@@ -638,7 +638,7 @@ func credentialModelAliasesWire(value any) ([]any, error) {
 			return nil, fmt.Errorf("model_aliases[%d]: name and alias are both required", position)
 		case len([]rune(name)) > managementAuthFileFieldLimit || len([]rune(alias)) > managementAuthFileFieldLimit || len([]rune(displayName)) > managementAuthFileFieldLimit:
 			return nil, fmt.Errorf("model_aliases[%d]: a value is too long", position)
-		case strings.EqualFold(name, alias):
+		case name == alias:
 			return nil, fmt.Errorf("model_aliases[%d]: the alias must differ from the model it names", position)
 		}
 		aliasKey := strings.ToLower(alias)
@@ -693,7 +693,7 @@ func projectModelAliasList(value any) []managementOAuthModelAlias {
 			continue
 		}
 		name, alias := strings.TrimSpace(stringValue(entry["name"])), strings.TrimSpace(stringValue(entry["alias"]))
-		if name == "" || alias == "" || strings.EqualFold(name, alias) {
+		if name == "" || alias == "" || name == alias {
 			continue
 		}
 		aliases = append(aliases, managementOAuthModelAlias{

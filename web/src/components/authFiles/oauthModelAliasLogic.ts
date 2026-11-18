@@ -83,7 +83,7 @@ export function validateOAuthModelAliasDrafts(
     ) {
       return { ok: false, error: 'field_too_long' };
     }
-    if (name.toLowerCase() === alias.toLowerCase()) {
+    if (name === alias) {
       return { ok: false, error: 'alias_same', alias };
     }
     const aliasKey = alias.toLowerCase();

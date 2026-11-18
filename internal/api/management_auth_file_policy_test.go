@@ -145,7 +145,7 @@ func TestCredentialPolicyFieldsRefuseWhatCPAWouldSkip(t *testing.T) {
 		`"request_retry":1,"request-retry":2`:                                                 "same field",
 		`"model_aliases":null`:                                                                "cannot be null",
 		`"model_aliases":[{"name":"gpt-5","alias":""}]`:                                       "both required",
-		`"model_aliases":[{"name":"gpt-5","alias":"GPT-5"}]`:                                  "must differ",
+		`"model_aliases":[{"name":"gpt-5","alias":"gpt-5"}]`:                                  "must differ",
 		`"model_aliases":[{"name":"a","alias":"x"},{"name":"b","alias":"X"}]`:                 "already used",
 		`"model_aliases":[{"name":"a","alias":"x","headers":{}}]`:                             "array of aliases",
 	}
@@ -212,7 +212,7 @@ func (r *cpaRecorder) count(method, path string) int {
 func TestCredentialModelAliasesRoundTrip(t *testing.T) {
 	upstream := &credentialPolicyUpstream{stored: map[string]any{
 		"type": "codex", "refresh_token": "STORED-TOKEN-SECRET",
-		"model-aliases": []any{map[string]any{"name": "gpt-5", "alias": "fast", "force-mapping": true}, map[string]any{"name": "same", "alias": "SAME"}},
+		"model-aliases": []any{map[string]any{"name": "gpt-5", "alias": "fast", "force-mapping": true}, map[string]any{"name": "glm-5", "alias": "GLM-5"}, map[string]any{"name": "same", "alias": "same"}},
 	}}
 	client, baseURL, recorder := startAuthFilesTestServer(t, "management-secret-value", upstream.serve(t))
 	base := baseURL + "/omc/api/v1/management/auth-files"
@@ -222,12 +222,12 @@ func TestCredentialModelAliasesRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &safe); err != nil || response.StatusCode != http.StatusOK {
 		t.Fatalf("safe fields = %d %s", response.StatusCode, raw)
 	}
-	if len(safe.ModelAliases) != 1 || safe.ModelAliases[0].Alias != "fast" || !safe.ModelAliases[0].ForceMapping {
-		t.Fatalf("stored aliases = %+v, want the one alias CPA applies", safe.ModelAliases)
+	if len(safe.ModelAliases) != 2 || safe.ModelAliases[0].Alias != "fast" || !safe.ModelAliases[0].ForceMapping || safe.ModelAliases[1].Name != "glm-5" || safe.ModelAliases[1].Alias != "GLM-5" {
+		t.Fatalf("stored aliases = %+v, want the aliases CPA applies", safe.ModelAliases)
 	}
 
 	body := `{"name":"codex.json","auth_index":"idx-1","model_aliases":[
-		{"name":" gpt-5 ","alias":"fast","fork":true,"display_name":"Fast","force_mapping":true},{"name":"gpt-5-mini","alias":"cheap"}]}`
+		{"name":" gpt-5 ","alias":"fast","fork":true,"display_name":"Fast","force_mapping":true},{"name":"glm-5","alias":"GLM-5","fork":true}]}`
 	response, raw = doJSON(t, client, http.MethodPatch, base+"/fields", body)
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("fields patch = %d %s", response.StatusCode, raw)
@@ -249,7 +249,7 @@ func TestCredentialModelAliasesRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &mutation); err != nil {
 		t.Fatal(err)
 	}
-	if len(mutation.Fields.ModelAliases) != 2 || mutation.Fields.ModelAliases[0].DisplayName != "Fast" || mutation.Fields.ModelAliases[1].Alias != "cheap" {
+	if len(mutation.Fields.ModelAliases) != 2 || mutation.Fields.ModelAliases[0].DisplayName != "Fast" || mutation.Fields.ModelAliases[1].Name != "glm-5" || mutation.Fields.ModelAliases[1].Alias != "GLM-5" {
 		t.Fatalf("read back = %+v, want both saved aliases", mutation.Fields.ModelAliases)
 	}
 	if strings.Contains(string(raw), "STORED-TOKEN-SECRET") {

@@ -106,7 +106,12 @@ test('an alias the gateway would drop is reported instead of saved', () => {
     modelAliases: modelAliases.map((entry, position) => ({ ...entry, rowKey: `row-${position}` })),
   });
   assert.deepEqual(credentialPolicyProblem(draft([{ name: 'gpt-5', alias: '' }])), { kind: 'alias', error: 'name_alias_required', alias: undefined });
-  assert.deepEqual(credentialPolicyProblem(draft([{ name: 'gpt-5', alias: 'GPT-5' }])), { kind: 'alias', error: 'alias_same', alias: 'GPT-5' });
+  assert.deepEqual(credentialPolicyProblem(draft([{ name: 'gpt-5', alias: 'gpt-5' }])), { kind: 'alias', error: 'alias_same', alias: 'gpt-5' });
+  assert.equal(credentialPolicyProblem(draft([{ name: 'gpt-5', alias: 'GPT-5' }])), null);
+  assert.deepEqual(
+    buildCredentialPolicyPatch(draft([{ name: 'glm-5', alias: 'GLM-5' }]), EMPTY_CREDENTIAL_POLICY_DRAFT),
+    { model_aliases: [{ name: 'glm-5', alias: 'GLM-5' }] },
+  );
   assert.deepEqual(
     credentialPolicyProblem(draft([{ name: 'a', alias: 'x' }, { name: 'b', alias: 'X' }])),
     { kind: 'alias', error: 'alias_duplicate', alias: 'X' },

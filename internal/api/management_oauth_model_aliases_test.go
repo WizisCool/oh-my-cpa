@@ -18,6 +18,9 @@ func TestManagementOAuthModelAliasesRoundTrip(t *testing.T) {
 		"claude": {
 			{Name: "claude-sonnet-4", Alias: "sonnet-latest"},
 		},
+		"zai": {
+			{Name: "glm-5", Alias: "GLM-5"},
+		},
 		"legacy:channel": {
 			{Name: "legacy-model", Alias: "legacy-alias"},
 		},
@@ -68,6 +71,9 @@ func TestManagementOAuthModelAliasesRoundTrip(t *testing.T) {
 	if entry := listed.Aliases["codex"][0]; entry.Name != "gpt-5" || entry.Alias != "gpt-5-fast" || !entry.Fork || !entry.ForceMapping || entry.DisplayName != "GPT-5 Fast" {
 		t.Fatalf("projected codex alias = %#v", entry)
 	}
+	if entry := listed.Aliases["zai"][0]; entry.Name != "glm-5" || entry.Alias != "GLM-5" {
+		t.Fatalf("projected case-only alias = %#v", entry)
+	}
 	if _, exists := listed.Aliases["legacy:channel"]; exists {
 		t.Fatalf("invalid legacy provider leaked into the projection: %#v", listed.Aliases)
 	}
@@ -75,7 +81,7 @@ func TestManagementOAuthModelAliasesRoundTrip(t *testing.T) {
 		t.Fatalf("invalid provider entries leaked into the projection: %#v", listed.Aliases)
 	}
 
-	patch := `{"provider":"codex","aliases":[{"name":"gpt-5.1","alias":"gpt-5.1-fast","fork":true,"force_mapping":true,"display_name":"GPT-5.1 Fast"}]}`
+	patch := `{"provider":"codex","aliases":[{"name":"gpt-5.1","alias":"gpt-5.1-fast","fork":true,"force_mapping":true,"display_name":"GPT-5.1 Fast"},{"name":"glm-5","alias":"GLM-5","fork":true}]}`
 	response, raw = doJSON(t, client, http.MethodPatch, base, patch)
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("patch model aliases = %d body = %s", response.StatusCode, raw)
@@ -88,7 +94,7 @@ func TestManagementOAuthModelAliasesRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &mutation); err != nil {
 		t.Fatal(err)
 	}
-	if mutation.Status != "ok" || mutation.Provider != "codex" || len(mutation.Aliases) != 1 || mutation.Aliases[0].Alias != "gpt-5.1-fast" {
+	if mutation.Status != "ok" || mutation.Provider != "codex" || len(mutation.Aliases) != 2 || mutation.Aliases[0].Alias != "gpt-5.1-fast" || mutation.Aliases[1].Alias != "GLM-5" {
 		t.Fatalf("model alias mutation = %s", raw)
 	}
 	forwardedPatch := recorder.last(t, http.MethodPatch, "/v8/management/config")
@@ -151,6 +157,7 @@ func TestManagementOAuthModelAliasesGuardrails(t *testing.T) {
 		{`{"provider":"codex","aliases":null}`, http.StatusBadRequest},
 		{`{"provider":"codex","aliases":[{"name":"gpt-5","alias":"gpt-5"}]}`, http.StatusBadRequest},
 		{`{"provider":"codex","aliases":[{"name":"gpt-5","alias":"fast"},{"name":"gpt-5.1","alias":"FAST"}]}`, http.StatusBadRequest},
+		{`{"provider":"codex","aliases":[{"name":"glm-5","alias":"GLM-5"},{"name":"gpt-5","alias":"glm-5"}]}`, http.StatusBadRequest},
 		{`{"provider":"codex","aliases":[{"name":"gpt-5","alias":"fast","api_key":"secret"}]}`, http.StatusBadRequest},
 	} {
 		response, raw := doJSON(t, client, http.MethodPatch, base, probe.body)

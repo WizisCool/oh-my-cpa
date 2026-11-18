@@ -193,6 +193,7 @@ func TestOAuthCatalogRetainsBillableUpstreamModels(t *testing.T) {
 		{"disabled credential", `[{"provider":"antigravity","disabled":true,"models":[{"id":"gemini-3.8-flash"}]}]`, `{"antigravity":[{"name":"gemini-3.8-flash-high","alias":"gemini-3.8-flash"}]}`, map[string]string{}},
 		{"provider scoped conflicts", `[{"provider":"claude","models":[{"id":"fast"}]},{"provider":"codex","models":[{"id":"fast"}]}]`, `{"claude":[{"name":"claude-sonnet","alias":"fast"}],"codex":[{"name":"gpt-5","alias":"fast"}]}`, map[string]string{"fast": "", "claude-sonnet": "claude-sonnet", "gpt-5": "gpt-5"}},
 		{"case insensitive alias", `[{"provider":"Antigravity","models":[{"id":"GEMINI-3.8-FLASH"}]}]`, `{"antigravity":[{"name":"gemini-3.8-flash-high","alias":"gemini-3.8-flash"}]}`, map[string]string{"GEMINI-3.8-FLASH": "gemini-3.8-flash-high", "gemini-3.8-flash-high": "gemini-3.8-flash-high"}},
+		{"case-only alias", `[{"provider":"zai","models":[{"id":"GLM-5"}]}]`, `{"zai":[{"name":"glm-5","alias":"GLM-5","fork":false}]}`, map[string]string{"GLM-5": "glm-5", "glm-5": "glm-5"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			client, aliasReads := newOAuthCatalogClient(t, test.files, test.aliases, http.StatusOK)
