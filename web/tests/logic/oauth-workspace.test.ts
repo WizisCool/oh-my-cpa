@@ -1,5 +1,5 @@
 import { renewalDetail, renewalKind, renewalLabel, renewalTone } from '../../src/components/authFiles/credentialRecovery.ts';
-import { buildCredentialQuotaBoard } from '../../src/components/dashboard/credentialQuotaLogic.ts';
+import { buildCredentialQuotaBoard, resolveCredentialQuotaStatusDetail } from '../../src/components/dashboard/credentialQuotaLogic.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { ManagementAuthFile } from '../../src/types/managementAuthFile.ts';
@@ -1090,4 +1090,48 @@ test('detail window helpers and unknown-plan sentinel localize consistently in E
   assert.equal(quotaDetailWindowName(agReq, en, [agReq, agTok]), '5-hour limit (Requests)');
   assert.equal(quotaDetailWindowFullName(agTok, en, [agReq, agTok]), 'Gemini Models 5-hour limit (Tokens)');
   assert.equal(quotaDetailWindowFullName(ag, en, [ag]), 'Gemini Models 5-hour limit');
+
+  // Dashboard status detail distinguishes low-quota cooldowns and credits_available from stale or failed readings.
+  const lowCooldown = buildCredentialQuotaBoard(
+    [file({ auth_index: 'low-cooldown', name: 'low-cooldown.json' })],
+    [quota({
+      auth_index: 'low-cooldown',
+      status: 'warning',
+      windows: [{ id: 'five_hour', label: '5-Hour', kind: 'five_hour', scope: 'standard', remaining_percent: 10 }],
+      model_cooldowns: [{ is_active: true, model: 'gpt-5', backoff_level: 1 }],
+      recommendation: { status: 'warning', priority: 'low', action: 'none', reason: '配额余量偏低（不足 20%）' },
+    })],
+  ).rows[0];
+  const lowCredits = buildCredentialQuotaBoard(
+    [file({ auth_index: 'low-credits', name: 'low-credits.json' })],
+    [quota({
+      auth_index: 'low-credits',
+      status: 'warning',
+      windows: [{ id: 'five_hour', label: '5-Hour', kind: 'five_hour', scope: 'standard', remaining_percent: 10 }],
+      model_cooldowns: [{ is_active: true, model: 'gpt-5', backoff_level: 1 }],
+      recommendation: { status: 'credits_available', priority: 'medium', action: 'redeem_credit', reason: '配额余量低于 20%' },
+    })],
+  ).rows[0];
+  const staleWarning = buildCredentialQuotaBoard(
+    [file({ auth_index: 'stale-warn', name: 'stale-warn.json' })],
+    [quota({
+      auth_index: 'stale-warn',
+      status: 'stale',
+      windows: [{ id: 'five_hour', label: '5-Hour', kind: 'five_hour', scope: 'standard', remaining_percent: 10 }],
+      recommendation: { status: 'warning', priority: 'low', action: 'refresh', reason: '已过期' },
+    })],
+  ).rows[0];
+  const errorReading = buildCredentialQuotaBoard(
+    [file({ auth_index: 'error-warn', name: 'error-warn.json' })],
+    [quota({
+      auth_index: 'error-warn',
+      status: 'error',
+      windows: [],
+      recommendation: { status: 'warning', priority: 'high', action: 'refresh', reason: '读取失败' },
+    })],
+  ).rows[0];
+  assert.equal(resolveCredentialQuotaStatusDetail(lowCooldown, en), 'Quota is running low');
+  assert.equal(resolveCredentialQuotaStatusDetail(lowCredits, en), 'Quota is running low');
+  assert.equal(resolveCredentialQuotaStatusDetail(staleWarning, en), 'This reading is past its own window reset; refresh for the current quota');
+  assert.equal(resolveCredentialQuotaStatusDetail(errorReading, en), 'The reading could not be fetched');
 });

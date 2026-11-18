@@ -80,8 +80,12 @@ func isEndpointURL(value string) bool {
 	return strings.Contains(value, "://") || strings.HasPrefix(value, "//")
 }
 
+func isClientKeyFingerprint(id string) bool {
+	return strings.HasPrefix(id, "hmac:") && !isEndpointURL(id)
+}
+
 func (h *Handler) trendsGroupProjection(group repository.UsageDimension, id string) trendsGroupName {
-	if !(group == repository.UsageDimensionKey && strings.HasPrefix(id, "hmac:")) && isEndpointURL(id) {
+	if isEndpointURL(id) {
 		if opaque := repository.TrendsOpaqueGroupID(h.cipher, group, id); opaque != "" {
 			return trendsGroupName{ID: opaque, Label: "endpoint"}
 		}
@@ -92,7 +96,7 @@ func (h *Handler) trendsGroupProjection(group repository.UsageDimension, id stri
 	if label == "" {
 		label = "unknown"
 	}
-	if group != repository.UsageDimensionKey && safeID != id {
+	if !(group == repository.UsageDimensionKey && isClientKeyFingerprint(id)) && safeID != id {
 		if opaque := repository.TrendsOpaqueGroupID(h.cipher, group, id); opaque != "" {
 			return trendsGroupName{ID: opaque, Label: label}
 		}
@@ -116,7 +120,7 @@ func (h *Handler) trendsGroupNames(ctx context.Context, group repository.UsageDi
 	}
 	fingerprints := make([]string, 0, len(ids))
 	for _, id := range ids {
-		if strings.HasPrefix(id, "hmac:") {
+		if isClientKeyFingerprint(id) {
 			fingerprints = append(fingerprints, id)
 		}
 	}

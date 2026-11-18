@@ -363,7 +363,7 @@ func readQuotaTrendUsageWithQuerier(ctx context.Context, q sqlQuerier, instanceI
 	}
 	const completed = `(timestamp_ms + MAX(latency_ms, 0))`
 	statement := buildStagedUsageEventsArm(`timestamp_ms AS started_ms, COALESCE(NULLIF(response_model, ''), model) AS served_model, `, `started_ms, served_model, `,
-		completed, "", `instance_id = ? AND auth_index = ? AND `+completed+` >= ? AND `+completed+` < ? AND total_tokens > 0`)
+		completed, "", `instance_id = ? AND auth_index = ? AND `+completed+` >= ? AND `+completed+` < ?`)
 	rows, err := q.QueryContext(ctx, `SELECT started_ms, served_model, aligned, `+strings.Join(usageFactMeasures, ", ")+` FROM (`+statement+`)`,
 		instanceID, authIndex, fromMS, toMS)
 	if err != nil {

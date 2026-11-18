@@ -29,7 +29,6 @@ import { Tabs } from '../src/components/ui/tabs';
 import { Combobox } from '../src/components/ui/combobox';
 import { AutoComplete } from '../src/components/ui/autocomplete';
 import { DataTable } from '../src/components/ui/table';
-import { LineSlot } from '../src/components/ui/line-slot';
 import { I18nProvider, useT, type MessageKey } from '../src/i18n';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { DashboardTrendChart } from '../src/charts/DashboardTrendChart';
@@ -1569,20 +1568,5 @@ describe('ShellLoading and LoadingRegion continuity', () => {
     } finally {
       nowSpy.mockRestore();
     }
-  });
-});
-
-describe('LineSlot', () => {
-  it('wraps fragment text children in spans so flex truncation applies', () => {
-    const view = render(
-      <LineSlot>
-        <>a-long-credential-name</>
-      </LineSlot>,
-    );
-    const slot = view.container.firstElementChild!;
-    const span = slot.querySelector(':scope > span');
-    expect(span).not.toBeNull();
-    expect(span?.textContent).toBe('a-long-credential-name');
-    view.unmount();
   });
 });

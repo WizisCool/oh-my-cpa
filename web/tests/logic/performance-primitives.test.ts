@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import React from 'react';
 import { MutationObserver, QueryClient, QueryObserver } from '@tanstack/react-query';
 import { test } from 'vitest';
+import { lineSlotChildren } from '../../src/components/ui/line-slot.tsx';
 
 import { MUTATION_KEYS, QUERY_KEYS } from '../../src/api/queryKeys.ts';
 import {
@@ -1126,4 +1128,22 @@ test('every route descriptor and static navigation entry declares a registered s
       assert.ok(resolved?.loadingBody, `nav item ${item.key} must resolve to a ROUTE_DESCRIPTOR with loadingBody`);
     }
   }
+});
+
+test('lineSlotChildren recursively wraps fragment text children in spans while preserving keys', () => {
+  const normalized = lineSlotChildren([
+    React.createElement(React.Fragment, { key: 'frag-1' }, 'a-long-credential-name', 42),
+    React.createElement('strong', { key: 'el-2' }, 'badge'),
+  ]) as React.ReactElement<{ children?: React.ReactNode }>[];
+  assert.equal(normalized.length, 2);
+  assert.equal(normalized[0]?.type, React.Fragment);
+  assert.equal(normalized[0]?.key, '.$frag-1');
+  assert.equal(normalized[1]?.type, 'strong');
+  assert.equal(normalized[1]?.key, '.$el-2');
+  const inner = React.Children.toArray(normalized[0]?.props.children) as React.ReactElement<{ children?: React.ReactNode }>[];
+  assert.equal(inner.length, 2);
+  assert.equal(inner[0]?.type, 'span');
+  assert.equal(inner[0]?.props.children, 'a-long-credential-name');
+  assert.equal(inner[1]?.type, 'span');
+  assert.equal(inner[1]?.props.children, 42);
 });

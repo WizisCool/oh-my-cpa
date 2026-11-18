@@ -987,6 +987,8 @@ func TestTrendsKeylessEndpointProjectionCipherlessGuardAndLiteralEventFilters(t 
 
 func TestTrendsCodeRabbitRegressionInvariants(t *testing.T) {
 	now := time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)
+	var currentNow atomic.Int64
+	currentNow.Store(now.UnixMilli())
 	var cpaOffline atomic.Bool
 	const authIdx = "quota-late-auth"
 	client, baseURL, repo := startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
@@ -1005,7 +1007,9 @@ func TestTrendsCodeRabbitRegressionInvariants(t *testing.T) {
 				{"auth_index": "quota-late-cycle-auth", "name": "late-cycle.json", "type": "codex", "provider": "codex", "account_type": "oauth"},
 			},
 		})
-	}, func(handler *Handler) { handler.nowFn = func() time.Time { return now } })
+	}, func(handler *Handler) {
+		handler.nowFn = func() time.Time { return time.UnixMilli(currentNow.Load()).UTC() }
+	})
 	repo.Timezone().Apply(time.UTC)
 	ctx := context.Background()
 
@@ -1058,8 +1062,11 @@ func TestTrendsCodeRabbitRegressionInvariants(t *testing.T) {
 		fmt.Sprintf("%s/omc/api/v1/management/trends/usage?from=%d&to=%d&bucket=hour&model=gpt-5&api_key=%s",
 			baseURL, curFrom.UnixMilli(), multiCurTo.UnixMilli(), url.QueryEscape("redacted:tenant-key")))
 	if len(multiUsage.Buckets) != 3 || multiUsage.CompareTotals == nil || multiUsage.CompareTotals.NetTokens != 100 ||
+		multiUsage.Buckets[0].CompareNetTokens == nil || *multiUsage.Buckets[0].CompareNetTokens != 0 ||
+		multiUsage.Buckets[1].CompareNetTokens == nil || *multiUsage.Buckets[1].CompareNetTokens != 30 ||
+		multiUsage.Buckets[2].CompareNetTokens == nil || *multiUsage.Buckets[2].CompareNetTokens != 70 ||
 		multiUsage.Buckets[2].CompareCumNetTokens == nil || *multiUsage.Buckets[2].CompareCumNetTokens != 100 {
-		t.Fatalf("expected multi-bucket unaligned overlay to accumulate all 100 prior tokens by end bucket, totals=%+v buckets=%+v", multiUsage.CompareTotals, multiUsage.Buckets)
+		t.Fatalf("expected multi-bucket unaligned overlay to place 0/30/70 across buckets and accumulate 100 by end, totals=%+v buckets=%+v", multiUsage.CompareTotals, multiUsage.Buckets)
 	}
 
 	// 3. URL-shaped model/provider values emit neutral "endpoint" labels across telemetry responses.
@@ -1147,5 +1154,119 @@ func TestTrendsCodeRabbitRegressionInvariants(t *testing.T) {
 	// Cycle 2 [12:30, 16:30): only longReq (1 req, 50 tokens, started 12:00, completed 12:45).
 	if curCycle.ActualRequests != 1 || curCycle.ActualTotalTokens != 50 {
 		t.Fatalf("expected current cycle to count longReq once (1 req, 50 tokens), got %+v", curCycle)
+	}
+
+	// 5. Keyless URL-shaped (including hmac://...) and email-shaped provider labels stay masked/neutral and filterable.
+	keyWinFrom := time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC)
+	keyWinTo := time.Date(2026, 10, 20, 11, 0, 0, 0, time.UTC)
+	evKeyURL := eventFor("keyless-hmac-url", time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC), usage.TokenStats{InputTokens: 11, TotalTokens: 11}, false)
+	evKeyURL.Provider, evKeyURL.Model, evKeyURL.APIGroupKey, evKeyURL.APIGroupLabel = "hmac://relay.internal/v1", "gpt-5", "hmac://relay.internal/v1", "provider"
+	evKeyEmail := eventFor("keyless-email", time.Date(2026, 10, 20, 10, 5, 0, 0, time.UTC), usage.TokenStats{InputTokens: 22, TotalTokens: 22}, false)
+	evKeyEmail.Provider, evKeyEmail.Model, evKeyEmail.APIGroupKey, evKeyEmail.APIGroupLabel = "alice@example.com", "gpt-5", "alice@example.com", "provider"
+	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{evKeyURL, evKeyEmail}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AggregateUsageFacts(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	keyGroupsResp := trendsTestRead[TrendsUsageResponseDTO](t, client,
+		fmt.Sprintf("%s/omc/api/v1/management/trends/usage?from=%d&to=%d&bucket=hour&group_by=key",
+			baseURL, keyWinFrom.UnixMilli(), keyWinTo.UnixMilli()))
+	var hmacURLID, emailKeyID string
+	for _, g := range keyGroupsResp.Groups {
+		if strings.Contains(g.ID, "relay.internal") || strings.Contains(g.Label, "relay.internal") ||
+			strings.Contains(g.ID, "alice@example.com") || strings.Contains(g.Label, "alice@example.com") {
+			t.Fatalf("leaked keyless label in group_by=key groups: %+v", g)
+		}
+		if g.Label == "endpoint" {
+			hmacURLID = g.ID
+		} else if g.Label == "al•••e@example.com" {
+			emailKeyID = g.ID
+		}
+	}
+	if !strings.HasPrefix(hmacURLID, repository.TrendsRedactedPrefix) || !strings.HasPrefix(emailKeyID, repository.TrendsRedactedPrefix) {
+		t.Fatalf("expected opaque redacted IDs for URL/email keyless labels, got %+v", keyGroupsResp.Groups)
+	}
+	byURL := trendsTestRead[TrendsUsageResponseDTO](t, client,
+		fmt.Sprintf("%s/omc/api/v1/management/trends/usage?from=%d&to=%d&bucket=hour&api_key=%s",
+			baseURL, keyWinFrom.UnixMilli(), keyWinTo.UnixMilli(), url.QueryEscape(hmacURLID)))
+	if byURL.Totals.NetTokens != 11 {
+		t.Fatalf("expected filtered hmac:// keyless group to yield 11 net tokens, got %+v", byURL.Totals)
+	}
+	byEmail := trendsTestRead[TrendsUsageResponseDTO](t, client,
+		fmt.Sprintf("%s/omc/api/v1/management/trends/usage?from=%d&to=%d&bucket=hour&api_key=%s",
+			baseURL, keyWinFrom.UnixMilli(), keyWinTo.UnixMilli(), url.QueryEscape(emailKeyID)))
+	if byEmail.Totals.NetTokens != 22 {
+		t.Fatalf("expected filtered email keyless group to yield 22 net tokens, got %+v", byEmail.Totals)
+	}
+
+	// 6. Closed calendar presets (e.g. last_month: Feb 28d vs Jan 31d) pair by day position without folding extra days.
+	var janEvents []usage.Event
+	for day := 28; day <= 31; day++ {
+		ev := eventFor(fmt.Sprintf("jan-%d", day), time.Date(2026, 1, day, 12, 0, 0, 0, time.UTC), usage.TokenStats{InputTokens: 10, TotalTokens: 10}, false)
+		ev.Provider, ev.Model = "codex", "gpt-5"
+		janEvents = append(janEvents, ev)
+	}
+	evFeb := eventFor("feb-28", time.Date(2026, 2, 28, 12, 0, 0, 0, time.UTC), usage.TokenStats{InputTokens: 5, TotalTokens: 5}, false)
+	evFeb.Provider, evFeb.Model = "codex", "gpt-5"
+	if _, err := repo.InsertUsageEvents(ctx, append(janEvents, evFeb)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AggregateUsageFacts(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	currentNow.Store(time.Date(2026, 3, 15, 12, 0, 0, 0, time.UTC).UnixMilli())
+	lastMonth := trendsTestRead[TrendsUsageResponseDTO](t, client, baseURL+"/omc/api/v1/management/trends/usage?preset=last_month&bucket=day")
+	currentNow.Store(now.UnixMilli())
+	if len(lastMonth.Buckets) != 28 || lastMonth.Totals.NetTokens != 5 || lastMonth.CompareTotals == nil || lastMonth.CompareTotals.NetTokens != 40 ||
+		lastMonth.Buckets[27].CompareNetTokens == nil || *lastMonth.Buckets[27].CompareNetTokens != 10 {
+		t.Fatalf("expected last_month day 28 to pair with Jan 28 (10) while compare_totals keeps all 40, totals=%+v compare=%+v lastBucket=%+v",
+			lastMonth.Totals, lastMonth.CompareTotals, lastMonth.Buckets[len(lastMonth.Buckets)-1])
+	}
+
+	// 7. Zero-token requests in ReadQuotaTrendPhysical count identically before and after retention deletes their detail row.
+	const authZero = "quota-zero-token-auth"
+	evZero := eventFor("zero-tok-phys", time.Date(2026, 10, 19, 10, 5, 0, 0, time.UTC), usage.TokenStats{}, false)
+	evZero.Provider, evZero.Model, evZero.AuthIndex = "codex", "gpt-5", authZero
+	evPriced := eventFor("priced-tok-phys", time.Date(2026, 10, 19, 10, 10, 0, 0, time.UTC), usage.TokenStats{InputTokens: 15, TotalTokens: 15}, false)
+	evPriced.Provider, evPriced.Model, evPriced.AuthIndex = "codex", "gpt-5", authZero
+	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{evZero, evPriced}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AggregateUsageFacts(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	physFrom := time.Date(2026, 10, 19, 10, 0, 0, 0, time.UTC).UnixMilli()
+	physTo := time.Date(2026, 10, 19, 11, 0, 0, 0, time.UTC).UnixMilli()
+	sumPhysical := func() (reqs, tokens int64) {
+		_, facts, retained, err := repo.ReadQuotaTrendPhysical(ctx, defaultInstanceID(), authZero, physFrom, physTo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range facts.Rows {
+			reqs += row.Requests
+			tokens += row.TotalTokens
+		}
+		for _, entry := range retained {
+			reqs += entry.Measures.Requests
+			tokens += entry.Measures.TotalTokens
+		}
+		return reqs, tokens
+	}
+	beforeReqs, beforeToks := sumPhysical()
+	if beforeReqs != 2 || beforeToks != 15 {
+		t.Fatalf("before retention: got (%d reqs, %d tokens), want (2, 15)", beforeReqs, beforeToks)
+	}
+	// Advance lifecycle past 10:15 (two passes purge detail rows into facts).
+	cutoffZero := time.Date(2026, 10, 19, 10, 15, 0, 0, time.UTC).UnixMilli()
+	if _, err := repo.RunLifecycle(ctx, map[string]int64{repository.LifecycleUsageDetail: cutoffZero}, 10); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.RunLifecycle(ctx, map[string]int64{repository.LifecycleUsageDetail: cutoffZero}, 10); err != nil {
+		t.Fatal(err)
+	}
+	afterReqs, afterToks := sumPhysical()
+	if afterReqs != 2 || afterToks != 15 {
+		t.Fatalf("after retention: got (%d reqs, %d tokens), want (2, 15)", afterReqs, afterToks)
 	}
 }

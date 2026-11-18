@@ -2247,4 +2247,68 @@ func TestMigration071AddsCompletedUsageEventsIndex(t *testing.T) {
 	if err := db.SQL.QueryRowContext(ctx, `SELECT sql FROM sqlite_schema WHERE type = 'index' AND name = 'idx_usage_events_instance_auth_completed'`).Scan(&idxSQL); err != nil {
 		t.Fatalf("completed index missing after migration 071: %v", err)
 	}
+	if strings.Contains(strings.ToUpper(idxSQL), "WHERE") {
+		t.Fatalf("expected un-filtered completion index so zero-token retained requests match, got %q", idxSQL)
+	}
+	if !strings.Contains(idxSQL, "(instance_id, auth_index, (timestamp_ms + MAX(latency_ms, 0)))") {
+		t.Fatalf("unexpected completion index definition: %q", idxSQL)
+	}
+
+	xrows, err := db.SQL.QueryContext(ctx, `PRAGMA index_xinfo('idx_usage_events_instance_auth_completed')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer xrows.Close()
+	var keyNames []string
+	for xrows.Next() {
+		var seqno, cid, desc, coll, key int
+		var name sql.NullString
+		var collName string
+		if err := xrows.Scan(&seqno, &cid, &name, &desc, &collName, &key); err != nil {
+			t.Fatal(err)
+		}
+		_ = coll
+		if key == 1 {
+			if cid == -2 {
+				keyNames = append(keyNames, "<expr>")
+			} else {
+				keyNames = append(keyNames, name.String)
+			}
+		}
+	}
+	if err := xrows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	wantKeys := []string{"instance_id", "auth_index", "<expr>"}
+	if !reflect.DeepEqual(keyNames, wantKeys) {
+		t.Fatalf("index_xinfo key columns = %v, want %v", keyNames, wantKeys)
+	}
+
+	planRows, err := db.SQL.QueryContext(ctx, `
+		EXPLAIN QUERY PLAN
+		SELECT timestamp_ms
+		FROM usage_events
+		WHERE instance_id = ? AND auth_index = ? AND (timestamp_ms + MAX(latency_ms, 0)) >= ? AND (timestamp_ms + MAX(latency_ms, 0)) < ?`,
+		"default", "auth-1", int64(1000), int64(2000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer planRows.Close()
+	var usedIndex bool
+	for planRows.Next() {
+		var id, parent, notused int
+		var detail string
+		if err := planRows.Scan(&id, &parent, &notused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(detail, "idx_usage_events_instance_auth_completed") {
+			usedIndex = true
+		}
+	}
+	if err := planRows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !usedIndex {
+		t.Fatalf("expected completion-time query plan to use idx_usage_events_instance_auth_completed")
+	}
 }

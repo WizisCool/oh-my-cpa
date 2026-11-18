@@ -176,6 +176,13 @@ func parseWindowDurationHours(seconds float64) float64 {
 	if seconds <= 0 {
 		return 0
 	}
+	return seconds / 3600.0
+}
+
+func formatWindowDurationHours(seconds float64) float64 {
+	if seconds <= 0 {
+		return 0
+	}
 	return math.Round((seconds/3600.0)*10) / 10
 }
 
@@ -199,7 +206,7 @@ func standardWindowIdentity(winSec float64, slotID, slotLabel string) (id, label
 		return "monthly", "月度用量上限 (Monthly)", "monthly"
 	case winSec > 0:
 		period := windowPeriodName(winSec)
-		hours := parseWindowDurationHours(winSec)
+		hours := formatWindowDurationHours(winSec)
 		return fmt.Sprintf("custom_%gh", hours), fmt.Sprintf("%s用量上限 (%gh)", period, hours), "custom"
 	default:
 		return slotID, slotLabel, "custom"
@@ -227,7 +234,7 @@ func windowPeriodName(seconds float64) string {
 		// provider that meters a short window would have it described as no window at all.
 		return fmt.Sprintf("%g分钟", math.Round(seconds/60))
 	default:
-		return fmt.Sprintf("%g小时", parseWindowDurationHours(seconds))
+		return fmt.Sprintf("%g小时", formatWindowDurationHours(seconds))
 	}
 }
 

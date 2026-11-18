@@ -242,8 +242,9 @@ func (h *Handler) trendsUsage(writer http.ResponseWriter, request *http.Request)
 	writeJSON(writer, http.StatusOK, result)
 }
 
-func isRunningCalendarPreset(preset string) bool {
-	return preset == "today" || preset == "this_week" || preset == "this_month"
+func isCalendarPreset(preset string) bool {
+	_, ok := insightsCalendarPresets[preset]
+	return ok
 }
 
 func alignComparisonBucketIndex(grid []int64, windowFromMS, windowToMS, priorFromMS, priorStartMS int64) int {
@@ -344,7 +345,7 @@ func (h *Handler) readTrendsUsage(ctx context.Context, request *http.Request, re
 	var compareByGrid []TrendsUsageGroupMeasuresDTO
 	if len(previousGrid) > 0 && len(grid) > 0 {
 		compareByGrid = make([]TrendsUsageGroupMeasuresDTO, len(grid))
-		if len(previousGrid) > len(grid) && !isRunningCalendarPreset(window.Preset) {
+		if len(previousGrid) > len(grid) && !isCalendarPreset(window.Preset) {
 			for _, priorStart := range previousGrid {
 				targetIndex := alignComparisonBucketIndex(grid, window.FromMS, window.ToMS, prior.FromMS, priorStart)
 				compareByGrid[targetIndex].add(previous.buckets[priorStart].TrendsUsageGroupMeasuresDTO)

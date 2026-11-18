@@ -42,6 +42,7 @@ import {
   QUOTA_LOW_PERCENT,
   quotaWindowPeriod,
   quotaWindowRemaining,
+  resolveCredentialQuotaStatusDetail,
   type CredentialQuotaRow,
   type CredentialQuotaState,
   type QuotaWindowPeriod,
@@ -137,39 +138,10 @@ interface QuotaRowProps {
   isPhone?: boolean;
 }
 
-function resolveStatusDetail(row: CredentialQuotaRow, t: TFunc): string | undefined {
-  if (row.detail) return row.detail;
-  if (row.recommendationReason && !/[^\x00-\x7f]/.test(row.recommendationReason)) {
-    return row.recommendationReason;
-  }
-  switch (row.recommendationStatus) {
-    case 'cooldown':
-      return t('quota.cooldown_active_desc');
-    case 'needs_reauth':
-      return t('recovery.sign_in_hint');
-    case 'exhausted':
-      return t('quota.status_exceeded');
-    case 'credits_available':
-      return row.remainingPercent === 0 || row.itemStatus === 'exhausted'
-        ? t('quota.status_exceeded')
-        : t('quota.low_quota_hint');
-    case 'idle':
-      return t('quota.not_observed_yet');
-    case 'unpublished':
-      return t('quota.usage_not_published');
-    case 'warning':
-      if (row.itemStatus === 'stale') return t('quota.reading_outlived_reset');
-      if (row.itemStatus === 'error' || row.state === 'problem') return t('quota.reading_failed');
-      return t('quota.low_quota_hint');
-    default:
-      return row.state === 'problem' ? t('quota.reading_failed') : undefined;
-  }
-}
-
 const CredentialQuotaRowView: React.FC<QuotaRowProps> = ({ row, nowMS, pluginLogos, reorder, isPhone = false }) => {
   const t = useT();
   const status = STATUS_ROW_STATES[row.state];
-  const statusDetail = status ? resolveStatusDetail(row, t) : undefined;
+  const statusDetail = status ? resolveCredentialQuotaStatusDetail(row, t) : undefined;
   // A blocked row counts down to when it serves again; a serving one to when its tightest window
   // refills. An instant the provider did not state exactly keeps its `~`.
   const reset = row.bindingWindow?.reset_at_ms;
