@@ -45,6 +45,17 @@ test('model alias validation rejects shapes CPA silently drops', () => {
     { ok: false, error: 'alias_same', alias: 'gpt-5' },
   );
   assert.deepEqual(
+    validateOAuthModelAliasDrafts('zai', [{ rowKey: 'row-1', name: 'glm-5', alias: 'GLM-5' }]),
+    { ok: true, provider: 'zai', aliases: [{ name: 'glm-5', alias: 'GLM-5' }] },
+  );
+  assert.deepEqual(
+    validateOAuthModelAliasDrafts('zai', [
+      { rowKey: 'row-1', name: 'glm-5', alias: 'GLM-5' },
+      { rowKey: 'row-2', name: 'glm-5-pro', alias: 'glm-5' },
+    ]),
+    { ok: false, error: 'alias_duplicate', alias: 'glm-5' },
+  );
+  assert.deepEqual(
     validateOAuthModelAliasDrafts('codex', [
       { rowKey: 'row-1', name: 'gpt-5', alias: 'fast' },
       { rowKey: 'row-2', name: 'gpt-5.1', alias: 'FAST' },
@@ -65,6 +76,13 @@ test('dirty comparison ignores row identity but not mapping semantics', () => {
   assert.equal(oauthModelAliasDraftsEqual(baseline, same), true);
   assert.equal(
     oauthModelAliasDraftsEqual(baseline, [{ ...same[0], force_mapping: true }]),
+    false,
+  );
+  assert.equal(
+    oauthModelAliasDraftsEqual(
+      createOAuthModelAliasDrafts([{ name: 'glm-5', alias: 'GLM-5' }]),
+      createOAuthModelAliasDrafts([{ name: 'glm-5', alias: 'Glm-5' }]),
+    ),
     false,
   );
 });

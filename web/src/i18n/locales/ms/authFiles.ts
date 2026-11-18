@@ -185,7 +185,7 @@ export default {
   "af.alias_error_too_many": "Penyedia boleh mengandungi paling banyak 512 model alias.",
   "af.alias_error_name_alias_required": "Kedua-dua model huluan dan alias klien diperlukan.",
   "af.alias_error_field_too_long": "Medan alias model terlalu panjang.",
-  "af.alias_error_alias_same": "Alias ​​pelanggan mesti berbeza daripada nama model huluan.",
+  "af.alias_error_alias_same": "Alias pelanggan mesti berbeza daripada nama model huluan (peka huruf besar kecil).",
   "af.alias_error_alias_duplicate": "Alias ​​pelanggan {alias} diduakan.",
   "af.batch_refresh": "Segar semula",
   "af.batch_refresh_success": "{n} kelayakan disegarkan semula",

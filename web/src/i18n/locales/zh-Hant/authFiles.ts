@@ -185,7 +185,7 @@ export default {
   "af.alias_error_too_many": "每個供應商最多設定 512 條模型別名。",
   "af.alias_error_name_alias_required": "上游模型名和客戶端別名都不能為空。",
   "af.alias_error_field_too_long": "模型別名欄位過長。",
-  "af.alias_error_alias_same": "客戶端別名不能與上游模型名相同。",
+  "af.alias_error_alias_same": "客戶端別名不能與上游模型名完全相同（區分大小寫）。",
   "af.alias_error_alias_duplicate": "客戶端別名 {alias} 重複。",
   "af.batch_refresh": "批次重新整理",
   "af.batch_refresh_success": "已重新整理 {n} 個憑證",
