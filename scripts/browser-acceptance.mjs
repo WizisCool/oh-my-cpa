@@ -50,6 +50,7 @@ const executable = configuredExecutable
   : path.join(temporary, process.platform === 'win32' ? 'oh-my-cpa.exe' : 'oh-my-cpa');
 const configuredSeeder = process.env.OMCPA_SEED_USAGE_BINARY?.trim();
 const appLog = [];
+const appStderr = [];
 const { check, checkEventually, checks, failures } = createChecker();
 let appProcess;
 let browser;
@@ -262,7 +263,11 @@ try {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   appProcess.stdout.on('data', (chunk) => appLog.push(chunk.toString()));
-  appProcess.stderr.on('data', (chunk) => appLog.push(chunk.toString()));
+  appProcess.stderr.on('data', (chunk) => {
+    const text = chunk.toString();
+    appLog.push(text);
+    appStderr.push(text);
+  });
   appProcess.once('exit', (code) => {
     if (code !== null && code !== 0) appLog.push(`app exited with ${code}`);
   });
@@ -276,7 +281,7 @@ try {
   if (identity.version !== fixtureVersion) throw new Error('Acceptance port is served by an unrelated process');
   cancellation.signal.throwIfAborted();
   const redirect = await fetch(appURL, { redirect: 'manual', signal: cancellation.signal });
-  check('startup prints build info banner', appLog.join('').includes(`Oh My CPA Version: ${fixtureVersion}, Commit: `));
+  check('startup prints build info banner on stderr', appStderr.join('').includes(`Oh My CPA Version: ${fixtureVersion}, Commit: `));
   check('fixture startup ignores operator dotenv files', !appLog.join('').includes('loaded environment file'));
   check('/omc redirects to /omc/', redirect.status === 308 && redirect.headers.get('location') === '/omc/', `status=${redirect.status}`);
 

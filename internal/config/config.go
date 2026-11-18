@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // BuildVersion is injected by release builds; untagged source builds remain incomparable.
@@ -34,7 +35,33 @@ type BuildInfo struct {
 
 // Banner formats the startup version line printed before service logs.
 func (b BuildInfo) Banner() string {
-	return fmt.Sprintf("Oh My CPA Version: %s, Commit: %s, BuiltAt: %s", b.Version, b.Commit, b.BuiltAt)
+	return fmt.Sprintf(
+		"Oh My CPA Version: %s, Commit: %s, BuiltAt: %s",
+		escapeBannerField(b.Version),
+		escapeBannerField(b.Commit),
+		escapeBannerField(b.BuiltAt),
+	)
+}
+
+func escapeBannerField(value string) string {
+	var builder strings.Builder
+	builder.Grow(len(value))
+	for _, r := range value {
+		switch r {
+		case '\n':
+			builder.WriteString(`\n`)
+		case '\r':
+			builder.WriteString(`\r`)
+		case '\t':
+			builder.WriteByte(' ')
+		default:
+			if unicode.IsControl(r) {
+				continue
+			}
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
 }
 
 // ResolveBuildInfo resolves the running version, commit, and build timestamp from

@@ -8,14 +8,15 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
-	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/app"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/applog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/backup"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/mcpbridge"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/updater"
 )
 
@@ -104,7 +105,7 @@ func main() {
 		return
 	}
 
-	writeStartupBanner(os.Stderr, serviceLog, config.ResolveBuildInfo(cfg.Version))
+	writeStartupBanner(os.Stderr, serviceLog, config.ResolveBuildInfo(cfg.Version), cfg.CPA.ManagementKey, cfg.MasterKey)
 	if applied > 0 {
 		logger.Info("loaded environment file", "path", config.DotEnvPath(), "variables", applied)
 	}
@@ -122,18 +123,38 @@ func main() {
 	}
 }
 
-func writeStartupBanner(stderr io.Writer, serviceLog *applog.Buffer, info config.BuildInfo) {
-	_, _ = fmt.Fprintln(stderr, info.Banner())
+func sanitizeBuildField(value string, knownSecrets ...string) string {
+	trimmed := strings.TrimSpace(value)
+	var longSecrets []string
+	for _, secret := range knownSecrets {
+		candidate := strings.TrimSpace(secret)
+		if candidate == "" {
+			continue
+		}
+		if trimmed == candidate {
+			return security.RedactedValue
+		}
+		// Only match substrings for non-trivial secret lengths so short local-dev
+		// keys like "dev" cannot mask suffixes such as "v0.1.0-dev".
+		if len(candidate) >= 8 {
+			longSecrets = append(longSecrets, candidate)
+		}
+	}
+	return security.RedactText(value, longSecrets...)
+}
+
+func writeStartupBanner(stderr io.Writer, serviceLog *applog.Buffer, info config.BuildInfo, knownSecrets ...string) {
+	safe := config.BuildInfo{
+		Version: sanitizeBuildField(info.Version, knownSecrets...),
+		Commit:  sanitizeBuildField(info.Commit, knownSecrets...),
+		BuiltAt: sanitizeBuildField(info.BuiltAt, knownSecrets...),
+	}
+	_, _ = fmt.Fprintln(stderr, safe.Banner())
 	if serviceLog != nil {
-		serviceLog.Append(applog.Record{
-			LoggedAtMS: time.Now().UnixMilli(),
-			Level:      "info",
-			Message:    "Oh My CPA starting",
-			Attrs: []applog.Attr{
-				{Key: "version", Value: info.Version},
-				{Key: "commit", Value: info.Commit},
-				{Key: "built_at", Value: info.BuiltAt},
-			},
-		})
+		// Route through applog.Handler with a discard sink so the buffer applies the
+		// exact same redaction and length bounds as stderr slog records without emitting
+		// a duplicate JSON line.
+		capture := slog.New(applog.NewHandler(slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}), serviceLog))
+		capture.Info("Oh My CPA starting", "version", safe.Version, "commit", safe.Commit, "built_at", safe.BuiltAt)
 	}
 }

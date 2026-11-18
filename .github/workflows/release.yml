@@ -507,6 +507,7 @@ jobs:
       - name: Verify packaged image, permissions, base paths and running version
         env:
           RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          BUILT_AT: ${{ steps.build_time.outputs.built_at }}
         run: node scripts/docker-smoke.mjs oh-my-cpa:release-test
       - name: Sign in to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f

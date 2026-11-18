@@ -451,4 +451,9 @@ func TestResolveBuildInfo(t *testing.T) {
 	if want := "Oh My CPA Version: " + BuildVersion + ", Commit: unknown, BuiltAt: unknown"; missing.Banner() != want {
 		t.Fatalf("missing Banner() = %q, want %q", missing.Banner(), want)
 	}
+
+	multiline := resolveBuildInfo("v1.0.0\r\ninjected\x1b[31m", "7df56074", "2026-11-17T02:10:49Z", noBuildInfo)
+	if want := `Oh My CPA Version: v1.0.0\r\ninjected[31m, Commit: 7df56074, BuiltAt: 2026-11-17T02:10:49Z`; multiline.Banner() != want {
+		t.Fatalf("multiline Banner() = %q, want %q", multiline.Banner(), want)
+	}
 }
