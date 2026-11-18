@@ -15,6 +15,7 @@ import {
   reconcileWirePatternRows,
   validatePatternRuleRows,
 } from '../../src/components/config/PatternRulesEditor.tsx';
+import { validateGoRe2Pattern } from '../../src/components/config/goRegex.ts';
 import { rebaseStringMapDraft, stringMapRowsToWire } from '../../src/components/config/StringMapEditor.tsx';
 import { writePayloadCategory } from '../../src/components/config/payloadRules.ts';
 import { ALL_CONFIG_FIELDS, CONFIG_GROUPS, type ConfigFieldDefinition } from '../../src/types/configSchema.ts';
@@ -1146,6 +1147,97 @@ test('findRe2PatternProblem and validatePatternRuleRows accept valid Go RE2 and 
   }
   assert.equal(findRe2PatternProblem('foo\\'), 'trailing_backslash');
 
+  for (const valid of [
+    '(?i)claude\\s+code',
+    '(?P<word>foo|bar)',
+    '\\Q(?=a)\\1\\E',
+    '\\\\1',
+    '\\0',
+    '\\12',
+    '\\123',
+    '\\777',
+    '\\123\\12',
+    '\\(?=a\\)',
+    '[(?=)]',
+    '[[:alpha:]]+',
+    '[]a]',
+    '[^]a]',
+    '(?<name>foo|bar)',
+    'a{1,2}?',
+    '\\Qunclosed',
+    '{01}',
+    'a{0,01}',
+    'a(?i)*',
+    'a*(?i)+',
+    '\\p{Han}',
+    '\\p{Cc}+',
+    '\\p{cntrl}+',
+    '\\p{Separator}+',
+    '\\p{Kawi}',
+    '\\p{Old_Italic}+',
+    '\\p{Uppercase-Letter}',
+    '\\p{Uppercase Letter}',
+    '\\p{^Uppercase_Letter}',
+    '\\pL',
+    '\\A\\b\\w+\\z',
+    '\\-',
+    '[A-[:]]',
+    '[A-[:alpha:]]',
+    '[a-]',
+    '(?:a{20}){40}',
+    '((a{100}){0}b){11}',
+    'a+\\Q\\E+',
+    '\\Qa\\E*',
+    `[${'[:'.repeat(200)}x]`,
+    'é',
+    '\\.',
+  ]) {
+    assert.equal(validateGoRe2Pattern(valid), null, valid);
+  }
+  for (const unsupported of [
+    'foo(?=bar)',
+    'foo(?!bar)',
+    '(?<=a)b',
+    '(?<!a)b',
+    '(a)\\1',
+    '\\18',
+    '\\80',
+    '\\9',
+    '(?>abc)',
+    '(?(1)a|b)',
+    '(?x)abc',
+    '\\u0041',
+    '\\Z',
+  ]) {
+    assert.equal(validateGoRe2Pattern(unsupported), 'unsupported_re2', unsupported);
+  }
+  for (const invalidSyntax of [
+    '\\(?=a)',
+    '(?i)*',
+    '\\q',
+    '\\E',
+    '[\\b]',
+    '\\p{123}',
+    '\\p{Leter}',
+    '\\p{Garay}',
+    '\\p{\u212Aawi}',
+    '\\Q\\E*',
+    '\\é',
+    '[z-a]',
+    '(?:a{40}){40}',
+    '(?:(?:a{1000}){0,}){2}',
+    '((a{100}){1}b){11}',
+    '(a{100}(b)){11}',
+    '((a{100})*b){11}',
+    '((a{100})+b){11}',
+    'a++',
+    '[unclosed',
+    'a{2,1}',
+  ]) {
+    assert.equal(validateGoRe2Pattern(invalidSyntax), 'invalid_syntax', invalidSyntax);
+  }
+  assert.equal(validateGoRe2Pattern('foo\\'), 'trailing_backslash');
+
   assert.deepEqual(validatePatternRuleRows([{ pattern: '', replacement: '' }]), {
     issue: null,
     rowErrors: [false],
@@ -1380,11 +1472,17 @@ test('payloadReplaceRules schema registration, searchability, patch emission, an
   const replaceValue = [
     {
       models: [{ name: '*', protocol: 'claude', 'from-protocol': 'openai' }],
-      target: { role: 'user', positions: [1, 2] },
+      target: { role: 'system', positions: [1, 2] },
       replacements: [
         { 'you are hero': 'you are fool' },
+        { pattern: '(?i)secret-(\\d+)', replacement: '[redacted-$1]' },
         { 'remove this phrase': '' },
       ],
+    },
+    {
+      models: [{ name: 'gpt-*', protocol: 'codex' }],
+      target: { paths: ['instructions', 'input.0.content'] },
+      replacements: [{ pattern: '^prefix:\\s*', replacement: '' }],
     },
   ];
   writePayloadCategory(draft, 'replace', replaceValue);

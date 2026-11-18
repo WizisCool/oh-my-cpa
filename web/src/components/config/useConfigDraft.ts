@@ -11,8 +11,10 @@ import { describeConfigSaveError } from './configSaveErrors';
 import { ALL_CONFIG_FIELDS, type ConfigFieldDefinition, type ConfigSectionId } from '../../types/configSchema';
 import type { ConfigScalarsResponse } from '../../types/configManagement';
 import {
+  isBlockingPayloadIssue,
   validatePayloadDocument,
   type PayloadValidationIssue,
+  type SavedInactiveReplaceTargetEntry,
   type UnresolvedReplacePendingEntry,
 } from './payloadRules';
 import {
@@ -87,6 +89,7 @@ export function useConfigDraft() {
   const payloadEditorMountedRef = React.useRef(false);
   const flushPendingPayloadRef = React.useRef<(() => boolean) | null>(null);
   const clearPendingPayloadRef = React.useRef<(() => void) | null>(null);
+  const savedReplaceInactiveTargetsRef = React.useRef<SavedInactiveReplaceTargetEntry[]>([]);
   const payloadIssuesRef = React.useRef<PayloadValidationIssue[]>([]);
   const firstFieldErrorMessageRef = React.useRef<string | undefined>(undefined);
   /** Guards against a second save starting before isPending propagates. */
@@ -217,6 +220,7 @@ export function useConfigDraft() {
 
   const clearPendingPayloadState = React.useCallback(() => {
     clearPendingPayloadRef.current?.();
+    savedReplaceInactiveTargetsRef.current = [];
     hasLivePendingPositionsRef.current = false;
     unresolvedReplacePendingRef.current = [];
     setUnresolvedReplacePending([]);
@@ -511,7 +515,47 @@ export function useConfigDraft() {
     }
   }, [rawYaml]);
 
-  const hasConfigErrors = hasYamlErrors || payloadIssues.length > 0 || hasFieldIssues;
+  const blockingPayloadIssuesCount = React.useMemo(
+    () => payloadIssues.filter(isBlockingPayloadIssue).length,
+    [payloadIssues],
+  );
+
+  const resolveSaveConfirmDescription = React.useCallback(
+    (
+      mode: 'visual' | 'source',
+      issues: readonly PayloadValidationIssue[],
+      baselineDoc: Document | null,
+      draftDoc: Document | null,
+    ): string => {
+      if (mode === 'visual' && draftDoc) {
+        const warningCount = issues.filter((issue) => issue.severity === 'warning').length;
+        if (warningCount > 0) {
+          const touchesReplace = computeConfigChanges(baselineDoc, draftDoc).some((change) => {
+            const p = change.path;
+            return (
+              !change.remove
+              && ((p.length === 1 && p[0] === 'requests')
+                || (p.length === 2 && p[0] === 'requests' && p[1] === 'payload')
+                || (p.length >= 3 && p[0] === 'requests' && p[1] === 'payload' && p[2] === 'replace'))
+            );
+          });
+          if (touchesReplace) {
+            return t('cfg.source_save_confirm_regex_warn', { n: warningCount });
+          }
+        }
+      }
+      return t('cfg.source_save_confirm_desc');
+    },
+    [t],
+  );
+
+  const saveConfirmDescription = React.useMemo(() => {
+    void rawYaml;
+    void serverYaml;
+    return resolveSaveConfirmDescription(viewMode, payloadIssues, serverDocRef.current, docRef.current);
+  }, [payloadIssues, rawYaml, resolveSaveConfirmDescription, serverYaml, viewMode]);
+
+  const hasConfigErrors = hasYamlErrors || blockingPayloadIssuesCount > 0 || hasFieldIssues;
 
   /**
    * saveConfig is the single save path for the whole page.
@@ -537,10 +581,11 @@ export function useConfigDraft() {
       toast.error(t('cfg.dirty_bar_yaml_error'));
       return Promise.resolve();
     }
-    if (viewModeRef.current === 'visual' && payloadIssuesRef.current.length > 0) {
+    const blockingPayloadIssues = payloadIssuesRef.current.filter(isBlockingPayloadIssue);
+    if (viewModeRef.current === 'visual' && blockingPayloadIssues.length > 0) {
       setValidateTrigger((v) => v + 1);
       setShowErrorFeedback(true);
-      toast.warning(t('cfg.dirty_bar_payload_issues', { n: payloadIssuesRef.current.length }));
+      toast.warning(t('cfg.dirty_bar_payload_issues', { n: blockingPayloadIssues.length }));
       return Promise.resolve();
     }
     if (firstFieldErrorMessageRef.current) {
@@ -582,7 +627,7 @@ export function useConfigDraft() {
       || Object.keys(patternRulesIssuesRef.current).length > 0;
     if (
       hasYamlErrorsNow()
-      || (viewModeRef.current === 'visual' && payloadIssuesRef.current.length > 0)
+      || (viewModeRef.current === 'visual' && payloadIssuesRef.current.some(isBlockingPayloadIssue))
       || hasCurrentFieldIssues
       || configQuery.isError
     ) {
@@ -591,7 +636,12 @@ export function useConfigDraft() {
     }
     modal.confirm({
       title: t('cfg.source_save_confirm'),
-      content: t('cfg.source_save_confirm_desc'),
+      content: resolveSaveConfirmDescription(
+        viewModeRef.current,
+        payloadIssuesRef.current,
+        serverDocRef.current,
+        docRef.current,
+      ),
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       onOk: () => {
@@ -600,7 +650,7 @@ export function useConfigDraft() {
         return saveConfigRef.current();
       },
     });
-  }, [configQuery.isError, hasYamlErrorsNow, isDirtyNow, modal, saveMutation.isPending, t]);
+  }, [configQuery.isError, hasYamlErrorsNow, isDirtyNow, modal, resolveSaveConfirmDescription, saveMutation.isPending, t]);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -753,6 +803,7 @@ export function useConfigDraft() {
     setShowErrorFeedback,
     handleDiscardChanges,
     payloadIssues,
+    blockingPayloadIssuesCount,
     setPayloadIssues,
     updatePayloadIssues,
     hasPendingPayloadEdits,
@@ -762,6 +813,7 @@ export function useConfigDraft() {
     setPayloadEditorMounted,
     flushPendingPayloadRef,
     clearPendingPayloadRef,
+    savedReplaceInactiveTargetsRef,
     payloadResetVersion,
     stringMapDrafts,
     setStringMapDraft,
@@ -776,6 +828,7 @@ export function useConfigDraft() {
     firstFieldErrorMessage,
     hasYamlErrors,
     hasConfigErrors,
+    saveConfirmDescription,
     saveConfig,
     requestSaveConfirmation,
     confirmDiscardDraft,

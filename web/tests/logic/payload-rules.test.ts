@@ -3,7 +3,10 @@ import { test } from 'vitest';
 import { parseDocument } from 'yaml';
 import {
   PAYLOAD_PROTOCOLS,
+  PAYLOAD_REPLACE_ROLES,
   buildPayloadProtocolOptions,
+  buildPayloadReplaceRoleOptions,
+  isBlockingPayloadIssue,
   parseTypedRules,
   serializeTypedRules,
   parseRawRules,
@@ -13,6 +16,8 @@ import {
   parseReplaceRules,
   serializeReplaceRules,
   appendReplacePositionTokens,
+  extractReplaceInactiveTargets,
+  hydrateReplaceInactiveTargets,
   reconcileReplaceRules,
   readPayloadCategory,
   writePayloadCategory,
@@ -648,12 +653,17 @@ test('replace target preserves unsupported or missing YAML roles instead of sile
     ['cfg.payload_replace_role_invalid'],
   );
 
-  // Editing an unrelated field (replacement destination) preserves role: assistant rather than rewriting to user.
-  parsedAssistant[0].replacements[0].to = 'edited';
-  assert.deepEqual((serializeReplaceRules(parsedAssistant)[0] as Record<string, unknown>).target, {
+  // Editing an unrelated field (replacement destination) preserves role: assistant rather than silently rewriting to user.
+  assert.equal(parsedAssistant[0].replacements[0].kind, 'literal');
+  if (parsedAssistant[0].replacements[0].kind === 'literal') {
+    parsedAssistant[0].replacements[0].to = 'edited';
+  }
+  const serializedAssistant = serializeReplaceRules(parsedAssistant)[0] as Record<string, unknown>;
+  assert.deepEqual(serializedAssistant.target, {
     role: 'assistant',
     positions: [1],
   });
+  assert.deepEqual(serializedAssistant.replacements, [{ old: 'edited' }]);
 
   // Missing target.role is also flagged and never invented on serialization.
   const parsedMissingRole = parseReplaceRules([
@@ -707,15 +717,19 @@ test('replace target preserves unsupported or missing YAML roles instead of sile
       replacements: [42, null, ['x'], { a: 'b' }],
     },
   ]);
-  malformedEntries[0].replacements[3].to = 'edited';
+  if (malformedEntries[0].replacements[3].kind === 'literal') {
+    malformedEntries[0].replacements[3].to = 'edited';
+  }
   assert.deepEqual((serializeReplaceRules(malformedEntries)[0] as Record<string, unknown>).replacements, [
     42,
     null,
     ['x'],
     { a: 'edited' },
   ]);
+  // Malformed replacement entry with non-string null destination keeps raw value until edited.
   malformedEntries[0].replacements[0] = {
     id: malformedEntries[0].replacements[0].id,
+    kind: 'literal',
     from: 'fixed',
     to: 'ok',
   };
@@ -748,7 +762,9 @@ test('replace target preserves unsupported or missing YAML roles instead of sile
   );
 
   // Editing another rule leaves rule 0's malformed `all` and mapping `replacements` verbatim.
-  malformedAllAndMap[1].replacements[0].to = 'baz';
+  if (malformedAllAndMap[1].replacements[0].kind === 'literal') {
+    malformedAllAndMap[1].replacements[0].to = 'baz';
+  }
   const serializedMalformed = serializeReplaceRules(malformedAllAndMap);
   assert.deepEqual((serializedMalformed[0] as Record<string, unknown>).target, {
     role: 'user',
@@ -757,4 +773,384 @@ test('replace target preserves unsupported or missing YAML roles instead of sile
   });
   assert.deepEqual((serializedMalformed[0] as Record<string, unknown>).replacements, { old: 'new' });
   assert.deepEqual((serializedMalformed[1] as Record<string, unknown>).replacements, [{ foo: 'baz' }]);
+});
+
+test('PAYLOAD_REPLACE_ROLES drives role options, system/developer targets, and path targets', () => {
+  assert.deepEqual(PAYLOAD_REPLACE_ROLES, ['system', 'developer', 'user']);
+  assert.deepEqual(
+    buildPayloadReplaceRoleOptions({ system: 'System', developer: 'Developer', user: 'User' }),
+    [
+      { value: 'system', label: 'System' },
+      { value: 'developer', label: 'Developer' },
+      { value: 'user', label: 'User' },
+    ],
+  );
+
+  const original = [
+    {
+      models: [{ name: 'claude-*', protocol: 'claude' }],
+      target: { role: 'system', all: true, custom_target_flag: 'keep' },
+      replacements: [{ 'old system': 'new system' }],
+    },
+    {
+      models: [{ name: 'gpt-5*', protocol: 'codex' }],
+      target: { role: 'developer', positions: [1, 3] },
+      replacements: [{ pattern: 'foo-(\\d+)', replacement: 'bar-${1}' }],
+    },
+    {
+      models: [{ name: '*', protocol: 'openai' }],
+      target: { paths: ['system', 'messages.0.content'], extra_path_flag: true },
+      replacements: [
+        { pattern: '(?i)legacy', replacement: '' },
+        { pattern: 'literal-key-word' }, // Wait: 1-key literal where the literal source happens to be "pattern"
+      ].slice(0, 1).concat([{ pattern: 'literal-value' }]),
+    },
+  ];
+
+  const parsed = parseReplaceRules(original, 'replace');
+  assert.equal(parsed.length, 3);
+  assert.equal(parsed[0].target.mode, 'role');
+  if (parsed[0].target.mode === 'role') {
+    assert.equal(parsed[0].target.role, 'system');
+    assert.equal(parsed[0].target.all, true);
+    assert.equal(parsed[0].target.invalidRole, undefined);
+  }
+  assert.equal(parsed[1].target.mode, 'role');
+  if (parsed[1].target.mode === 'role') {
+    assert.equal(parsed[1].target.role, 'developer');
+    assert.deepEqual(parsed[1].target.positions, [1, 3]);
+    assert.equal(parsed[1].target.invalidRole, undefined);
+  }
+  assert.deepEqual(parsed[1].replacements[0], {
+    id: 'replace_r1_rep0',
+    kind: 'regex',
+    pattern: 'foo-(\\d+)',
+    replacement: 'bar-${1}',
+  });
+
+  assert.equal(parsed[2].target.mode, 'paths');
+  if (parsed[2].target.mode === 'paths') {
+    assert.deepEqual(
+      parsed[2].target.paths.map((item) => item.path),
+      ['system', 'messages.0.content'],
+    );
+  }
+  // A 1-key entry named `pattern` without `replacement` remains a 1-key literal mapping.
+  assert.equal(parsed[2].replacements[1].kind, 'literal');
+  if (parsed[2].replacements[1].kind === 'literal') {
+    assert.equal(parsed[2].replacements[1].from, 'pattern');
+    assert.equal(parsed[2].replacements[1].to, 'literal-value');
+  }
+
+  assert.deepEqual(validateAllPayloadRules([], [], [], [], [], parsed), []);
+
+  const serialized = serializeReplaceRules(parsed);
+  assert.deepEqual(serialized[0].target, { custom_target_flag: 'keep', role: 'system', all: true });
+  assert.deepEqual(serialized[1].target, { role: 'developer', positions: [1, 3] });
+  assert.deepEqual(serialized[1].replacements, [{ pattern: 'foo-(\\d+)', replacement: 'bar-${1}' }]);
+  assert.deepEqual(serialized[2].target, { extra_path_flag: true, paths: ['system', 'messages.0.content'] });
+  assert.equal(Object.prototype.hasOwnProperty.call(serialized[2].target as object, 'role'), false);
+  assert.deepEqual(serialized[2].replacements, [
+    { pattern: '(?i)legacy', replacement: '' },
+    { pattern: 'literal-value' },
+  ]);
+
+  // Empty paths target preserves `paths: []` so paths mode survives reparsing, emits no `role`, and fails validation.
+  const emptyPathsRule = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { paths: [] },
+      replacements: [{ a: 'b' }],
+    },
+  ]);
+  assert.equal(emptyPathsRule[0].target.mode, 'paths');
+  assert.deepEqual(
+    validateAllPayloadRules([], [], [], [], [], emptyPathsRule).map((i) => i.messageKey),
+    ['cfg.payload_replace_paths_required'],
+  );
+  const serializedEmptyPaths = serializeReplaceRules(emptyPathsRule);
+  assert.deepEqual(serializedEmptyPaths[0].target, { paths: [] });
+  assert.equal(parseReplaceRules(serializedEmptyPaths)[0].target.mode, 'paths');
+
+  // Blank path rows are retained in draft serialization so Add Path rows survive baseline sync,
+  // while validation blocks saving until filled or removed.
+  const blankPathRule = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { paths: ['   '] },
+      replacements: [{ a: 'b' }],
+    },
+  ]);
+  assert.deepEqual(
+    validateAllPayloadRules([], [], [], [], [], blankPathRule).map((i) => i.messageKey),
+    ['cfg.payload_replace_path_empty'],
+  );
+  assert.deepEqual(serializeReplaceRules(blankPathRule)[0].target, { paths: ['   '] });
+
+  // Blank-path validation also matches Go strings.TrimSpace on U+0085 (NEL) without altering stored path text.
+  const nelPathRule = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { paths: ['\u0085'] },
+      replacements: [{ a: 'b' }],
+    },
+  ]);
+  assert.deepEqual(
+    validateAllPayloadRules([], [], [], [], [], nelPathRule).map((i) => i.messageKey),
+    ['cfg.payload_replace_path_empty'],
+  );
+  assert.deepEqual(serializeReplaceRules(nelPathRule)[0].target, { paths: ['\u0085'] });
+
+  // Neutral inactive role fields (`role: ''` / `null`, `all: false` / `null`, `positions: []` / `null`) alongside `paths` are valid in CPA v8.0.77 and round-trip.
+  const neutralConflictTarget = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { paths: ['messages.0.content'], role: '', all: false, positions: [] },
+      replacements: [{ a: 'b' }],
+    },
+    {
+      models: [{ name: '*' }],
+      target: { paths: ['messages.0.content'], positions: null },
+      replacements: [{ a: 'b' }],
+    },
+    {
+      models: [{ name: '*' }],
+      target: { paths: ['system'], role: null, all: null },
+      replacements: [{ a: 'b' }],
+    },
+  ]);
+  assert.deepEqual(validateAllPayloadRules([], [], [], [], [], neutralConflictTarget), []);
+  assert.deepEqual(serializeReplaceRules(neutralConflictTarget)[0].target, {
+    paths: ['messages.0.content'],
+    role: '',
+    all: false,
+    positions: [],
+  });
+  assert.deepEqual(serializeReplaceRules(neutralConflictTarget)[1].target, {
+    paths: ['messages.0.content'],
+    positions: null,
+  });
+  assert.deepEqual(serializeReplaceRules(neutralConflictTarget)[2].target, {
+    paths: ['system'],
+    role: null,
+    all: null,
+  });
+
+  // `paths: null` on a role target is treated as unset (CPA decodes nil slice) and stays in role mode.
+  const nullPathsRoleTarget = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'user', all: true, paths: null },
+      replacements: [{ old: 'new' }],
+    },
+  ]);
+  assert.equal(nullPathsRoleTarget[0].target.mode, 'role');
+  assert.deepEqual(validateAllPayloadRules([], [], [], [], [], nullPathsRoleTarget), []);
+  if (nullPathsRoleTarget[0].replacements[0].kind === 'literal') {
+    nullPathsRoleTarget[0].replacements[0].to = 'updated';
+  }
+  const serializedNullPaths = serializeReplaceRules(nullPathsRoleTarget)[0];
+  assert.deepEqual(serializedNullPaths.target, {
+    role: 'user',
+    all: true,
+    paths: null,
+  });
+  assert.deepEqual(serializedNullPaths.replacements, [{ old: 'updated' }]);
+
+  // Whitespace-only role alongside `paths` remains a conflict so it is flagged and repairable.
+  const whitespaceRoleConflict = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { paths: ['prompt'], role: ' ' },
+      replacements: [{ a: 'b' }],
+    },
+  ]);
+  assert.deepEqual(
+    validateAllPayloadRules([], [], [], [], [], whitespaceRoleConflict).map((i) => i.messageKey),
+    ['cfg.payload_replace_paths_conflict'],
+  );
+
+  // Exact match reconciliation carries over draft-only inactive targets across server refreshes.
+  const prevWithInactive = parseReplaceRules([
+    { models: [{ name: '*' }], target: { paths: ['system'] }, replacements: [{ a: 'b' }] },
+  ]);
+  if (prevWithInactive[0].target.mode === 'paths') {
+    prevWithInactive[0].target._savedRoleTarget = { mode: 'role', role: 'system', positions: [2], all: false };
+  }
+  const incomingSame = parseReplaceRules([
+    { models: [{ name: '*' }], target: { paths: ['system'] }, replacements: [{ a: 'b' }] },
+  ]);
+  const reconciledWithInactive = reconcileReplaceRules(incomingSame, prevWithInactive);
+  assert.equal(reconciledWithInactive[0].target.mode, 'paths');
+  if (reconciledWithInactive[0].target.mode === 'paths') {
+    assert.deepEqual(reconciledWithInactive[0].target._savedRoleTarget, {
+      mode: 'role',
+      role: 'system',
+      positions: [2],
+      all: false,
+    });
+  }
+
+  // Duplicate active-path rules must not copy or hydrate ambiguous inactive role targets after one is deleted.
+  const duplicatePrevWithInactive = parseReplaceRules([
+    { models: [{ name: '*' }], target: { paths: ['system'] }, replacements: [{ a: 'b' }] },
+    { models: [{ name: '*' }], target: { paths: ['system'] }, replacements: [{ a: 'b' }] },
+  ]);
+  if (duplicatePrevWithInactive[0].target.mode === 'paths') {
+    duplicatePrevWithInactive[0].target._savedRoleTarget = { mode: 'role', role: 'user', positions: [1], all: false };
+  }
+  if (duplicatePrevWithInactive[1].target.mode === 'paths') {
+    duplicatePrevWithInactive[1].target._savedRoleTarget = { mode: 'role', role: 'user', positions: [2], all: false };
+  }
+  const survivingSingle = parseReplaceRules([
+    { models: [{ name: '*' }], target: { paths: ['system'] }, replacements: [{ a: 'b' }] },
+  ]);
+  const reconciledAmbiguous = reconcileReplaceRules(survivingSingle, duplicatePrevWithInactive);
+  assert.equal(reconciledAmbiguous[0].target.mode, 'paths');
+  if (reconciledAmbiguous[0].target.mode === 'paths') {
+    assert.equal(reconciledAmbiguous[0].target._savedRoleTarget, undefined);
+  }
+  const extractedDuplicates = extractReplaceInactiveTargets(duplicatePrevWithInactive);
+  const hydratedAmbiguous = hydrateReplaceInactiveTargets(survivingSingle, extractedDuplicates);
+  if (hydratedAmbiguous[0].target.mode === 'paths') {
+    assert.equal(hydratedAmbiguous[0].target._savedRoleTarget, undefined);
+  }
+
+  // Malformed structured objects with a non-callable toString in path/pattern/replacement must not throw during parse.
+  const hostileToStringRule = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { paths: [{ toString: 'not-a-function' }] },
+      replacements: [
+        { pattern: { toString: 'not-a-function' }, replacement: { toString: 'nope' } },
+        { literalKey: { toString: 'bad' } },
+      ],
+    },
+  ]);
+  assert.equal(hostileToStringRule[0].target.mode, 'paths');
+  if (hostileToStringRule[0].target.mode === 'paths') {
+    assert.equal(hostileToStringRule[0].target.paths[0].path, '[object]');
+    assert.deepEqual(hostileToStringRule[0].target.paths[0]._rawValue, { toString: 'not-a-function' });
+  }
+  assert.deepEqual(
+    validateAllPayloadRules([], [], [], [], [], hostileToStringRule).map((i) => i.messageKey),
+    [
+      'cfg.payload_replace_path_invalid',
+      'cfg.payload_replace_pattern_invalid_type',
+      'cfg.payload_replace_dest_invalid',
+    ],
+  );
+  assert.deepEqual(serializeReplaceRules(hostileToStringRule)[0].target, {
+    paths: [{ toString: 'not-a-function' }],
+  });
+
+  // Conflicting `paths` + active `role`/`all: true`/`positions` and non-array/non-string paths preserve verbatim and flag errors.
+  const conflictingTarget = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'user', all: true, paths: ['system', 123] },
+      replacements: [{ a: 'b' }],
+    },
+    {
+      models: [{ name: '*' }],
+      target: { paths: 'system' },
+      replacements: [{ a: 'b' }],
+    },
+  ]);
+  assert.deepEqual(
+    validateAllPayloadRules([], [], [], [], [], conflictingTarget).map((i) => i.messageKey),
+    [
+      'cfg.payload_replace_paths_conflict',
+      'cfg.payload_replace_path_invalid',
+      'cfg.payload_replace_paths_invalid',
+    ],
+  );
+  const serializedConflict = serializeReplaceRules(conflictingTarget);
+  assert.deepEqual(serializedConflict[0].target, { role: 'user', all: true, paths: ['system', 123] });
+  assert.deepEqual(serializedConflict[1].target, { paths: 'system' });
+
+  // reconcileReplaceRules preserves path item IDs when concurrent baseline edits shift rules.
+  const prevPaths = parseReplaceRules([
+    { models: [{ name: '*' }], target: { paths: ['system'] }, replacements: [{ a: 'b' }] },
+  ]);
+  if (prevPaths[0].target.mode === 'paths') {
+    prevPaths[0].target.paths[0].id = 'custom_path_id';
+  }
+  const incomingPaths = parseReplaceRules([
+    { models: [{ name: 'claude-*' }], target: { role: 'system', all: true }, replacements: [{ x: 'y' }] },
+    { models: [{ name: '*' }], target: { paths: ['system'] }, replacements: [{ a: 'b' }] },
+  ]);
+  const reconciledPaths = reconcileReplaceRules(incomingPaths, prevPaths);
+  assert.equal(reconciledPaths[1].target.mode, 'paths');
+  if (reconciledPaths[1].target.mode === 'paths') {
+    assert.equal(reconciledPaths[1].target.paths[0].id, 'custom_path_id');
+  }
+});
+
+test('regex replacement validation flags empty/non-string patterns as blocking and RE2 issues as non-blocking warnings preserved verbatim', () => {
+  const mixedRules = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'system', all: true },
+      replacements: [
+        { pattern: '(?P<tag>[a-z]+)-(\\d+)', replacement: '$tag:$2' },
+        { pattern: 'foo(?=bar)', replacement: 'baz' },
+        { pattern: 'trailing\\', replacement: 'x' },
+        { pattern: '[unclosed', replacement: 'x' },
+      ],
+    },
+  ]);
+
+  const warningIssues = validateAllPayloadRules([], [], [], [], [], mixedRules);
+  assert.deepEqual(
+    warningIssues.map((i) => ({ key: i.messageKey, severity: i.severity })),
+    [
+      { key: 'cfg.payload_replace_regex_unsupported', severity: 'warning' },
+      { key: 'cfg.payload_replace_regex_trailing_backslash', severity: 'warning' },
+      { key: 'cfg.payload_replace_regex_syntax', severity: 'warning' },
+    ],
+  );
+  assert.equal(warningIssues.some(isBlockingPayloadIssue), false);
+
+  // Invalid regex patterns round-trip verbatim through serialization and Document AST writes.
+  const doc = parseDocument('host: 127.0.0.1\n');
+  writePayloadCategory(doc, 'replace', serializeReplaceRules(mixedRules));
+  const reparsed = parseReplaceRules(readPayloadCategory(parseDocument(doc.toString()), 'replace'), 'replace');
+  assert.deepEqual(
+    reparsed[0].replacements.map((r) => (r.kind === 'regex' ? { pattern: r.pattern, replacement: r.replacement } : null)),
+    [
+      { pattern: '(?P<tag>[a-z]+)-(\\d+)', replacement: '$tag:$2' },
+      { pattern: 'foo(?=bar)', replacement: 'baz' },
+      { pattern: 'trailing\\', replacement: 'x' },
+      { pattern: '[unclosed', replacement: 'x' },
+    ],
+  );
+
+  // Empty regex pattern and non-string regex pattern/replacement remain blocking errors.
+  const invalidTypeRules = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { role: 'user', all: true },
+      replacements: [
+        { pattern: '', replacement: 'x' },
+        { pattern: 123, replacement: 'y' },
+        { pattern: 'ok', replacement: null },
+      ],
+    },
+  ]);
+  const blockingIssues = validateAllPayloadRules([], [], [], [], [], invalidTypeRules);
+  assert.deepEqual(
+    blockingIssues.map((i) => i.messageKey),
+    [
+      'cfg.payload_replace_pattern_empty',
+      'cfg.payload_replace_pattern_invalid_type',
+      'cfg.payload_replace_dest_invalid',
+    ],
+  );
+  assert.equal(blockingIssues.every(isBlockingPayloadIssue), true);
+  assert.deepEqual(serializeReplaceRules(invalidTypeRules)[0].replacements, [
+    { pattern: '', replacement: 'x' },
+    { pattern: 123, replacement: 'y' },
+    { pattern: 'ok', replacement: null },
+  ]);
 });

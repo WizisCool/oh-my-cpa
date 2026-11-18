@@ -96,6 +96,8 @@
   --shadow-field-focus: var(--shadow-field-focus);
   --shadow-field-invalid: var(--shadow-field-invalid);
   --shadow-field-invalid-focus: var(--shadow-field-invalid-focus);
+  --shadow-field-warning: var(--shadow-field-warning);
+  --shadow-field-warning-focus: var(--shadow-field-warning-focus);
   --shadow-focus: var(--shadow-focus);
 
   --text-*: initial;
@@ -342,6 +344,8 @@
   --shadow-field-focus: inset 0 0 0 1px var(--select-ring), 0 0 0 3px var(--select-halo);
   --shadow-field-invalid: inset 0 0 0 1px var(--danger), var(--well-drop);
   --shadow-field-invalid-focus: inset 0 0 0 1px var(--danger), 0 0 0 2px color-mix(in srgb, var(--danger) 16%, transparent);
+  --shadow-field-warning: inset 0 0 0 1px var(--warn), var(--well-drop);
+  --shadow-field-warning-focus: inset 0 0 0 1px var(--warn), 0 0 0 2px color-mix(in srgb, var(--warn) 16%, transparent);
   --shadow-focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   --tooltip-bg: var(--surface);
   --tooltip-fg: var(--fg);
@@ -1619,6 +1623,9 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
    likewise ringed by its container (a card whose stretched button opens it). */
 :focus-visible:not(input):not(textarea):not([data-slot="select-trigger"]):not([data-slot="combobox-trigger"]):not([data-slot="color-picker-trigger"]):not([data-focus-ring="outer"]) { outline: none; box-shadow: 0 0 0 2px var(--accent) !important; border-radius: var(--radius-md); }
 input:focus-visible, textarea:focus-visible { outline: none; }
+@media (forced-colors: active) {
+  textarea:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+}
 
 /* ── shell: a rail on the canvas, the page on one sheet ─────────────────────
    Two layers and no rules between them. The navigation stands on the canvas, which is chrome;

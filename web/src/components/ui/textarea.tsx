@@ -50,6 +50,7 @@ export function Textarea({
     <textarea
       ref={ref}
       data-slot="textarea"
+      data-status={status}
       rows={autoSize ? minRows : rows}
       maxLength={maxLength}
       value={value}
@@ -67,6 +68,9 @@ export function Textarea({
         'hover:not-focus-visible:not-disabled:bg-field-hover hover:not-focus-visible:not-disabled:shadow-field-hover',
         'focus-visible:outline-none focus-visible:shadow-field-focus',
         'aria-invalid:shadow-field-invalid aria-invalid:focus-visible:shadow-field-invalid-focus',
+        status === 'warning'
+          && !isInvalid
+          && 'shadow-field-warning hover:not-focus-visible:not-disabled:shadow-field-warning focus-visible:shadow-field-warning-focus',
         'disabled:cursor-not-allowed disabled:opacity-50',
         Boolean(autoSize) && 'resize-none',
         monospace && 'font-mono',

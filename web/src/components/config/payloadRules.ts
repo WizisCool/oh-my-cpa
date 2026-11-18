@@ -1,5 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
 import { isMap, type Document } from 'yaml';
+import { validateGoRe2Pattern } from './goRegex';
 
 export const PAYLOAD_PROTOCOLS = [
   'openai',
@@ -81,19 +82,95 @@ export interface PayloadFilterRule {
   _extra?: Record<string, unknown>;
 }
 
-export interface PayloadReplaceTarget {
+export const PAYLOAD_REPLACE_ROLES = ['system', 'developer', 'user'] as const;
+
+export type PayloadReplaceRole = (typeof PAYLOAD_REPLACE_ROLES)[number];
+
+export function isPayloadReplaceRole(value: unknown): value is PayloadReplaceRole {
+  return typeof value === 'string' && (PAYLOAD_REPLACE_ROLES as readonly string[]).includes(value);
+}
+
+export function buildPayloadReplaceRoleOptions(
+  labels?: Partial<Record<PayloadReplaceRole, string>>,
+): { value: PayloadReplaceRole; label: string }[] {
+  return PAYLOAD_REPLACE_ROLES.map((role) => ({
+    value: role,
+    label: labels?.[role] ?? role,
+  }));
+}
+
+export type PayloadReplaceTargetMode = 'role' | 'paths';
+
+export interface PayloadReplacePathItem {
+  id: string;
+  path: string;
+  /** Preserves non-string YAML path entries verbatim until edited. */
+  _rawValue?: unknown;
+}
+
+function isGoBlankText(value: string): boolean {
+  // Go's strings.TrimSpace treats U+0085 (NEL) as whitespace, unlike JS trim().
+  return /^[\s\u0085]*$/u.test(value);
+}
+
+function safeRawDisplayText(value: unknown, fallback = '[object]'): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+  return fallback;
+}
+
+export interface PayloadReplaceRoleTarget {
+  mode: 'role';
+  role: PayloadReplaceRole;
   positions: number[];
   all: boolean;
+  /** Preserves an unset/null `paths: null` key on a role target without changing mode. */
+  _nullPaths?: boolean;
   /** Preserves non-boolean YAML `all` values so edits never drop or coerce them. */
   invalidAll?: { value: unknown };
   /** Preserves non-numeric YAML tokens or unparseable UI tokens so validation flags them. */
   invalidPositions?: string[];
-  /** Preserves an unsupported or missing YAML role so edits never silently retarget it to 'user'. */
+  /** Preserves an unsupported or missing YAML role so edits never silently retarget it. */
   invalidRole?: { present: boolean; value?: unknown };
   /** Preserves a non-object YAML target until the operator updates target controls. */
   _rawTarget?: unknown;
+  /** Draft-only inactive target preserved when switching target mode so switching back restores edits. */
+  _savedPathsTarget?: PayloadReplacePathsTarget;
   _extra?: Record<string, unknown>;
 }
+
+export interface PayloadReplacePathsTarget {
+  mode: 'paths';
+  paths: PayloadReplacePathItem[];
+  /** Preserves non-array YAML `paths` values until corrected. */
+  invalidPaths?: { value: unknown };
+  /** Preserves conflicting role-mode fields (`role`, `positions`, `all`) present alongside `paths` in YAML. */
+  conflictingRoleFields?: {
+    hasRole?: boolean;
+    role?: unknown;
+    hasAll?: boolean;
+    all?: unknown;
+    hasPositions?: boolean;
+    positions?: unknown;
+  };
+  /** Preserves explicit empty/null `role`, `all`, or `positions` alongside `paths` without treating them as conflicts. */
+  neutralRoleFields?: {
+    hasEmptyRole?: boolean;
+    role?: '' | null;
+    hasAllFalse?: boolean;
+    all?: false | null;
+    hasEmptyPositions?: boolean;
+    positions?: unknown;
+  };
+  /** Draft-only inactive target preserved when switching target mode so switching back restores edits. */
+  _savedRoleTarget?: PayloadReplaceRoleTarget;
+  _extra?: Record<string, unknown>;
+}
+
+export type PayloadReplaceTarget = PayloadReplaceRoleTarget | PayloadReplacePathsTarget;
 
 export interface UnresolvedReplacePendingEntry {
   id: string;
@@ -101,14 +178,28 @@ export interface UnresolvedReplacePendingEntry {
   text: string;
 }
 
-export interface PayloadReplacementItem {
+export interface PayloadReplacementBase {
   id: string;
-  from: string;
-  to: string;
-  /** Preserves malformed YAML entries (multiple keys or non-string destination) for validation. */
-  _invalidReason?: 'multiple_keys' | 'non_string_value' | 'invalid_entry';
+  /** Preserves malformed YAML entries (multiple keys or non-string fields) for validation. */
+  _invalidReason?: 'multiple_keys' | 'non_string_value' | 'non_string_pattern' | 'invalid_entry';
   _rawEntry?: unknown;
 }
+
+export interface PayloadLiteralReplacementItem extends PayloadReplacementBase {
+  kind: 'literal';
+  from: string;
+  to: string;
+}
+
+export interface PayloadRegexReplacementItem extends PayloadReplacementBase {
+  kind: 'regex';
+  pattern: string;
+  replacement: string;
+}
+
+export type PayloadReplacementItem =
+  | PayloadLiteralReplacementItem
+  | PayloadRegexReplacementItem;
 
 export interface PayloadReplaceRule {
   id: string;
@@ -128,12 +219,19 @@ export type PayloadCategoryKey =
   | 'replace'
   | 'filter';
 
+export type PayloadValidationSeverity = 'error' | 'warning';
+
 export interface PayloadValidationIssue {
   category: PayloadCategoryKey;
   ruleId: string;
   targetId: string;
   field: 'model' | 'path' | 'value' | 'duplicate' | 'target' | 'replacement';
   messageKey: MessageKey;
+  severity?: PayloadValidationSeverity;
+}
+
+export function isBlockingPayloadIssue(issue: PayloadValidationIssue): boolean {
+  return issue.severity !== 'warning';
 }
 
 let nextDynamicId = 1;
@@ -467,7 +565,7 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
       return {
         id: ruleId,
         models: [],
-        target: { positions: [], all: false, invalidRole: { present: false } },
+        target: { mode: 'role', role: 'user', positions: [], all: false, invalidRole: { present: false } },
         replacements: [],
       };
     }
@@ -479,9 +577,11 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
 
     let parsedTarget: PayloadReplaceTarget;
     if (target === undefined) {
-      parsedTarget = { positions: [], all: false, invalidRole: { present: false } };
+      parsedTarget = { mode: 'role', role: 'user', positions: [], all: false, invalidRole: { present: false } };
     } else if (typeof target !== 'object' || target === null || Array.isArray(target)) {
       parsedTarget = {
+        mode: 'role',
+        role: 'user',
         positions: [],
         all: false,
         invalidRole: { present: false },
@@ -489,42 +589,115 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
       };
     } else {
       const targetRecord = target as Record<string, unknown>;
+      const hasPaths = Object.prototype.hasOwnProperty.call(targetRecord, 'paths') && targetRecord.paths !== null;
+      const hasNullPaths = Object.prototype.hasOwnProperty.call(targetRecord, 'paths') && targetRecord.paths === null;
       const hasRole = Object.prototype.hasOwnProperty.call(targetRecord, 'role');
-      const {
-        role: rawRole,
-        positions: rawPositions,
-        all: rawAll,
-        ...targetExtra
-      } = targetRecord;
-      const invalidRole = hasRole && rawRole === 'user'
-        ? undefined
-        : hasRole
-          ? { present: true, value: rawRole }
-          : { present: false };
-      const invalidAll = rawAll !== undefined && typeof rawAll !== 'boolean'
-        ? { value: rawAll }
-        : undefined;
-      const positions: number[] = [];
-      const invalidPositions: string[] = [];
-      if (Array.isArray(rawPositions)) {
-        for (const pos of rawPositions) {
-          if (typeof pos === 'number') {
-            positions.push(pos);
-          } else {
-            invalidPositions.push(String(pos));
-          }
+      const hasAll = Object.prototype.hasOwnProperty.call(targetRecord, 'all');
+      const hasPositions = Object.prototype.hasOwnProperty.call(targetRecord, 'positions');
+
+      if (hasPaths) {
+        const {
+          paths: rawPaths,
+          role: rawRole,
+          positions: rawPositions,
+          all: rawAll,
+          ...targetExtra
+        } = targetRecord;
+        const paths: PayloadReplacePathItem[] = [];
+        const invalidPaths = !Array.isArray(rawPaths) ? { value: rawPaths } : undefined;
+        if (Array.isArray(rawPaths)) {
+          rawPaths.forEach((entry, pathIdx) => {
+            const pathId = `${ruleId}_path${pathIdx}`;
+            if (typeof entry === 'string') {
+              paths.push({ id: pathId, path: entry });
+            } else {
+              paths.push({
+                id: pathId,
+                path: safeRawDisplayText(entry),
+                _rawValue: entry,
+              });
+            }
+          });
         }
-      } else if (rawPositions !== undefined && rawPositions !== null) {
-        invalidPositions.push(String(rawPositions));
+        const isNeutralRole = hasRole && (rawRole === '' || rawRole === null);
+        const isNeutralAll = hasAll && (rawAll === false || rawAll === null);
+        const isRoleActive = hasRole && !isNeutralRole;
+        const isAllActive = hasAll && !isNeutralAll;
+        const isPositionsActive =
+          hasPositions
+          && rawPositions !== null
+          && (!Array.isArray(rawPositions) || rawPositions.length > 0);
+        const conflictingRoleFields =
+          isRoleActive || isAllActive || isPositionsActive
+            ? {
+                ...(hasRole ? { hasRole: true, role: rawRole } : {}),
+                ...(hasAll ? { hasAll: true, all: rawAll } : {}),
+                ...(hasPositions ? { hasPositions: true, positions: rawPositions } : {}),
+              }
+            : undefined;
+        const isNeutralPositions =
+          hasPositions && (rawPositions === null || (Array.isArray(rawPositions) && rawPositions.length === 0));
+        const neutralRoleFields =
+          !conflictingRoleFields
+          && (isNeutralRole || isNeutralAll || isNeutralPositions)
+            ? {
+                ...(isNeutralRole ? { hasEmptyRole: true, role: rawRole as '' | null } : {}),
+                ...(isNeutralAll ? { hasAllFalse: true, all: rawAll as false | null } : {}),
+                ...(isNeutralPositions
+                  ? { hasEmptyPositions: true, positions: rawPositions }
+                  : {}),
+              }
+            : undefined;
+        parsedTarget = {
+          mode: 'paths',
+          paths,
+          ...(invalidPaths ? { invalidPaths } : {}),
+          ...(conflictingRoleFields ? { conflictingRoleFields } : {}),
+          ...(neutralRoleFields ? { neutralRoleFields } : {}),
+          ...(Object.keys(targetExtra).length > 0 ? { _extra: targetExtra } : {}),
+        };
+      } else {
+        const {
+          paths: _ignoredNullPaths,
+          role: rawRole,
+          positions: rawPositions,
+          all: rawAll,
+          ...targetExtra
+        } = targetRecord;
+        const validRole = isPayloadReplaceRole(rawRole);
+        const invalidRole = hasRole && validRole
+          ? undefined
+          : hasRole
+            ? { present: true, value: rawRole }
+            : { present: false };
+        const invalidAll = rawAll !== undefined && typeof rawAll !== 'boolean'
+          ? { value: rawAll }
+          : undefined;
+        const positions: number[] = [];
+        const invalidPositions: string[] = [];
+        if (Array.isArray(rawPositions)) {
+          for (const pos of rawPositions) {
+            if (typeof pos === 'number') {
+              positions.push(pos);
+            } else {
+              invalidPositions.push(String(pos));
+            }
+          }
+        } else if (rawPositions !== undefined && rawPositions !== null) {
+          invalidPositions.push(String(rawPositions));
+        }
+        parsedTarget = {
+          mode: 'role',
+          role: validRole ? rawRole : 'user',
+          positions,
+          all: rawAll === true,
+          ...(hasNullPaths ? { _nullPaths: true } : {}),
+          ...(invalidAll ? { invalidAll } : {}),
+          ...(invalidRole ? { invalidRole } : {}),
+          ...(invalidPositions.length > 0 ? { invalidPositions } : {}),
+          ...(Object.keys(targetExtra).length > 0 ? { _extra: targetExtra } : {}),
+        };
       }
-      parsedTarget = {
-        positions,
-        all: rawAll === true,
-        ...(invalidAll ? { invalidAll } : {}),
-        ...(invalidRole ? { invalidRole } : {}),
-        ...(invalidPositions.length > 0 ? { invalidPositions } : {}),
-        ...(Object.keys(targetExtra).length > 0 ? { _extra: targetExtra } : {}),
-      };
     }
 
     const parsedReplacements: PayloadReplacementItem[] = [];
@@ -537,6 +710,7 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
         if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
           parsedReplacements.push({
             id: repId,
+            kind: 'literal',
             from: '',
             to: '',
             _invalidReason: 'invalid_entry',
@@ -544,14 +718,55 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
           });
           return;
         }
-        const entries = Object.entries(entry as Record<string, unknown>);
+        const entryRecord = entry as Record<string, unknown>;
+        const entries = Object.entries(entryRecord);
         if (entries.length === 0) {
           parsedReplacements.push({
             id: repId,
+            kind: 'literal',
             from: '',
             to: '',
             _invalidReason: 'invalid_entry',
             _rawEntry: entry,
+          });
+          return;
+        }
+        const hasPatternAndReplacement =
+          entries.length === 2
+          && Object.prototype.hasOwnProperty.call(entryRecord, 'pattern')
+          && Object.prototype.hasOwnProperty.call(entryRecord, 'replacement');
+        if (hasPatternAndReplacement) {
+          const rawPattern = entryRecord.pattern;
+          const rawReplacement = entryRecord.replacement;
+          if (typeof rawPattern !== 'string') {
+            parsedReplacements.push({
+              id: repId,
+              kind: 'regex',
+              pattern: safeRawDisplayText(rawPattern),
+              replacement: typeof rawReplacement === 'string'
+                ? rawReplacement
+                : safeRawDisplayText(rawReplacement),
+              _invalidReason: 'non_string_pattern',
+              _rawEntry: entry,
+            });
+            return;
+          }
+          if (typeof rawReplacement !== 'string') {
+            parsedReplacements.push({
+              id: repId,
+              kind: 'regex',
+              pattern: rawPattern,
+              replacement: safeRawDisplayText(rawReplacement),
+              _invalidReason: 'non_string_value',
+              _rawEntry: entry,
+            });
+            return;
+          }
+          parsedReplacements.push({
+            id: repId,
+            kind: 'regex',
+            pattern: rawPattern,
+            replacement: rawReplacement,
           });
           return;
         }
@@ -559,8 +774,9 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
           const [firstKey, firstVal] = entries[0];
           parsedReplacements.push({
             id: repId,
+            kind: 'literal',
             from: firstKey,
-            to: typeof firstVal === 'string' ? firstVal : String(firstVal ?? ''),
+            to: typeof firstVal === 'string' ? firstVal : safeRawDisplayText(firstVal),
             _invalidReason: 'multiple_keys',
             _rawEntry: entry,
           });
@@ -570,8 +786,9 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
         if (typeof toVal !== 'string') {
           parsedReplacements.push({
             id: repId,
+            kind: 'literal',
             from: fromKey,
-            to: toVal == null ? '' : String(toVal),
+            to: safeRawDisplayText(toVal),
             _invalidReason: 'non_string_value',
             _rawEntry: entry,
           });
@@ -579,6 +796,7 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
         }
         parsedReplacements.push({
           id: repId,
+          kind: 'literal',
           from: fromKey,
           to: toVal,
         });
@@ -829,37 +1047,191 @@ export function reconcileFilterRules(
   );
 }
 
+export interface SavedInactiveReplaceTargetEntry {
+  fingerprint: string;
+  totalWithFingerprint: number;
+  savedRoleTarget?: PayloadReplaceRoleTarget;
+  savedPathsTarget?: PayloadReplacePathsTarget;
+}
+
+export function getReplaceRuleFingerprint(rule: PayloadReplaceRule): string {
+  return JSON.stringify(canonicalizeForFingerprint(serializeReplaceRules([rule])[0]));
+}
+
+function countFingerprints(rules: readonly PayloadReplaceRule[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const rule of rules) {
+    const fp = getReplaceRuleFingerprint(rule);
+    counts.set(fp, (counts.get(fp) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export function extractReplaceInactiveTargets(
+  rules: readonly PayloadReplaceRule[],
+): SavedInactiveReplaceTargetEntry[] {
+  const counts = countFingerprints(rules);
+  const entries: SavedInactiveReplaceTargetEntry[] = [];
+  for (const rule of rules) {
+    if (rule.target.mode === 'paths' && rule.target._savedRoleTarget) {
+      const fingerprint = getReplaceRuleFingerprint(rule);
+      entries.push({
+        fingerprint,
+        totalWithFingerprint: counts.get(fingerprint) ?? 1,
+        savedRoleTarget: rule.target._savedRoleTarget,
+      });
+    } else if (rule.target.mode === 'role' && rule.target._savedPathsTarget) {
+      const fingerprint = getReplaceRuleFingerprint(rule);
+      entries.push({
+        fingerprint,
+        totalWithFingerprint: counts.get(fingerprint) ?? 1,
+        savedPathsTarget: rule.target._savedPathsTarget,
+      });
+    }
+  }
+  return entries;
+}
+
+export function hydrateReplaceInactiveTargets(
+  rules: readonly PayloadReplaceRule[],
+  savedEntries: readonly SavedInactiveReplaceTargetEntry[],
+): PayloadReplaceRule[] {
+  if (savedEntries.length === 0) return [...rules];
+  const ruleCounts = countFingerprints(rules);
+  const used = new Set<number>();
+  return rules.map((rule) => {
+    const fingerprint = getReplaceRuleFingerprint(rule);
+    if ((ruleCounts.get(fingerprint) ?? 0) !== 1) return rule;
+    const matchIdx = savedEntries.findIndex(
+      (entry, idx) =>
+        !used.has(idx)
+        && entry.fingerprint === fingerprint
+        && entry.totalWithFingerprint === 1,
+    );
+    if (matchIdx === -1) return rule;
+    used.add(matchIdx);
+    const entry = savedEntries[matchIdx];
+    if (rule.target.mode === 'paths' && entry.savedRoleTarget) {
+      return {
+        ...rule,
+        target: {
+          ...rule.target,
+          _savedRoleTarget: entry.savedRoleTarget,
+        },
+      };
+    }
+    if (rule.target.mode === 'role' && entry.savedPathsTarget) {
+      return {
+        ...rule,
+        target: {
+          ...rule.target,
+          _savedPathsTarget: entry.savedPathsTarget,
+        },
+      };
+    }
+    return rule;
+  });
+}
+
 export function reconcileReplaceRules(
   incoming: readonly PayloadReplaceRule[],
   previous: readonly PayloadReplaceRule[],
 ): PayloadReplaceRule[] {
   const reservedRepIds = new Set(previous.flatMap((prev) => prev.replacements.map((rep) => rep.id)));
+  const reservedPathIds = new Set(
+    previous.flatMap((prev) => (prev.target.mode === 'paths' ? prev.target.paths.map((item) => item.id) : [])),
+  );
+  const incomingCounts = countFingerprints(incoming);
+  const previousCounts = countFingerprints(previous);
   return reconcileRuleList(
     incoming,
     previous,
     'replace_rule',
-    (rule) => JSON.stringify(canonicalizeForFingerprint(serializeReplaceRules([rule])[0])),
-    (rule, prev) => ({
-      replacements: rule.replacements.map((rep, repIdx) => (
-        prev?.replacements[repIdx]
-          ? { ...rep, id: prev.replacements[repIdx].id }
-          : { ...rep, id: nextReservedId('rep', reservedRepIds) }
-      )),
-    }),
+    getReplaceRuleFingerprint,
+    (rule, prev) => {
+      const fingerprint = getReplaceRuleFingerprint(rule);
+      const isUnambiguous =
+        (incomingCounts.get(fingerprint) ?? 0) === 1
+        && (previousCounts.get(fingerprint) ?? 0) === 1;
+      return {
+        target: rule.target.mode === 'paths'
+          ? {
+              ...rule.target,
+              ...(isUnambiguous && prev?.target.mode === 'paths' && prev.target._savedRoleTarget
+                ? { _savedRoleTarget: prev.target._savedRoleTarget }
+                : {}),
+              paths: rule.target.paths.map((item, pIdx) => (
+                prev?.target.mode === 'paths' && prev.target.paths[pIdx]
+                  ? { ...item, id: prev.target.paths[pIdx].id }
+                  : { ...item, id: nextReservedId('rpath', reservedPathIds) }
+              )),
+            }
+          : isUnambiguous && prev?.target.mode === 'role' && prev.target._savedPathsTarget
+            ? {
+                ...rule.target,
+                _savedPathsTarget: prev.target._savedPathsTarget,
+              }
+            : rule.target,
+        replacements: rule.replacements.map((rep, repIdx) => (
+          prev?.replacements[repIdx]
+            ? { ...rep, id: prev.replacements[repIdx].id }
+            : { ...rep, id: nextReservedId('rep', reservedRepIds) }
+        )),
+      };
+    },
   );
 }
 
 export function serializeReplaceRules(rules: PayloadReplaceRule[]): Record<string, unknown>[] {
   return rules.map((r) => {
     let targetOut: unknown;
-    if (r.target._rawTarget !== undefined) {
+    if (r.target.mode === 'paths') {
+      const targetObj: Record<string, unknown> = {
+        ...(r.target._extra ?? {}),
+      };
+      if (r.target.conflictingRoleFields) {
+        if (r.target.conflictingRoleFields.hasRole) {
+          targetObj.role = r.target.conflictingRoleFields.role;
+        }
+        if (r.target.conflictingRoleFields.hasAll) {
+          targetObj.all = r.target.conflictingRoleFields.all;
+        }
+        if (r.target.conflictingRoleFields.hasPositions) {
+          targetObj.positions = r.target.conflictingRoleFields.positions;
+        }
+      } else if (r.target.neutralRoleFields) {
+        if (r.target.neutralRoleFields.hasEmptyRole) {
+          targetObj.role =
+            r.target.neutralRoleFields.role !== undefined ? r.target.neutralRoleFields.role : '';
+        }
+        if (r.target.neutralRoleFields.hasAllFalse) {
+          targetObj.all =
+            r.target.neutralRoleFields.all !== undefined ? r.target.neutralRoleFields.all : false;
+        }
+        if (r.target.neutralRoleFields.hasEmptyPositions) {
+          targetObj.positions =
+            r.target.neutralRoleFields.positions !== undefined
+              ? r.target.neutralRoleFields.positions
+              : [];
+        }
+      }
+      if (r.target.invalidPaths) {
+        targetObj.paths = r.target.invalidPaths.value;
+      } else {
+        const serializedPaths: unknown[] = r.target.paths.map((item) =>
+          item._rawValue !== undefined ? item._rawValue : item.path,
+        );
+        targetObj.paths = serializedPaths;
+      }
+      targetOut = targetObj;
+    } else if (r.target._rawTarget !== undefined) {
       targetOut = r.target._rawTarget;
     } else {
       const targetObj: Record<string, unknown> = {
         ...(r.target._extra ?? {}),
       };
       if (!r.target.invalidRole) {
-        targetObj.role = 'user';
+        targetObj.role = r.target.role;
       } else if (r.target.invalidRole.present) {
         targetObj.role = r.target.invalidRole.value;
       }
@@ -872,6 +1244,9 @@ export function serializeReplaceRules(rules: PayloadReplaceRule[]): Record<strin
         ...r.target.positions,
         ...(r.target.invalidPositions ?? []),
       ];
+      if (r.target._nullPaths) {
+        targetObj.paths = null;
+      }
       if (serializedPositions.length > 0) {
         targetObj.positions = serializedPositions;
       }
@@ -883,6 +1258,12 @@ export function serializeReplaceRules(rules: PayloadReplaceRule[]): Record<strin
       : r.replacements.map((rep) => {
           if (rep._invalidReason && Object.prototype.hasOwnProperty.call(rep, '_rawEntry')) {
             return rep._rawEntry;
+          }
+          if (rep.kind === 'regex') {
+            return {
+              pattern: rep.pattern,
+              replacement: rep.replacement,
+            };
           }
           const entry: Record<string, string> = {};
           Object.defineProperty(entry, rep.from, {
@@ -1193,53 +1574,102 @@ export function validateAllPayloadRules(
         }
       });
 
-      const hasPositions = r.target.positions.length > 0 || (r.target.invalidPositions?.length ?? 0) > 0;
       const targetId = `${r.id}_target`;
-      if (r.target.invalidRole) {
-        issues.push({
-          category: 'replace',
-          ruleId: r.id,
-          targetId,
-          field: 'target',
-          messageKey: 'cfg.payload_replace_role_invalid',
-        });
-      }
-      if (r.target.invalidAll) {
-        issues.push({
-          category: 'replace',
-          ruleId: r.id,
-          targetId,
-          field: 'target',
-          messageKey: 'cfg.payload_replace_all_invalid',
-        });
-      }
-      if (r.target.all && hasPositions) {
-        issues.push({
-          category: 'replace',
-          ruleId: r.id,
-          targetId,
-          field: 'target',
-          messageKey: 'cfg.payload_replace_target_conflict',
-        });
-      } else if (!r.target.all && !r.target.invalidAll && !hasPositions) {
-        issues.push({
-          category: 'replace',
-          ruleId: r.id,
-          targetId,
-          field: 'target',
-          messageKey: 'cfg.payload_replace_positions_required',
-        });
-      } else if (
-        !r.target.all
-        && (r.target.positions.some((p) => !Number.isInteger(p) || p < 1) || (r.target.invalidPositions?.length ?? 0) > 0)
-      ) {
-        issues.push({
-          category: 'replace',
-          ruleId: r.id,
-          targetId,
-          field: 'target',
-          messageKey: 'cfg.payload_replace_positions_invalid',
-        });
+      if (r.target.mode === 'paths') {
+        if (r.target.conflictingRoleFields) {
+          issues.push({
+            category: 'replace',
+            ruleId: r.id,
+            targetId,
+            field: 'target',
+            messageKey: 'cfg.payload_replace_paths_conflict',
+          });
+        }
+        if (r.target.invalidPaths) {
+          issues.push({
+            category: 'replace',
+            ruleId: r.id,
+            targetId,
+            field: 'target',
+            messageKey: 'cfg.payload_replace_paths_invalid',
+          });
+        } else if (r.target.paths.length === 0) {
+          issues.push({
+            category: 'replace',
+            ruleId: r.id,
+            targetId,
+            field: 'target',
+            messageKey: 'cfg.payload_replace_paths_required',
+          });
+        } else {
+          r.target.paths.forEach((item) => {
+            if (item._rawValue !== undefined) {
+              issues.push({
+                category: 'replace',
+                ruleId: r.id,
+                targetId: item.id,
+                field: 'target',
+                messageKey: 'cfg.payload_replace_path_invalid',
+              });
+            } else if (isGoBlankText(item.path)) {
+              issues.push({
+                category: 'replace',
+                ruleId: r.id,
+                targetId: item.id,
+                field: 'target',
+                messageKey: 'cfg.payload_replace_path_empty',
+              });
+            }
+          });
+        }
+      } else {
+        const hasPositions = r.target.positions.length > 0 || (r.target.invalidPositions?.length ?? 0) > 0;
+        if (r.target.invalidRole) {
+          issues.push({
+            category: 'replace',
+            ruleId: r.id,
+            targetId,
+            field: 'target',
+            messageKey: 'cfg.payload_replace_role_invalid',
+          });
+        }
+        if (r.target.invalidAll) {
+          issues.push({
+            category: 'replace',
+            ruleId: r.id,
+            targetId,
+            field: 'target',
+            messageKey: 'cfg.payload_replace_all_invalid',
+          });
+        }
+        if (r.target.all && hasPositions) {
+          issues.push({
+            category: 'replace',
+            ruleId: r.id,
+            targetId,
+            field: 'target',
+            messageKey: 'cfg.payload_replace_target_conflict',
+          });
+        } else if (!r.target.all && !r.target.invalidAll && !hasPositions) {
+          issues.push({
+            category: 'replace',
+            ruleId: r.id,
+            targetId,
+            field: 'target',
+            messageKey: 'cfg.payload_replace_positions_required',
+          });
+        } else if (
+          !r.target.all
+          && (r.target.positions.some((p) => !Number.isInteger(p) || p < 1) || (r.target.invalidPositions?.length ?? 0) > 0)
+        ) {
+          issues.push({
+            category: 'replace',
+            ruleId: r.id,
+            targetId,
+            field: 'target',
+            messageKey: 'cfg.payload_replace_positions_invalid',
+          });
+        }
       }
 
       if (r.invalidReplacements) {
@@ -1268,6 +1698,14 @@ export function validateAllPayloadRules(
             field: 'replacement',
             messageKey: 'cfg.payload_replace_entry_invalid',
           });
+        } else if (rep._invalidReason === 'non_string_pattern') {
+          issues.push({
+            category: 'replace',
+            ruleId: r.id,
+            targetId: rep.id,
+            field: 'replacement',
+            messageKey: 'cfg.payload_replace_pattern_invalid_type',
+          });
         } else if (rep._invalidReason === 'non_string_value') {
           issues.push({
             category: 'replace',
@@ -1276,6 +1714,46 @@ export function validateAllPayloadRules(
             field: 'replacement',
             messageKey: 'cfg.payload_replace_dest_invalid',
           });
+        } else if (rep.kind === 'regex') {
+          if (rep.pattern.length === 0) {
+            issues.push({
+              category: 'replace',
+              ruleId: r.id,
+              targetId: rep.id,
+              field: 'replacement',
+              messageKey: 'cfg.payload_replace_pattern_empty',
+            });
+          } else {
+            const re2Problem = validateGoRe2Pattern(rep.pattern);
+            if (re2Problem === 'trailing_backslash') {
+              issues.push({
+                category: 'replace',
+                ruleId: r.id,
+                targetId: rep.id,
+                field: 'replacement',
+                messageKey: 'cfg.payload_replace_regex_trailing_backslash',
+                severity: 'warning',
+              });
+            } else if (re2Problem === 'unsupported_re2') {
+              issues.push({
+                category: 'replace',
+                ruleId: r.id,
+                targetId: rep.id,
+                field: 'replacement',
+                messageKey: 'cfg.payload_replace_regex_unsupported',
+                severity: 'warning',
+              });
+            } else if (re2Problem === 'invalid_syntax') {
+              issues.push({
+                category: 'replace',
+                ruleId: r.id,
+                targetId: rep.id,
+                field: 'replacement',
+                messageKey: 'cfg.payload_replace_regex_syntax',
+                severity: 'warning',
+              });
+            }
+          }
         } else if (rep.from.length === 0) {
           issues.push({
             category: 'replace',

@@ -3,12 +3,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { Document } from 'yaml';
 
 import { useT } from '../../i18n';
+import { prefixedKey } from '../../i18n/catalog';
 import {
+  PAYLOAD_REPLACE_ROLES,
   appendReplacePositionTokens,
   areModelItemsEqual,
   buildPayloadProtocolOptions,
+  buildPayloadReplaceRoleOptions,
   buildUnresolvedPendingIssues,
+  extractReplaceInactiveTargets,
   generateDynamicId,
+  hydrateReplaceInactiveTargets,
+  isBlockingPayloadIssue,
   parseFilterRules,
   parseRawRules,
   parseReplaceRules,
@@ -27,10 +33,12 @@ import {
   type PayloadCategoryKey,
   type PayloadFilterRule,
   type PayloadRawRule,
+  type PayloadReplaceRole,
   type PayloadReplaceRule,
   type PayloadModelItem,
   type PayloadTypedRule,
   type PayloadValidationIssue,
+  type SavedInactiveReplaceTargetEntry,
   type UnresolvedReplacePendingEntry,
 } from './payloadRules';
 
@@ -51,6 +59,7 @@ import {
  */
 export function usePayloadRulesDraft({
   doc,
+  liveDocRef,
   onDocChange,
   onValidationChange,
   onPendingChange,
@@ -59,10 +68,12 @@ export function usePayloadRulesDraft({
   onMountChange,
   flushPendingRef,
   clearPendingRef,
+  savedInactiveTargetsRef,
   resetVersion,
   validateTrigger,
 }: {
   doc: Document | null;
+  liveDocRef?: React.MutableRefObject<Document | null>;
   onDocChange: () => void;
   onValidationChange?: (issues: PayloadValidationIssue[]) => void;
   onPendingChange?: (hasPending: boolean) => void;
@@ -71,6 +82,7 @@ export function usePayloadRulesDraft({
   onMountChange?: (mounted: boolean) => void;
   flushPendingRef?: React.MutableRefObject<(() => boolean) | null>;
   clearPendingRef?: React.MutableRefObject<(() => void) | null>;
+  savedInactiveTargetsRef?: React.MutableRefObject<SavedInactiveReplaceTargetEntry[]>;
   resetVersion?: number;
   validateTrigger?: number;
 }) {
@@ -78,6 +90,19 @@ export function usePayloadRulesDraft({
 
   const PROTOCOL_OPTIONS = React.useMemo(
     () => buildPayloadProtocolOptions(t('cfg.payload_model_default')),
+    [t],
+  );
+
+  const REPLACE_ROLE_OPTIONS = React.useMemo(
+    () =>
+      buildPayloadReplaceRoleOptions(
+        Object.fromEntries(
+          PAYLOAD_REPLACE_ROLES.map((role) => [
+            role,
+            t(prefixedKey('cfg.payload_replace_role_', role) ?? 'cfg.payload_replace_role_user'),
+          ]),
+        ) as Record<PayloadReplaceRole, string>,
+      ),
     [t],
   );
 
@@ -97,7 +122,10 @@ export function usePayloadRulesDraft({
     parseRawRules(readPayloadCategory(doc, 'override-raw'), 'override-raw')
   );
   const [replaceRules, setReplaceRules] = useState<PayloadReplaceRule[]>(() =>
-    parseReplaceRules(readPayloadCategory(doc, 'replace'), 'replace')
+    hydrateReplaceInactiveTargets(
+      parseReplaceRules(readPayloadCategory(doc, 'replace'), 'replace'),
+      savedInactiveTargetsRef?.current ?? [],
+    ),
   );
   const [filterRules, setFilterRules] = useState<PayloadFilterRule[]>(() =>
     parseFilterRules(readPayloadCategory(doc, 'filter'), 'filter')
@@ -123,6 +151,10 @@ export function usePayloadRulesDraft({
   const pendingPositionsRef = useRef<Record<string, string>>({});
   const docRef = useRef<Document | null>(doc);
   docRef.current = doc;
+  const liveDocRefCurrent = useRef(liveDocRef);
+  liveDocRefCurrent.current = liveDocRef;
+  const resetVersionRef = useRef(resetVersion);
+  resetVersionRef.current = resetVersion;
   const onDocChangeRef = useRef(onDocChange);
   onDocChangeRef.current = onDocChange;
   const onValidationChangeRef = useRef(onValidationChange);
@@ -133,6 +165,8 @@ export function usePayloadRulesDraft({
   onUnresolvedPendingChangeRef.current = onUnresolvedPendingChange;
   const onMountChangeRef = useRef(onMountChange);
   onMountChangeRef.current = onMountChange;
+  const savedInactiveTargetsRefCurrent = useRef(savedInactiveTargetsRef);
+  savedInactiveTargetsRefCurrent.current = savedInactiveTargetsRef;
 
   const updateUnresolvedPending = (
     updater: (prev: UnresolvedReplacePendingEntry[]) => UnresolvedReplacePendingEntry[],
@@ -176,25 +210,29 @@ export function usePayloadRulesDraft({
   // while explicit discards/resets clear transient draft state.
   const lastDocInstanceRef = useRef<Document | null>(doc);
   const lastResetVersionRef = useRef<number | undefined>(resetVersion);
-  useEffect(() => {
-    const docChanged = Boolean(doc && doc !== lastDocInstanceRef.current);
-    const resetChanged = resetVersion !== undefined && resetVersion !== lastResetVersionRef.current;
+  const reconcileFromDocIfNeeded = (
+    targetDoc: Document | null,
+    currentResetVersion: number | undefined,
+  ) => {
+    const docChanged = Boolean(targetDoc && targetDoc !== lastDocInstanceRef.current);
+    const resetChanged =
+      currentResetVersion !== undefined && currentResetVersion !== lastResetVersionRef.current;
     if (!docChanged && !resetChanged) return;
 
-    if (resetVersion !== undefined) {
-      lastResetVersionRef.current = resetVersion;
+    if (resetChanged) {
+      lastResetVersionRef.current = currentResetVersion;
     }
 
     const previousReplaceRules = replaceRulesRef.current;
 
-    if (docChanged && doc) {
-      lastDocInstanceRef.current = doc;
-      const parsedDefault = parseTypedRules(readPayloadCategory(doc, 'default'), 'default');
-      const parsedDefaultRaw = parseRawRules(readPayloadCategory(doc, 'default-raw'), 'default-raw');
-      const parsedOverride = parseTypedRules(readPayloadCategory(doc, 'override'), 'override');
-      const parsedOverrideRaw = parseRawRules(readPayloadCategory(doc, 'override-raw'), 'override-raw');
-      const parsedReplace = parseReplaceRules(readPayloadCategory(doc, 'replace'), 'replace');
-      const parsedFilter = parseFilterRules(readPayloadCategory(doc, 'filter'), 'filter');
+    if (docChanged && targetDoc) {
+      lastDocInstanceRef.current = targetDoc;
+      const parsedDefault = parseTypedRules(readPayloadCategory(targetDoc, 'default'), 'default');
+      const parsedDefaultRaw = parseRawRules(readPayloadCategory(targetDoc, 'default-raw'), 'default-raw');
+      const parsedOverride = parseTypedRules(readPayloadCategory(targetDoc, 'override'), 'override');
+      const parsedOverrideRaw = parseRawRules(readPayloadCategory(targetDoc, 'override-raw'), 'override-raw');
+      const parsedReplace = parseReplaceRules(readPayloadCategory(targetDoc, 'replace'), 'replace');
+      const parsedFilter = parseFilterRules(readPayloadCategory(targetDoc, 'filter'), 'filter');
       const nextDefault = resetChanged ? parsedDefault : reconcileTypedRules(parsedDefault, defaultRulesRef.current);
       const nextDefaultRaw = resetChanged ? parsedDefaultRaw : reconcileRawRules(parsedDefaultRaw, defaultRawRulesRef.current);
       const nextOverride = resetChanged ? parsedOverride : reconcileTypedRules(parsedOverride, overrideRulesRef.current);
@@ -207,6 +245,9 @@ export function usePayloadRulesDraft({
       overrideRawRulesRef.current = nextOverrideRaw;
       replaceRulesRef.current = nextReplace;
       filterRulesRef.current = nextFilter;
+      if (savedInactiveTargetsRefCurrent.current) {
+        savedInactiveTargetsRefCurrent.current.current = extractReplaceInactiveTargets(nextReplace);
+      }
       setDefaultRules(nextDefault);
       setDefaultRawRules(nextDefaultRaw);
       setOverrideRules(nextOverride);
@@ -237,7 +278,7 @@ export function usePayloadRulesDraft({
         for (const [ruleId, text] of Object.entries(pendingPositionsRef.current)) {
           if (text.trim() === '') continue;
           const targetRule = validRulesById.get(ruleId);
-          if (targetRule && !targetRule.target.all) {
+          if (targetRule && targetRule.target.mode === 'role' && !targetRule.target.all) {
             nextPending[ruleId] = text;
           } else {
             const prevIdx = previousReplaceRules.findIndex((r) => r.id === ruleId);
@@ -284,6 +325,12 @@ export function usePayloadRulesDraft({
         }
       }
     }
+  };
+  const reconcileFromDocIfNeededRef = useRef(reconcileFromDocIfNeeded);
+  reconcileFromDocIfNeededRef.current = reconcileFromDocIfNeeded;
+
+  useEffect(() => {
+    reconcileFromDocIfNeededRef.current(doc, resetVersion);
   }, [doc, resetVersion]);
 
   // Validate issues using centralized pure function
@@ -322,8 +369,9 @@ export function usePayloadRulesDraft({
   useEffect(() => {
     if (validateTrigger && validateTrigger > 0) {
       setShowAllErrors(true);
-      if (issues.length > 0) {
-        const firstCat = issues[0].category;
+      const blocking = issues.filter(isBlockingPayloadIssue);
+      if (blocking.length > 0) {
+        const firstCat = blocking[0].category;
         setActivePanels((panels) => (panels.includes(firstCat) ? panels : [...panels, firstCat]));
       }
     }
@@ -332,25 +380,37 @@ export function usePayloadRulesDraft({
   const issuesByTarget = React.useMemo(() => {
     const map = new Map<string, PayloadValidationIssue>();
     for (const issue of issues) {
-      if (!map.has(issue.targetId)) {
+      const existing = map.get(issue.targetId);
+      if (!existing || (existing.severity === 'warning' && issue.severity !== 'warning')) {
         map.set(issue.targetId, issue);
       }
     }
     return map;
   }, [issues]);
 
-  const getTargetError = (targetId: string): string | undefined => {
+  const getTargetFeedback = (
+    targetId: string,
+  ): { message: string; severity: 'error' | 'warning' } | undefined => {
     const issue = issuesByTarget.get(targetId);
     if (!issue) return undefined;
+    if (issue.severity === 'warning') {
+      return { message: t(issue.messageKey), severity: 'warning' };
+    }
     const isVisible = showAllErrors || touchedFields.has(targetId);
-    return isVisible ? t(issue.messageKey) : undefined;
+    return isVisible ? { message: t(issue.messageKey), severity: 'error' } : undefined;
+  };
+
+  const getTargetError = (targetId: string): string | undefined => {
+    const feedback = getTargetFeedback(targetId);
+    return feedback?.severity === 'error' ? feedback.message : undefined;
   };
 
   // Sync back helper
   const commitCategory = (category: PayloadCategoryKey, serialized: unknown[]) => {
-    if (!doc) return;
-    writePayloadCategory(doc, category, serialized);
-    onDocChange();
+    const targetDoc = liveDocRefCurrent.current?.current ?? docRef.current;
+    if (!targetDoc) return;
+    writePayloadCategory(targetDoc, category, serialized);
+    onDocChangeRef.current();
   };
 
   // State for Advanced Model Modal
@@ -425,6 +485,9 @@ export function usePayloadRulesDraft({
   const updateReplaceRules = (updater: (prev: PayloadReplaceRule[]) => PayloadReplaceRule[]) => {
     const next = updater([...replaceRulesRef.current]);
     replaceRulesRef.current = next;
+    if (savedInactiveTargetsRefCurrent.current) {
+      savedInactiveTargetsRefCurrent.current.current = extractReplaceInactiveTargets(next);
+    }
     setReplaceRules(next);
     const nextIssues = [
       ...validateAllPayloadRules(
@@ -447,8 +510,8 @@ export function usePayloadRulesDraft({
       {
         id: generateDynamicId('replace_rule'),
         models: [{ id: generateDynamicId('m'), name: '' }],
-        target: { positions: [], all: false },
-        replacements: [{ id: generateDynamicId('rep'), from: '', to: '' }],
+        target: { mode: 'role', role: 'user', positions: [], all: false },
+        replacements: [{ id: generateDynamicId('rep'), kind: 'literal', from: '', to: '' }],
       },
     ]);
   };
@@ -497,7 +560,7 @@ export function usePayloadRulesDraft({
 
     const nextRules = currentRules.map((rule) => {
       const rawText = pendingByRuleId.get(rule.id);
-      if (rawText === undefined || rawText.trim() === '' || rule.target.all) {
+      if (rawText === undefined || rawText.trim() === '' || rule.target.mode !== 'role' || rule.target.all) {
         return rule;
       }
       const parsed = appendReplacePositionTokens(
@@ -522,6 +585,8 @@ export function usePayloadRulesDraft({
   };
 
   const flushPendingPositions = (): boolean => {
+    const activeDoc = liveDocRefCurrent.current?.current ?? docRef.current;
+    reconcileFromDocIfNeeded(activeDoc, resetVersionRef.current);
     const { hasEntries, anyCommitted, touchedIds, nextRules } = applyPendingPositions();
     if (!hasEntries) return false;
 
@@ -547,10 +612,16 @@ export function usePayloadRulesDraft({
 
   const commitPendingOnUnmountRef = useRef<() => void>(() => {});
   commitPendingOnUnmountRef.current = () => {
+    const activeDoc = liveDocRefCurrent.current?.current ?? docRef.current;
+    reconcileFromDocIfNeeded(activeDoc, resetVersionRef.current);
     const { hasEntries, anyCommitted, nextRules } = applyPendingPositions();
     if (!hasEntries) return;
     onPendingChangeRef.current?.(false);
-    if (anyCommitted && docRef.current) {
+    if (anyCommitted && activeDoc) {
+      replaceRulesRef.current = nextRules;
+      if (savedInactiveTargetsRefCurrent.current) {
+        savedInactiveTargetsRefCurrent.current.current = extractReplaceInactiveTargets(nextRules);
+      }
       const nextIssues = [
         ...validateAllPayloadRules(
           defaultRulesRef.current,
@@ -563,7 +634,7 @@ export function usePayloadRulesDraft({
         ...buildUnresolvedPendingIssues(unresolvedPendingRef.current),
       ];
       onValidationChangeRef.current?.(nextIssues);
-      writePayloadCategory(docRef.current, 'replace', serializeReplaceRules(nextRules));
+      writePayloadCategory(activeDoc, 'replace', serializeReplaceRules(nextRules));
       onDocChangeRef.current();
     }
   };
@@ -607,6 +678,9 @@ export function usePayloadRulesDraft({
     return () => {
       onMountChangeRef.current?.(false);
       commitPendingOnUnmountRef.current();
+      if (savedInactiveTargetsRefCurrent.current) {
+        savedInactiveTargetsRefCurrent.current.current = extractReplaceInactiveTargets(replaceRulesRef.current);
+      }
     };
   }, []);
 
@@ -781,6 +855,7 @@ export function usePayloadRulesDraft({
     showAllErrors,
     markTouched,
     getTargetError,
+    getTargetFeedback,
     commitCategory,
     advModalState,
     setAdvModalState,
@@ -802,6 +877,7 @@ export function usePayloadRulesDraft({
     addModelToRule,
     deleteModelFromRule,
     PROTOCOL_OPTIONS,
+    REPLACE_ROLE_OPTIONS,
     t,
   };
 }

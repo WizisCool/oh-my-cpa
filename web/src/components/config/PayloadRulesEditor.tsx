@@ -14,6 +14,7 @@ import {
   type PayloadKVCondition,
   type PayloadModelItem,
   type PayloadValidationIssue,
+  type SavedInactiveReplaceTargetEntry,
   type UnresolvedReplacePendingEntry,
 } from './payloadRules';
 import {
@@ -33,6 +34,7 @@ export type { PayloadValidationIssue };
 
 export interface PayloadRulesEditorProps {
   doc: Document | null;
+  liveDocRef?: React.MutableRefObject<Document | null>;
   onDocChange: () => void;
   onValidationChange?: (issues: PayloadValidationIssue[]) => void;
   onPendingChange?: (hasPending: boolean) => void;
@@ -41,12 +43,14 @@ export interface PayloadRulesEditorProps {
   onMountChange?: (mounted: boolean) => void;
   flushPendingRef?: React.MutableRefObject<(() => boolean) | null>;
   clearPendingRef?: React.MutableRefObject<(() => void) | null>;
+  savedInactiveTargetsRef?: React.MutableRefObject<SavedInactiveReplaceTargetEntry[]>;
   resetVersion?: number;
   validateTrigger?: number;
 }
 
 export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
   doc,
+  liveDocRef,
   onDocChange,
   onValidationChange,
   onPendingChange,
@@ -55,6 +59,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
   onMountChange,
   flushPendingRef,
   clearPendingRef,
+  savedInactiveTargetsRef,
   resetVersion,
   validateTrigger,
 }) => {
@@ -62,6 +67,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
   // themselves are rendered by `payloadRuleSections`, each given this draft.
   const draft = usePayloadRulesDraft({
     doc,
+    liveDocRef,
     onDocChange,
     onValidationChange,
     onPendingChange,
@@ -70,6 +76,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
     onMountChange,
     flushPendingRef,
     clearPendingRef,
+    savedInactiveTargetsRef,
     resetVersion,
     validateTrigger,
   });
