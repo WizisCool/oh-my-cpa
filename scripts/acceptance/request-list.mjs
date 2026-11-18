@@ -56,7 +56,7 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
   // read is held. Request identities must remain resolved throughout that read.
   await page.waitForFunction(() => document.querySelectorAll('.request-row .req-badge-unresolved').length === 0);
   await page.locator('[data-route-path="/logs"]').first().click();
-  await page.locator('.logs-page').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.locator('.logs-page .logs-toolbar').waitFor({ state: 'visible', timeout: 15_000 });
   let releaseCatalog;
   const catalogGate = new Promise((resolve) => { releaseCatalog = resolve; });
   const catalogRead = page.waitForRequest('**/api/v1/management/identity-directory', { timeout: 15_000 });
