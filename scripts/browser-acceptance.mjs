@@ -128,6 +128,10 @@ async function waitFor(url, timeoutMs = 30000) {
 async function auditRoutes(page, responseBodies, routes) {
   for (const [route, selector, options] of routes) {
     await page.goto(`${appURL}${route}`, { waitUntil: 'domcontentloaded' });
+    // Wait past ShellLoading and match a settled page selector rather than outer layout
+    // wrappers shared with route skeletons (.dashboard-page, .logs-page, .plugins-page,
+    // .config-page, .omc-settings-page, .system-page).
+    await page.locator('.app-shell:not(.shell-loading)').waitFor({ state: 'visible', timeout: 15000 });
     await page.locator(selector).first().waitFor({ state: 'visible', timeout: 15000 });
     const overflow = await measureStable(
       () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
@@ -338,12 +342,12 @@ try {
   check('invalid sign-in is rejected', await page.locator('.auth-alert').isVisible());
   await page.locator('input[type="password"]').fill(FAKE_CPA_MANAGEMENT_KEY);
   await page.locator('button[type="submit"]').click();
-  await page.locator('.app-shell').waitFor({ state: 'visible', timeout: 15000 });
-  check('valid sign-in creates an administrator session', await page.locator('.app-shell').isVisible());
+  await page.locator('.app-shell:not(.shell-loading)').waitFor({ state: 'visible', timeout: 15000 });
+  check('valid sign-in creates an administrator session', await page.locator('.app-shell:not(.shell-loading)').isVisible());
 
   const withProviderSecrets = { pageSecrets: providerSecrets };
   await auditRoutes(page, responseBodies, [
-    ['/dashboard', '.dashboard-page', withProviderSecrets],
+    ['/dashboard', '.dashboard-page .tile-head', withProviderSecrets],
     ['/agent', '[data-testid="agent-page"]', withProviderSecrets],
     ['/playground', '[data-testid="playground-empty"]', withProviderSecrets],
     ['/model-square', '.model-square-page [data-model-identity]', withProviderSecrets],
@@ -354,14 +358,14 @@ try {
     ['/routing', '[data-testid="routing-page"] [data-member]', withProviderSecrets],
     ['/usage/events', '.usage-events-page', withProviderSecrets],
     ['/pricing', '[data-testid="pricing-page"]', withProviderSecrets],
-    ['/logs', '.logs-page', withProviderSecrets],
+    ['/logs', '.logs-page .log-line', withProviderSecrets],
     ['/audit', '[data-testid="audit-page"]', withProviderSecrets],
-    ['/plugins', '.plugins-page', withProviderSecrets],
+    ['/plugins', '.plugins-page [data-plugin-panel="installed"]', withProviderSecrets],
     ['/plugins/store', '[data-plugin-panel="store"]', withProviderSecrets],
     ['/plugins/settings', '[data-plugin-panel="settings"]', withProviderSecrets],
-    ['/config', '.config-page'],
-    ['/omc-settings', '.omc-settings-page', withProviderSecrets],
-    ['/system', '.system-page', withProviderSecrets],
+    ['/config', '.config-page .config-workbench'],
+    ['/omc-settings', '.omc-settings-page .terminal-title', withProviderSecrets],
+    ['/system', '.system-page [data-testid="sys-card-versions"]', withProviderSecrets],
     // Retired paths still land on the page that replaced them.
     ['/oauth', '.oauth-management-page', withProviderSecrets],
     ['/quota', '.oauth-management-page', withProviderSecrets],
