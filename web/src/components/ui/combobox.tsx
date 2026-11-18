@@ -3,6 +3,7 @@ import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Check, Loader2, Plus, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { LineSlot } from '@/components/ui/line-slot';
 import { DropdownCaret } from '@/components/ui/dropdown-caret';
 
 export type ComboboxValue = string | number;
@@ -442,9 +443,9 @@ export function Combobox<
     const opt = byValue.get(current);
     const fallbackLabel = opt?.label ?? String(current);
     return (
-      <span className="min-w-0 flex-1 truncate text-left">
+      <LineSlot className="flex-1 text-left">
         {labelRender ? labelRender({ value: current, label: fallbackLabel }) : fallbackLabel}
-      </span>
+      </LineSlot>
     );
   };
 
@@ -473,7 +474,7 @@ export function Combobox<
             key={String(val)}
             className="inline-flex max-w-full items-center gap-1 rounded-sm bg-selected px-1.5 py-0.5 text-xs text-foreground"
           >
-            <span className="truncate">{renderChipLabel(val)}</span>
+            <LineSlot>{renderChipLabel(val)}</LineSlot>
             {!disabled ? (
               <button
                 type="button"
@@ -610,7 +611,7 @@ export function Combobox<
           isOptionDisabled && 'pointer-events-none opacity-45',
         )}
       >
-        <span className="min-w-0 flex-1 truncate">{content}</span>
+        <LineSlot className="flex-1">{content}</LineSlot>
         {isSelected ? <Check className="size-3.5 shrink-0 text-brand" /> : null}
       </button>
     );
@@ -698,7 +699,7 @@ export function Combobox<
                         key={String(val)}
                         className="inline-flex max-w-[180px] items-center gap-1 rounded-sm bg-selected px-1.5 py-0.5 text-xs text-foreground"
                       >
-                        <span className="truncate">{renderChipLabel(val)}</span>
+                        <LineSlot>{renderChipLabel(val)}</LineSlot>
                         {!disabled ? (
                           <span
                             role="button"

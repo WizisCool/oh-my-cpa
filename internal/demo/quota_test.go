@@ -60,6 +60,28 @@ func TestSeedQuotaObservationsIncludeScopedAndPreviousCycles(t *testing.T) {
 		t.Fatalf("demo direct window capacity missing: %+v", primaryCycles)
 	}
 
+	for _, index := range []string{"auth-codex-01", "auth-claude-01", "auth-antigravity-01"} {
+		reading := latest[index]
+		var currentWindows []quota.QuotaWindow
+		if err := json.Unmarshal([]byte(reading.WindowsJSON), &currentWindows); err != nil {
+			t.Fatal(err)
+		}
+		storedCycles, err := repo.LoadCapacityCycles(ctx, index)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, window := range currentWindows {
+			if !quota.SupportsWindowCapacity(reading.Provider, window) {
+				continue
+			}
+			stored := storedCycles[quota.CapacityWindowKey(reading.Provider, window)]
+			used, _ := quota.WindowUsedPercent(window)
+			if len(stored) < 3 || (used > 0 && len(stored[0].Points) < 4) {
+				t.Fatalf("%s/%s needs a stepped current cycle and two prior cycles: %+v", index, window.ID, stored)
+			}
+		}
+	}
+
 	windows = nil
 	if err := json.Unmarshal([]byte(latest["auth-codex-02"].WindowsJSON), &windows); err != nil {
 		t.Fatal(err)

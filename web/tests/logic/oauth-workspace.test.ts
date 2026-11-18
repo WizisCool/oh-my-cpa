@@ -24,9 +24,9 @@ import { pluginMultiPortalKeys, pluginOAuthProviderTitles } from '../../src/type
 import { providerDisplayName } from '../../src/types/providerMetadata.ts';
 import { orderQuotaWindows, quotaWindowFullName, quotaWindowGroupKey, quotaWindowKindOf, quotaWindowParts } from '../../src/pages/quota/quotaWindowSelection.ts';
 import { applyKeyOrder, moveKey, parseGroupedOrder, parseRankOrder, rankedKeys, ranksOf } from '../../src/types/displayOrder.ts';
-import { credentialStatusOf, compareSections, quotaCellsOf, quotaLinesOf, quotaReadingName, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection, providersInSectionOrder } from '../../src/pages/oauthManagement/credentialSections.ts';
+import { credentialStatusOf, compareSections, quotaCellsOf, quotaDetailWindowFullName, quotaDetailWindowName, quotaLinesOf, quotaReadingLabels, quotaReadingName, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection, providersInSectionOrder } from '../../src/pages/oauthManagement/credentialSections.ts';
 import type { QuotaWindow } from '../../src/types/quota.ts';
-import { formatShortDateTime, isUnusedFullCodexFiveHourWindow, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../../src/pages/quota/quotaFormat.ts';
+import { formatShortDateTime, isUnusedFullCodexFiveHourWindow, quotaPlanLabel, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../../src/pages/quota/quotaFormat.ts';
 import { matchesStatusFilter } from '../../src/components/authFiles/authFileLogic.ts';
 import { healthBucketOf, healthCounts, matchesHealthLens, parseHealthLens, providerSummaries } from '../../src/pages/oauthManagement/fleetPresentation.ts';
 import { siwcBadgeState } from '../../src/components/authFiles/siwcBadge.ts';
@@ -1040,4 +1040,35 @@ test('isUnusedFullCodexFiveHourWindow distinguishes unstarted windows from start
   assert.equal(isUnusedFullCodexFiveHourWindow('claude', base, observedAt, observedAt), false);
   assert.equal(isUnusedFullCodexFiveHourWindow('codex', { ...base, id: 'weekly', kind: 'weekly' }, observedAt, observedAt), false);
   assert.equal(isUnusedFullCodexFiveHourWindow('codex', { ...base, scope: 'model', model: 'gpt-5' }, observedAt, observedAt), false);
+});
+
+test('detail window helpers and unknown-plan sentinel localize consistently in English and Chinese', () => {
+  const en = makeT('en');
+  const zh = makeT('zh');
+  const ag: QuotaWindow = { id: 'ag_Gemini Models_5h', label: 'Gemini Models \u00b7 5小时限制 (5-Hour)', scope: 'group', period_hours: 5 };
+  const sonnet: QuotaWindow = { id: 'seven_day_sonnet', label: 'Sonnet 每周用量', scope: 'model', model: 'claude-3-5-sonnet', period_hours: 168 };
+  const oauthApps: QuotaWindow = { id: 'seven_day_oauth_apps', label: '第三方应用 每周用量', scope: 'standard', period_hours: 168 };
+  const xai: QuotaWindow = { id: 'xai_credit_usage', label: '额度总使用率 (Credit Usage)', scope: 'standard', period_hours: 168 };
+
+  assert.equal(quotaDetailWindowName(ag, en), '5-hour limit');
+  assert.equal(quotaDetailWindowFullName(ag, en), 'Gemini Models 5-hour limit');
+  assert.equal(quotaDetailWindowName(sonnet, en), 'Weekly Sonnet');
+  assert.equal(quotaDetailWindowName(oauthApps, en), 'Weekly OAuth apps');
+  assert.equal(quotaDetailWindowName(xai, en), 'Credit usage');
+  assert.equal(quotaDetailWindowName(xai, zh), '额度用量');
+  assert.equal(quotaReadingLabels([xai], en).get('xai_credit_usage'), 'Credit usage');
+
+  assert.equal(quotaPlanLabel({ plan_label: '未知套餐' }, en), 'Unknown plan');
+  assert.equal(quotaPlanLabel({ plan_label: '未知套餐' }, zh), '未知套餐');
+  assert.equal(quotaPlanLabel({ plan_label: 'Pro' }, en), 'Pro');
+
+  // Custom non-standard duration like an 8-hour Codex window renders "8h" / "8小时" rather than stale "5小时用量上限 (5-Hour)".
+  const codex8h: QuotaWindow = { id: 'standard_primary', label: '5小时用量上限 (5-Hour)', kind: 'model_scoped', scope: 'standard', period_hours: 8 };
+  assert.equal(quotaDetailWindowName(codex8h, en), '8h');
+  assert.equal(quotaDetailWindowName(codex8h, zh), '8小时');
+  const spark5h: QuotaWindow = { id: 'spark_5h', label: 'Spark 5小时', kind: 'model_scoped', scope: 'model', model: 'spark', period_hours: 5 };
+  const spark7d: QuotaWindow = { id: 'spark_7d', label: 'Spark 每周', kind: 'model_scoped', scope: 'model', model: 'spark', period_hours: 168 };
+  const sparkLabels = quotaReadingLabels([spark5h, spark7d], en);
+  assert.equal(sparkLabels.get('spark_5h'), '5 hours Spark');
+  assert.equal(sparkLabels.get('spark_7d'), 'Weekly Spark');
 });

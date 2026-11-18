@@ -3,6 +3,7 @@ import { Select as SelectPrimitive } from '@base-ui/react/select';
 import { Check, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DropdownCaret } from '@/components/ui/dropdown-caret';
+import { LINE_SLOT_CLASS, lineSlotChildren } from '@/components/ui/line-slot';
 
 const SelectRoot = SelectPrimitive.Root;
 
@@ -24,7 +25,7 @@ function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
-      className={cn('min-w-0 flex-1 truncate text-left data-[placeholder]:text-muted-foreground', className)}
+      className={cn(LINE_SLOT_CLASS, 'flex-1 text-left data-[placeholder]:text-muted-foreground', className)}
       {...props}
     />
   );
@@ -185,8 +186,8 @@ function SelectItem({ className, children, onClickCapture, ...props }: SelectPri
       )}
       {...props}
     >
-      <SelectPrimitive.ItemText data-slot="select-item-text" className="min-w-0 flex-1 truncate">
-        {children}
+      <SelectPrimitive.ItemText data-slot="select-item-text" className={cn(LINE_SLOT_CLASS, 'flex-1')}>
+        {lineSlotChildren(children)}
       </SelectPrimitive.ItemText>
       <SelectPrimitive.ItemIndicator data-slot="select-item-indicator" className="inline-flex shrink-0 items-center text-brand">
         <Check className="size-3.5" />
@@ -336,6 +337,19 @@ function Select<V extends SelectPrimitiveValue = string>(rawProps: SimpleSelectP
     </SelectItem>
   );
 
+  const renderValue = (current: V | null): React.ReactNode => {
+    if (current === null || current === undefined || (current as unknown) === '') {
+      const emptyOpt = optionMap.get('' as V);
+      if (current === ('' as V) && emptyOpt) {
+        return labelRender ? labelRender({ value: current, label: emptyOpt.label }) : emptyOpt.label;
+      }
+      return placeholder ? <span className="text-muted-foreground">{placeholder}</span> : null;
+    }
+    const found = optionMap.get(current);
+    const resolvedLabel = found ? found.label : String(current);
+    return labelRender ? labelRender({ value: current, label: resolvedLabel }) : resolvedLabel;
+  };
+
   return (
     <SelectRoot<V>
       id={id}
@@ -376,18 +390,7 @@ function Select<V extends SelectPrimitiveValue = string>(rawProps: SimpleSelectP
         data-testid={testId}
       >
         <SelectValue placeholder={placeholder}>
-          {(current: V | null) => {
-            if (current === null || current === undefined || (current as unknown) === '') {
-              const emptyOpt = optionMap.get('' as V);
-              if (current === ('' as V) && emptyOpt) {
-                return labelRender ? labelRender({ value: current, label: emptyOpt.label }) : emptyOpt.label;
-              }
-              return placeholder ? <span className="text-muted-foreground">{placeholder}</span> : null;
-            }
-            const found = optionMap.get(current);
-            const resolvedLabel = found ? found.label : String(current);
-            return labelRender ? labelRender({ value: current, label: resolvedLabel }) : resolvedLabel;
-          }}
+          {(current: V | null) => lineSlotChildren(renderValue(current))}
         </SelectValue>
       </SelectTrigger>
       <SelectContent matchTriggerWidth={popupMatchSelectWidth} className={popupClassName}>

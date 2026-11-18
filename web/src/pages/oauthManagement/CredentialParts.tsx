@@ -48,7 +48,7 @@ import {
 import { useT, type TFunc } from '../../i18n';
 import { maskAccount } from '../../utils/maskAccount';
 import { formatGatewayTimestamp } from '../../utils/time';
-import { formatObservedAgo } from '../quota/quotaFormat';
+import { formatObservedAgo, quotaPlanLabel } from '../quota/quotaFormat';
 import { Switch } from '../../components/common/Switch';
 import { Tag } from '../../components/common/Tag';
 import { outlivedResetLine, refreshFailureLine } from '../quota/quotaAttempt';
@@ -239,13 +239,14 @@ export function CredentialName({ record, facts, isRenaming, onRename, onRenamed,
 export function CredentialTraits({ record, facts, actions }: { record: OAuthWorkspaceRecord; facts: CredentialFacts; actions: CredentialActions }) {
   const t = useT();
   const plan = record.quota?.plan;
-  const hasTraits = Boolean(plan?.plan_label) || record.file.priority !== undefined || (record.file.weight ?? 1) !== 1
+  const planLabel = quotaPlanLabel(plan, t);
+  const hasTraits = Boolean(planLabel) || record.file.priority !== undefined || (record.file.weight ?? 1) !== 1
     || plan?.subscription_active === false || facts.credits > 0;
   if (!hasTraits) return null;
   return (
     <div className={styles.traits}>
       {/* The plan says what the account can do, so it leads what is said about it. */}
-      {plan?.plan_label && <Tag size="small">{plan.plan_label}</Tag>}
+      {planLabel && <Tag size="small">{planLabel}</Tag>}
       {plan?.subscription_active === false && (
         <Tag size="small" tone="warn" data-subscription-inactive="true">{t('quota.subscription_inactive')}</Tag>
       )}

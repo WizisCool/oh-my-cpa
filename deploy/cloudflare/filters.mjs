@@ -252,6 +252,7 @@ export function filterUsageEvents(decoded, url, { deltaMs = 0 } = {}) {
     params.get('client_agent') ||
     (params.get('result') && params.get('result') !== 'all') ||
     params.get('model') ||
+    params.get('response_model') ||
     params.get('model_alias') ||
     params.get('provider') ||
     params.get('auth_index') ||
@@ -263,6 +264,7 @@ export function filterUsageEvents(decoded, url, { deltaMs = 0 } = {}) {
     params.get('service_tier') ||
     params.get('resolved_service_tier') ||
     (params.get('cost') && params.get('cost') !== 'all') ||
+    (params.get('served') && params.get('served') !== 'all') ||
     (params.get('transport') && params.get('transport') !== 'all') ||
     params.has('min_latency_ms') ||
     params.has('max_latency_ms') ||
@@ -361,13 +363,26 @@ const USAGE_PRESET_MS = {
 function presetWindowBounds(baseWindow, params, deltaMs, items = []) {
   const fromParam = Number(params.get('from'));
   const toParam = Number(params.get('to'));
-  if (Number.isFinite(fromParam) && Number.isFinite(toParam) && toParam > fromParam) {
-    return {
-      ...(baseWindow ?? {}),
-      from: fromParam - deltaMs,
-      to: toParam - deltaMs,
-      preset: params.get('preset') ?? 'custom',
-    };
+  if (params.has('from') && Number.isFinite(fromParam)) {
+    if (!params.has('to')) {
+      const anchorTo = typeof baseWindow?.to === 'number'
+        ? baseWindow.to
+        : items.reduce((max, item) => Math.max(max, item.timestamp_ms ?? 0), fromParam - deltaMs);
+      return {
+        ...(baseWindow ?? {}),
+        from: fromParam - deltaMs,
+        to: Math.max(fromParam - deltaMs, anchorTo),
+        preset: params.get('preset') ?? 'custom',
+      };
+    }
+    if (Number.isFinite(toParam) && toParam > fromParam) {
+      return {
+        ...(baseWindow ?? {}),
+        from: fromParam - deltaMs,
+        to: toParam - deltaMs,
+        preset: params.get('preset') ?? 'custom',
+      };
+    }
   }
   const preset = (params.get('preset') ?? baseWindow?.preset ?? '').toLowerCase();
   const duration = USAGE_PRESET_MS[preset];
@@ -393,6 +408,7 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
   const ua = (params.get('ua') ?? '').trim().toLowerCase();
   const result = (params.get('result') ?? 'all').toLowerCase();
   const models = new Set(params.getAll('model').filter(Boolean));
+  const responseModels = new Set(params.getAll('response_model').filter(Boolean));
   const modelAliases = new Set(params.getAll('model_alias').filter(Boolean));
   const providers = new Set(params.getAll('provider').filter(Boolean));
   const authIndexes = new Set(params.getAll('auth_index').filter(Boolean));
@@ -405,6 +421,7 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
   const resolvedTiers = new Set(params.getAll('resolved_service_tier').filter(Boolean));
   const clientAgents = new Set(params.getAll('client_agent').map((v) => v.trim()).filter(Boolean));
   const cost = (params.get('cost') ?? 'all').toLowerCase();
+  const served = (params.get('served') ?? '').trim().toLowerCase();
   const transport = (params.get('transport') ?? 'all').toLowerCase();
   const minLatency = params.has('min_latency_ms') ? Number(params.get('min_latency_ms')) : null;
   const maxLatency = params.has('max_latency_ms') ? Number(params.get('max_latency_ms')) : null;
@@ -413,9 +430,13 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
   let toCaptured = null;
   const fromParam = Number(params.get('from'));
   const toParam = Number(params.get('to'));
-  if (Number.isFinite(fromParam) && Number.isFinite(toParam) && toParam > fromParam) {
-    fromCaptured = fromParam - deltaMs;
-    toCaptured = toParam - deltaMs;
+  if (params.has('from') && Number.isFinite(fromParam)) {
+    if (!params.has('to')) {
+      fromCaptured = fromParam - deltaMs;
+    } else if (Number.isFinite(toParam) && toParam > fromParam) {
+      fromCaptured = fromParam - deltaMs;
+      toCaptured = toParam - deltaMs;
+    }
   } else if ((params.has('preset') || resolvedWindow) && resolvedWindow && typeof resolvedWindow.from === 'number' && typeof resolvedWindow.to === 'number') {
     fromCaptured = resolvedWindow.from;
     toCaptured = resolvedWindow.to;
@@ -427,6 +448,7 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
     if (result === 'success' && item.failed) return false;
     if (result === 'failed' && !item.failed) return false;
     if (models.size > 0 && !models.has(item.model)) return false;
+    if (responseModels.size > 0 && !responseModels.has(item.response_model ?? '')) return false;
     const callModel = String(item.model_alias ?? '').trim() || String(item.model ?? '');
     if (modelAliases.size > 0 && !modelAliases.has(callModel)) return false;
     const providerLabel = String(item.provider ?? '').trim() || 'unknown';
@@ -443,6 +465,8 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
     if (ua && !String(item.user_agent ?? '').toLowerCase().includes(ua)) return false;
     if (cost === 'priced' && item.pricing_status !== 'priced') return false;
     if (cost === 'unpriced' && item.pricing_status === 'priced') return false;
+    if (served === 'substituted' && item.model_substituted !== true) return false;
+    if (served === 'matched' && (item.model_substituted === true || !item.response_model)) return false;
     if (transport === 'stream' && item.stream !== true) return false;
     if (transport === 'non_stream' && item.stream !== false) return false;
     if (minLatency !== null && Number.isFinite(minLatency) && (item.latency_ms ?? 0) < minLatency) return false;

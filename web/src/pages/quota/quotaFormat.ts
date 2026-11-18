@@ -1,6 +1,6 @@
 import dayjs from '../../utils/time';
 import type { TFunc } from '../../i18n';
-import type { CodexResetCredit, QuotaItem, QuotaMetric, QuotaWindow } from '../../types/quota';
+import type { CodexResetCredit, QuotaItem, QuotaMetric, QuotaPlan, QuotaWindow } from '../../types/quota';
 import { formatUsd } from '../../types/pricingDisplay';
 import { quotaWindowFullName, quotaWindowKindOf } from './quotaWindowSelection';
 
@@ -174,6 +174,13 @@ export function quotaWindowLabel(kind: string | undefined, label: string | undef
   if (kind === 'monthly') return t('quota.window_monthly');
   if (kind === 'credit_usage') return t('quota.window_credit_usage');
   return label || '';
+}
+
+/** Localizes the backend's sentinel unknown-plan label (`\u672a\u77e5\u5957\u9910`) without altering custom/provider plan titles. */
+export function quotaPlanLabel(plan: Pick<QuotaPlan, 'plan_label'> | undefined, t: TFunc): string | undefined {
+  const raw = plan?.plan_label?.trim();
+  if (!raw) return undefined;
+  return raw === '\u672a\u77e5\u5957\u9910' ? t('quota.plan_unknown') : raw;
 }
 
 /**

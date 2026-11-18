@@ -70,8 +70,11 @@ export function useUsageEventSync({
    * counts the operator just asked for are recomputed.
    */
   const [facetWindowRevision, setFacetWindowRevision] = React.useState(0);
-  const { preset, from, to } = query;
-  const facetWindow = React.useMemo(() => eventWindowQuery({ preset, from, to }), [preset, from, to]);
+  const { preset, from, to, replay } = query;
+  const facetWindow = React.useMemo(
+    () => ({ ...eventWindowQuery({ preset, from, to }), ...(replay ? { replay } : {}) }),
+    [preset, from, to, replay],
+  );
   const facetRevision = React.useMemo(() => Date.now(), [facetWindow, facetWindowRevision]);
 
   const ingest = useQuery({

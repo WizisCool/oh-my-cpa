@@ -376,6 +376,7 @@ export default {
   'events.active_filters': 'Active Filters',
   'events.clear_all': 'Clear All',
   'events.filter_chip_model': 'Requested model: {val}',
+  'events.filter_chip_response_model': 'Response model: {val}',
   'events.filter_chip_provider': 'Provider: {val}',
   'events.filter_chip_source': 'Source: {val}',
   'events.filter_chip_credential': 'Credential: {val}',

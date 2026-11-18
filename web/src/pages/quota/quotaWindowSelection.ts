@@ -1,6 +1,4 @@
-import type { TFunc } from '../../i18n';
 import type { QuotaWindow } from '../../types/quota';
-import { quotaWindowLabel } from './quotaFormat';
 
 /**
  * Which window a reading describes.
@@ -11,15 +9,30 @@ import { quotaWindowLabel } from './quotaFormat';
  * of repeating the provider's label, and ordering stops depending on the source sequence. A
  * period that matches no known bucket stays unnamed rather than being forced into one.
  */
-export function quotaWindowKindOf(window: QuotaWindow): QuotaWindow['kind'] {
-  if (window.kind) return window.kind;
-  const hours = window.period_hours;
-  if (hours == null) return undefined;
+export type InferredQuotaPeriod = 'five_hour' | 'daily' | 'weekly' | 'monthly';
+
+export function quotaPeriodFromHours(hours: number | undefined): InferredQuotaPeriod | undefined {
+  if (hours == null || !Number.isFinite(hours) || hours <= 0) return undefined;
   if (Math.abs(hours - 5) < 1) return 'five_hour';
   if (Math.abs(hours - 24) < 1) return 'daily';
   if (Math.abs(hours - 168) < 1) return 'weekly';
   if (hours >= 24 * 28 && hours <= 24 * 31) return 'monthly';
   return undefined;
+}
+
+export function quotaWindowKindOf(window: QuotaWindow): QuotaWindow['kind'] {
+  if (
+    window.kind === 'five_hour'
+    || window.kind === 'daily'
+    || window.kind === 'weekly'
+    || window.kind === 'monthly'
+    || window.kind === 'credit_usage'
+  ) {
+    return window.kind;
+  }
+  const periodKind = quotaPeriodFromHours(window.period_hours);
+  if (periodKind) return periodKind;
+  return window.kind;
 }
 
 /**
@@ -92,18 +105,6 @@ export function orderQuotaWindows(windows: QuotaWindow[]): QuotaWindow[] {
 /** The model group a window belongs to, by the provider's own name; null for a plan's own window. */
 export function quotaWindowGroupName(window: QuotaWindow): string | null {
   return quotaWindowParts(window).group;
-}
-
-/**
- * A window's name without its group: the period in the reader's language for a plan's window or a
- * group's, the provider's label for a model's own limit.
- */
-export function quotaWindowName(window: QuotaWindow, t: TFunc): string {
-  if (window.scope === 'group') {
-    const { name } = quotaWindowParts(window);
-    return quotaWindowLabel(quotaWindowKindOf(window), name, t);
-  }
-  return window.scope === 'model' ? window.label : quotaWindowLabel(window.kind, window.label, t);
 }
 
 /** Whether the server attaches capacity evidence or an unavailable reason to this window. */

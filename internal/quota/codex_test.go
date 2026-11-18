@@ -119,6 +119,17 @@ func TestParseCodexUsageReadsAccountCredits(t *testing.T) {
 	}
 }
 
+func TestStandardWindowIdentityNamesCustomDurations(t *testing.T) {
+	id, label, kind := standardWindowIdentity(8*3600, "five_hour", "5小时用量上限 (5-Hour)")
+	if id != "custom_8h" || label != "8小时用量上限 (8h)" || kind != "custom" {
+		t.Fatalf("standardWindowIdentity(8h) = (%q, %q, %q), want (custom_8h, 8小时用量上限 (8h), custom)", id, label, kind)
+	}
+	id0, label0, kind0 := standardWindowIdentity(0, "five_hour", "5小时用量上限 (5-Hour)")
+	if id0 != "five_hour" || label0 != "5小时用量上限 (5-Hour)" || kind0 != "custom" {
+		t.Fatalf("standardWindowIdentity(0) = (%q, %q, %q), want fallback", id0, label0, kind0)
+	}
+}
+
 func TestParseCodexUsagePreservesProMaxIdentity(t *testing.T) {
 	for _, rawType := range []string{"promax", "pro-max", "pro_max", "  ProMax  "} {
 		t.Run(rawType, func(t *testing.T) {

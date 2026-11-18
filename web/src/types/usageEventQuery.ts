@@ -88,6 +88,7 @@ export function readEventQuery(params: URLSearchParams): UsageEventQuery {
   if (isUsageServedState(served)) query.served = served;
   const transport = params.get('transport')?.trim();
   if (isUsageTransport(transport)) query.transport = transport;
+  if (params.get('replay') === 'calendar') query.replay = 'calendar';
 
   const from = Number(params.get('from'));
   const to = Number(params.get('to'));
