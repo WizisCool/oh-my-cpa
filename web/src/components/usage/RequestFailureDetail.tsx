@@ -13,11 +13,11 @@ import './requestMarks.css';
  * read from the single-record view on intent. The query key is the
  * request detail's own, so opening the record afterwards costs no second read.
  */
-export function RequestFailureDetail({ id, eventId, statusLabel }: { id?: string; eventId: number; statusLabel: string }) {
+export function RequestFailureDetail({ id, eventId, statusLabel, replay }: { id?: string; eventId: number; statusLabel: string; replay?: 'calendar' }) {
   const t = useT();
   const result = useQuery({
-    queryKey: ['usage-event', eventId],
-    queryFn: () => api.getUsageEvent(eventId),
+    queryKey: replay === 'calendar' ? ['usage-event', eventId, 'calendar'] : ['usage-event', eventId],
+    queryFn: () => api.getUsageEvent(eventId, replay),
   });
   const body = result.data?.event?.fail_body?.trim() ?? '';
   const cause = requestFailureCause(undefined, result.data?.event?.fail_code);

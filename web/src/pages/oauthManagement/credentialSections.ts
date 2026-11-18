@@ -117,7 +117,9 @@ export function quotaReadingName(line: QuotaLine, cell: QuotaLineCell, t: TFunc)
   }
   const family = line.scope === 'group' ? groupLabel(cell.window) : lineTitle(line, cell, t);
   const periodText = period ?? (line.scope === 'model' || line.scope === 'code_review' ? customPeriodText(cell.window, t) : undefined);
-  const name = periodText ? t('omc.quota_reading_name', { family, period: periodText }) : family;
+  const name = periodText
+    ? t('omc.quota_reading_name', { family, period: periodText })
+    : (line.scope === 'model' || line.scope === 'code_review' ? cell.window.label : family);
   const allowance = line.scope === 'group' ? cell.allowanceName ?? (!period ? columnLabel(cell.window) : undefined) : undefined;
   return allowance && allowance !== family ? t('omc.quota_allowance_name', { name, allowance }) : name;
 }
@@ -139,15 +141,34 @@ export function quotaReadingLabels(windows: readonly QuotaWindow[], t: TFunc): M
   return labels;
 }
 
+function groupAllowanceDiscriminator(window: QuotaWindow, siblings: readonly QuotaWindow[] | undefined): string | undefined {
+  if (window.scope !== 'group' || !siblings?.length) return undefined;
+  const period = periodOf(window);
+  if (!period) return undefined;
+  const group = quotaWindowParts(window).group;
+  const hasSamePeriodSibling = siblings.some(
+    (other) => other !== window
+      && other.scope === 'group'
+      && (!other.id || !window.id || other.id !== window.id)
+      && quotaWindowParts(other).group === group
+      && periodOf(other) === period,
+  );
+  if (!hasSamePeriodSibling) return undefined;
+  const allowance = columnLabel(window);
+  return allowance && allowance !== groupLabel(window) ? allowance : undefined;
+}
+
 /**
  * Localized name for a window in detail surfaces (Credential Drawer cards, Capacity dialog, Warmup
  * window picker, Dashboard tooltip): keeps full window-limit phrasing for standard/grouped windows
  * while translating model-scoped, code-review, and secondary allowances identically to the list.
  */
-export function quotaDetailWindowName(window: QuotaWindow, t: TFunc): string {
+export function quotaDetailWindowName(window: QuotaWindow, t: TFunc, siblings?: readonly QuotaWindow[]): string {
   const kind = quotaWindowKindOf(window);
   if (window.scope === 'group') {
-    return quotaWindowLabel(kind, columnLabel(window), t);
+    const base = quotaWindowLabel(kind, columnLabel(window), t);
+    const allowance = groupAllowanceDiscriminator(window, siblings);
+    return allowance ? t('omc.quota_allowance_name', { name: base, allowance }) : base;
   }
   if (window.id === 'xai_credit_usage' || kind === 'credit_usage') {
     return quotaWindowLabel('credit_usage', window.label, t);
@@ -156,8 +177,11 @@ export function quotaDetailWindowName(window: QuotaWindow, t: TFunc): string {
   if (knownAllowance || window.scope === 'model' || window.scope === 'code_review') {
     const periodKind = periodOf(window);
     const period = periodKind ? t(PERIOD_KEYS[periodKind]) : customPeriodText(window, t);
+    if (!period) {
+      return knownAllowance ?? window.label;
+    }
     const family = knownAllowance ?? (window.scope === 'code_review' ? t('omc.quota_family_code_review') : modelLabel(window));
-    return period ? t('omc.quota_reading_name', { family, period }) : family;
+    return t('omc.quota_reading_name', { family, period });
   }
   const periodKind = periodOf(window);
   if (periodKind) return quotaWindowLabel(periodKind, window.label, t);
@@ -165,8 +189,8 @@ export function quotaDetailWindowName(window: QuotaWindow, t: TFunc): string {
 }
 
 /** Full localized name for tooltips and accessible labels: group name plus localized window name. */
-export function quotaDetailWindowFullName(window: QuotaWindow, t: TFunc): string {
-  const detail = quotaDetailWindowName(window, t);
+export function quotaDetailWindowFullName(window: QuotaWindow, t: TFunc, siblings?: readonly QuotaWindow[]): string {
+  const detail = quotaDetailWindowName(window, t, siblings);
   if (window.scope !== 'group') return detail;
   const group = quotaWindowParts(window).group;
   return group ? `${group} ${detail}` : detail;

@@ -168,6 +168,32 @@ describe('credential quota presentation', () => {
     expect(within(rows[4]).getByText('No quota reading')).toBeTruthy();
   });
 
+  it('distinguishes low-quota model cooldowns and credits_available from failed quota readings', () => {
+    const lowCooldownFile = file('low-cooldown');
+    const lowCooldownQuota = quota('low-cooldown', [quotaWindow('five_hour', 10, 2)], {
+      status: 'warning',
+      model_cooldowns: [{ is_active: true, model: 'gpt-5', backoff_level: 1 }],
+      recommendation: { status: 'warning', priority: 'low', action: 'none', reason: '配额余量偏低（不足 20%）' },
+    });
+    const lowCreditsQuota = quota('low-credits', [quotaWindow('five_hour', 10, 2)], {
+      status: 'warning',
+      model_cooldowns: [{ is_active: true, model: 'gpt-5', backoff_level: 1 }],
+      recommendation: { status: 'credits_available', priority: 'medium', action: 'redeem_credit', reason: '配额余量低于 20%' },
+    });
+    render(
+      <QuotaSurface
+        files={[lowCooldownFile, file('low-credits')]}
+        quotas={[lowCooldownQuota, lowCreditsQuota]}
+      />,
+    );
+    const rows = screen.getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      const status = row.querySelector('.quota-row-status');
+      expect(status?.getAttribute('data-tip')).toBe('Quota is running low');
+    }
+  });
+
   it('persists keyboard reordering alongside existing dashboard order keys', async () => {
     const api = installOmcApi();
     api.state.preferences.omc_dashboard_order = { other_list: ['keep'], credential_quota: ['ample', 'low'] };
@@ -402,6 +428,17 @@ describe('credential list row', () => {
     expect(within(cells[0]).getByText('100%')).toBeTruthy();
     expect(within(cells[0]).getByText('5h', { exact: true })).toBeTruthy();
     expect(within(cells[1]).getByText('~2d left')).toBeTruthy();
+  });
+
+  it('keeps allowance discriminators on group and meter accessible labels for same-period group allowances', () => {
+    renderCredentialRow(quota('ag-allowances', [
+      { id: 'ag_req', label: 'Gemini Models · Requests', kind: 'five_hour', scope: 'group', period_hours: 5, remaining_percent: 80 },
+      { id: 'ag_tok', label: 'Gemini Models · Tokens', kind: 'five_hour', scope: 'group', period_hours: 5, remaining_percent: 60 },
+    ]));
+    expect(screen.getByRole('group', { name: 'Gemini Models 5-hour limit (Requests)' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Gemini Models 5-hour limit (Tokens)' })).toBeTruthy();
+    expect(screen.getByRole('meter', { name: 'Gemini Models 5-hour limit (Requests)' })).toBeTruthy();
+    expect(screen.getByRole('meter', { name: 'Gemini Models 5-hour limit (Tokens)' })).toBeTruthy();
   });
 
   it('hides capacity trigger when a window has no capacity estimate and shows estimated full total when available', () => {

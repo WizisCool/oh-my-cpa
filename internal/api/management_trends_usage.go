@@ -242,6 +242,24 @@ func (h *Handler) trendsUsage(writer http.ResponseWriter, request *http.Request)
 	writeJSON(writer, http.StatusOK, result)
 }
 
+func isRunningCalendarPreset(preset string) bool {
+	return preset == "today" || preset == "this_week" || preset == "this_month"
+}
+
+func alignComparisonBucketIndex(grid []int64, windowFromMS, windowToMS, priorFromMS, priorStartMS int64) int {
+	clippedStart := max(priorStartMS, priorFromMS)
+	elapsed := max(int64(0), clippedStart-priorFromMS)
+	targetAt := min(windowFromMS+elapsed, windowToMS)
+	index, found := slices.BinarySearch(grid, targetAt)
+	if found {
+		return index
+	}
+	if index > 0 {
+		return index - 1
+	}
+	return 0
+}
+
 func (h *Handler) readTrendsUsage(ctx context.Context, request *http.Request, resolved insightsRange, group repository.UsageDimension, top int) (TrendsUsageResponseDTO, error) {
 	window, zone := resolved.window, h.insightsZone()
 	result := TrendsUsageResponseDTO{
@@ -253,13 +271,51 @@ func (h *Handler) readTrendsUsage(ctx context.Context, request *http.Request, re
 		return result, err
 	}
 	query.Dimensions = []repository.UsageDimension{group}
-	facts, err := h.repo.QueryUsageFacts(ctx, query)
+	var facts, prior, baselineFacts repository.UsageFactResult
+	var hasPrior, hasBaselineFacts bool
+	var priorSpanWindow insightsWindow
+	err = h.repo.QueryUsageFactsSnapshot(ctx, func(queryFacts func(repository.UsageFactQuery) (repository.UsageFactResult, error)) error {
+		var queryErr error
+		facts, queryErr = queryFacts(query)
+		if queryErr != nil {
+			return queryErr
+		}
+		priorSpanWindow = window
+		priorSpanWindow.Clipped = facts.Clipped
+		priorSpanWindow.Widened = !facts.Clipped && (facts.FromMS != window.FromMS || facts.ToMS != window.ToMS)
+		priorSpanWindow.FromMS, priorSpanWindow.ToMS = facts.FromMS, facts.ToMS
+		if compare := resolved.compare; compare != nil {
+			// Align the comparison end below the widened current start so a rolled-up
+			// 15m boundary bucket is never counted in both windows. When the entire
+			// comparison window collapses into current's widened edge, omit it.
+			compareFrom, compareTo := compare.FromMS, min(compare.ToMS, priorSpanWindow.FromMS-1)
+			if compareFrom <= compareTo {
+				query.FromMS, query.ToMS = compareFrom, compareTo
+				prior, queryErr = queryFacts(query)
+				if queryErr != nil {
+					return queryErr
+				}
+				if !prior.Clipped && prior.ToMS < priorSpanWindow.FromMS {
+					hasPrior = true
+					bucketMS, calendar, groupBucket := compareBucketSpec(prior.FromMS, prior.ToMS, zone)
+					query.BucketMS, query.Calendar = bucketMS, calendar
+					if groupBucket != window.Bucket {
+						query.FromMS, query.ToMS = prior.FromMS, prior.ToMS
+						baselineFacts, queryErr = queryFacts(query)
+						if queryErr != nil {
+							return queryErr
+						}
+						hasBaselineFacts = true
+					}
+				}
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return result, err
 	}
-	window.Clipped = facts.Clipped
-	window.Widened = !facts.Clipped && (facts.FromMS != window.FromMS || facts.ToMS != window.ToMS)
-	window.FromMS, window.ToMS = facts.FromMS, facts.ToMS
+	window = priorSpanWindow
 	result.Window = window
 	result.Coverage = insightsCoverage{FactRequests: facts.FactRequests, DetailRequests: facts.DetailRequests}
 	current := foldTrendsUsage(facts.Rows, window.Bucket, zone)
@@ -268,39 +324,34 @@ func (h *Handler) readTrendsUsage(ctx context.Context, request *http.Request, re
 	var previous, baseline trendsUsageFold
 	var previousGrid []int64
 	var baselineScale float64
-	if compare := resolved.compare; compare != nil {
-		// Align the comparison end below the widened current start so a rolled-up
-		// 15m boundary bucket is never counted in both windows. When the entire
-		// comparison window collapses into current's widened edge, omit it.
-		compareFrom, compareTo := compare.FromMS, min(compare.ToMS, window.FromMS-1)
-		if compareFrom <= compareTo {
-			query.FromMS, query.ToMS = compareFrom, compareTo
-			prior, err := h.repo.QueryUsageFacts(ctx, query)
-			if err != nil {
-				return result, err
+	if hasPrior {
+		result.CompareWindow = &insightsCompareWindow{FromMS: prior.FromMS, ToMS: prior.ToMS}
+		previous = foldTrendsUsage(prior.Rows, window.Bucket, zone)
+		previousGrid = window.Bucket.bucketStarts(prior.FromMS, prior.ToMS, zone)
+		baseline = previous
+		baselineScale = float64(window.ToMS-window.FromMS+1) / float64(prior.ToMS-prior.FromMS+1)
+		if hasBaselineFacts {
+			_, _, groupBucket := compareBucketSpec(prior.FromMS, prior.ToMS, zone)
+			baseline = foldTrendsUsage(baselineFacts.Rows, groupBucket, zone)
+		}
+		robust := trendsUsageBaseline(baseline.buckets, baselineScale)
+		result.CompareTotals = &TrendsUsageCompareTotalsDTO{
+			TrendsUsageGroupMeasuresDTO: previous.totals.TrendsUsageGroupMeasuresDTO,
+			BaselineRequests:            robust.Requests, BaselineNetTokens: robust.NetTokens,
+			BaselineTotalTokens: robust.TotalTokens, BaselineCostNanos: robust.CostNanos,
+		}
+	}
+	var compareByGrid []TrendsUsageGroupMeasuresDTO
+	if len(previousGrid) > 0 && len(grid) > 0 {
+		compareByGrid = make([]TrendsUsageGroupMeasuresDTO, len(grid))
+		if len(previousGrid) > len(grid) && !isRunningCalendarPreset(window.Preset) {
+			for _, priorStart := range previousGrid {
+				targetIndex := alignComparisonBucketIndex(grid, window.FromMS, window.ToMS, prior.FromMS, priorStart)
+				compareByGrid[targetIndex].add(previous.buckets[priorStart].TrendsUsageGroupMeasuresDTO)
 			}
-			if !prior.Clipped && prior.ToMS < window.FromMS {
-				result.CompareWindow = &insightsCompareWindow{FromMS: prior.FromMS, ToMS: prior.ToMS}
-				previous = foldTrendsUsage(prior.Rows, window.Bucket, zone)
-				previousGrid = window.Bucket.bucketStarts(prior.FromMS, prior.ToMS, zone)
-				baseline = previous
-				baselineScale = float64(window.ToMS-window.FromMS+1) / float64(prior.ToMS-prior.FromMS+1)
-				bucketMS, calendar, groupBucket := compareBucketSpec(prior.FromMS, prior.ToMS, zone)
-				query.BucketMS, query.Calendar = bucketMS, calendar
-				if groupBucket != window.Bucket {
-					query.FromMS, query.ToMS = prior.FromMS, prior.ToMS
-					baselineFacts, err := h.repo.QueryUsageFacts(ctx, query)
-					if err != nil {
-						return result, err
-					}
-					baseline = foldTrendsUsage(baselineFacts.Rows, groupBucket, zone)
-				}
-				robust := trendsUsageBaseline(baseline.buckets, baselineScale)
-				result.CompareTotals = &TrendsUsageCompareTotalsDTO{
-					TrendsUsageGroupMeasuresDTO: previous.totals.TrendsUsageGroupMeasuresDTO,
-					BaselineRequests:            robust.Requests, BaselineNetTokens: robust.NetTokens,
-					BaselineTotalTokens: robust.TotalTokens, BaselineCostNanos: robust.CostNanos,
-				}
+		} else {
+			for index := 0; index < len(grid) && index < len(previousGrid); index++ {
+				compareByGrid[index] = previous.buckets[previousGrid[index]].TrendsUsageGroupMeasuresDTO
 			}
 		}
 	}
@@ -316,13 +367,13 @@ func (h *Handler) readTrendsUsage(ctx context.Context, request *http.Request, re
 			PromptTokens: bucket.PromptTokens, CompletionTokens: bucket.CompletionTokens, ReasoningTokens: bucket.ReasoningTokens,
 			CacheReadTokens: bucket.CacheReadTokens, CacheRate: bucket.CacheRate, ReasoningShare: bucket.ReasoningShare,
 		}
-		if index < len(previousGrid) {
-			prior := previous.buckets[previousGrid[index]]
-			compareCum.add(prior.TrendsUsageGroupMeasuresDTO)
+		if len(compareByGrid) > 0 && (index < len(previousGrid) || len(previousGrid) > len(grid)) {
+			priorBucket := compareByGrid[index]
+			compareCum.add(priorBucket)
 			total := compareCum
-			point.CompareNetTokens, point.CompareCumNetTokens = &prior.NetTokens, &total.NetTokens
-			point.CompareTotalTokens, point.CompareCumTotalTokens = &prior.TotalTokens, &total.TotalTokens
-			point.CompareRequests, point.CompareCumRequests = &prior.Requests, &total.Requests
+			point.CompareNetTokens, point.CompareCumNetTokens = &priorBucket.NetTokens, &total.NetTokens
+			point.CompareTotalTokens, point.CompareCumTotalTokens = &priorBucket.TotalTokens, &total.TotalTokens
+			point.CompareRequests, point.CompareCumRequests = &priorBucket.Requests, &total.Requests
 		}
 		result.Buckets = append(result.Buckets, point)
 	}

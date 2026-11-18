@@ -1011,8 +1011,8 @@ export const api = {
     return request<UsageEventPage>(`/usage/events${query ? `?${query}` : ''}`, { method: 'GET', signal });
   },
 
-  async getUsageEvent(id: number): Promise<UsageEventDetail> {
-    return request<UsageEventDetail>(`/usage/events/${id}`, { method: 'GET' });
+  async getUsageEvent(id: number, replay?: 'calendar'): Promise<UsageEventDetail> {
+    return request<UsageEventDetail>(`/usage/events/${id}${replay === 'calendar' ? '?replay=calendar' : ''}`, { method: 'GET' });
   },
 
   async downloadUsageEventRequestLog(id: number): Promise<Blob> {

@@ -35,6 +35,7 @@ export default {
   'quota.redeem_cooldown_warning': '额度已重置，但未能清除网关冷却。请对该凭证使用“清除冷却”，不要再消耗重置额度',
   'quota.credential_disabled': '该凭据已在 CPA 中停用',
   'quota.reading_failed': '读数获取失败',
+  'quota.low_quota_hint': '配额余量偏低',
   'quota.not_observed_yet': '尚未读取配额，点击「刷新额度」获取',
   'quota.usage_not_published': '上游已应答但未返回配额窗口',
   'quota.no_live_probe': '该提供商不提供实时配额探测',

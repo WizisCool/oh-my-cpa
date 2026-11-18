@@ -252,8 +252,10 @@ func (r *Repository) ReadQuotaTrendUsage(ctx context.Context, instanceID, authIn
 	})
 }
 
-// ReadQuotaTrendPhysical reads the retention horizon, any pre-horizon 15m fact
-// rows, and retained serving-model records inside one SQLite read snapshot.
+// ReadQuotaTrendPhysical reads the retention horizon, deleted-only pre-horizon
+// 15m fact residuals, and all retained serving-model records completing within
+// [fromMS, toMS) inside one SQLite read snapshot so facts and retained detail
+// remain strictly disjoint across cycles.
 func (r *Repository) ReadQuotaTrendPhysical(ctx context.Context, instanceID, authIndex string, fromMS, toMS int64) (horizon int64, facts UsageFactResult, retained []QuotaTrendRetainedUsage, err error) {
 	facts = UsageFactResult{Rows: []UsageFactRow{}}
 	if toMS <= fromMS {
@@ -262,6 +264,7 @@ func (r *Repository) ReadQuotaTrendPhysical(ctx context.Context, instanceID, aut
 	if r == nil || r.SQL() == nil {
 		return 0, facts, nil, fmt.Errorf("repository is not initialized")
 	}
+	authIndex = strings.TrimSpace(authIndex)
 	tx, err := r.SQL().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return 0, facts, nil, fmt.Errorf("begin quota physical read snapshot: %w", err)
@@ -283,11 +286,13 @@ func (r *Repository) ReadQuotaTrendPhysical(ctx context.Context, instanceID, aut
 		if err != nil {
 			return 0, facts, nil, err
 		}
+		if len(facts.Rows) > 0 {
+			if err := subtractSurvivingUsageEventsFromFacts(ctx, tx, instanceID, authIndex, &facts); err != nil {
+				return 0, facts, nil, err
+			}
+		}
 	}
-	// Do not clamp timestamp_ms >= horizon here: a retained request that started
-	// shortly before the horizon and completed at or after max(fromMS, horizon) must
-	// still be scanned so per-window deduplication can decide whether facts covered it.
-	err = readQuotaTrendUsageWithQuerier(ctx, tx, instanceID, authIndex, max(fromMS, horizon), toMS, 0, func(startedMS, completedMS int64, model string, measures UsageMeasures) {
+	err = readQuotaTrendUsageWithQuerier(ctx, tx, instanceID, authIndex, fromMS, toMS, 0, func(startedMS, completedMS int64, model string, measures UsageMeasures) {
 		retained = append(retained, QuotaTrendRetainedUsage{
 			StartedMS:   startedMS,
 			CompletedMS: completedMS,
@@ -298,15 +303,69 @@ func (r *Repository) ReadQuotaTrendPhysical(ctx context.Context, instanceID, aut
 	return horizon, facts, retained, err
 }
 
+func subtractSurvivingUsageEventsFromFacts(ctx context.Context, q sqlQuerier, instanceID, authIndex string, facts *UsageFactResult) error {
+	if facts == nil || len(facts.Rows) == 0 || facts.ToMS < facts.FromMS {
+		return nil
+	}
+	type bucketKey struct {
+		startMS int64
+		model   string
+	}
+	bucketIndex := make(map[bucketKey]int, len(facts.Rows))
+	for index, row := range facts.Rows {
+		if len(row.Keys) > 0 {
+			bucketIndex[bucketKey{startMS: row.StartMS, model: row.Keys[0]}] = index
+		}
+	}
+	bucketExpr := fmt.Sprintf("(timestamp_ms / %d) * %d", QuarterHourBucketMS, QuarterHourBucketMS)
+	statement := buildStagedUsageEventsArm(`model AS k0, `, `k0, `, bucketExpr, "",
+		`instance_id = ? AND auth_index = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`)
+	rows, err := q.QueryContext(ctx,
+		`SELECT k0, aligned, `+strings.Join(usageFactMeasures, ", ")+` FROM (`+statement+`)`,
+		instanceID, authIndex, facts.FromMS, facts.ToMS)
+	if err != nil {
+		return fmt.Errorf("query surviving quota fact overlap: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var model string
+		var startMS int64
+		var measures UsageMeasures
+		targets := make([]any, 2+len(usageFactMeasures))
+		targets[0], targets[1] = &model, &startMS
+		fillUsageMeasureTargets(targets[2:], &measures)
+		if err := rows.Scan(targets...); err != nil {
+			return fmt.Errorf("scan surviving quota fact overlap: %w", err)
+		}
+		if idx, ok := bucketIndex[bucketKey{startMS: startMS, model: model}]; ok {
+			facts.Rows[idx].UsageMeasures.subtractClamped(measures)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate surviving quota fact overlap: %w", err)
+	}
+	filtered := facts.Rows[:0]
+	for _, row := range facts.Rows {
+		if row.Requests > 0 {
+			filtered = append(filtered, row)
+		}
+	}
+	facts.Rows = filtered
+	return nil
+}
+
 func readQuotaTrendUsageWithQuerier(ctx context.Context, q sqlQuerier, instanceID, authIndex string, fromMS, toMS, retentionStartMS int64, visit func(startedMS, completedMS int64, model string, measures UsageMeasures)) error {
+	if retentionStartMS > fromMS {
+		fromMS = retentionStartMS
+	}
 	if toMS <= fromMS {
 		return nil
 	}
 	const completed = `(timestamp_ms + MAX(latency_ms, 0))`
 	statement := buildStagedUsageEventsArm(`timestamp_ms AS started_ms, COALESCE(NULLIF(response_model, ''), model) AS served_model, `, `started_ms, served_model, `,
-		completed, "", `auth_index = ? AND instance_id = ? AND timestamp_ms >= ? AND timestamp_ms < ? AND `+completed+` >= ? AND `+completed+` < ? AND total_tokens > 0`)
+		completed, "", `instance_id = ? AND auth_index = ? AND `+completed+` >= ? AND `+completed+` < ? AND total_tokens > 0`)
 	rows, err := q.QueryContext(ctx, `SELECT started_ms, served_model, aligned, `+strings.Join(usageFactMeasures, ", ")+` FROM (`+statement+`)`,
-		authIndex, instanceID, max(retentionStartMS, fromMS-capacityLatencyLookbackMS), toMS, fromMS, toMS)
+		instanceID, authIndex, fromMS, toMS)
 	if err != nil {
 		return fmt.Errorf("query quota trend usage: %w", err)
 	}

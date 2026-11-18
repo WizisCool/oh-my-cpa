@@ -13,10 +13,10 @@ export type InferredQuotaPeriod = 'five_hour' | 'daily' | 'weekly' | 'monthly';
 
 export function quotaPeriodFromHours(hours: number | undefined): InferredQuotaPeriod | undefined {
   if (hours == null || !Number.isFinite(hours) || hours <= 0) return undefined;
-  if (Math.abs(hours - 5) < 1) return 'five_hour';
-  if (Math.abs(hours - 24) < 1) return 'daily';
-  if (Math.abs(hours - 168) < 1) return 'weekly';
-  if (hours >= 24 * 28 && hours <= 24 * 31) return 'monthly';
+  if (Math.abs(hours - 5) <= 1 / 6) return 'five_hour';
+  if (Math.abs(hours - 24) <= 1) return 'daily';
+  if (Math.abs(hours - 168) <= 1) return 'weekly';
+  if (hours >= 24 * 29 && hours <= 24 * 31) return 'monthly';
   return undefined;
 }
 
@@ -27,6 +27,7 @@ export function quotaWindowKindOf(window: QuotaWindow): QuotaWindow['kind'] {
     || window.kind === 'weekly'
     || window.kind === 'monthly'
     || window.kind === 'credit_usage'
+    || window.kind === 'custom'
   ) {
     return window.kind;
   }

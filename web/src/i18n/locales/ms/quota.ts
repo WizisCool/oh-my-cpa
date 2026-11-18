@@ -38,6 +38,7 @@ export default {
   "quota.redeem_cooldown_warning": "Kuota ditetapkan semula, tetapi penyejukan get laluan tidak dapat dikosongkan. Gunakan Padam penyejukan pada kelayakan ini; jangan tebus penetapan semula yang lain",
   "quota.credential_disabled": "Kredensial dilumpuhkan dalam CPA",
   "quota.reading_failed": "Bacaan tidak dapat diambil",
+  "quota.low_quota_hint": "Kuota hampir habis",
   "quota.not_observed_yet": "Kuota belum dibaca — guna Muat semula kuota",
   "quota.usage_not_published": "Penyedia menjawab tanpa menerbitkan tetingkap kuota",
   "quota.no_live_probe": "Penyedia ini tidak menyediakan probe kuota langsung",

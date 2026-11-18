@@ -185,7 +185,8 @@ func parseWindowDurationHours(seconds float64) float64 {
 // usual five-hour one is described by the limit it actually has rather than by the slot the
 // payload delivered it in. The id follows the period for the same reason: it keys the cycle
 // calculations, and a monthly window filed under the five-hour id would have its cycles read as
-// five-hour cycles. A duration that names no known period keeps the slot's own name.
+// five-hour cycles. An unrecognised positive duration uses a period-keyed custom id, while an
+// absent duration keeps the slot's own name.
 func standardWindowIdentity(winSec float64, slotID, slotLabel string) (id, label, kind string) {
 	switch {
 	case winSec >= FiveHourSeconds-600 && winSec <= FiveHourSeconds+600:

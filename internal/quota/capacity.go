@@ -142,6 +142,10 @@ func SupportsWindowCapacity(provider string, window QuotaWindow) bool {
 	switch window.Kind {
 	case "five_hour", "daily", "weekly", "monthly":
 		return true
+	case "custom":
+		if window.PeriodHours != nil && *window.PeriodHours > 0 && !math.IsNaN(*window.PeriodHours) && !math.IsInf(*window.PeriodHours, 0) {
+			return true
+		}
 	}
 	return window.ID == "five_hour" || window.ID == "seven_day"
 }

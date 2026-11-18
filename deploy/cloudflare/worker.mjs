@@ -263,9 +263,11 @@ function serve(entry, nowMs, url) {
   }
   // Whole weeks preserve local hours, Monday buckets and the rhythm grid
   // together. Calendar presets need a fresh aggregation, so they are refused above.
-  // Usage drill-downs from Trends/Insights pass replay=calendar so their rebased
-  // [from, to] window aligns with the same whole-week offset.
-  const isUsageReplay = url.pathname === '/api/v1/usage/events' || url.pathname === '/api/v1/usage/facets';
+  // Usage drill-downs and detail reads from Trends/Insights pass replay=calendar so
+  // their rebased timestamps and [from, to] window align with the same whole-week offset.
+  const isUsageReplay = url.pathname === '/api/v1/usage/events'
+    || url.pathname === '/api/v1/usage/facets'
+    || EVENT_DETAIL_PATH.test(url.pathname);
   const useCalendarDelta = isCalendarReplay || (isUsageReplay && url.searchParams.get('replay') === 'calendar');
   const deltaMs = useCalendarDelta
     ? Math.trunc((nowMs - REFERENCE_MS) / WEEK_MS) * WEEK_MS

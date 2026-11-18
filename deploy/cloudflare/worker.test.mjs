@@ -787,9 +787,11 @@ describe('usage-events client_agent search and call-point fallback parity', () =
     assert.deepEqual(openFrom.items.map((row) => row.id), [2, 3]);
   });
 
-  it('aligns Trends drill-downs with calendar whole-week replay offset when replay=calendar is set', async (t) => {
+  it('aligns Trends drill-downs and event details with calendar whole-week replay offset when replay=calendar is set', async (t) => {
     const dayMs = 86_400_000;
-    t.mock.method(Date, 'now', () => REFERENCE_MS + 10 * dayMs + 3_600_000);
+    const weekMs = 7 * dayMs;
+    const nowMs = REFERENCE_MS + 10 * dayMs + 3_600_000;
+    t.mock.method(Date, 'now', () => nowMs);
     const { default: worker } = await import('./worker.mjs');
     const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
     const trendsResp = await worker.fetch(request('/api/v1/management/trends/usage?preset=7d'), env);
@@ -798,7 +800,41 @@ describe('usage-events client_agent search and call-point fallback parity', () =
     const eventsResp = await worker.fetch(request(drillUrl), env);
     assert.equal(eventsResp.status, 200);
     const eventsData = await eventsResp.json();
-    assert.ok(eventsData.items.length > 0, 'calendar-replayed drilldown should return demo events');
+    const capturedEvents = JSON.parse(DATASET.responses['usage-events'].body).items;
+    const expectedCaptured = capturedEvents.filter((row) =>
+      row.timestamp_ms + weekMs >= trendsData.window.from && row.timestamp_ms + weekMs <= trendsData.window.to);
+    assert.ok(expectedCaptured.length > 0, 'captured events should overlap calendar 7d window');
+    const pageLimit = eventsData.limit ?? 200;
+    const expectedPage = expectedCaptured.slice(0, pageLimit);
+    assert.deepEqual(
+      eventsData.items.map((row) => row.id),
+      expectedPage.map((row) => row.id),
+    );
+    assert.deepEqual(
+      eventsData.items.map((row) => row.timestamp_ms),
+      expectedPage.map((row) => row.timestamp_ms + weekMs),
+    );
+
+    // Without replay=calendar, the Worker applies the full 10d+1h offset instead of 7d, selecting different rows.
+    const ordinaryEventsResp = await worker.fetch(
+      request(`/api/v1/usage/events?from=${trendsData.window.from}&to=${trendsData.window.to}`),
+      env,
+    );
+    const ordinaryEventsData = await ordinaryEventsResp.json();
+    assert.notDeepEqual(
+      ordinaryEventsData.items.map((row) => row.id),
+      eventsData.items.map((row) => row.id),
+    );
+
+    const detailCalendarResp = await worker.fetch(request(`/api/v1/usage/events/${eventsData.items[0].id}?replay=calendar`), env);
+    assert.equal(detailCalendarResp.status, 200);
+    const detailCalendarData = await detailCalendarResp.json();
+    assert.equal(detailCalendarData.event.timestamp_ms, eventsData.items[0].timestamp_ms);
+
+    const detailOrdinaryResp = await worker.fetch(request(`/api/v1/usage/events/${eventsData.items[0].id}`), env);
+    assert.equal(detailOrdinaryResp.status, 200);
+    const detailOrdinaryData = await detailOrdinaryResp.json();
+    assert.equal(detailOrdinaryData.event.timestamp_ms, expectedCaptured[0].timestamp_ms + (nowMs - REFERENCE_MS));
   });
 });
 

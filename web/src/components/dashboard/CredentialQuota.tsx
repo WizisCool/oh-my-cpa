@@ -148,16 +148,21 @@ function resolveStatusDetail(row: CredentialQuotaRow, t: TFunc): string | undefi
     case 'needs_reauth':
       return t('recovery.sign_in_hint');
     case 'exhausted':
-    case 'credits_available':
       return t('quota.status_exceeded');
+    case 'credits_available':
+      return row.remainingPercent === 0 || row.itemStatus === 'exhausted'
+        ? t('quota.status_exceeded')
+        : t('quota.low_quota_hint');
     case 'idle':
       return t('quota.not_observed_yet');
     case 'unpublished':
       return t('quota.usage_not_published');
     case 'warning':
-      return row.itemStatus === 'stale' ? t('quota.reading_outlived_reset') : t('quota.reading_failed');
+      if (row.itemStatus === 'stale') return t('quota.reading_outlived_reset');
+      if (row.itemStatus === 'error' || row.state === 'problem') return t('quota.reading_failed');
+      return t('quota.low_quota_hint');
     default:
-      return undefined;
+      return row.state === 'problem' ? t('quota.reading_failed') : undefined;
   }
 }
 

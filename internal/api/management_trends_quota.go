@@ -309,6 +309,7 @@ func (h *Handler) readTrendsQuota(ctx context.Context, providers, indexes []stri
 	authIndexes = slices.DeleteFunc(authIndexes, func(index string) bool { return !trendsMatches(indexes, index) })
 	slices.Sort(authIndexes)
 	if len(authIndexes) == 0 {
+		result.Summary.IsMembershipUnknown = !isLive
 		return result, nil
 	}
 	latest, err := h.repo.GetLatestQuotaSnapshots(ctx, authIndexes)
@@ -911,15 +912,14 @@ func readTrendsQuotaPhysicalFromData(data *trendsQuotaPhysicalSnapshot, window q
 		}
 	}
 	snapshotHorizon := data.horizon
-	var coveredFactBuckets map[int64]struct{}
 	if snapshotHorizon > fromMS {
 		factEnd := min(toMS, snapshotHorizon)
 		if isScoped {
 			// Permanent 15m facts store requested model rather than serving model;
-			// mark scoped history approximate instead of attributing requested-model rollups.
+			// mark scoped history approximate when deleted fact residuals remain.
 			for _, row := range data.facts {
 				rowEnd := row.StartMS + repository.QuarterHourBucketMS
-				if rowEnd > fromMS && row.StartMS < factEnd {
+				if rowEnd > fromMS && row.StartMS < factEnd && row.Requests > 0 {
 					isApproximate = true
 					break
 				}
@@ -927,7 +927,7 @@ func readTrendsQuotaPhysicalFromData(data *trendsQuotaPhysicalSnapshot, window q
 		} else {
 			for _, row := range data.facts {
 				rowEnd := row.StartMS + repository.QuarterHourBucketMS
-				if rowEnd <= fromMS || row.StartMS >= factEnd {
+				if rowEnd <= fromMS || row.StartMS >= factEnd || row.Requests <= 0 {
 					continue
 				}
 				if row.StartMS < fromMS || rowEnd > factEnd {
@@ -936,28 +936,15 @@ func readTrendsQuotaPhysicalFromData(data *trendsQuotaPhysicalSnapshot, window q
 				}
 				// Permanent 15m facts bucket by request start time (`timestamp_ms`) rather
 				// than completion time (`completed_at_ms`), and aggregate failures together with
-				// zero-token rows, so any fact-backed span is conservatively marked approximate.
+				// zero-token rows, so any deleted-detail fact span is marked approximate.
 				isApproximate = true
-				if coveredFactBuckets == nil {
-					coveredFactBuckets = make(map[int64]struct{})
-				}
-				coveredFactBuckets[row.StartMS] = struct{}{}
 				accumulate(row.StartMS, rowEnd, row.Keys[0], row.UsageMeasures, true)
 			}
 		}
 	}
 	for _, entry := range data.retained {
-		if entry.CompletedMS < max(fromMS, snapshotHorizon) || entry.CompletedMS >= toMS {
+		if entry.CompletedMS < fromMS || entry.CompletedMS >= toMS {
 			continue
-		}
-		if coveredFactBuckets != nil {
-			bucketStart := (entry.StartedMS / repository.QuarterHourBucketMS) * repository.QuarterHourBucketMS
-			if entry.StartedMS < 0 {
-				bucketStart = ((entry.StartedMS - repository.QuarterHourBucketMS + 1) / repository.QuarterHourBucketMS) * repository.QuarterHourBucketMS
-			}
-			if _, alreadyCounted := coveredFactBuckets[bucketStart]; alreadyCounted {
-				continue
-			}
 		}
 		accumulate(entry.CompletedMS, entry.CompletedMS+1, entry.Model, entry.Measures, true)
 	}

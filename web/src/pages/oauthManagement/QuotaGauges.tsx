@@ -75,6 +75,7 @@ function QuotaReading({ cell, siblings, name, provider, observedAtMS, isMuted, n
   const hasForecast = Boolean(forecastLabel);
   const hasDialogEvidence = Boolean(owner && (hasForecast || window.usage || window.capacity_unavailable));
   const detailsLabel = forecastLabel ?? window.description;
+  const accessibleName = quotaDetailWindowFullName(window, t, siblings);
   return (
     <div
       className={clsx(
@@ -86,14 +87,14 @@ function QuotaReading({ cell, siblings, name, provider, observedAtMS, isMuted, n
       data-quota-window-label={window.label}
       data-quota-spans={cell.spans ? 'true' : undefined}
     >
-      <div className={styles.reading} role="group" aria-label={quotaDetailWindowFullName(window, t)}>
+      <div className={styles.reading} role="group" aria-label={accessibleName}>
         <span className={styles.name} data-tip={name} data-tip-overflow="">{name}</span>
         <span className={styles.value}>
           <span className={styles['value-prefix']}>{t('omc.quota_remaining_prefix')}</span>
           {/* The bar carries the tone; the figure takes it only once the window is nearly spent. */}
           <b style={remaining != null && remaining < QUOTA_LOW_PERCENT ? { color: quotaRemainingStroke(remaining) } : undefined}>{quotaRemainingText(window)}</b>
         </span>
-        <Meter className={styles.bar} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : quotaDetailWindowFullName(window, t)} />
+        <Meter className={styles.bar} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : accessibleName} />
         {hasDialogEvidence && owner ? (
           <span className={styles.estimate}>
             <QuotaCapacityButton owner={owner} window={window} windows={siblings} hasTrigger={hasForecast}>

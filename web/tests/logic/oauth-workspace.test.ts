@@ -1071,4 +1071,23 @@ test('detail window helpers and unknown-plan sentinel localize consistently in E
   const sparkLabels = quotaReadingLabels([spark5h, spark7d], en);
   assert.equal(sparkLabels.get('spark_5h'), '5 hours Spark');
   assert.equal(sparkLabels.get('spark_7d'), 'Weekly Spark');
+
+  // Warmup/compact model windows with unknown custom durations retain their duration-bearing label.
+  const spark8h: QuotaWindow = { id: 'addl_spark_8h', label: 'Spark 8小时配额', scope: 'model' };
+  const spark48h: QuotaWindow = { id: 'addl_spark_48h', label: 'Spark 48小时配额', scope: 'model' };
+  assert.equal(quotaDetailWindowName(spark8h, en), 'Spark 8小时配额');
+  assert.equal(quotaDetailWindowName(spark48h, en), 'Spark 48小时配额');
+  assert.notEqual(quotaDetailWindowName(spark8h, en), quotaDetailWindowName(spark48h, en));
+
+  // Explicitly custom noncanonical durations (like 4.5h) are not rounded into 5-hour limits.
+  const custom45h: QuotaWindow = { id: 'custom_4.5h', label: '4.5小时用量上限 (4.5h)', kind: 'custom', scope: 'standard', period_hours: 4.5 };
+  assert.equal(quotaWindowKindOf(custom45h), 'custom');
+  assert.equal(quotaDetailWindowName(custom45h, en), '4.5h');
+
+  // Same-group, same-period sibling allowances retain their discriminator in detail and full names.
+  const agReq: QuotaWindow = { id: 'ag_req', label: 'Gemini Models · Requests', scope: 'group', period_hours: 5 };
+  const agTok: QuotaWindow = { id: 'ag_tok', label: 'Gemini Models · Tokens', scope: 'group', period_hours: 5 };
+  assert.equal(quotaDetailWindowName(agReq, en, [agReq, agTok]), '5-hour limit (Requests)');
+  assert.equal(quotaDetailWindowFullName(agTok, en, [agReq, agTok]), 'Gemini Models 5-hour limit (Tokens)');
+  assert.equal(quotaDetailWindowFullName(ag, en, [ag]), 'Gemini Models 5-hour limit');
 });

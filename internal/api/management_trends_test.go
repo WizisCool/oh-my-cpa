@@ -821,14 +821,16 @@ func TestTrendsDSTGridStaleHealthAndSubstitutionDrilldown(t *testing.T) {
 	subEvent2.Provider, subEvent2.Model, subEvent2.ResponseModel, subEvent2.ModelSubstituted = "codex", "gpt-5", "gpt-5-nano", true
 	subEvent3 := eventFor("sub-redacted", now.Add(-8*time.Minute), usage.TokenStats{InputTokens: 10, OutputTokens: 20, TotalTokens: 30}, false)
 	subEvent3.Provider, subEvent3.Model, subEvent3.ResponseModel, subEvent3.ModelSubstituted = "codex", reqModel, "gpt-5-mini", true
-	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{subEvent1, subEvent2, subEvent3}); err != nil {
+	subEvent4 := eventFor("sub-redacted-nano", now.Add(-7*time.Minute), usage.TokenStats{InputTokens: 10, OutputTokens: 20, TotalTokens: 30}, false)
+	subEvent4.Provider, subEvent4.Model, subEvent4.ResponseModel, subEvent4.ModelSubstituted = "codex", reqModel, "gpt-5-nano", true
+	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{subEvent1, subEvent2, subEvent3, subEvent4}); err != nil {
 		t.Fatal(err)
 	}
 
 	telURL := fmt.Sprintf("%s/omc/api/v1/management/trends/telemetry?from=%d&to=%d&bucket=hour", baseURL, now.Add(-time.Hour).UnixMilli(), now.UnixMilli()-1)
 	tel := trendsTestRead[TrendsTelemetryResponseDTO](t, client, telURL)
-	if len(tel.SubstitutionPairs) != 3 {
-		t.Fatalf("expected 3 substitution pairs, got %+v", tel.SubstitutionPairs)
+	if len(tel.SubstitutionPairs) != 4 {
+		t.Fatalf("expected 4 substitution pairs, got %+v", tel.SubstitutionPairs)
 	}
 	var redactedPair *TrendsSubstitutionPairDTO
 	for i := range tel.SubstitutionPairs {
@@ -857,8 +859,8 @@ func TestTrendsDSTGridStaleHealthAndSubstitutionDrilldown(t *testing.T) {
 	if err := json.Unmarshal(rawBody, &eventsResp); err != nil {
 		t.Fatal(err)
 	}
-	if len(eventsResp.Items) != 1 || eventsResp.Items[0].RequestID != "sub-redacted" {
-		t.Fatalf("expected opaque model + response_model filter to isolate sub-redacted, got %+v", eventsResp.Items)
+	if len(eventsResp.Items) != 1 || eventsResp.Items[0].RequestID != "sub-redacted" || eventsResp.Items[0].ResponseModel != "gpt-5-mini" {
+		t.Fatalf("expected opaque model + response_model filter to isolate sub-redacted/gpt-5-mini, got %+v", eventsResp.Items)
 	}
 
 	// 4. Opaque redacted model filter in a window with only a different model returns 0 rows, never unfiltered.
@@ -980,5 +982,170 @@ func TestTrendsKeylessEndpointProjectionCipherlessGuardAndLiteralEventFilters(t 
 	endpointNoCipher := cipherless.trendsGroupProjection(repository.UsageDimensionKey, endpointURL)
 	if endpointNoCipher.ID != "endpoint" || endpointNoCipher.Label != "endpoint" || !endpointNoCipher.FilterDisabled {
 		t.Fatalf("expected neutral endpoint projection with FilterDisabled=true when cipher is nil, got %+v", endpointNoCipher)
+	}
+}
+
+func TestTrendsCodeRabbitRegressionInvariants(t *testing.T) {
+	now := time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)
+	var cpaOffline atomic.Bool
+	const authIdx = "quota-late-auth"
+	client, baseURL, repo := startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v8/management/credentials" {
+			http.NotFound(writer, request)
+			return
+		}
+		if cpaOffline.Load() {
+			writer.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(writer).Encode(map[string]any{
+			"files": []map[string]any{
+				{"auth_index": authIdx, "name": "late.json", "type": "codex", "provider": "codex", "account_type": "oauth"},
+				{"auth_index": "quota-late-cycle-auth", "name": "late-cycle.json", "type": "codex", "provider": "codex", "account_type": "oauth"},
+			},
+		})
+	}, func(handler *Handler) { handler.nowFn = func() time.Time { return now } })
+	repo.Timezone().Apply(time.UTC)
+	ctx := context.Background()
+
+	// 1. Offline empty authIndexes reports IsMembershipUnknown=true.
+	cpaOffline.Store(true)
+	offlineEmpty := trendsTestRead[TrendsQuotaResponseDTO](t, client, baseURL+"/omc/api/v1/management/trends/quota")
+	if !offlineEmpty.Summary.IsMembershipUnknown {
+		t.Fatalf("expected IsMembershipUnknown=true when CPA is offline with empty snapshots, got %+v", offlineEmpty.Summary)
+	}
+	cpaOffline.Store(false)
+
+	// 2. Unaligned equal-duration comparison keeps full prior range without dropping buckets.
+	// Current: [12:05, 12:34:59.999] (1 hour bucket: 12:00). Prior: [11:35, 12:04:59.999] (2 hour buckets: 11:00, 12:00).
+	curFrom := time.Date(2026, 10, 21, 12, 5, 0, 0, time.UTC)
+	curTo := time.Date(2026, 10, 21, 12, 34, 59, 999_000_000, time.UTC)
+	evPriorEarly := eventFor("cmp-early", time.Date(2026, 10, 21, 11, 40, 0, 0, time.UTC), usage.TokenStats{InputTokens: 30, TotalTokens: 30}, false)
+	evPriorLate := eventFor("cmp-late", time.Date(2026, 10, 21, 12, 2, 0, 0, time.UTC), usage.TokenStats{InputTokens: 70, TotalTokens: 70}, false)
+	evCur := eventFor("cmp-cur", time.Date(2026, 10, 21, 12, 10, 0, 0, time.UTC), usage.TokenStats{InputTokens: 50, TotalTokens: 50}, false)
+	// Caller key literally prefixed with "redacted:" must still match via hmac fingerprint.
+	fpRedacted, err := repo.UsageClientKeyFingerprint("redacted:tenant-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// URL-shaped model & provider must not leak hostnames/paths into telemetry groups/scatter/substitutions.
+	urlModel := "https://secret.upstream.internal/v1/custom-model"
+	urlProvider := "https://proxy.upstream.internal/gateway"
+	evURL := eventFor("url-telemetry", time.Date(2026, 10, 21, 12, 15, 0, 0, time.UTC), usage.TokenStats{InputTokens: 20, OutputTokens: 10, TotalTokens: 30}, false)
+	evURL.Model, evURL.ResponseModel, evURL.Provider, evURL.ModelSubstituted, evURL.Generate, evURL.LatencyMS = urlModel, "gpt-5-served", urlProvider, true, true, 120
+	for _, ev := range []*usage.Event{&evPriorEarly, &evPriorLate, &evCur} {
+		ev.Provider, ev.Model, ev.AuthIndex, ev.APIGroupKey = "codex", "gpt-5", authIdx, fpRedacted
+	}
+	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{evPriorEarly, evPriorLate, evCur, evURL}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AggregateUsageFacts(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+
+	unalignedUsage := trendsTestRead[TrendsUsageResponseDTO](t, client,
+		fmt.Sprintf("%s/omc/api/v1/management/trends/usage?from=%d&to=%d&bucket=hour&model=gpt-5&api_key=%s",
+			baseURL, curFrom.UnixMilli(), curTo.UnixMilli(), url.QueryEscape("redacted:tenant-key")))
+	if unalignedUsage.Totals.NetTokens != 50 || unalignedUsage.CompareTotals == nil || unalignedUsage.CompareTotals.NetTokens != 100 {
+		t.Fatalf("unexpected totals/compare_totals for literal redacted: key + unaligned window: totals=%+v compare=%+v", unalignedUsage.Totals, unalignedUsage.CompareTotals)
+	}
+	if len(unalignedUsage.Buckets) != 1 || unalignedUsage.Buckets[0].CompareCumNetTokens == nil || *unalignedUsage.Buckets[0].CompareCumNetTokens != 100 {
+		t.Fatalf("expected unaligned equal-duration comparison overlay to retain full prior 100 tokens, got %+v", unalignedUsage.Buckets)
+	}
+	multiCurTo := time.Date(2026, 10, 21, 14, 34, 59, 999_000_000, time.UTC) // [12:05, 14:35) -> 3 buckets vs [09:35, 12:05) -> 4 buckets
+	multiUsage := trendsTestRead[TrendsUsageResponseDTO](t, client,
+		fmt.Sprintf("%s/omc/api/v1/management/trends/usage?from=%d&to=%d&bucket=hour&model=gpt-5&api_key=%s",
+			baseURL, curFrom.UnixMilli(), multiCurTo.UnixMilli(), url.QueryEscape("redacted:tenant-key")))
+	if len(multiUsage.Buckets) != 3 || multiUsage.CompareTotals == nil || multiUsage.CompareTotals.NetTokens != 100 ||
+		multiUsage.Buckets[2].CompareCumNetTokens == nil || *multiUsage.Buckets[2].CompareCumNetTokens != 100 {
+		t.Fatalf("expected multi-bucket unaligned overlay to accumulate all 100 prior tokens by end bucket, totals=%+v buckets=%+v", multiUsage.CompareTotals, multiUsage.Buckets)
+	}
+
+	// 3. URL-shaped model/provider values emit neutral "endpoint" labels across telemetry responses.
+	telProbeResp := trendsTestRead[TrendsTelemetryResponseDTO](t, client,
+		fmt.Sprintf("%s/omc/api/v1/management/trends/telemetry?from=%d&to=%d&bucket=hour", baseURL, curFrom.UnixMilli(), curTo.UnixMilli()))
+	var telProbeID string
+	for _, g := range telProbeResp.Groups {
+		if g.Label == "endpoint" {
+			telProbeID = g.ID
+		}
+		if strings.Contains(g.Label, "secret.upstream.internal") || strings.Contains(g.ID, "secret.upstream.internal") {
+			t.Fatalf("leaked URL-shaped model in telemetry groups: %+v", g)
+		}
+	}
+	if !strings.HasPrefix(telProbeID, repository.TrendsRedactedPrefix) {
+		t.Fatalf("expected opaque redacted ID for URL-shaped model in telemetry groups, got %+v", telProbeResp.Groups)
+	}
+	telURLResp := trendsTestRead[TrendsTelemetryResponseDTO](t, client,
+		fmt.Sprintf("%s/omc/api/v1/management/trends/telemetry?from=%d&to=%d&bucket=hour&model=%s",
+			baseURL, curFrom.UnixMilli(), curTo.UnixMilli(), url.QueryEscape(telProbeID)))
+	if telURLResp.Summary.TotalRequests != 1 || len(telURLResp.Groups) != 1 || telURLResp.Groups[0].Label != "endpoint" ||
+		len(telURLResp.Scatter) != 1 || telURLResp.Scatter[0].Model != "endpoint" || telURLResp.Scatter[0].Provider != "endpoint" ||
+		len(telURLResp.SubstitutionPairs) != 1 || telURLResp.SubstitutionPairs[0].RequestedModel != "endpoint" || telURLResp.SubstitutionPairs[0].Provider != "endpoint" {
+		t.Fatalf("expected neutral endpoint labels across telemetry groups, scatter, and substitutions, got %+v", telURLResp)
+	}
+
+	// 4. Quota cycles count >15m latency requests by completion time and do not double-count across adjacent cycles
+	// when a pre-horizon row still exists in usage_events during two-phase retention.
+	const authIdxQuota = "quota-late-cycle-auth"
+	cycle1Reset := time.Date(2026, 10, 21, 12, 30, 0, 0, time.UTC)
+	cycle2Reset := time.Date(2026, 10, 21, 16, 30, 0, 0, time.UTC)
+	longReq := eventFor("long-latency-req", time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC), usage.TokenStats{InputTokens: 40, OutputTokens: 10, TotalTokens: 50}, false)
+	longReq.Provider = "codex"
+	longReq.Model = "gpt-5"
+	longReq.AuthIndex = authIdxQuota
+	longReq.LatencyMS = int64(45 * time.Minute / time.Millisecond) // completes 12:45 (inside cycle 2 [12:30, 16:30))
+	longInCycle1 := eventFor("long-cycle1-req", time.Date(2026, 10, 21, 8, 10, 0, 0, time.UTC), usage.TokenStats{InputTokens: 20, OutputTokens: 10, TotalTokens: 30}, false)
+	longInCycle1.Provider = "codex"
+	longInCycle1.Model = "gpt-5"
+	longInCycle1.AuthIndex = authIdxQuota
+	longInCycle1.LatencyMS = int64(25 * time.Minute / time.Millisecond) // starts 08:10 (<08:30 - 15m!), completes 08:35 (inside cycle 1 [08:30, 12:30))
+	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{longReq, longInCycle1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AggregateUsageFacts(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	// Publish lifecycle horizon at 12:15 while longReq (started 12:00, completed 12:45) still remains in usage_events.
+	if _, err := repo.RunLifecycle(ctx, map[string]int64{repository.LifecycleUsageDetail: time.Date(2026, 10, 21, 12, 15, 0, 0, time.UTC).UnixMilli()}, 10); err != nil {
+		t.Fatal(err)
+	}
+	saveQuotaAt := func(at, reset time.Time, used float64) {
+		periodH := 4.0
+		raw, _ := json.Marshal([]quota.QuotaWindow{{ID: "custom_4h", Scope: "standard", Kind: "custom", PeriodHours: &periodH, UsedPercent: &used, ResetAtMS: func() *int64 { ms := reset.UnixMilli(); return &ms }(), ResetAccuracy: "exact"}})
+		if err := repo.SaveQuotaSnapshot(ctx, repository.QuotaSnapshotRecord{
+			ID: fmt.Sprintf("late-snap-%d", at.UnixMilli()), AuthIndex: authIdxQuota, Provider: "codex", Status: "healthy",
+			ObservedAtMS: at.UnixMilli(), CreatedAtMS: at.UnixMilli(), WindowsJSON: string(raw),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	saveQuotaAt(time.Date(2026, 10, 21, 12, 20, 0, 0, time.UTC), cycle1Reset, 40)
+	saveQuotaAt(now, cycle2Reset, 25)
+
+	quotaResp := trendsTestRead[TrendsQuotaResponseDTO](t, client, baseURL+"/omc/api/v1/management/trends/quota?auth_index="+authIdxQuota)
+	if len(quotaResp.Items) != 1 || len(quotaResp.Items[0].Windows) != 1 {
+		t.Fatalf("unexpected quota response: %+v", quotaResp)
+	}
+	cycles := quotaResp.Items[0].Windows[0].Cycles
+	if len(cycles) != 2 {
+		t.Fatalf("expected 2 cycles (current + prior), got %+v", cycles)
+	}
+	var priorCycle, curCycle TrendsQuotaCycleHistoryDTO
+	for _, c := range cycles {
+		if c.IsCurrent {
+			curCycle = c
+		} else {
+			priorCycle = c
+		}
+	}
+	// Cycle 1 [08:30, 12:30): only longInCycle1 (30 tokens, started 08:10, completed 08:35).
+	if priorCycle.ActualRequests != 1 || priorCycle.ActualTotalTokens != 30 {
+		t.Fatalf("expected prior cycle to count only longInCycle1 (1 req, 30 tokens) without longReq, got %+v", priorCycle)
+	}
+	// Cycle 2 [12:30, 16:30): only longReq (1 req, 50 tokens, started 12:00, completed 12:45).
+	if curCycle.ActualRequests != 1 || curCycle.ActualTotalTokens != 50 {
+		t.Fatalf("expected current cycle to count longReq once (1 req, 50 tokens), got %+v", curCycle)
 	}
 }

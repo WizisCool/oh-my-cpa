@@ -462,6 +462,33 @@ func (m *UsageMeasures) add(other UsageMeasures) {
 	m.Accounting.EffectiveTotalTokens += other.Accounting.EffectiveTotalTokens
 }
 
+func (m *UsageMeasures) subtractClamped(other UsageMeasures) {
+	m.Requests = max(0, m.Requests-other.Requests)
+	m.Failures = max(0, m.Failures-other.Failures)
+	m.InputTokens = max(0, m.InputTokens-other.InputTokens)
+	m.OutputTokens = max(0, m.OutputTokens-other.OutputTokens)
+	m.ReasoningTokens = max(0, m.ReasoningTokens-other.ReasoningTokens)
+	m.CachedTokens = max(0, m.CachedTokens-other.CachedTokens)
+	m.CacheReadTokens = max(0, m.CacheReadTokens-other.CacheReadTokens)
+	m.CacheCreationTokens = max(0, m.CacheCreationTokens-other.CacheCreationTokens)
+	m.TotalTokens = max(0, m.TotalTokens-other.TotalTokens)
+	m.LatencySumMS = max(0, m.LatencySumMS-other.LatencySumMS)
+	m.TTFTSumMS = max(0, m.TTFTSumMS-other.TTFTSumMS)
+	m.TTFTCount = max(0, m.TTFTCount-other.TTFTCount)
+	m.CostNanos = max(0, m.CostNanos-other.CostNanos)
+	m.PricedRequests = max(0, m.PricedRequests-other.PricedRequests)
+	m.CostedRequests = max(0, m.CostedRequests-other.CostedRequests)
+	m.Accounting.CanonicalRequests = max(0, m.Accounting.CanonicalRequests-other.Accounting.CanonicalRequests)
+	m.Accounting.UnresolvedRequests = max(0, m.Accounting.UnresolvedRequests-other.Accounting.UnresolvedRequests)
+	m.Accounting.RawInputTokens = max(0, m.Accounting.RawInputTokens-other.Accounting.RawInputTokens)
+	m.Accounting.RawOutputTokens = max(0, m.Accounting.RawOutputTokens-other.Accounting.RawOutputTokens)
+	m.Accounting.RawTotalTokens = max(0, m.Accounting.RawTotalTokens-other.Accounting.RawTotalTokens)
+	m.Accounting.PromptTokens = max(0, m.Accounting.PromptTokens-other.Accounting.PromptTokens)
+	m.Accounting.CompletionTokens = max(0, m.Accounting.CompletionTokens-other.Accounting.CompletionTokens)
+	m.Accounting.EffectiveCacheReadTokens = max(0, m.Accounting.EffectiveCacheReadTokens-other.Accounting.EffectiveCacheReadTokens)
+	m.Accounting.EffectiveTotalTokens = max(0, m.Accounting.EffectiveTotalTokens-other.Accounting.EffectiveTotalTokens)
+}
+
 // UsageFactQuery is one read of deployment usage.
 type UsageFactQuery struct {
 	InstanceID string
@@ -811,6 +838,23 @@ func (r *Repository) QueryUsageFacts(ctx context.Context, query UsageFactQuery) 
 	}
 	defer func() { _ = tx.Rollback() }()
 	return queryUsageFactsWithQuerier(ctx, tx, query)
+}
+
+// QueryUsageFactsSnapshot executes multiple usage-fact reads against one shared
+// SQLite read transaction so current, comparison, and baseline windows observe
+// the same retention horizon and checkpoint.
+func (r *Repository) QueryUsageFactsSnapshot(ctx context.Context, fn func(queryFacts func(UsageFactQuery) (UsageFactResult, error)) error) error {
+	if r == nil || r.SQL() == nil {
+		return errors.New("repository is not initialized")
+	}
+	tx, err := r.SQL().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return fmt.Errorf("begin usage facts read snapshot: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	return fn(func(query UsageFactQuery) (UsageFactResult, error) {
+		return queryUsageFactsWithQuerier(ctx, tx, query)
+	})
 }
 
 func queryUsageFactsWithQuerier(ctx context.Context, q sqlQuerier, query UsageFactQuery) (UsageFactResult, error) {

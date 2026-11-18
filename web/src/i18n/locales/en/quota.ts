@@ -38,6 +38,7 @@ export default {
   'quota.redeem_cooldown_warning': 'Quota reset, but the gateway cooldown couldn\'t be cleared. Use Clear cooldown on this credential; don\'t redeem another reset',
   'quota.credential_disabled': 'Credential disabled in CPA',
   'quota.reading_failed': 'The reading could not be fetched',
+  'quota.low_quota_hint': 'Quota is running low',
   'quota.not_observed_yet': 'Quota not read yet — use Refresh quota',
   'quota.usage_not_published': 'Upstream answered without a quota window',
   'quota.no_live_probe': 'This provider offers no live quota probe',

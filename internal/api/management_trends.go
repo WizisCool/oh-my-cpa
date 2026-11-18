@@ -81,16 +81,16 @@ func isEndpointURL(value string) bool {
 }
 
 func (h *Handler) trendsGroupProjection(group repository.UsageDimension, id string) trendsGroupName {
-	safeID := security.MaskEmailAddresses(security.RedactText(id))
-	label := safeID
-	if label == "" {
-		label = "unknown"
-	}
-	if group == repository.UsageDimensionKey && !strings.HasPrefix(id, "hmac:") && isEndpointURL(id) {
+	if !(group == repository.UsageDimensionKey && strings.HasPrefix(id, "hmac:")) && isEndpointURL(id) {
 		if opaque := repository.TrendsOpaqueGroupID(h.cipher, group, id); opaque != "" {
 			return trendsGroupName{ID: opaque, Label: "endpoint"}
 		}
 		return trendsGroupName{ID: "endpoint", Label: "endpoint", FilterDisabled: true}
+	}
+	safeID := security.MaskEmailAddresses(security.RedactText(id))
+	label := safeID
+	if label == "" {
+		label = "unknown"
 	}
 	if group != repository.UsageDimensionKey && safeID != id {
 		if opaque := repository.TrendsOpaqueGroupID(h.cipher, group, id); opaque != "" {

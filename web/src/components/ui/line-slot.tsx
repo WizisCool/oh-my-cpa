@@ -15,7 +15,16 @@ export const LINE_SLOT_CLASS =
 
 /** Wraps bare text among a slot's children so it can truncate; nodes pass through as flex items. */
 export function lineSlotChildren(children: React.ReactNode): React.ReactNode {
-  return React.Children.map(children, (child) => (typeof child === 'string' || typeof child === 'number' ? <span>{child}</span> : child));
+  return React.Children.map(children, (child) => {
+    if (typeof child === 'string' || typeof child === 'number') {
+      return <span>{child}</span>;
+    }
+    if (React.isValidElement<{ children?: React.ReactNode }>(child) && child.type === React.Fragment) {
+      const normalized = lineSlotChildren(child.props.children);
+      return child.key !== null ? <React.Fragment key={child.key}>{normalized}</React.Fragment> : <React.Fragment>{normalized}</React.Fragment>;
+    }
+    return child;
+  });
 }
 
 export function LineSlot({ className, children, ...props }: React.HTMLAttributes<HTMLSpanElement>) {

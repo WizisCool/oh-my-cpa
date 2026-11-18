@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
-	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 type TrendsTelemetrySummaryDTO struct {
@@ -323,10 +322,12 @@ func (h *Handler) readTrendsTelemetry(ctx context.Context, request *http.Request
 			return
 		}
 		groupID, _ := h.trendsGroupIdentity(group, sample.GroupID)
+		_, scatterModel := h.trendsGroupIdentity(repository.UsageDimensionModel, sample.Model)
+		_, scatterProvider := h.trendsGroupIdentity(repository.UsageDimensionProvider, sample.Provider)
 		point := TrendsTelemetryScatterPointDTO{
 			TimestampMS: sample.TimestampMS, GroupID: groupID,
-			Model:    security.MaskEmailAddresses(security.RedactText(sample.Model)),
-			Provider: security.MaskEmailAddresses(security.RedactText(sample.Provider)),
+			Model:    scatterModel,
+			Provider: scatterProvider,
 			TTFTMS:   sample.TTFTMS, TPS: sample.TPS, OutputTokens: sample.OutputTokens,
 			Failed: sample.IsFailed, ModelSubstituted: sample.IsModelSubstituted,
 		}

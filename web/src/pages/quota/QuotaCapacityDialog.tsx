@@ -95,7 +95,7 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
         <span className={styles['dialog-title']}>
           {owner.mark && <span className={styles['mark-tile']} aria-hidden="true">{owner.mark}</span>}
           <span className={styles['title-text']}>
-            {t('quota.capacity_dialog_title', { window: quotaDetailWindowName(activeWindow, t) })}
+            {t('quota.capacity_dialog_title', { window: quotaDetailWindowName(activeWindow, t, siblingWindows) })}
           </span>
         </span>
       )}
@@ -111,7 +111,7 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
             onChange={setSelectedWindowId}
             options={siblingWindows.map((candidate) => ({
               value: candidate.id,
-              label: quotaDetailWindowName(candidate, t),
+              label: quotaDetailWindowName(candidate, t, siblingWindows),
             }))}
           />
         </div>

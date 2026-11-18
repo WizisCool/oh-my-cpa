@@ -108,11 +108,12 @@ func TestFailureCodeMigrationPreservesExistingEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	after := schemaObjects()
-	// 065 reshapes usage_cost_no_reprice and 067 adds idx_usage_events_instance_client_time;
-	// each has its own dedicated migration test below.
+	// 065 reshapes usage_cost_no_reprice, 067 adds idx_usage_events_instance_client_time,
+	// and 071 adds idx_usage_events_instance_auth_completed; each has its own dedicated migration test below.
 	delete(before, "usage_cost_no_reprice")
 	delete(after, "usage_cost_no_reprice")
 	delete(after, "idx_usage_events_instance_client_time")
+	delete(after, "idx_usage_events_instance_auth_completed")
 	if !reflect.DeepEqual(before, after) {
 		t.Fatalf("usage-event indexes or triggers changed: before=%v after=%v", before, after)
 	}
@@ -2227,5 +2228,23 @@ func TestMigration068To070PreservesCodexAliasPrefix(t *testing.T) {
 	}
 	if got := res.Items[0]; got.ID != usage.ClientAgentCodexCLI || got.Requests != 2 || got.TotalTokens != 200 || got.RawPrefix == "" {
 		t.Fatalf("QueryUsageClientAgents item = %+v, want unified codex-cli with retained prefix", got)
+	}
+}
+
+func TestMigration071AddsCompletedUsageEventsIndex(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, "file:mig071_completed_idx?mode=memory&cache=shared", withMigrationsUntil(70))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	db.migrateUntil = 0
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate(070->071) failed: %v", err)
+	}
+	var idxSQL string
+	if err := db.SQL.QueryRowContext(ctx, `SELECT sql FROM sqlite_schema WHERE type = 'index' AND name = 'idx_usage_events_instance_auth_completed'`).Scan(&idxSQL); err != nil {
+		t.Fatalf("completed index missing after migration 071: %v", err)
 	}
 }

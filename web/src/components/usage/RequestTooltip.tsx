@@ -32,7 +32,7 @@ interface TooltipTarget {
   isOpen: boolean;
 }
 
-export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTMLDivElement | null> }) {
+export function RequestTooltipLayer({ hostRef, replay }: { hostRef: React.RefObject<HTMLDivElement | null>; replay?: 'calendar' }) {
   const [target, setTarget] = React.useState<TooltipTarget | null>(null);
   const popupId = React.useId();
 
@@ -226,7 +226,7 @@ export function RequestTooltipLayer({ hostRef }: { hostRef: React.RefObject<HTML
           finalFocus={false}
           className={`${POPUP_CLASS} request-failure-tooltip relative`}
         >
-          <RequestFailureDetail id={popupId} eventId={failureEventId} statusLabel={title} />
+          <RequestFailureDetail id={popupId} eventId={failureEventId} statusLabel={title} replay={replay} />
         </PopoverContent>
       </Popover>
     );

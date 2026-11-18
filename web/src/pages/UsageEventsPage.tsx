@@ -757,7 +757,7 @@ export const UsageEventsPage: React.FC = () => {
               onToggleAll={handleToggleAll}
             />
             <div ref={listHostRef} className="request-list-host">
-              <RequestTooltipLayer hostRef={listHostRef} />
+              <RequestTooltipLayer hostRef={listHostRef} replay={query.replay} />
               {!isQueryEnabled || result.isLoading ? (
                 <TablePlaceholder rows={8} className="request-loading" />
               ) : events.length ? (
@@ -823,6 +823,7 @@ export const UsageEventsPage: React.FC = () => {
         pluginTitles={pluginTitles}
         isProviderCatalogUnknown={isProviderCatalogUnproven}
         archive={archive}
+        replay={query.replay}
       />
       <RequestExportDialog
         open={isExportOpen}
