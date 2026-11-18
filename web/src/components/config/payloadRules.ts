@@ -108,6 +108,11 @@ export interface PayloadReplacePathItem {
   _rawValue?: unknown;
 }
 
+function isGoBlankText(value: string): boolean {
+  // Go's strings.TrimSpace treats U+0085 (NEL) as whitespace, unlike JS trim().
+  return /^[\s\u0085]*$/u.test(value);
+}
+
 function safeRawDisplayText(value: unknown, fallback = '[object]'): string {
   if (value == null) return '';
   if (typeof value === 'string') return value;
@@ -151,10 +156,12 @@ export interface PayloadReplacePathsTarget {
     hasPositions?: boolean;
     positions?: unknown;
   };
-  /** Preserves explicit `role: ''`, `all: false`, or empty/null `positions` alongside `paths` without treating them as conflicts. */
+  /** Preserves explicit empty/null `role`, `all`, or `positions` alongside `paths` without treating them as conflicts. */
   neutralRoleFields?: {
     hasEmptyRole?: boolean;
+    role?: '' | null;
     hasAllFalse?: boolean;
+    all?: false | null;
     hasEmptyPositions?: boolean;
     positions?: unknown;
   };
@@ -612,8 +619,10 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
             }
           });
         }
-        const isRoleActive = hasRole && rawRole !== '';
-        const isAllActive = hasAll && rawAll !== false;
+        const isNeutralRole = hasRole && (rawRole === '' || rawRole === null);
+        const isNeutralAll = hasAll && (rawAll === false || rawAll === null);
+        const isRoleActive = hasRole && !isNeutralRole;
+        const isAllActive = hasAll && !isNeutralAll;
         const isPositionsActive =
           hasPositions
           && rawPositions !== null
@@ -630,12 +639,10 @@ export function parseReplaceRules(rawArray: unknown, category = 'replace'): Payl
           hasPositions && (rawPositions === null || (Array.isArray(rawPositions) && rawPositions.length === 0));
         const neutralRoleFields =
           !conflictingRoleFields
-          && ((hasRole && rawRole === '')
-            || (hasAll && rawAll === false)
-            || isNeutralPositions)
+          && (isNeutralRole || isNeutralAll || isNeutralPositions)
             ? {
-                ...(hasRole && rawRole === '' ? { hasEmptyRole: true } : {}),
-                ...(hasAll && rawAll === false ? { hasAllFalse: true } : {}),
+                ...(isNeutralRole ? { hasEmptyRole: true, role: rawRole as '' | null } : {}),
+                ...(isNeutralAll ? { hasAllFalse: true, all: rawAll as false | null } : {}),
                 ...(isNeutralPositions
                   ? { hasEmptyPositions: true, positions: rawPositions }
                   : {}),
@@ -1040,6 +1047,92 @@ export function reconcileFilterRules(
   );
 }
 
+export interface SavedInactiveReplaceTargetEntry {
+  fingerprint: string;
+  totalWithFingerprint: number;
+  savedRoleTarget?: PayloadReplaceRoleTarget;
+  savedPathsTarget?: PayloadReplacePathsTarget;
+}
+
+export function getReplaceRuleFingerprint(rule: PayloadReplaceRule): string {
+  return JSON.stringify(canonicalizeForFingerprint(serializeReplaceRules([rule])[0]));
+}
+
+function countFingerprints(rules: readonly PayloadReplaceRule[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const rule of rules) {
+    const fp = getReplaceRuleFingerprint(rule);
+    counts.set(fp, (counts.get(fp) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export function extractReplaceInactiveTargets(
+  rules: readonly PayloadReplaceRule[],
+): SavedInactiveReplaceTargetEntry[] {
+  const counts = countFingerprints(rules);
+  const entries: SavedInactiveReplaceTargetEntry[] = [];
+  for (const rule of rules) {
+    if (rule.target.mode === 'paths' && rule.target._savedRoleTarget) {
+      const fingerprint = getReplaceRuleFingerprint(rule);
+      entries.push({
+        fingerprint,
+        totalWithFingerprint: counts.get(fingerprint) ?? 1,
+        savedRoleTarget: rule.target._savedRoleTarget,
+      });
+    } else if (rule.target.mode === 'role' && rule.target._savedPathsTarget) {
+      const fingerprint = getReplaceRuleFingerprint(rule);
+      entries.push({
+        fingerprint,
+        totalWithFingerprint: counts.get(fingerprint) ?? 1,
+        savedPathsTarget: rule.target._savedPathsTarget,
+      });
+    }
+  }
+  return entries;
+}
+
+export function hydrateReplaceInactiveTargets(
+  rules: readonly PayloadReplaceRule[],
+  savedEntries: readonly SavedInactiveReplaceTargetEntry[],
+): PayloadReplaceRule[] {
+  if (savedEntries.length === 0) return [...rules];
+  const ruleCounts = countFingerprints(rules);
+  const used = new Set<number>();
+  return rules.map((rule) => {
+    const fingerprint = getReplaceRuleFingerprint(rule);
+    if ((ruleCounts.get(fingerprint) ?? 0) !== 1) return rule;
+    const matchIdx = savedEntries.findIndex(
+      (entry, idx) =>
+        !used.has(idx)
+        && entry.fingerprint === fingerprint
+        && entry.totalWithFingerprint === 1,
+    );
+    if (matchIdx === -1) return rule;
+    used.add(matchIdx);
+    const entry = savedEntries[matchIdx];
+    if (rule.target.mode === 'paths' && entry.savedRoleTarget) {
+      return {
+        ...rule,
+        target: {
+          ...rule.target,
+          _savedRoleTarget: entry.savedRoleTarget,
+        },
+      };
+    }
+    if (rule.target.mode === 'role' && entry.savedPathsTarget) {
+      return {
+        ...rule,
+        target: {
+          ...rule.target,
+          _savedPathsTarget: entry.savedPathsTarget,
+        },
+      };
+    }
+    return rule;
+  });
+}
+
 export function reconcileReplaceRules(
   incoming: readonly PayloadReplaceRule[],
   previous: readonly PayloadReplaceRule[],
@@ -1048,36 +1141,44 @@ export function reconcileReplaceRules(
   const reservedPathIds = new Set(
     previous.flatMap((prev) => (prev.target.mode === 'paths' ? prev.target.paths.map((item) => item.id) : [])),
   );
+  const incomingCounts = countFingerprints(incoming);
+  const previousCounts = countFingerprints(previous);
   return reconcileRuleList(
     incoming,
     previous,
     'replace_rule',
-    (rule) => JSON.stringify(canonicalizeForFingerprint(serializeReplaceRules([rule])[0])),
-    (rule, prev) => ({
-      target: rule.target.mode === 'paths'
-        ? {
-            ...rule.target,
-            ...(prev?.target.mode === 'paths' && prev.target._savedRoleTarget
-              ? { _savedRoleTarget: prev.target._savedRoleTarget }
-              : {}),
-            paths: rule.target.paths.map((item, pIdx) => (
-              prev?.target.mode === 'paths' && prev.target.paths[pIdx]
-                ? { ...item, id: prev.target.paths[pIdx].id }
-                : { ...item, id: nextReservedId('rpath', reservedPathIds) }
-            )),
-          }
-        : prev?.target.mode === 'role' && prev.target._savedPathsTarget
+    getReplaceRuleFingerprint,
+    (rule, prev) => {
+      const fingerprint = getReplaceRuleFingerprint(rule);
+      const isUnambiguous =
+        (incomingCounts.get(fingerprint) ?? 0) === 1
+        && (previousCounts.get(fingerprint) ?? 0) === 1;
+      return {
+        target: rule.target.mode === 'paths'
           ? {
               ...rule.target,
-              _savedPathsTarget: prev.target._savedPathsTarget,
+              ...(isUnambiguous && prev?.target.mode === 'paths' && prev.target._savedRoleTarget
+                ? { _savedRoleTarget: prev.target._savedRoleTarget }
+                : {}),
+              paths: rule.target.paths.map((item, pIdx) => (
+                prev?.target.mode === 'paths' && prev.target.paths[pIdx]
+                  ? { ...item, id: prev.target.paths[pIdx].id }
+                  : { ...item, id: nextReservedId('rpath', reservedPathIds) }
+              )),
             }
-          : rule.target,
-      replacements: rule.replacements.map((rep, repIdx) => (
-        prev?.replacements[repIdx]
-          ? { ...rep, id: prev.replacements[repIdx].id }
-          : { ...rep, id: nextReservedId('rep', reservedRepIds) }
-      )),
-    }),
+          : isUnambiguous && prev?.target.mode === 'role' && prev.target._savedPathsTarget
+            ? {
+                ...rule.target,
+                _savedPathsTarget: prev.target._savedPathsTarget,
+              }
+            : rule.target,
+        replacements: rule.replacements.map((rep, repIdx) => (
+          prev?.replacements[repIdx]
+            ? { ...rep, id: prev.replacements[repIdx].id }
+            : { ...rep, id: nextReservedId('rep', reservedRepIds) }
+        )),
+      };
+    },
   );
 }
 
@@ -1100,10 +1201,12 @@ export function serializeReplaceRules(rules: PayloadReplaceRule[]): Record<strin
         }
       } else if (r.target.neutralRoleFields) {
         if (r.target.neutralRoleFields.hasEmptyRole) {
-          targetObj.role = '';
+          targetObj.role =
+            r.target.neutralRoleFields.role !== undefined ? r.target.neutralRoleFields.role : '';
         }
         if (r.target.neutralRoleFields.hasAllFalse) {
-          targetObj.all = false;
+          targetObj.all =
+            r.target.neutralRoleFields.all !== undefined ? r.target.neutralRoleFields.all : false;
         }
         if (r.target.neutralRoleFields.hasEmptyPositions) {
           targetObj.positions =
@@ -1508,7 +1611,7 @@ export function validateAllPayloadRules(
                 field: 'target',
                 messageKey: 'cfg.payload_replace_path_invalid',
               });
-            } else if (!item.path.trim()) {
+            } else if (isGoBlankText(item.path)) {
               issues.push({
                 category: 'replace',
                 ruleId: r.id,

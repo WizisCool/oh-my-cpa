@@ -8,6 +8,7 @@ import { NumberInput } from '../common/NumberInput';
 import { ReorderHandle, RowReorder, useReorderRow } from '../common/RowReorder';
 import { Switch } from '../common/Switch';
 import { Tag } from '../common/Tag';
+import { ToolButton } from '../common/ToolButton';
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -934,7 +935,7 @@ const ReplaceEntryRowView: React.FC<ReplaceEntryRowViewProps> = ({
   const isWarning = feedback?.severity === 'warning';
   const isDestError = isError && entry._invalidReason === 'non_string_value';
   const isSourceError = isError && entry._invalidReason !== 'non_string_value';
-  const sourceWarningId = isWarning ? `payload-replace-source-warning-${entry.id}` : undefined;
+  const feedbackId = feedback ? `payload-replace-feedback-${entry.id}` : undefined;
   const sourcePlaceholder = entry.kind === 'regex'
     ? t('cfg.payload_replace_pattern_ph')
     : t('cfg.payload_replace_from_ph');
@@ -963,7 +964,7 @@ const ReplaceEntryRowView: React.FC<ReplaceEntryRowViewProps> = ({
           autoSize={{ minRows: 1, maxRows: 4 }}
           style={{ minHeight: '28px' }}
           aria-label={`${sourcePlaceholder} ${index + 1}`}
-          aria-describedby={sourceWarningId}
+          aria-describedby={isWarning || isSourceError ? feedbackId : undefined}
           className="config-mono-input payload-replace-from payload-replace-textarea"
           placeholder={sourcePlaceholder}
           status={isWarning ? 'warning' : isSourceError ? 'error' : undefined}
@@ -1048,6 +1049,7 @@ const ReplaceEntryRowView: React.FC<ReplaceEntryRowViewProps> = ({
           autoSize={{ minRows: 1, maxRows: 4 }}
           style={{ minHeight: '28px' }}
           aria-label={`${destPlaceholder} ${index + 1}`}
+          aria-describedby={isDestError ? feedbackId : undefined}
           className="config-mono-input payload-replace-to payload-replace-textarea"
           placeholder={destPlaceholder}
           status={isDestError ? 'error' : undefined}
@@ -1120,7 +1122,7 @@ const ReplaceEntryRowView: React.FC<ReplaceEntryRowViewProps> = ({
       </div>
       {feedback && (
         <span
-          id={sourceWarningId}
+          id={feedbackId}
           className={feedback.severity === 'warning' ? 'payload-field-warning' : 'payload-field-error'}
           role={feedback.severity === 'warning' ? 'status' : 'alert'}
           data-testid={
@@ -1169,21 +1171,75 @@ const ReplaceEntriesList: React.FC<ReplaceEntriesListProps> = ({
       const r = rules[ruleIndex];
       if (!r) return rules;
       const current = r.replacements[repIdx];
-      if (!current || (current.kind === nextKind && !current._invalidReason)) return rules;
+      if (!current || current.kind === nextKind) return rules;
+      const sourceText = current.kind === 'literal' ? current.from : current.pattern;
+      const destText = current.kind === 'literal' ? current.to : current.replacement;
+      const rawRecord =
+        current._rawEntry && typeof current._rawEntry === 'object' && !Array.isArray(current._rawEntry)
+          ? (current._rawEntry as Record<string, unknown>)
+          : undefined;
+      let hasNonStringDest = false;
+      let preservedRawDest: unknown;
+      if (current._invalidReason === 'non_string_value') {
+        hasNonStringDest = true;
+        if (current.kind === 'regex') {
+          preservedRawDest =
+            rawRecord && Object.prototype.hasOwnProperty.call(rawRecord, 'replacement')
+              ? rawRecord.replacement
+              : null;
+        } else {
+          const rawEntries = rawRecord ? Object.entries(rawRecord) : [];
+          preservedRawDest = rawEntries.length > 0 ? rawEntries[0][1] : null;
+        }
+      } else if (
+        current._invalidReason === 'non_string_pattern'
+        && rawRecord
+        && Object.prototype.hasOwnProperty.call(rawRecord, 'replacement')
+        && typeof rawRecord.replacement !== 'string'
+      ) {
+        hasNonStringDest = true;
+        preservedRawDest = rawRecord.replacement;
+      }
+
       const next = [...r.replacements];
       if (nextKind === 'regex') {
+        next[repIdx] = hasNonStringDest
+          ? {
+              id: current.id,
+              kind: 'regex',
+              pattern: sourceText,
+              replacement: destText,
+              _invalidReason: 'non_string_value',
+              _rawEntry: { pattern: sourceText, replacement: preservedRawDest },
+            }
+          : {
+              id: current.id,
+              kind: 'regex',
+              pattern: sourceText,
+              replacement: destText,
+            };
+      } else if (hasNonStringDest) {
+        const nextRawEntry: Record<string, unknown> = {};
+        Object.defineProperty(nextRawEntry, sourceText, {
+          value: preservedRawDest,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
         next[repIdx] = {
           id: current.id,
-          kind: 'regex',
-          pattern: current.kind === 'literal' ? current.from : current.pattern,
-          replacement: current.kind === 'literal' ? current.to : current.replacement,
+          kind: 'literal',
+          from: sourceText,
+          to: destText,
+          _invalidReason: 'non_string_value',
+          _rawEntry: nextRawEntry,
         };
       } else {
         next[repIdx] = {
           id: current.id,
           kind: 'literal',
-          from: current.kind === 'regex' ? current.pattern : current.from,
-          to: current.kind === 'regex' ? current.replacement : current.to,
+          from: sourceText,
+          to: destText,
         };
       }
       rules[ruleIndex] = { ...r, replacements: next };
@@ -1352,31 +1408,31 @@ const ReplacePathRowView: React.FC<ReplacePathRowViewProps> = ({
           data-testid={`payload-replace-path-${ruleIndex}-${index}`}
         />
         <div className="payload-replace-actions">
-          <Button
+          <ToolButton
             size="sm"
             variant="ghost"
             icon={<ArrowUpOutlined />}
             disabled={index === 0}
-            aria-label={t('cfg.payload_replace_path_move_up', { n: index + 1 })}
+            label={t('cfg.payload_replace_path_move_up', { n: index + 1 })}
             onClick={() => onStep(item.id, -1)}
             data-testid={`payload-replace-path-up-${ruleIndex}-${index}`}
           />
-          <Button
+          <ToolButton
             size="sm"
             variant="ghost"
             icon={<ArrowDownOutlined />}
             disabled={index === count - 1}
-            aria-label={t('cfg.payload_replace_path_move_down', { n: index + 1 })}
+            label={t('cfg.payload_replace_path_move_down', { n: index + 1 })}
             onClick={() => onStep(item.id, 1)}
             data-testid={`payload-replace-path-down-${ruleIndex}-${index}`}
           />
-          <Button
+          <ToolButton
             size="sm"
             variant="ghost"
             danger
             icon={<DeleteOutlined />}
             disabled={count <= 1}
-            aria-label={t('cfg.payload_replace_path_remove', { n: index + 1 })}
+            label={t('cfg.payload_replace_path_remove', { n: index + 1 })}
             onClick={() => onRemove(index)}
             data-testid={`payload-replace-path-remove-${ruleIndex}-${index}`}
           />
@@ -1628,13 +1684,30 @@ export function renderReplaceTargetSection(
           return rules;
         }
         const conflict = r.target.conflictingRoleFields;
-        const recoveredRole = conflict?.hasRole && isPayloadReplaceRole(conflict.role)
-          ? conflict.role
+        const hasValidRole = Boolean(conflict?.hasRole && isPayloadReplaceRole(conflict.role));
+        const recoveredRole: PayloadReplaceRole = hasValidRole
+          ? (conflict!.role as PayloadReplaceRole)
           : 'user';
+        const recoveredInvalidRole = conflict?.hasRole && !hasValidRole
+          ? { present: true, value: conflict.role }
+          : undefined;
         const recoveredAll = Boolean(conflict?.hasAll && conflict.all === true);
-        const recoveredPositions = Array.isArray(conflict?.positions)
-          ? conflict.positions.filter((p): p is number => typeof p === 'number' && Number.isInteger(p) && p >= 1)
-          : [];
+        const recoveredInvalidAll = conflict?.hasAll && typeof conflict.all !== 'boolean'
+          ? { value: conflict.all }
+          : undefined;
+        const recoveredPositions: number[] = [];
+        const recoveredInvalidPositions: string[] = [];
+        if (Array.isArray(conflict?.positions)) {
+          for (const p of conflict.positions) {
+            if (typeof p === 'number') {
+              recoveredPositions.push(p);
+            } else {
+              recoveredInvalidPositions.push(String(p));
+            }
+          }
+        } else if (conflict?.hasPositions && conflict.positions !== undefined && conflict.positions !== null) {
+          recoveredInvalidPositions.push(String(conflict.positions));
+        }
         rules[ruleIndex] = {
           ...r,
           target: {
@@ -1642,6 +1715,9 @@ export function renderReplaceTargetSection(
             role: recoveredRole,
             all: recoveredAll,
             positions: recoveredPositions,
+            ...(recoveredInvalidRole ? { invalidRole: recoveredInvalidRole } : {}),
+            ...(recoveredInvalidAll ? { invalidAll: recoveredInvalidAll } : {}),
+            ...(recoveredInvalidPositions.length > 0 ? { invalidPositions: recoveredInvalidPositions } : {}),
             ...(r.target._extra ? { _extra: r.target._extra } : {}),
             _savedPathsTarget: savedPathsTarget,
           },

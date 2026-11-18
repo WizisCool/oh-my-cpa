@@ -383,6 +383,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
     setPayloadEditorMounted,
     flushPendingPayloadRef,
     clearPendingPayloadRef,
+    savedReplaceInactiveTargetsRef,
     payloadResetVersion,
     syncDocChanges,
     configuredKeyCount,
@@ -435,6 +436,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
           )}
           <PayloadRulesEditor
             doc={docRef.current}
+            liveDocRef={docRef}
             onDocChange={syncDocChanges}
             onValidationChange={updatePayloadIssues}
             onPendingChange={updateHasPendingPayloadEdits}
@@ -443,6 +445,7 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
             onMountChange={setPayloadEditorMounted}
             flushPendingRef={flushPendingPayloadRef}
             clearPendingRef={clearPendingPayloadRef}
+            savedInactiveTargetsRef={savedReplaceInactiveTargetsRef}
             resetVersion={payloadResetVersion}
             validateTrigger={validateTrigger}
           />

@@ -37,7 +37,10 @@ const GO_UNICODE_TABLES = new Set([
 ]);
 
 function isSupportedGoUnicodeTable(name: string): boolean {
-  const canonical = name.replace(/[_ -]/g, '').toLowerCase();
+  // Fold ASCII A-Z only: Go's regexp/syntax does not apply Unicode case folding (e.g. \u212A).
+  const canonical = name
+    .replace(/[_ -]/g, '')
+    .replace(/[A-Z]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 32));
   return GO_UNICODE_TABLES.has(canonical);
 }
 
@@ -156,6 +159,7 @@ function readClassAtom(
   pattern: string,
   index: number,
   allowPosix: boolean,
+  posixState?: { noMorePosixClose: boolean },
 ): { nextIndex: number; isSingleChar: boolean; codePoint?: number; problem?: GoRe2PatternProblem } {
   const c = pattern[index];
   if (c === '\\') {
@@ -168,9 +172,11 @@ function readClassAtom(
     }
     return { nextIndex: escaped.nextIndex + 1, isSingleChar: false };
   }
-  if (allowPosix && c === '[' && pattern[index + 1] === ':') {
+  if (allowPosix && c === '[' && pattern[index + 1] === ':' && !posixState?.noMorePosixClose) {
     const closePosix = pattern.indexOf(':]', index + 2);
-    if (closePosix !== -1) {
+    if (closePosix === -1) {
+      if (posixState) posixState.noMorePosixClose = true;
+    } else {
       const inner = pattern.slice(index + 2, closePosix);
       const name = inner.startsWith('^') ? inner.slice(1) : inner;
       if (!POSIX_CLASSES.has(name)) {
@@ -198,6 +204,7 @@ interface GroupRepeatFrame {
  * constructs (lookarounds, backreferences, possessive quantifiers, atomic groups).
  */
 export function validateGoRe2Pattern(pattern: string): GoRe2PatternProblem | null {
+  const posixState = { noMorePosixClose: false };
   const frames: GroupRepeatFrame[] = [{ parentBranchProduct: 1, maxRepeatProduct: 1 }];
   let currentBranchProduct = 1;
   let lastAtomProduct = 1;
@@ -256,11 +263,11 @@ export function validateGoRe2Pattern(pattern: string): GoRe2PatternProblem | nul
           break;
         }
         first = false;
-        const lo = readClassAtom(pattern, j, true);
+        const lo = readClassAtom(pattern, j, true, posixState);
         if (lo.problem) return lo.problem;
         j = lo.nextIndex;
         if (lo.isSingleChar && pattern[j] === '-' && j + 1 < pattern.length && pattern[j + 1] !== ']') {
-          const hi = readClassAtom(pattern, j + 1, false);
+          const hi = readClassAtom(pattern, j + 1, false, posixState);
           if (hi.problem) return hi.problem;
           if (!hi.isSingleChar || lo.codePoint! > hi.codePoint!) {
             return 'invalid_syntax';

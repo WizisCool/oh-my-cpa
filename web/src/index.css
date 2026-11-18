@@ -1623,6 +1623,9 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
    likewise ringed by its container (a card whose stretched button opens it). */
 :focus-visible:not(input):not(textarea):not([data-slot="select-trigger"]):not([data-slot="combobox-trigger"]):not([data-slot="color-picker-trigger"]):not([data-focus-ring="outer"]) { outline: none; box-shadow: 0 0 0 2px var(--accent) !important; border-radius: var(--radius-md); }
 input:focus-visible, textarea:focus-visible { outline: none; }
+@media (forced-colors: active) {
+  textarea:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+}
 
 /* ── shell: a rail on the canvas, the page on one sheet ─────────────────────
    Two layers and no rules between them. The navigation stands on the canvas, which is chrome;

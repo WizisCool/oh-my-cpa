@@ -728,14 +728,14 @@
 .payload-field-warning {
   display: block;
   font-size: var(--text-xs);
-  color: var(--warn);
+  color: var(--fg-2);
   margin-top: 3px;
   line-height: 1.4;
 }
 .payload-replace-hint {
   display: block;
   font-size: var(--text-xs);
-  color: var(--muted);
+  color: var(--fg-2);
   line-height: 1.4;
 }
 .payload-adv-kv-header {

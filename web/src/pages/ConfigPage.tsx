@@ -97,6 +97,7 @@ export const ConfigPage: React.FC = () => {
     hasYamlErrors,
     hasConfigErrors,
     hasPendingPayloadEdits,
+    saveConfirmDescription,
     saveConfig,
     requestSaveConfirmation,
     handleViewModeChange,
@@ -407,7 +408,7 @@ export const ConfigPage: React.FC = () => {
               ) : (
                 <ConfirmAction
                   title={t('cfg.source_save_confirm')}
-                  description={t('cfg.source_save_confirm_desc')}
+                  description={saveConfirmDescription}
                   onConfirm={saveConfig}
                   disabled={!isDirty || saveMutation.isPending}
                 >
@@ -621,6 +622,7 @@ export const ConfigPage: React.FC = () => {
         payloadIssuesCount={blockingPayloadIssuesCount}
         validationError={firstFieldErrorMessage}
         showErrorFeedback={showErrorFeedback}
+        confirmDescription={saveConfirmDescription}
         onSave={saveConfig}
         onDiscard={handleDiscardChanges}
       />

@@ -16,6 +16,8 @@ import {
   parseReplaceRules,
   serializeReplaceRules,
   appendReplacePositionTokens,
+  extractReplaceInactiveTargets,
+  hydrateReplaceInactiveTargets,
   reconcileReplaceRules,
   readPayloadCategory,
   writePayloadCategory,
@@ -885,7 +887,21 @@ test('PAYLOAD_REPLACE_ROLES drives role options, system/developer targets, and p
   );
   assert.deepEqual(serializeReplaceRules(blankPathRule)[0].target, { paths: ['   '] });
 
-  // Neutral inactive role fields (`role: ''`, `all: false`, `positions: []`, `positions: null`) alongside `paths` are valid in CPA v8.0.77 and round-trip.
+  // Blank-path validation also matches Go strings.TrimSpace on U+0085 (NEL) without altering stored path text.
+  const nelPathRule = parseReplaceRules([
+    {
+      models: [{ name: '*' }],
+      target: { paths: ['\u0085'] },
+      replacements: [{ a: 'b' }],
+    },
+  ]);
+  assert.deepEqual(
+    validateAllPayloadRules([], [], [], [], [], nelPathRule).map((i) => i.messageKey),
+    ['cfg.payload_replace_path_empty'],
+  );
+  assert.deepEqual(serializeReplaceRules(nelPathRule)[0].target, { paths: ['\u0085'] });
+
+  // Neutral inactive role fields (`role: ''` / `null`, `all: false` / `null`, `positions: []` / `null`) alongside `paths` are valid in CPA v8.0.77 and round-trip.
   const neutralConflictTarget = parseReplaceRules([
     {
       models: [{ name: '*' }],
@@ -895,6 +911,11 @@ test('PAYLOAD_REPLACE_ROLES drives role options, system/developer targets, and p
     {
       models: [{ name: '*' }],
       target: { paths: ['messages.0.content'], positions: null },
+      replacements: [{ a: 'b' }],
+    },
+    {
+      models: [{ name: '*' }],
+      target: { paths: ['system'], role: null, all: null },
       replacements: [{ a: 'b' }],
     },
   ]);
@@ -908,6 +929,11 @@ test('PAYLOAD_REPLACE_ROLES drives role options, system/developer targets, and p
   assert.deepEqual(serializeReplaceRules(neutralConflictTarget)[1].target, {
     paths: ['messages.0.content'],
     positions: null,
+  });
+  assert.deepEqual(serializeReplaceRules(neutralConflictTarget)[2].target, {
+    paths: ['system'],
+    role: null,
+    all: null,
   });
 
   // `paths: null` on a role target is treated as unset (CPA decodes nil slice) and stays in role mode.
@@ -923,11 +949,13 @@ test('PAYLOAD_REPLACE_ROLES drives role options, system/developer targets, and p
   if (nullPathsRoleTarget[0].replacements[0].kind === 'literal') {
     nullPathsRoleTarget[0].replacements[0].to = 'updated';
   }
-  assert.deepEqual(serializeReplaceRules(nullPathsRoleTarget)[0].target, {
+  const serializedNullPaths = serializeReplaceRules(nullPathsRoleTarget)[0];
+  assert.deepEqual(serializedNullPaths.target, {
     role: 'user',
     all: true,
     paths: null,
   });
+  assert.deepEqual(serializedNullPaths.replacements, [{ old: 'updated' }]);
 
   // Whitespace-only role alongside `paths` remains a conflict so it is flagged and repairable.
   const whitespaceRoleConflict = parseReplaceRules([
@@ -961,6 +989,31 @@ test('PAYLOAD_REPLACE_ROLES drives role options, system/developer targets, and p
       positions: [2],
       all: false,
     });
+  }
+
+  // Duplicate active-path rules must not copy or hydrate ambiguous inactive role targets after one is deleted.
+  const duplicatePrevWithInactive = parseReplaceRules([
+    { models: [{ name: '*' }], target: { paths: ['system'] }, replacements: [{ a: 'b' }] },
+    { models: [{ name: '*' }], target: { paths: ['system'] }, replacements: [{ a: 'b' }] },
+  ]);
+  if (duplicatePrevWithInactive[0].target.mode === 'paths') {
+    duplicatePrevWithInactive[0].target._savedRoleTarget = { mode: 'role', role: 'user', positions: [1], all: false };
+  }
+  if (duplicatePrevWithInactive[1].target.mode === 'paths') {
+    duplicatePrevWithInactive[1].target._savedRoleTarget = { mode: 'role', role: 'user', positions: [2], all: false };
+  }
+  const survivingSingle = parseReplaceRules([
+    { models: [{ name: '*' }], target: { paths: ['system'] }, replacements: [{ a: 'b' }] },
+  ]);
+  const reconciledAmbiguous = reconcileReplaceRules(survivingSingle, duplicatePrevWithInactive);
+  assert.equal(reconciledAmbiguous[0].target.mode, 'paths');
+  if (reconciledAmbiguous[0].target.mode === 'paths') {
+    assert.equal(reconciledAmbiguous[0].target._savedRoleTarget, undefined);
+  }
+  const extractedDuplicates = extractReplaceInactiveTargets(duplicatePrevWithInactive);
+  const hydratedAmbiguous = hydrateReplaceInactiveTargets(survivingSingle, extractedDuplicates);
+  if (hydratedAmbiguous[0].target.mode === 'paths') {
+    assert.equal(hydratedAmbiguous[0].target._savedRoleTarget, undefined);
   }
 
   // Malformed structured objects with a non-callable toString in path/pattern/replacement must not throw during parse.
