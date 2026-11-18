@@ -297,7 +297,7 @@ export function useTransitionNavigate(
  * Configuration, credential-bearing, and mount-hydrated views are intentionally excluded so
  * plaintext keys never remain in hidden DOM and form drafts always reset cleanly on exit.
  */
-export const HOT_ACTIVITY_ROUTES: ReadonlySet<string> = new Set(['/dashboard', '/insights']);
+export const HOT_ACTIVITY_ROUTES: ReadonlySet<string> = new Set(['/dashboard', '/insights', '/trends']);
 export const PINNED_HOT_ROUTES: ReadonlySet<string> = new Set(['/dashboard']);
 
 /**

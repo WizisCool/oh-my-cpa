@@ -117,6 +117,7 @@ export default {
   'nav.playground': 'Playground',
   'nav.dashboard': 'Dashboard',
   'nav.insights': 'Insights',
+  'nav.trends': 'Trends',
   'nav.providers': 'AI providers',
   'nav.api_keys': 'Key management',
   'nav.routing': 'Routing',

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { CodeOutlined, SyncOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
-import { formatObservedAgo, formatQuotaMetric, formatQuotaMoney, formatSnapshotRenewalBound, formatTimeWithCountdown, quotaEmptyStateKey, quotaPayloadSummary } from './quotaFormat';
+import { formatObservedAgo, formatQuotaMetric, formatQuotaMoney, formatSnapshotRenewalBound, formatTimeWithCountdown, quotaEmptyStateKey, quotaPayloadSummary, quotaPlanLabel } from './quotaFormat';
 import { QuotaWindowCards } from './QuotaWindowCards';
 import { QuotaResetCards } from './QuotaResetCards';
 import { ToolButton } from '../../components/common/ToolButton';
@@ -55,6 +55,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
   const t = useT();
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = React.useState(false);
   const windows = orderQuotaWindows(item.windows ?? []);
+  const planLabel = quotaPlanLabel(item.plan, t);
   const availableCredits = item.reset_credits?.available_count ?? 0;
   const creditBalanceText = item.plan?.credits?.unlimited
     ? t('quota.credits_unlimited')
@@ -202,13 +203,13 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
         </div>
       )}
 
-      {(item.plan?.plan_label || item.plan?.expires_at_ms || creditBalanceText || extraUsage || metrics.length > 0) && (
+      {(planLabel || item.plan?.expires_at_ms || creditBalanceText || extraUsage || metrics.length > 0) && (
         <div className={styles['meta-row']}>
-          {item.plan?.plan_label && (
+          {planLabel && (
             <span className={styles['meta-item']}>
               <span className={styles['meta-label']}>{t('quota.col_plan')}</span>
-              <span className={styles['meta-value']}>{item.plan.plan_label}</span>
-              {item.plan.subscription_active === false && (
+              <span className={styles['meta-value']}>{planLabel}</span>
+              {item.plan?.subscription_active === false && (
                 <span className={styles['meta-tag']} data-subscription-inactive="true">
                   {t('quota.subscription_inactive')}
                 </span>

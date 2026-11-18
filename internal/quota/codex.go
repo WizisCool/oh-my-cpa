@@ -196,6 +196,10 @@ func standardWindowIdentity(winSec float64, slotID, slotLabel string) (id, label
 		return "weekly", "每周用量上限 (Weekly)", "weekly"
 	case winSec >= MonthlySeconds-86400 && winSec <= MonthlySeconds+86400:
 		return "monthly", "月度用量上限 (Monthly)", "monthly"
+	case winSec > 0:
+		period := windowPeriodName(winSec)
+		hours := parseWindowDurationHours(winSec)
+		return fmt.Sprintf("custom_%gh", hours), fmt.Sprintf("%s用量上限 (%gh)", period, hours), "custom"
 	default:
 		return slotID, slotLabel, "custom"
 	}

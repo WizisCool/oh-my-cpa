@@ -373,6 +373,7 @@ export default {
   'events.active_filters': '当前筛选',
   'events.clear_all': '清空全部',
   'events.filter_chip_model': '请求模型: {val}',
+  'events.filter_chip_response_model': '实际响应模型: {val}',
   'events.filter_chip_provider': '提供商: {val}',
   'events.filter_chip_source': '来源: {val}',
   'events.filter_chip_credential': '凭据: {val}',

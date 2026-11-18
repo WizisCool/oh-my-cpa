@@ -376,6 +376,7 @@ export default {
   "events.active_filters": "Penapis Aktif",
   "events.clear_all": "Kosongkan Semua",
   "events.filter_chip_model": "Model diminta: {val}",
+  "events.filter_chip_response_model": "Model respons: {val}",
   "events.filter_chip_provider": "Penyedia: {val}",
   "events.filter_chip_source": "Sumber: {val}",
   "events.filter_chip_credential": "Kredensial: {val}",

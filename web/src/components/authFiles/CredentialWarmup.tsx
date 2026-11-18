@@ -1,5 +1,7 @@
 import type { MessageKey } from '../../i18n/catalog';
-import { quotaWindowFullName, quotaWindowParts } from '../../pages/quota/quotaWindowSelection';
+import { inferQuotaWindowKind, quotaDetailWindowFullName, quotaDetailWindowName } from '../../pages/oauthManagement/credentialSections';
+import { QUOTA_GROUP_LABEL_SEPARATOR, quotaWindowParts } from '../../pages/quota/quotaWindowSelection';
+import type { QuotaWindow } from '../../types/quota';
 import { MetaLine } from '../common/MetaLine';
 import React from 'react';
 import { Button } from '@/components/ui/button';
@@ -109,20 +111,31 @@ function accountLabel(account: WarmupCatalogAccount | undefined, task: Pick<Warm
   return account?.email || account?.name || task.account || task.auth_index;
 }
 
+function toWarmupQuotaWindow(id: string, label: string): QuotaWindow {
+  const scope: QuotaWindow['scope'] = id.startsWith('ag_') || label.includes(QUOTA_GROUP_LABEL_SEPARATOR)
+    ? 'group'
+    : id.startsWith('code_review_')
+      ? 'code_review'
+      : id.startsWith('addl_') || id === 'seven_day_sonnet' || id === 'seven_day_opus' || id === 'seven_day_fable'
+        ? 'model'
+        : 'standard';
+  return { id, label, kind: inferQuotaWindowKind(id, label), scope };
+}
+
 /** A window's name; `isGrouped` keeps the model group in front where nothing else names it. */
 function windowLabel(id: string | undefined, account: WarmupCatalogAccount | undefined, t: TFunc, isGrouped = false): string {
   const key = id ? WINDOW_KEYS[id] : undefined;
   if (key) return t(key);
   const label = account?.windows.find((w) => w.id === id)?.label;
   if (!label) return id || '';
-  const window = { label, scope: id?.startsWith('ag_') ? 'group' as const : 'standard' as const };
-  return isGrouped ? quotaWindowFullName(window) : quotaWindowParts(window).name;
+  const window = toWarmupQuotaWindow(id ?? '', label);
+  return isGrouped ? quotaDetailWindowFullName(window, t) : quotaDetailWindowName(window, t);
 }
 
 /** A window option: its own name, with the model group it belongs to as a quiet line beneath. */
 function WindowOption({ id, account, t }: { id: string; account: WarmupCatalogAccount | undefined; t: TFunc }) {
   const label = account?.windows.find((w) => w.id === id)?.label;
-  const group = label && id.startsWith('ag_') ? quotaWindowParts({ label, scope: 'group' }).group : null;
+  const group = label ? quotaWindowParts(toWarmupQuotaWindow(id, label)).group : null;
   return (
     <span className={styles['window-option']}>
       <span>{windowLabel(id, account, t)}</span>

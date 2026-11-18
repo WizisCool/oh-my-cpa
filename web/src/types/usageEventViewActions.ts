@@ -85,6 +85,7 @@ export function applyTimeWindow(
   next.delete('preset');
   next.delete('from');
   next.delete('to');
+  next.delete('replay');
   if (window.from !== undefined) {
     next.set('from', String(window.from));
     if (window.to !== undefined) next.set('to', String(window.to));

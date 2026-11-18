@@ -199,6 +199,7 @@ export default {
   'omc.refresh_needed': 'Needs refresh',
   'omc.quota_family_plan': 'Plan',
   'omc.quota_family_code_review': 'Code review',
+  'omc.quota_family_oauth_apps': 'OAuth apps',
   'omc.quota_remaining_prefix': 'Left',
   'omc.quota_reading_name': '{period} {family}',
   'omc.quota_allowance_name': '{name} ({allowance})',

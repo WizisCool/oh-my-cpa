@@ -57,6 +57,7 @@ export function insightsPresetOf(url) {
 
 /** Insights reads are calendar reads, which the Worker moves by whole weeks. */
 export const INSIGHTS_PATH_PREFIX = '/api/v1/management/insights/';
+export const TRENDS_PATH_PREFIX = '/api/v1/management/trends/';
 
 /**
  * Routes that take no parameter, mapped from their path.
@@ -82,6 +83,7 @@ const FIXED_ROUTES = new Map([
   ['/api/v1/pricing/catalog', 'pricing-catalog'],
   ['/api/v1/management/model-square', 'model-square'],
   ['/api/v1/management/overview', 'overview'],
+  [`${TRENDS_PATH_PREFIX}quota`, 'trends-quota'],
   ['/api/v1/management/system', 'system'],
   ['/api/v1/management/system/releases', 'system-releases'],
   ['/api/v1/management/system/repository', 'system-repository'],
@@ -179,6 +181,8 @@ const PARAMETERISED_ROUTES = [
   { path: '/api/v1/management/insights/cube', resolve: (url) => `insights-cube-${insightsPresetOf(url)}` },
   { path: '/api/v1/management/insights/rhythm', resolve: (url) => `insights-rhythm-${insightsPresetOf(url)}` },
   { path: '/api/v1/management/insights/clients', resolve: (url) => `insights-clients-${insightsPresetOf(url)}` },
+  { path: `${TRENDS_PATH_PREFIX}usage`, resolve: (url) => trendsResponseName(url, 'usage') },
+  { path: `${TRENDS_PATH_PREFIX}telemetry`, resolve: (url) => trendsResponseName(url, 'telemetry') },
   {
     path: '/api/v1/management/dashboard/models',
     resolve: (url) => {
@@ -249,6 +253,11 @@ const PARAMETERISED_ROUTES = [
   // sentence about a route, shown to a visitor who clicked a request.
   { path: REQUEST_EVENT_DETAIL, pattern: /^\/api\/v1\/usage\/events\/(\d+)$/, resolve: () => 'usage-event-detail' },
 ];
+
+function trendsResponseName(url, view) {
+  const group = url.searchParams.get('group_by') || 'model';
+  return `trends-${view}-${group === 'model' ? '' : `${group}-`}${insightsPresetOf(url)}`;
+}
 
 /**
  * The dataset entry that answers a request, or undefined when nothing does.

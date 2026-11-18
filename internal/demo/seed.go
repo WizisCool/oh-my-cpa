@@ -883,6 +883,12 @@ func buildEventAt(random *deterministic, profile modelProfile, credentials map[s
 		// stays where it was.
 		failure := demoFailures[int(latency)%len(demoFailures)]
 		event.FailStatusCode, event.FailBody = failure.statusCode, failure.body
+		switch latency % 17 {
+		case 0, 1:
+			event.FailCode = usage.FailureStreamTruncated
+		case 2:
+			event.FailCode = usage.FailureForceCooldown
+		}
 	}
 	// A share of Codex traffic arrives over the upstream WebSocket, derived from
 	// the latency already drawn so every other generated value stays where it was.

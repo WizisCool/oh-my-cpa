@@ -140,6 +140,9 @@ export interface CredentialQuotaRow {
   recoverAtMS?: number;
   /** The gateway's own words for a problem, for the reader who wants the cause. */
   detail?: string;
+  recommendationStatus?: string;
+  recommendationReason?: string;
+  itemStatus?: string;
 }
 
 export interface CredentialQuotaBoard {
@@ -227,7 +230,10 @@ export function buildCredentialQuotaBoard(
       bindingWindow,
       remainingPercent,
       recoverAtMS: resolveRecovery(state, item, windows),
-      detail: (file.status_message || item?.error || item?.recommendation?.reason || '').trim() || undefined,
+      detail: (file.status_message || item?.error || '').trim() || undefined,
+      recommendationStatus: item?.recommendation?.status,
+      recommendationReason: item?.recommendation?.reason?.trim() || undefined,
+      itemStatus: item?.status,
     });
   }
 

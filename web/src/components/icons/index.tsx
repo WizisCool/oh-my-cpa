@@ -123,6 +123,8 @@ import {
   X,
   XCircle,
   Zap,
+  ZoomIn,
+  ZoomOut,
   type LucideIcon,
   type LucideProps,
 } from 'lucide-react';
@@ -293,6 +295,8 @@ export const UpOutlined = /*#__PURE__*/ createIcon(ChevronUp, 'omc-icon-up');
 export const UploadOutlined = /*#__PURE__*/ createIcon(Upload, 'omc-icon-upload');
 export const VerticalAlignTopOutlined = /*#__PURE__*/ createIcon(ArrowUpToLine, 'omc-icon-vertical-align-top');
 export const WarningOutlined = /*#__PURE__*/ createIcon(AlertTriangle, 'omc-icon-warning');
+export const ZoomInOutlined = /*#__PURE__*/ createIcon(ZoomIn, 'omc-icon-zoom-in');
+export const ZoomOutOutlined = /*#__PURE__*/ createIcon(ZoomOut, 'omc-icon-zoom-out');
 
 /**
  * The GitHub mark, drawn from Octicons' `mark-github` (MIT). Lucide no longer ships

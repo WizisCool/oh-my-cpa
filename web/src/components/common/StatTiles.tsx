@@ -25,7 +25,8 @@ export interface StatTile<K extends string> {
 
 export interface StatTilesProps<K extends string> {
   tiles: readonly StatTile<K>[];
-  selected: K;
+  /** The tile currently chosen; `null` when the strip is an overview with none picked yet. */
+  selected: K | null;
   onSelect: (key: K) => void;
   /** Names the group for assistive technology: what the tiles choose. */
   ariaLabel: string;

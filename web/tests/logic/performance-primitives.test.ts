@@ -912,6 +912,7 @@ test('frame scheduler enforces per-tier maxJobsByPriority caps independently', (
 test('reconcileHotRouteSlots preserves slot order, keeps outlet identity on warm return, and pins dashboard during LRU eviction', () => {
   assert.equal(HOT_ACTIVITY_ROUTES.has('/dashboard'), true);
   assert.equal(HOT_ACTIVITY_ROUTES.has('/insights'), true);
+  assert.equal(HOT_ACTIVITY_ROUTES.has('/trends'), true);
   assert.equal(HOT_ACTIVITY_ROUTES.has('/api-keys'), false, 'secret-bearing routes never enter hot route pool');
   assert.equal(PINNED_HOT_ROUTES.has('/dashboard'), true);
 
@@ -959,6 +960,11 @@ test('reconcileHotRouteSlots preserves slot order, keeps outlet identity on warm
     { maxSlots: 2, pinnedKeys: PINNED_HOT_ROUTES },
   );
   assert.deepEqual(evicted.map((s) => s.key), ['/dashboard', '/extra'], 'evicts unpinned /insights in place, keeping /dashboard pinned');
+
+  // The shell sizes the pool to every hot route, so the three observability pages all stay warm.
+  const trendsLoc = { locationContext: { location: { pathname: '/trends', search: '', hash: '', state: null } } };
+  const allHot = reconcileHotRouteSlots(slotsInsightsNewest, { key: '/trends', outlet: { id: 'trends-1' }, locationContext: trendsLoc }, { maxSlots: HOT_ACTIVITY_ROUTES.size });
+  assert.deepEqual(allHot.map((s) => s.key), ['/dashboard', '/insights', '/trends']);
 });
 
 test('buildMonotoneSparkline produces overshoot-free monotone paths and maps pointer x to nearest bucket', () => {

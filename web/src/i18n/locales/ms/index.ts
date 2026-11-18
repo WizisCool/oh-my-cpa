@@ -4,6 +4,7 @@ import authFiles from './authFiles';
 import config from './config';
 import dashboard from './dashboard';
 import insights from './insights';
+import trends from './trends';
 import logs from './logs';
 import models from './models';
 import oauth from './oauth';
@@ -24,6 +25,7 @@ export default {
   ...config,
   ...dashboard,
   ...insights,
+  ...trends,
   ...logs,
   ...models,
   ...oauth,

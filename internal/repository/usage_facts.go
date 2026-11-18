@@ -483,6 +483,10 @@ type UsageFactQuery struct {
 	// Client attribution is rolled up beside the request records and pruned with
 	// them, so such a read starts no earlier than the request-record horizon.
 	ClientAgents []string
+	// HorizonMS pins the retention horizon when set so multi-step reads (such as
+	// Trends telemetry combining permanent facts and retained records) plan
+	// against one consistent boundary instead of re-reading a moving horizon.
+	HorizonMS *int64
 }
 
 // isClientRead reports whether the read is answered from the client facts:
@@ -706,11 +710,25 @@ func (grid calendarGrid) bucket(column string) string {
 }
 
 // instant turns a wall-clock bucket start back into the instant it names. A local
-// midnight or hour that a daylight-saving jump skips resolves forward, as Go's
-// time.Date does.
+// midnight or hour that a daylight-saving jump skips resolves forward to the first
+// instant of that local civil date/hour (even when Go's time.Date resolves a skipped
+// 00:00 backwards to 23:00 of the prior day).
 func (grid calendarGrid) instant(wallMS int64) int64 {
 	wall := time.UnixMilli(wallMS).UTC()
-	return time.Date(wall.Year(), wall.Month(), wall.Day(), wall.Hour(), 0, 0, 0, grid.location).UnixMilli()
+	if grid.unit == UsageCalendarHour {
+		return time.Date(wall.Year(), wall.Month(), wall.Day(), wall.Hour(), 0, 0, 0, grid.location).UnixMilli()
+	}
+	y, m, d := wall.Date()
+	start := time.Date(y, m, d, 0, 0, 0, 0, grid.location)
+	if start.Year() != y || start.Month() != m || start.Day() != d {
+		for offsetMin := 15; offsetMin <= 240; offsetMin += 15 {
+			probe := time.Date(y, m, d, 0, offsetMin, 0, 0, grid.location)
+			if probe.Year() == y && probe.Month() == m && probe.Day() == d {
+				return probe.UnixMilli()
+			}
+		}
+	}
+	return start.UnixMilli()
 }
 
 // bucketFromWall renders the bucket for a column that already holds a wall-clock
@@ -724,12 +742,25 @@ func (grid calendarGrid) bucketFromWall(column string) string {
 }
 
 // localMidnight is the instant a local day begins, and the same day's midnight on
-// the wall clock. A midnight that a daylight-saving jump skips resolves to the
-// first instant of that day, which is also where its records start.
+// the wall clock. When a midnight DST spring-forward (such as America/Havana) causes
+// Go's time.Date(..., 0, 0, ...) to resolve backwards to 23:00 of the prior civil
+// day, advance until the local calendar date matches (year, month, day) so the day's
+// first instant is returned cleanly.
 func localMidnight(at time.Time, location *time.Location, dayOffset int) (int64, int64) {
 	local := at.In(location)
-	start := time.Date(local.Year(), local.Month(), local.Day()+dayOffset, 0, 0, 0, 0, location)
-	wall := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
+	ref := time.Date(local.Year(), local.Month(), local.Day()+dayOffset, 12, 0, 0, 0, location)
+	y, m, d := ref.Date()
+	start := time.Date(y, m, d, 0, 0, 0, 0, location)
+	if start.Year() != y || start.Month() != m || start.Day() != d {
+		for offsetMin := 15; offsetMin <= 240; offsetMin += 15 {
+			probe := time.Date(y, m, d, 0, offsetMin, 0, 0, location)
+			if probe.Year() == y && probe.Month() == m && probe.Day() == d {
+				start = probe
+				break
+			}
+		}
+	}
+	wall := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 	return start.UnixMilli(), wall.UnixMilli()
 }
 
@@ -763,12 +794,27 @@ func planLocalDays(plan *usageFactPlan, location *time.Location) {
 // The boundary between facts and records is the event id, not a timestamp. CPA
 // reports a request's start time, so records arrive out of time order; an id
 // boundary is exact regardless, because a fold covers precisely the ids up to
+type sqlQuerier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
 // its checkpoint.
 func (r *Repository) QueryUsageFacts(ctx context.Context, query UsageFactQuery) (UsageFactResult, error) {
 	result := UsageFactResult{Rows: []UsageFactRow{}}
 	if r == nil || r.SQL() == nil {
 		return result, errors.New("repository is not initialized")
 	}
+	tx, err := r.SQL().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return result, fmt.Errorf("begin usage facts read snapshot: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	return queryUsageFactsWithQuerier(ctx, tx, query)
+}
+
+func queryUsageFactsWithQuerier(ctx context.Context, q sqlQuerier, query UsageFactQuery) (UsageFactResult, error) {
+	result := UsageFactResult{Rows: []UsageFactRow{}}
 	if query.ToMS < query.FromMS {
 		return result, errors.New("usage window is negative")
 	}
@@ -785,9 +831,15 @@ func (r *Repository) QueryUsageFacts(ctx context.Context, query UsageFactQuery) 
 			return result, fmt.Errorf("unknown usage filter %q", dimension)
 		}
 	}
-	horizonMS, err := r.LifecycleHorizonMS(ctx, LifecycleUsageDetail)
-	if err != nil {
-		return result, err
+	var horizonMS int64
+	if query.HorizonMS != nil {
+		horizonMS = *query.HorizonMS
+	} else {
+		var err error
+		horizonMS, err = lifecycleHorizonMS(ctx, q, LifecycleUsageDetail)
+		if err != nil {
+			return result, err
+		}
 	}
 	isClientRead := query.isClientRead()
 	if isClientRead && horizonMS > 0 && query.FromMS < horizonMS {
@@ -822,7 +874,7 @@ func (r *Repository) QueryUsageFacts(ctx context.Context, query UsageFactQuery) 
 	}
 	hasLocalMarker := false
 	if plan.localMarker != "" {
-		if err := r.SQL().QueryRowContext(ctx, `
+		if err := q.QueryRowContext(ctx, `
 			SELECT EXISTS (SELECT 1 FROM usage_aggregation_checkpoints WHERE name = ?)`,
 			plan.localMarker).Scan(&hasLocalMarker); err != nil {
 			return result, fmt.Errorf("read local usage fact marker: %w", err)
@@ -834,7 +886,7 @@ func (r *Repository) QueryUsageFacts(ctx context.Context, query UsageFactQuery) 
 	}
 
 	statement, args := buildUsageFactStatement(plan, query, grid, hasLocalMarker, true)
-	rows, err := r.SQL().QueryContext(ctx, statement, args...)
+	rows, err := q.QueryContext(ctx, statement, args...)
 	if err != nil {
 		return result, fmt.Errorf("read usage facts: %w", err)
 	}
@@ -1511,8 +1563,12 @@ func (r *Repository) LifecycleHorizonMS(ctx context.Context, policy string) (int
 	if r == nil || r.SQL() == nil {
 		return 0, errors.New("repository is not initialized")
 	}
+	return lifecycleHorizonMS(ctx, r.SQL(), policy)
+}
+
+func lifecycleHorizonMS(ctx context.Context, q sqlQuerier, policy string) (int64, error) {
 	var horizonMS int64
-	err := r.SQL().QueryRowContext(ctx,
+	err := q.QueryRowContext(ctx,
 		`SELECT horizon_ms FROM data_lifecycle_state WHERE policy = ?`, policy).Scan(&horizonMS)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil

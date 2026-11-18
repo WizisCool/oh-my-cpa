@@ -2,6 +2,7 @@ import { applyKeyOrder } from '../../types/displayOrder';
 import type { MessageKey, TFunc } from '../../i18n/catalog';
 import { PRIMARY_CREDENTIAL_PROVIDERS } from '../../types/credentialProviders';
 import type { QuotaWindow } from '../../types/quota';
+import { quotaWindowLabel } from '../quota/quotaFormat';
 import { orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf, quotaWindowParts } from '../quota/quotaWindowSelection';
 import type { OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
 
@@ -51,20 +52,124 @@ const PERIOD_KEYS: Record<QuotaPeriod, MessageKey> = {
   five_hour: 'quota.slot_five_hour', daily: 'quota.slot_daily', weekly: 'quota.slot_weekly', monthly: 'quota.slot_monthly',
 };
 
-function lineTitle(line: QuotaLine, t: TFunc): string {
+function knownStandardAllowanceFamily(window: Pick<QuotaWindow, 'id' | 'label'>, t: TFunc): string | undefined {
+  if (window.id === 'seven_day_oauth_apps') return t('omc.quota_family_oauth_apps');
+  if (window.id === 'seven_day_cowork') return 'Cowork';
+  return undefined;
+}
+
+/**
+ * Infers a window's period kind from its id and upstream label when a compact endpoint (such as
+ * warmup catalog windows) omits `kind` and `period_hours`.
+ */
+export function inferQuotaWindowKind(id: string | undefined, label: string): QuotaWindow['kind'] {
+  const lowerId = (id ?? '').toLowerCase();
+  const lowerLabel = label.toLowerCase();
+  if (lowerId === 'xai_credit_usage' || lowerLabel.includes('credit usage') || label.includes('额度总使用率')) return 'credit_usage';
+  if (lowerId === 'five_hour' || lowerId.endsWith('_5h') || /\b5[- ]?hours?\b|\b5h\b/.test(lowerLabel) || label.includes('5小时')) return 'five_hour';
+  if (lowerId.includes('daily') || /\bdaily\b|\b24h\b/.test(lowerLabel) || /每日|每天/.test(label)) return 'daily';
+  if (lowerId === 'weekly' || lowerId === 'seven_day' || lowerId.endsWith('_week') || lowerId.endsWith('_7d') || /\bweekly\b|\b7d\b/.test(lowerLabel) || label.includes('每周')) return 'weekly';
+  if (lowerId.includes('monthly') || lowerId.endsWith('_month') || lowerId.endsWith('_30d') || /\bmonthly\b|\b30d\b/.test(lowerLabel) || label.includes('每月')) return 'monthly';
+  return undefined;
+}
+
+function lineTitle(line: QuotaLine, cell: QuotaLineCell, t: TFunc): string {
+  if (line.scope === 'model') return modelLabel(cell.window);
   if (line.label) return line.label;
   return t(line.scope === 'code_review' ? 'omc.quota_family_code_review' : 'omc.quota_family_plan');
 }
 
+/**
+ * Formats an arbitrary positive window duration in hours into the active console locale,
+ * keeping exact whole-day periods concise (`7d` / `2d`) and sub-day/custom spans in hours (`8h`).
+ */
+export function formatQuotaDuration(hours: number | undefined, t: TFunc): string | undefined {
+  if (hours == null || !Number.isFinite(hours) || hours <= 0) return undefined;
+  if (hours >= 24 && hours % 24 === 0) return t('quota.duration_days', { n: hours / 24 });
+  return t('quota.duration_hours', { n: hours });
+}
+
+function legacySlotFallbackName(window: Pick<QuotaWindow, 'id' | 'label' | 'period_hours'>, t: TFunc): string | undefined {
+  if (window.period_hours != null && window.period_hours > 0) return undefined;
+  const label = window.label.trim();
+  if (label === '5小时用量上限 (5-Hour)') return t('quota.window_five_hour');
+  if (label === '每周用量上限 (Weekly)') return t('quota.window_weekly');
+  return undefined;
+}
+
+function customPeriodText(window: QuotaWindow, t: TFunc): string | undefined {
+  return formatQuotaDuration(window.period_hours, t);
+}
+
 /** The plan's limits are named by their period; any other by its period and name, or its name alone. */
 export function quotaReadingName(line: QuotaLine, cell: QuotaLineCell, t: TFunc): string {
+  if (cell.window.id === 'xai_credit_usage' || quotaWindowKindOf(cell.window) === 'credit_usage') {
+    return t('quota.window_credit_usage');
+  }
   const kind = periodOf(cell.window);
   const period = kind ? t(PERIOD_KEYS[kind]) : undefined;
-  if (line.scope === 'standard' && !line.label) return period ?? cell.window.label;
-  const family = line.scope === 'group' ? groupLabel(cell.window) : lineTitle(line, t);
-  const name = period ? t('omc.quota_reading_name', { family, period }) : family;
+  const knownAllowance = knownStandardAllowanceFamily(cell.window, t);
+  if (knownAllowance) {
+    return period ? t('omc.quota_reading_name', { family: knownAllowance, period }) : knownAllowance;
+  }
+  if (line.scope === 'standard' && !line.label) {
+    return period ?? customPeriodText(cell.window, t) ?? legacySlotFallbackName(cell.window, t) ?? cell.window.label;
+  }
+  const family = line.scope === 'group' ? groupLabel(cell.window) : lineTitle(line, cell, t);
+  const periodText = period ?? (line.scope === 'model' || line.scope === 'code_review' ? customPeriodText(cell.window, t) : undefined);
+  const name = periodText ? t('omc.quota_reading_name', { family, period: periodText }) : family;
   const allowance = line.scope === 'group' ? cell.allowanceName ?? (!period ? columnLabel(cell.window) : undefined) : undefined;
   return allowance && allowance !== family ? t('omc.quota_allowance_name', { name, allowance }) : name;
+}
+
+/**
+ * Resolves localized reading names for every window in a credential using the OAuth workspace's
+ * shared line/cell model without dropping list-excluded families (e.g. Antigravity Claude and GPT).
+ */
+export function quotaReadingLabels(windows: readonly QuotaWindow[], t: TFunc): Map<string, string> {
+  const labels = new Map<string, string>();
+  const lines = quotaLinesOf({ quota: { windows: [...windows] } } as OAuthWorkspaceRecord, '');
+  for (const line of lines) {
+    for (const cell of line.cells) {
+      if (cell.window.id && !labels.has(cell.window.id)) {
+        labels.set(cell.window.id, quotaReadingName(line, cell, t));
+      }
+    }
+  }
+  return labels;
+}
+
+/**
+ * Localized name for a window in detail surfaces (Credential Drawer cards, Capacity dialog, Warmup
+ * window picker, Dashboard tooltip): keeps full window-limit phrasing for standard/grouped windows
+ * while translating model-scoped, code-review, and secondary allowances identically to the list.
+ */
+export function quotaDetailWindowName(window: QuotaWindow, t: TFunc): string {
+  const kind = quotaWindowKindOf(window);
+  if (window.scope === 'group') {
+    return quotaWindowLabel(kind, columnLabel(window), t);
+  }
+  if (window.id === 'xai_credit_usage' || kind === 'credit_usage') {
+    return quotaWindowLabel('credit_usage', window.label, t);
+  }
+  const knownAllowance = knownStandardAllowanceFamily(window, t);
+  if (knownAllowance || window.scope === 'model' || window.scope === 'code_review') {
+    const periodKind = periodOf(window);
+    const period = periodKind ? t(PERIOD_KEYS[periodKind]) : customPeriodText(window, t);
+    const family = knownAllowance ?? (window.scope === 'code_review' ? t('omc.quota_family_code_review') : modelLabel(window));
+    return period ? t('omc.quota_reading_name', { family, period }) : family;
+  }
+  const periodKind = periodOf(window);
+  if (periodKind) return quotaWindowLabel(periodKind, window.label, t);
+  return customPeriodText(window, t) ?? legacySlotFallbackName(window, t) ?? quotaWindowLabel(kind, window.label, t);
+}
+
+/** Full localized name for tooltips and accessible labels: group name plus localized window name. */
+export function quotaDetailWindowFullName(window: QuotaWindow, t: TFunc): string {
+  const detail = quotaDetailWindowName(window, t);
+  if (window.scope !== 'group') return detail;
+  const group = quotaWindowParts(window).group;
+  return group ? `${group} ${detail}` : detail;
 }
 
 export interface CredentialSection {
@@ -80,7 +185,12 @@ export interface QuotaColumnSort {
 
 function periodOf(window: QuotaWindow): QuotaPeriod | undefined {
   const kind = quotaWindowKindOf(window);
-  return kind === 'five_hour' || kind === 'daily' || kind === 'weekly' || kind === 'monthly' ? kind : undefined;
+  if (kind === 'five_hour' || kind === 'daily' || kind === 'weekly' || kind === 'monthly') return kind;
+  if (window.period_hours == null) {
+    const inferred = inferQuotaWindowKind(window.id, window.label);
+    if (inferred === 'five_hour' || inferred === 'daily' || inferred === 'weekly' || inferred === 'monthly') return inferred;
+  }
+  return undefined;
 }
 
 /** The group "Gemini Models" reads as "Gemini"; "Gemini 4 Argon" keeps its whole name. */
@@ -91,7 +201,10 @@ function groupLabel(window: QuotaWindow): string {
 
 /** "Sonnet 每周用量" and "GPT-5-Codex-Spark 5小时配额" name their model before the period phrase. */
 function modelLabel(window: QuotaWindow): string {
-  const name = window.label.replace(/\s+\S*(?:配额|用量|限额|限制|limit|usage)\S*$/i, '').trim();
+  const name = window.label
+    .replace(/\s+\S*(?:配额|用量|限额|限制|limit|usage)\S*$/i, '')
+    .replace(/\s+(?:5\s*小时|每日|每天|每周|每月|\d+(?:\.\d+)?\s*(?:分钟|小时|天|hours?|days?|d|h|m)|5-?hour|daily|weekly|monthly)\s*$/i, '')
+    .trim();
   return name || window.model || window.label;
 }
 

@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -59,6 +60,19 @@ var insightsCoarser = map[insightsBucket]insightsBucket{
 // thinner than a pixel on the widest layout.
 const maxInsightsHourSpan = 14 * 24 * time.Hour
 
+const (
+	insightsHourLimitCode    = "insights_bucket_hour_limit"
+	insightsHourLimitMessage = "hour buckets cover at most 14 days"
+)
+
+func writeInsightsRangeError(writer http.ResponseWriter, message string) {
+	if message == insightsHourLimitMessage {
+		writeErrorCode(writer, http.StatusBadRequest, insightsHourLimitCode, message)
+		return
+	}
+	writeError(writer, http.StatusBadRequest, message)
+}
+
 // insightsWindow is the window a read covers, as resolved.
 type insightsWindow struct {
 	Preset string `json:"preset"`
@@ -91,17 +105,38 @@ type insightsRange struct {
 	isAutoBucket bool
 }
 
+// civilDayStart returns the earliest instant on civil calendar date (year, month, day) in zone.
+// When midnight does not exist due to a midnight spring-forward transition (e.g. America/Havana),
+// Go's time.Date resolves 00:00 backwards onto the previous local day, so advance in 15-minute
+// steps until the wall clock enters the target date.
+func civilDayStart(year int, month time.Month, day int, zone *time.Location) time.Time {
+	target := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+	t := time.Date(target.Year(), target.Month(), target.Day(), 0, 0, 0, 0, zone)
+	if local := t.In(zone); local.Year() != target.Year() || local.Month() != target.Month() || local.Day() != target.Day() {
+		for minute := 15; minute <= 240; minute += 15 {
+			candidate := t.Add(time.Duration(minute) * time.Minute)
+			cl := candidate.In(zone)
+			if cl.Year() == target.Year() && cl.Month() == target.Month() && cl.Day() == target.Day() {
+				return candidate
+			}
+		}
+		return time.Date(target.Year(), target.Month(), target.Day(), 1, 0, 0, 0, zone)
+	}
+	return t
+}
+
 // civilStart is the local start of the unit holding `at`, stepped back by `previous` units.
 func civilStart(at time.Time, zone *time.Location, unit string, previous int) time.Time {
 	local := at.In(zone)
 	switch unit {
 	case "day":
-		return time.Date(local.Year(), local.Month(), local.Day()-previous, 0, 0, 0, 0, zone)
+		return civilDayStart(local.Year(), local.Month(), local.Day()-previous, zone)
 	case "week":
 		sinceMonday := (int(local.Weekday()) + 6) % 7
-		return time.Date(local.Year(), local.Month(), local.Day()-sinceMonday-7*previous, 0, 0, 0, 0, zone)
+		return civilDayStart(local.Year(), local.Month(), local.Day()-sinceMonday-7*previous, zone)
 	default:
-		return time.Date(local.Year(), local.Month()-time.Month(previous), 1, 0, 0, 0, 0, zone)
+		monthStart := time.Date(local.Year(), local.Month()-time.Month(previous), 1, 0, 0, 0, 0, time.UTC)
+		return civilDayStart(monthStart.Year(), monthStart.Month(), 1, zone)
 	}
 }
 
@@ -196,7 +231,7 @@ func resolveInsightsRange(query url.Values, now time.Time, zone *time.Location, 
 		}
 	case insightsBucketHour:
 		if span > maxInsightsHourSpan {
-			return result, "hour buckets cover at most 14 days", nil
+			return result, insightsHourLimitMessage, nil
 		}
 		window.Bucket = bucket
 	case insightsBucketDay, insightsBucketWeek, insightsBucketMonth:
@@ -249,11 +284,24 @@ func (bucket insightsBucket) next(start time.Time, zone *time.Location) time.Tim
 			}
 		}
 	case insightsBucketDay:
-		return time.Date(local.Year(), local.Month(), local.Day()+1, 0, 0, 0, 0, zone)
+		next := civilDayStart(local.Year(), local.Month(), local.Day()+1, zone)
+		if !next.After(start) {
+			return start.Add(24 * time.Hour)
+		}
+		return next
 	case insightsBucketWeek:
-		return time.Date(local.Year(), local.Month(), local.Day()+7, 0, 0, 0, 0, zone)
+		next := civilDayStart(local.Year(), local.Month(), local.Day()+7, zone)
+		if !next.After(start) {
+			return start.Add(7 * 24 * time.Hour)
+		}
+		return next
 	default:
-		return time.Date(local.Year(), local.Month()+1, 1, 0, 0, 0, 0, zone)
+		monthStart := time.Date(local.Year(), local.Month()+1, 1, 0, 0, 0, 0, time.UTC)
+		next := civilDayStart(monthStart.Year(), monthStart.Month(), 1, zone)
+		if !next.After(start) {
+			return start.Add(28 * 24 * time.Hour)
+		}
+		return next
 	}
 }
 
@@ -261,8 +309,13 @@ func (bucket insightsBucket) next(start time.Time, zone *time.Location) time.Tim
 // zero-filled across quiet stretches.
 func (bucket insightsBucket) bucketStarts(fromMS, toMS int64, zone *time.Location) []int64 {
 	starts := []int64{}
-	for at := bucket.bucketStart(time.UnixMilli(fromMS), zone); at.UnixMilli() <= toMS; at = bucket.next(at, zone) {
+	for at := bucket.bucketStart(time.UnixMilli(fromMS), zone); at.UnixMilli() <= toMS; {
 		starts = append(starts, at.UnixMilli())
+		next := bucket.next(at, zone)
+		if !next.After(at) {
+			break
+		}
+		at = next
 	}
 	return starts
 }

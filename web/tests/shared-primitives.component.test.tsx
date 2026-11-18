@@ -1491,8 +1491,8 @@ describe('ShellLoading and LoadingRegion continuity', () => {
         { client },
       );
 
-      // 18 static items minus 2 hidden (`/agent`, `/playground`) = 16 rendered rail rows.
-      expect(container.querySelectorAll('.shell-loading-nav-item')).toHaveLength(16);
+      // 19 static items minus 2 hidden (`/agent`, `/playground`) = 17 rendered rail rows.
+      expect(container.querySelectorAll('.shell-loading-nav-item')).toHaveLength(17);
       expect(container.querySelector('.placeholder-insights-rankings')).not.toBeNull();
     } finally {
       window.history.replaceState(null, '', originalPath);

@@ -122,3 +122,42 @@ func TestOrdinaryQuotaErrorDoesNotExposeUpstreamToken(t *testing.T) {
 		t.Error("ordinary quota error DTO exposes CPA-substituted opaque token echo")
 	}
 }
+
+func TestTrendsQuotaDoesNotExposeCredentialIdentityOrSecrets(t *testing.T) {
+	const account = "sensitive.person@example.test"
+	const filename = "private-codex-account.json"
+	const sentinel = "opaque-trends-oauth-token"
+	client, baseURL, recorder := startAuthFilesTestServer(t, "management-secret-value", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/v8/management/credentials" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"files":[
+			{"name":"/private/oauth/%s","auth_index":"enabled","type":"codex","provider":"codex","account_type":"oauth","email":"%s","account":"%s","access_token":"%s","status":"active","status_message":"Bearer %s"},
+			{"name":"other.json","auth_index":"disabled","type":"codex","provider":"codex","account_type":"oauth","disabled":true},
+			{"name":"key.json","auth_index":"apikey","type":"codex","provider":"codex","account_type":"api_key"}
+		]}`, filename, account, sentinel, sentinel, sentinel)
+	})
+	response, body := doJSON(t, client, http.MethodGet, baseURL+"/omc/api/v1/management/trends/quota", "")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d %s", response.StatusCode, body)
+	}
+	var payload TrendsQuotaResponseDTO
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Items) != 1 || payload.Items[0].AuthIndex != "enabled" || payload.Items[0].AccountLabel != "se•••n@example.test" {
+		t.Fatalf("expected only the enabled OAuth account with a masked label, got %s", body)
+	}
+	for _, secret := range []string{account, filename, "/private/oauth/", sentinel} {
+		if strings.Contains(string(body), secret) {
+			t.Fatalf("quota trends exposed private credential data: %s", body)
+		}
+	}
+	for _, entry := range recorder.all() {
+		if entry.Method != http.MethodGet {
+			t.Fatalf("quota trends made an upstream write: %+v", entry)
+		}
+	}
+}

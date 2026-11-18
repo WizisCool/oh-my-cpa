@@ -199,6 +199,7 @@ export default {
   "omc.refresh_needed": "Perlu dimuat semula",
   "omc.quota_family_plan": "Pelan",
   "omc.quota_family_code_review": "Semakan kod",
+  "omc.quota_family_oauth_apps": "Aplikasi OAuth",
   "omc.quota_remaining_prefix": "Baki",
   "omc.quota_reading_name": "{family} {period}",
   "omc.quota_allowance_name": "{name} ({allowance})",

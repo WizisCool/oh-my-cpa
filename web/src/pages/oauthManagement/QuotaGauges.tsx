@@ -1,5 +1,4 @@
 import clsx from 'clsx';
-import { quotaWindowFullName } from '../quota/quotaWindowSelection';
 import { Meter } from '../../components/common/Meter';
 import { useT } from '../../i18n';
 import type { QuotaMetric } from '../../types/quota';
@@ -8,7 +7,7 @@ import { compactQuotaCapacity } from '../quota/quotaCapacity';
 import { QuotaCapacityButton, type QuotaCapacityOwner } from '../quota/QuotaCapacityButton';
 import { formatQuotaMetric, isUnusedFullCodexFiveHourWindow, quotaRemainingPercent, quotaRemainingText, quotaResetCountdown } from '../quota/quotaFormat';
 import { QUOTA_LOW_PERCENT, quotaRemainingStroke } from '../quota/quotaThresholds';
-import { packQuotaLines, quotaReadingName, type QuotaLine, type QuotaLineCell } from './credentialSections';
+import { packQuotaLines, quotaDetailWindowFullName, quotaReadingName, type QuotaLine, type QuotaLineCell } from './credentialSections';
 import styles from './QuotaGauges.module.css';
 
 /**
@@ -87,14 +86,14 @@ function QuotaReading({ cell, siblings, name, provider, observedAtMS, isMuted, n
       data-quota-window-label={window.label}
       data-quota-spans={cell.spans ? 'true' : undefined}
     >
-      <div className={styles.reading} role="group" aria-label={quotaWindowFullName(window)}>
+      <div className={styles.reading} role="group" aria-label={quotaDetailWindowFullName(window, t)}>
         <span className={styles.name} data-tip={name} data-tip-overflow="">{name}</span>
         <span className={styles.value}>
           <span className={styles['value-prefix']}>{t('omc.quota_remaining_prefix')}</span>
           {/* The bar carries the tone; the figure takes it only once the window is nearly spent. */}
           <b style={remaining != null && remaining < QUOTA_LOW_PERCENT ? { color: quotaRemainingStroke(remaining) } : undefined}>{quotaRemainingText(window)}</b>
         </span>
-        <Meter className={styles.bar} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : quotaWindowFullName(window)} />
+        <Meter className={styles.bar} value={remaining ?? 0} color={quotaRemainingStroke(remaining)} label={remaining == null ? undefined : quotaDetailWindowFullName(window, t)} />
         {hasDialogEvidence && owner ? (
           <span className={styles.estimate}>
             <QuotaCapacityButton owner={owner} window={window} windows={siblings} hasTrigger={hasForecast}>

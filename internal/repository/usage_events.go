@@ -108,6 +108,8 @@ type UsageEventFilter struct {
 
 	// Models matches the upstream model name exactly.
 	Models []string
+	// ResponseModels matches the upstream served model name exactly.
+	ResponseModels []string
 	// ModelAliases matches the client-requested alias when CPA reported one.
 	ModelAliases []string
 	// Providers is the upstream provider family CPA reported.
@@ -961,6 +963,7 @@ func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 		values []string
 	}{
 		{"e.model", filter.Models},
+		{"e.response_model", filter.ResponseModels},
 		{`COALESCE(NULLIF(TRIM(COALESCE(e.model_alias, '')), ''), e.model)`, filter.ModelAliases},
 		{`COALESCE(NULLIF(TRIM(e.provider), ''), 'unknown')`, filter.Providers},
 		{"e.api_group_key", filter.APIGroupKeys},

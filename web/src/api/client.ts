@@ -3,6 +3,7 @@ import type { RoutingBoard, RoutingModels, RoutingOutcome, RoutingPlanRequest } 
 import type { ExchangeRates } from '../types/currencyDisplay';
 import type { OutboundProxyInput, OutboundProxySettings } from '../types/outboundProxy';
 import type { InsightsClientsResponse, InsightsCubeResponse, InsightsRhythmResponse } from '../types/insights';
+import type { TrendsQuotaResponse, TrendsTelemetryResponse, TrendsUsageResponse } from '../types/trends';
 import type { WarmupRunResponse, WarmupStateView, WarmupTaskInput } from '../types/warmup';
 import type { ModelCatalogRefreshResult, ModelSquareDirectory } from '../types/modelSquare';
 import type { CustomIcon } from '../types/customIcons';
@@ -801,6 +802,21 @@ export const api = {
   /** getInsightsClients reads a window's usage by client program, narrowed like the rhythm read. */
   async getInsightsClients(query: string): Promise<InsightsClientsResponse> {
     return request<InsightsClientsResponse>(`/management/insights/clients?${query}`, { method: 'GET' });
+  },
+
+  /** getTrendsQuota reads every active OAuth window's cycle burn, forecast and cycle history. */
+  async getTrendsQuota(query: string, signal?: AbortSignal): Promise<TrendsQuotaResponse> {
+    return request<TrendsQuotaResponse>(`/management/trends/quota${query ? `?${query}` : ''}`, { method: 'GET', signal });
+  },
+
+  /** getTrendsUsage reads a window's cumulative net-token trajectory, its group shares and its movers. */
+  async getTrendsUsage(query: string, signal?: AbortSignal): Promise<TrendsUsageResponse> {
+    return request<TrendsUsageResponse>(`/management/trends/usage?${query}`, { method: 'GET', signal });
+  },
+
+  /** getTrendsTelemetry reads a window's streaming speed, latency percentiles, failures and substitutions. */
+  async getTrendsTelemetry(query: string, signal?: AbortSignal): Promise<TrendsTelemetryResponse> {
+    return request<TrendsTelemetryResponse>(`/management/trends/telemetry?${query}`, { method: 'GET', signal });
   },
 
   async getClientKeyUsage(
