@@ -829,12 +829,24 @@ describe('trends page', () => {
     mount();
     const attribution = await screen.findByTestId('trends-failure-attribution', {}, { timeout: 5000 });
     expect(within(attribution).getAllByTestId('trends-failure-row')).toHaveLength(2);
+    expect(within(attribution).getByRole('columnheader', { name: 'Model' })).toBeTruthy();
+    expect(within(attribution).getByRole('columnheader', { name: 'Provider' })).toBeTruthy();
+    expect(within(attribution).getByRole('columnheader', { name: 'Causes' })).toBeTruthy();
+    expect(within(attribution).getByRole('columnheader', { name: 'Failures' })).toBeTruthy();
+    expect(within(attribution).getByRole('columnheader', { name: 'Failure rate' })).toBeTruthy();
+    // Failures and failure rate sit in separate table cells so digits align independently across rows.
+    const modelRowCells = within(within(attribution).getAllByTestId('trends-failure-row')[0]!).getAllByRole('cell');
+    expect(modelRowCells).toHaveLength(6);
+    expect(modelRowCells[3]!.textContent).toBe('1');
+    expect(modelRowCells[4]!.textContent).toBe('12.5%');
     expect(within(attribution).getByText('gpt-5')).toBeTruthy();
     expect(within(attribution).getByText('claude-sonnet')).toBeTruthy();
 
     // Switch breakdown dimension to Credential without extra network calls.
     const stability = screen.getByTestId('trends-stability');
     fireEvent.click(within(stability).getByRole('radio', { name: 'Credential' }));
+    expect(within(attribution).getByRole('columnheader', { name: 'Credential' })).toBeTruthy();
+    expect(within(attribution).getByRole('columnheader', { name: 'Provider & model' })).toBeTruthy();
     expect(within(attribution).getByText('c1')).toBeTruthy();
     expect(within(attribution).getByText('c2')).toBeTruthy();
 
@@ -1054,7 +1066,10 @@ describe('trends page', () => {
         expect(req?.query.get('result')).toBe('all');
         expect(req?.query.get('replay')).toBe('calendar');
       });
-      const slicedRow = (await within(await screen.findByTestId('trends-failure-attribution')).findAllByTestId('trends-failure-row'))[0]!;
+      const slicedTable = await screen.findByTestId('trends-failure-attribution');
+      expect(within(slicedTable).queryByRole('columnheader', { name: 'Failure rate' })).toBeNull();
+      const slicedRow = within(slicedTable).getAllByTestId('trends-failure-row')[0]!;
+      expect(within(slicedRow).getAllByRole('cell')).toHaveLength(5);
       expect(slicedRow.textContent).not.toMatch(/%/);
       expect(screen.getByTestId('trends-attribution-partial')).toBeTruthy();
 

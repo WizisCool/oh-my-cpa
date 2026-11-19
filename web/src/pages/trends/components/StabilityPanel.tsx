@@ -514,7 +514,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
           })
         : undefined;
       return (
-        <span className={styles['attribution-context']}>
+        <div role="cell" className={styles['attribution-context']}>
           {row.providerId && (
             <Tag size="small" icon={identity.mark('provider', row.providerId)}>
               {identity.label('provider', { id: row.providerId, label: row.providerLabel })}
@@ -528,13 +528,13 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
               {extraModels > 0 && <span className={styles['attribution-peer-more']}>{`+${extraModels}`}</span>}
             </span>
           )}
-        </span>
+        </div>
       );
     }
 
     const peerDim = row.dimension === 'model' ? 'provider' : 'model';
     const topPeer = row.peers[0];
-    if (!topPeer) return <span className={styles['attribution-context']} />;
+    if (!topPeer) return <div role="cell" className={styles['attribution-context']} />;
     const extraPeers = row.peers.length - 1;
     const topName = peerDim === 'provider'
       ? identity.label('provider', { id: topPeer.id, label: topPeer.label })
@@ -558,7 +558,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
       : undefined;
 
     return (
-      <span className={styles['attribution-context']} {...peersTip}>
+      <div role="cell" className={styles['attribution-context']} {...peersTip}>
         {peerDim === 'provider' ? (
           <Tag size="small" icon={identity.mark('provider', topPeer.id)}>{topName}</Tag>
         ) : (
@@ -570,9 +570,20 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
           </span>
         )}
         {extraPeers > 0 && <span className={styles['attribution-peer-more']}>{`+${extraPeers}`}</span>}
-      </span>
+      </div>
     );
   };
+
+  const hasFailureRate = visibleAttributionRows.some((row) => row.failureRate !== null);
+  const contextColLabel = attributionDim === 'model'
+    ? t('trends.stability.dim.provider')
+    : attributionDim === 'provider'
+      ? t('trends.stability.dim.model')
+      : t('trends.stability.col.context');
+  const attributionLabelVars = {
+    '--attribution-failures-label': JSON.stringify(t('trends.stability.drawer.failures')),
+    '--attribution-rate-label': JSON.stringify(t('trends.stability.col.failure_rate')),
+  } as React.CSSProperties;
 
   const showAttribution = hasFailureLanes && activeLane !== 'model_substituted' && (attributionRows.length > 0 || Boolean(activeCell));
   const isSubstitutionSlice = Boolean(activeCell && activeLane === 'model_substituted');
@@ -792,6 +803,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                       <ToolButton
                         size="sm"
                         variant="ghost"
+                        className="row-action-btn"
                         icon={<SearchOutlined />}
                         label={t('trends.stability.inspect_requests')}
                         disabled={isStale}
@@ -821,128 +833,160 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                   </p>
                 ) : (
                   <>
-                    <ul
-                      className={styles['attribution-list']}
-                      data-loading={isSliceFetching || isStale || undefined}
-                      data-testid="trends-failure-attribution"
-                    >
-                      {visibleAttributionRows.map((row) => {
-                        const name = rowDisplayName(row);
-                        const canDrill = Boolean(row.id && !row.drillDisabled);
-                        const canFilterPage = canDrill && canFilterTrends && !isStale;
-                        const signals = rowSignalTags(row, activeLane, t);
-                        const shownSignals = signals.slice(0, SIGNAL_TAG_LIMIT);
-                        const overflowSignals = signals.slice(SIGNAL_TAG_LIMIT);
-                        const rateTone = failureRateTone(row.failureRate);
-                        const rowHref = canDrill && !isStale
-                          ? stabilityEventsHref(
-                              data.window,
-                              filters,
-                              { lane: activeLane, cell: activeCell, entity: { dimension: row.dimension, id: row.id } },
-                              { isDemo },
-                            )
-                          : null;
-                        const manageTarget = canDrill && !isStale && (row.dimension === 'provider' || row.dimension === 'credential')
-                          ? identity.manage(row.dimension, row.id)
-                          : null;
-                        const countTipRows: TipRow[] = [
-                          { label: t('trends.stability.drawer.failures'), value: row.failures.toLocaleString('en'), tone: 'danger' },
-                        ];
-                        if (row.totalRequests > 0) {
-                          countTipRows.push({ label: t('trends.metric.requests'), value: row.totalRequests.toLocaleString('en') });
-                        }
-                        if (row.lastFailedAtMs > 0) {
-                          countTipRows.push({ label: t('trends.stability.drawer.last_seen'), value: dayjs(row.lastFailedAtMs).format('MM-DD HH:mm:ss') });
-                        }
-                        const countTip = tipCard({ heading: name, rows: countTipRows });
+                    <div className={styles['attribution-wrap']}>
+                      <div
+                        className={styles['attribution-list']}
+                        role="table"
+                        aria-label={t('trends.stability.attribution')}
+                        style={attributionLabelVars}
+                        data-no-rate={!hasFailureRate || undefined}
+                        data-loading={isSliceFetching || isStale || undefined}
+                        data-testid="trends-failure-attribution"
+                      >
+                        <div className={styles['attribution-head']} role="row">
+                          <span role="columnheader">{t(`trends.stability.dim.${attributionDim}`)}</span>
+                          <span role="columnheader">{contextColLabel}</span>
+                          <span role="columnheader">{t('trends.stability.col.causes')}</span>
+                          <span role="columnheader" className={styles['attribution-col-num']}>{t('trends.stability.drawer.failures')}</span>
+                          {hasFailureRate && (
+                            <span role="columnheader" className={styles['attribution-col-num']}>{t('trends.stability.col.failure_rate')}</span>
+                          )}
+                          <span role="columnheader" className={styles['attribution-col-actions']}>
+                            <span className="sr-only">{t('trends.stability.col.actions')}</span>
+                          </span>
+                        </div>
+                        {visibleAttributionRows.map((row) => {
+                          const name = rowDisplayName(row);
+                          const canDrill = Boolean(row.id && !row.drillDisabled);
+                          const canFilterPage = canDrill && canFilterTrends && !isStale;
+                          const signals = rowSignalTags(row, activeLane, t);
+                          const shownSignals = signals.slice(0, SIGNAL_TAG_LIMIT);
+                          const overflowSignals = signals.slice(SIGNAL_TAG_LIMIT);
+                          const rateTone = failureRateTone(row.failureRate);
+                          const rowHref = canDrill && !isStale
+                            ? stabilityEventsHref(
+                                data.window,
+                                filters,
+                                { lane: activeLane, cell: activeCell, entity: { dimension: row.dimension, id: row.id } },
+                                { isDemo },
+                              )
+                            : null;
+                          const manageTarget = canDrill && !isStale && (row.dimension === 'provider' || row.dimension === 'credential')
+                            ? identity.manage(row.dimension, row.id)
+                            : null;
+                          const countTipRows: TipRow[] = [
+                            { label: t('trends.stability.drawer.failures'), value: row.failures.toLocaleString('en'), tone: 'danger' },
+                          ];
+                          if (row.totalRequests > 0) {
+                            countTipRows.push({ label: t('trends.metric.requests'), value: row.totalRequests.toLocaleString('en') });
+                          }
+                          if (row.failureRate !== null) {
+                            countTipRows.push({
+                              label: t('trends.stability.col.failure_rate'),
+                              value: formatPercent(row.failureRate * 100),
+                              tone: rateTone,
+                            });
+                          }
+                          if (row.lastFailedAtMs > 0) {
+                            countTipRows.push({ label: t('trends.stability.drawer.last_seen'), value: dayjs(row.lastFailedAtMs).format('MM-DD HH:mm:ss') });
+                          }
+                          const countTip = countTipRows.length > 1 ? tipCard({ heading: name, rows: countTipRows }) : undefined;
 
-                        return (
-                          <li
-                            key={`${row.dimension}\u0000${row.id}\u0000${row.label}`}
-                            className={styles['attribution-row']}
-                            data-testid="trends-failure-row"
-                          >
-                            {canFilterPage ? (
-                              <button
-                                type="button"
-                                className={styles['mover-name']}
-                                aria-pressed={isEntityFiltered(row.dimension, row.id)}
-                                onClick={() => onToggleFilter(row.dimension, row.id)}
-                              >
-                                <TrendsValue mark={identity.mark(row.dimension, row.id)} name={name} />
-                              </button>
-                            ) : (
-                              <TrendsValue
-                                mark={row.id ? identity.mark(row.dimension, row.id) : null}
-                                name={name}
-                                className={row.id ? undefined : styles['tone-muted']}
-                              />
-                            )}
+                          return (
+                            <div
+                              key={`${row.dimension}\u0000${row.id}\u0000${row.label}`}
+                              className={styles['attribution-row']}
+                              role="row"
+                              data-testid="trends-failure-row"
+                            >
+                              <div role="cell" className={styles['attribution-entity']}>
+                                {canFilterPage ? (
+                                  <button
+                                    type="button"
+                                    className={styles['mover-name']}
+                                    aria-pressed={isEntityFiltered(row.dimension, row.id)}
+                                    onClick={() => onToggleFilter(row.dimension, row.id)}
+                                  >
+                                    <TrendsValue mark={identity.mark(row.dimension, row.id)} name={name} />
+                                  </button>
+                                ) : (
+                                  <TrendsValue
+                                    mark={row.id ? identity.mark(row.dimension, row.id) : null}
+                                    name={name}
+                                    className={row.id ? undefined : styles['tone-muted']}
+                                  />
+                                )}
+                              </div>
 
-                            {renderPeerContext(row)}
+                              {renderPeerContext(row)}
 
-                            <span className={styles['attribution-signals']}>
-                              {shownSignals.map((sig) => (
-                                <Tag key={sig.key} size="small" tone="danger">
-                                  {`${sig.label} × ${sig.count}`}
-                                </Tag>
-                              ))}
-                              {overflowSignals.length > 0 && (
-                                <span
-                                  className={styles['attribution-peer-more']}
-                                  {...tipCard({
-                                    heading: t('trends.stability.drawer.status_codes'),
-                                    rows: signals.map((sig) => ({ label: sig.label, value: sig.count.toLocaleString('en'), tone: 'danger' as const })),
-                                  })}
-                                >
-                                  {`+${overflowSignals.length}`}
-                                </span>
+                              <div role="cell" className={styles['attribution-signals']}>
+                                {shownSignals.map((sig) => (
+                                  <Tag key={sig.key} size="small" tone="danger">
+                                    {`${sig.label} × ${sig.count}`}
+                                  </Tag>
+                                ))}
+                                {overflowSignals.length > 0 && (
+                                  <span
+                                    className={styles['attribution-peer-more']}
+                                    {...tipCard({
+                                      heading: t('trends.stability.drawer.status_codes'),
+                                      rows: signals.map((sig) => ({ label: sig.label, value: sig.count.toLocaleString('en'), tone: 'danger' as const })),
+                                    })}
+                                  >
+                                    {`+${overflowSignals.length}`}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div role="cell" className={styles['attribution-count']} {...countTip}>
+                                {row.failures.toLocaleString('en')}
+                              </div>
+
+                              {hasFailureRate && (
+                                <div role="cell" className={styles['attribution-rate']} data-tone={rateTone} {...countTip}>
+                                  {row.failureRate !== null ? formatPercent(row.failureRate * 100) : '—'}
+                                </div>
                               )}
-                            </span>
 
-                            <span className={styles['attribution-figure']} {...countTip}>
-                              <b className={styles['attribution-count']}>{row.failures.toLocaleString('en')}</b>
-                              {row.failureRate !== null && (
-                                <span className={`${styles['attribution-rate']} ${rateTone ? styles[`tone-${rateTone}`] : ''}`}>
-                                  {formatPercent(row.failureRate * 100)}
-                                </span>
-                              )}
-                            </span>
-
-                            <span className={styles['attribution-actions']}>
-                              <ToolButton
-                                size="sm"
-                                variant="ghost"
-                                icon={<SearchOutlined />}
-                                label={t('trends.stability.inspect_of', { name })}
-                                disabled={isStale}
-                                onClick={() => openRowDrawer(row)}
-                                data-testid="trends-failure-inspect"
-                              />
-                              {manageTarget && (
+                              <div role="cell" className={styles['attribution-actions']}>
                                 <ToolButton
                                   size="sm"
                                   variant="ghost"
-                                  icon={<SettingOutlined />}
-                                  label={t(manageTarget.target === 'oauth' ? 'trends.stability.manage_oauth_of' : 'trends.stability.manage_provider_of', { name })}
-                                  onClick={() => onNavigate(manageTarget.href)}
-                                  data-testid="trends-failure-manage"
+                                  className="row-action-btn"
+                                  icon={<SearchOutlined />}
+                                  label={t('trends.stability.inspect_of', { name })}
+                                  disabled={isStale}
+                                  onClick={() => openRowDrawer(row)}
+                                  data-testid="trends-failure-inspect"
                                 />
-                              )}
-                              <ToolButton
-                                size="sm"
-                                variant="ghost"
-                                icon={<HistoryOutlined />}
-                                label={t('trends.view_requests_of', { name })}
-                                disabled={!rowHref}
-                                onClick={() => rowHref && onNavigate(rowHref)}
-                                data-testid="trends-failure-events"
-                              />
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                                {manageTarget && (
+                                  <ToolButton
+                                    size="sm"
+                                    variant="ghost"
+                                    className="row-action-btn"
+                                    icon={<SettingOutlined />}
+                                    label={t(manageTarget.target === 'oauth' ? 'trends.stability.manage_oauth_of' : 'trends.stability.manage_provider_of', { name })}
+                                    onClick={() => onNavigate(manageTarget.href)}
+                                    data-testid="trends-failure-manage"
+                                  />
+                                )}
+                                <ToolButton
+                                  size="sm"
+                                  variant="ghost"
+                                  className="row-action-btn"
+                                  icon={<HistoryOutlined />}
+                                  label={t('trends.view_requests_of', { name })}
+                                  disabled={!rowHref}
+                                  onClick={() => rowHref && onNavigate(rowHref)}
+                                  data-testid="trends-failure-events"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                     {attributionRows.length > ATTRIBUTION_LIMIT && (
                       <Button
                         size="sm"
