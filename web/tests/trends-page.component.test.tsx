@@ -8,6 +8,7 @@ import { TrendsPage } from '../src/pages/trends/TrendsPage';
 import { QuotaBurnChart } from '../src/pages/trends/charts/QuotaBurnChart';
 import { buildQuotaBurnSeries } from '../src/pages/trends/trendsLogic';
 import { ChartContainer, ChartTooltipContent } from '../src/components/ui/chart';
+import { sharedResizeObserverHub } from '../src/performance/resizeObserverHub';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import type {
   TrendsQuotaResponse,
@@ -117,7 +118,7 @@ function LocationProbe() {
 function mount(route = '/trends') {
   const client = createTestQueryClient();
   client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retryDelay: 0 } });
-  return renderWithOmc(
+  const result = renderWithOmc(
     <Routes>
       <Route path="/trends" element={<ThemeProvider><TrendsPage /><LocationProbe /></ThemeProvider>} />
       <Route path="/usage/events" element={<LocationProbe />} />
@@ -125,6 +126,7 @@ function mount(route = '/trends') {
     </Routes>,
     { route, client },
   );
+  return { ...result, client };
 }
 
 beforeEach(() => {
@@ -136,23 +138,6 @@ beforeEach(() => {
 });
 
 describe('trends page', () => {
-  it('reads the three trends and leads with the most pressing quota window', async () => {
-    mount();
-    await waitFor(() => expect(screen.getByTestId('trends-quota-used').textContent).toBe('60.0%'));
-    await waitFor(() => expect(screen.getByTestId('trends-tile-movers').textContent).toContain('4.5K'));
-    const quota = screen.getByTestId('trends-quota');
-    // The head reads the cycle as figures, each a label over its value.
-    const figure = (label: string) => within(quota).getByText(label).nextElementSibling?.textContent;
-    expect(figure('Hits limit')).toBe('03:00');
-    expect(figure('Resets in')).toBe('3h 0m');
-    expect(figure('Burn rate')).toBe('30.00%/h');
-    // An overview strip opens with no tile picked.
-    expect(screen.queryAllByRole('button', { pressed: true }).filter((button) => button.dataset.testid?.startsWith('trends-tile-'))).toEqual([]);
-    const riser = await screen.findByTestId('trends-movers-risers');
-    expect(within(riser).getByText('+50.0%')).toBeTruthy();
-    expect(within(screen.getByTestId('trends-tile-delivery')).getByText('90.0%')).toBeTruthy();
-  });
-
   it('switches the quota window and steps the burn curve with the arrow keys', async () => {
     mount();
     const chart = await screen.findByTestId('trends-quota-chart', {}, { timeout: 5000 });
@@ -455,11 +440,16 @@ describe('trends page', () => {
     api.on('GET', '/management/trends/telemetry', () => (shouldFail ? json({ error: 'telemetry boom' }, 500) : TELEMETRY));
     api.on('GET', '/management/trends/quota', () => (shouldFail ? json({ error: 'quota boom' }, 500) : QUOTA));
 
-    mount();
+    const { client } = mount();
     await waitFor(() => {
-      expect(api.requests.filter((r) => r.path === '/management/trends/usage').length).toBeGreaterThanOrEqual(3);
-      expect(api.requests.filter((r) => r.path === '/management/trends/telemetry').length).toBeGreaterThanOrEqual(3);
-      expect(api.requests.filter((r) => r.path === '/management/trends/quota').length).toBeGreaterThanOrEqual(3);
+      for (const key of ['trends-usage', 'trends-telemetry', 'trends-quota'] as const) {
+        const queries = client.getQueryCache().findAll({ queryKey: [key] });
+        expect(queries.length).toBeGreaterThan(0);
+        for (const q of queries) {
+          expect(q.state.status).toBe('error');
+          expect(q.state.fetchStatus).toBe('idle');
+        }
+      }
     });
     const retryBtn = await screen.findByRole('button', { name: 'Retry' });
     shouldFail = false;
@@ -696,6 +686,66 @@ describe('trends page', () => {
       expect(new URLSearchParams(lastSearch).get('to')).toBe(String(5 * HOUR));
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('waits for unfiltered demo options when usage is filtered and sizes aggregated stability cells proportionally', async () => {
+    const win = window as unknown as { __OMCPA_CONFIG__?: { demo?: boolean } };
+    const previousConfig = win.__OMCPA_CONFIG__;
+    const observeSpy = vi.spyOn(sharedResizeObserverHub, 'observe').mockImplementation((_el, callback) => {
+      callback({ width: 8, height: 20 });
+      return () => {};
+    });
+    win.__OMCPA_CONFIG__ = { ...previousConfig, demo: true };
+    try {
+      const buckets10h = Array.from({ length: 10 }, (_, index) =>
+        telemetryBucket(index * HOUR, { rate_limited_429: index === 9 ? 4 : 1 }),
+      );
+      api.on('GET', '/management/trends/telemetry', () => ({
+        ...TELEMETRY,
+        window: { ...WINDOW, to: 10 * HOUR - 1 },
+        buckets: buckets10h,
+      }));
+      api.on('GET', '/management/trends/usage', (request) => {
+        if (request.query.get('group_by') === 'provider' && request.query.getAll('provider').includes('codex')) {
+          return { ...USAGE, group_by: 'provider', groups: [{ id: 'codex', label: 'codex', requests: 10 }] };
+        }
+        return USAGE;
+      });
+
+      mount('/trends?group=provider&provider=codex');
+      const lane = await screen.findByTestId('trends-lane-rate_limited_429', {}, { timeout: 5000 });
+      const cells = within(lane).getAllByRole('img');
+      expect(cells).toHaveLength(3);
+      const track = lane.querySelector('[role="group"]') as HTMLElement;
+      expect(track.style.gridTemplateColumns).toBe(`${3 * HOUR}fr ${3 * HOUR}fr ${4 * HOUR}fr`);
+      const stability = screen.getByTestId('trends-stability');
+      expect(within(stability).getByText('01-01 00:00')).toBeTruthy();
+      expect(within(stability).getByText('01-01 05:00')).toBeTruthy();
+      expect(within(stability).getByText('01-01 10:00')).toBeTruthy();
+
+      // In demo mode with ?group=provider&provider=codex, opening Provider filter waits for the
+      // unfiltered options read rather than reusing the filtered usage response.
+      const heldDemoOptions = api.hold('GET', '/management/trends/usage');
+      fireEvent.click(screen.getByTestId('trends-filter-add'));
+      fireEvent.click(await screen.findByRole('button', { name: /^Provider/ }));
+      const optionsRequest = await heldDemoOptions.arrived;
+      expect(optionsRequest.query.getAll('provider')).toEqual([]);
+      expect(within(screen.getByTestId('trends-filter-values')).queryByText('Codex')).toBeNull();
+
+      heldDemoOptions.release({
+        ...USAGE,
+        group_by: 'provider',
+        groups: [
+          { id: 'codex', label: 'codex', requests: 10 },
+          { id: 'anthropic', label: 'anthropic', requests: 5 },
+        ],
+      });
+      expect(await within(await screen.findByTestId('trends-filter-values')).findByText('anthropic')).toBeTruthy();
+      expect(within(screen.getByTestId('trends-filter-values')).getByText('Codex')).toBeTruthy();
+    } finally {
+      win.__OMCPA_CONFIG__ = previousConfig;
+      observeSpy.mockRestore();
     }
   });
 });

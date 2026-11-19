@@ -86,6 +86,13 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({ data, identity, 
     () => (data ? stabilityDisplayBuckets(data.buckets, data.window.to + 1, maxCells) : []),
     [data, maxCells],
   );
+  const isAggregated = displayCells.some((cell) => cell.span_count > 1);
+  const trackStyle = React.useMemo<React.CSSProperties | undefined>(() => {
+    if (!isAggregated || displayCells.length === 0) return undefined;
+    const spans = displayCells.map((cell) => Math.max(1, cell.end_ms - cell.start_ms));
+    if (spans.every((span) => span === spans[0])) return undefined;
+    return { gridTemplateColumns: spans.map((span) => `${span}fr`).join(' ') };
+  }, [displayCells, isAggregated]);
   // A lane with nothing in it reads as a placeholder, so only the lanes that saw an event are drawn.
   const lanes = React.useMemo(() => (data ? stabilityLanes(displayCells).filter((lane) => lane.total > 0) : []), [data, displayCells]);
   const rate = data ? successRate(data.summary) : null;
@@ -96,12 +103,19 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({ data, identity, 
     if (displayCells.length === 0) return [];
     const first = displayCells[0]!;
     const last = displayCells[displayCells.length - 1]!;
-    const endInstant = last.span_count > 1 && bucket === 'hour' ? last.end_ms : last.last_start_ms;
+    if (!isAggregated) {
+      const raw = displayCells.length === 1
+        ? [first.start_ms]
+        : [first.start_ms, displayCells[Math.floor((displayCells.length - 1) / 2)]!.start_ms, last.start_ms];
+      return [...new Set(raw.map((ms) => dayjs(ms).format(AXIS_FORMATS[bucket])))];
+    }
+    const endInstant = bucket === 'hour' ? last.end_ms : Math.max(last.last_start_ms, data?.window.to ?? last.last_start_ms);
+    const midInstant = Math.round(first.start_ms + (endInstant - first.start_ms) / 2);
     const raw = displayCells.length === 1
-      ? (last.span_count > 1 ? [first.start_ms, endInstant] : [first.start_ms])
-      : [first.start_ms, displayCells[Math.floor((displayCells.length - 1) / 2)]!.start_ms, endInstant];
+      ? [first.start_ms, endInstant]
+      : [first.start_ms, midInstant, endInstant];
     return [...new Set(raw.map((ms) => dayjs(ms).format(AXIS_FORMATS[bucket])))];
-  }, [bucket, displayCells]);
+  }, [bucket, data?.window.to, displayCells, isAggregated]);
 
   const stepLaneCell = (currentIndex: number, key: string): number | null => {
     const count = displayCells.length;
@@ -148,6 +162,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({ data, identity, 
                     <span
                       ref={laneIndex === 0 ? setTrackNode : undefined}
                       className={styles['lane-cells']}
+                      style={trackStyle}
                       role="group"
                       aria-label={laneLabel}
                       onKeyDown={(event) => {

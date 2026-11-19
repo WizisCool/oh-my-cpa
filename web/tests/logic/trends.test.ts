@@ -184,6 +184,10 @@ test('quota card opens on the requested window or the most pressing one', () => 
   const pressing = pickQuotaWindow(items, undefined, undefined)!;
   assert.equal(pressing.credential.auth_index, 'c2');
   assert.equal(pressing.window.window_id, '5h');
+  assert.equal(
+    pickQuotaWindow([credential('c1', [quotaWindow({ window_id: 'weekly', status: 'normal', used_percent: 12 }), quotaWindow({ window_id: '5h', status: 'projected_exhaust', used_percent: 60 })])], undefined, undefined)!.window.window_id,
+    '5h',
+  );
   const asked = pickQuotaWindow(items, 'c2', '7d')!;
   assert.equal(asked.window.window_id, '7d');
   // A credential with no cycle to draw is skipped rather than opened empty.
@@ -207,8 +211,10 @@ test('quota card opens on the requested window or the most pressing one', () => 
   assert.deepEqual(quotaCycleBars(quotaWindow(), 'requests').map((bar) => bar.full), [80, null]);
 
   assert.deepEqual(countdownParts((2 * 24 * 60 + 3 * 60 + 5) * 60_000 + 59_000), { days: 2, hours: 3, minutes: 5 });
+  assert.deepEqual(countdownParts(3 * HOUR), { days: 0, hours: 3, minutes: 0 });
   assert.deepEqual(countdownParts(-1), { days: 0, hours: 0, minutes: 0 });
   assert.equal(formatPercent(62.345), '62.3%');
+  assert.equal(formatPercent(30, 2), '30.00%');
   assert.equal(formatPercent(140.2), '140%');
   assert.equal(formatPercent(null), '—');
 });
@@ -240,6 +246,8 @@ test('telemetry gaps stay gaps and stability lanes count each failure kind', () 
   ]);
   assert.deepEqual(lanes[5]!.counts, [0, 0, 2]);
   assert.equal(successRate({ total_requests: 4, success_requests: 3 }), 0.75);
+  assert.equal(successRate({ total_requests: 20, success_requests: 18 }), 0.9);
+  assert.equal(formatPercent(0.9 * 100), '90.0%');
   assert.equal(successRate({ total_requests: 0, success_requests: 0 }), null);
 
   // Performance latency filtering resolves in-memory top series or an on-demand item read.
@@ -483,12 +491,11 @@ test('quota tile targeting, delivery causes, performance mode samples, and stabi
     }),
   );
   const aggregated = stabilityDisplayBuckets(manyBuckets, 10 * HOUR, 4);
-  assert.equal(aggregated.length, 4);
-  assert.deepEqual(aggregated.map((cell) => [cell.start_ms, cell.last_start_ms, cell.span_count, cell.rate_limited_429]), [
-    [0, 2 * HOUR, 3, 3],
-    [3 * HOUR, 5 * HOUR, 3, 3],
-    [6 * HOUR, 8 * HOUR, 3, 3],
-    [9 * HOUR, 9 * HOUR, 1, 4],
+  assert.equal(aggregated.length, 3);
+  assert.deepEqual(aggregated.map((cell) => [cell.start_ms, cell.last_start_ms, cell.end_ms, cell.span_count, cell.rate_limited_429]), [
+    [0, 2 * HOUR, 3 * HOUR, 3, 3],
+    [3 * HOUR, 5 * HOUR, 6 * HOUR, 3, 3],
+    [6 * HOUR, 9 * HOUR, 10 * HOUR, 4, 7],
   ]);
   const lanes = stabilityLanes(aggregated);
   assert.equal(lanes.find((l) => l.lane === 'rate_limited_429')?.total, 13);

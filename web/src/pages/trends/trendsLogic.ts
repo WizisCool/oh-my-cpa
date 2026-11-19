@@ -753,6 +753,25 @@ export function stabilityDisplayBuckets(
       model_substituted,
     });
   }
+  if (groupSize > 1 && cells.length >= 2) {
+    const tail = cells[cells.length - 1]!;
+    if (tail.span_count < groupSize) {
+      const prev = cells[cells.length - 2]!;
+      cells[cells.length - 2] = {
+        start_ms: prev.start_ms,
+        last_start_ms: tail.last_start_ms,
+        end_ms: tail.end_ms,
+        span_count: prev.span_count + tail.span_count,
+        rate_limited_429: prev.rate_limited_429 + tail.rate_limited_429,
+        stream_truncated: prev.stream_truncated + tail.stream_truncated,
+        force_cooldown: prev.force_cooldown + tail.force_cooldown,
+        upstream_5xx: prev.upstream_5xx + tail.upstream_5xx,
+        other_failures: prev.other_failures + tail.other_failures,
+        model_substituted: prev.model_substituted + tail.model_substituted,
+      };
+      cells.pop();
+    }
+  }
   return cells;
 }
 

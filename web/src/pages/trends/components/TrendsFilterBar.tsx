@@ -100,20 +100,20 @@ export const TrendsFilterBar: React.FC<TrendsFilterBarProps> = ({
     if (
       usage
       && usage.group_by === targetGroupBy
-      && (!filters[dimension]?.length || isDemo)
-      && trendsWindowParams(range, bucket, usage.group_by, isDemo ? {} : filters) === queryString
+      && trendsWindowParams(range, bucket, usage.group_by, filters) === queryString
     ) {
       return usage;
     }
     return undefined;
-  }, [bucket, dimension, filters, isDemo, optionsQuery.data, optionsQuery.isPlaceholderData, queryString, range, targetGroupBy, usage]);
+  }, [bucket, dimension, filters, optionsQuery.data, optionsQuery.isPlaceholderData, queryString, range, targetGroupBy, usage]);
 
   const matchingTelemetry = React.useMemo(() => {
-    if (!dimension || !matchingUsage || !telemetry || filters[dimension]?.length) return undefined;
+    if (!dimension || !matchingUsage || !telemetry) return undefined;
     if (telemetry.group_by !== matchingUsage.group_by) return undefined;
+    if (trendsWindowParams(range, bucket, telemetry.group_by, filters) !== queryString) return undefined;
     if (telemetry.window.from !== matchingUsage.window.from || telemetry.window.to !== matchingUsage.window.to) return undefined;
     return telemetry;
-  }, [dimension, filters, matchingUsage, telemetry]);
+  }, [bucket, dimension, filters, matchingUsage, queryString, range, telemetry]);
 
   const options = React.useMemo(
     () => (dimension ? trendsFilterOptions(matchingUsage, matchingTelemetry) : []),
