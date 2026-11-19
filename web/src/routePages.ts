@@ -25,6 +25,9 @@ export const DashboardPage = lazyRoute(loadDashboardPage);
 export const loadInsightsPage = createNamedLoader(() => import('./pages/insights/InsightsPage'), 'InsightsPage');
 export const InsightsPage = lazyRoute(loadInsightsPage);
 
+export const loadTrendsPage = createNamedLoader(() => import('./pages/trends/TrendsPage'), 'TrendsPage');
+export const TrendsPage = lazyRoute(loadTrendsPage);
+
 export const loadAgentPage = createNamedLoader(() => import('./pages/agent/AgentPage'), 'AgentPage');
 export const AgentPage = lazyRoute(loadAgentPage);
 

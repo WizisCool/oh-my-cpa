@@ -19,7 +19,7 @@ let api: OmcApi;
 const MODEL_ORDER = [
   'Dashboard', 'Agent', 'Playground', 'Model Square',
   'AI providers', 'OAuth management', 'Key management', 'Routing',
-  'Insights', 'Request Events', 'Model Pricing', 'Logs', 'Audit trail',
+  'Insights', 'Trends', 'Request Events', 'Model Pricing', 'Logs', 'Audit trail',
   'Plugin management', 'Plugin store',
   'Config', 'OMC Settings', 'System Information',
 ];

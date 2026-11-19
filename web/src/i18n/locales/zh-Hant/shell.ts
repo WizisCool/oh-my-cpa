@@ -117,6 +117,7 @@ export default {
   "nav.playground": "操練場",
   "nav.dashboard": "儀表板",
   "nav.insights": "洞察",
+  "nav.trends": "趨勢",
   "nav.providers": "AI 供應商",
   "nav.api_keys": "金鑰管理",
   "nav.routing": "路由編排",

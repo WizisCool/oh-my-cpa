@@ -5,9 +5,12 @@ import type { InsightsTrendChartProps } from '../pages/insights/charts/InsightsT
 import type { InsightsFlowChartProps } from '../pages/insights/charts/InsightsFlowChart';
 import type { InsightsCompositionChartProps } from '../pages/insights/charts/InsightsCompositionChart';
 import type { InsightsHourChartProps } from '../pages/insights/charts/InsightsHourChart';
+import type { QuotaBurnChartProps } from '../pages/trends/charts/QuotaBurnChart';
+import type { QuotaCyclesChartProps } from '../pages/trends/charts/QuotaCyclesChart';
+import type { PerformanceChartProps } from '../pages/trends/charts/PerformanceChart';
 
 /**
- * Shared preloadable loaders for lazy chart modules across Dashboard and Insights.
+ * Shared preloadable loaders for lazy chart modules across Dashboard, Insights and Trends.
  *
  * Centralizing these loaders lets `routePreload` settle both the route module and its nested
  * chart modules in parallel, so `lazyRoute` renders charts synchronously on first mount without
@@ -46,6 +49,16 @@ export const loadInsightsHourChart = createRouteLoader(
 );
 export const LazyInsightsHourChart = lazyRoute<InsightsHourChartProps>(loadInsightsHourChart);
 
+export const loadQuotaBurnChart = createRouteLoader(() => import('../pages/trends/charts/QuotaBurnChart'));
+export const LazyQuotaBurnChart = lazyRoute<QuotaBurnChartProps>(loadQuotaBurnChart);
+
+export const loadQuotaCyclesChart = createRouteLoader(() => import('../pages/trends/charts/QuotaCyclesChart'));
+export const LazyQuotaCyclesChart = lazyRoute<QuotaCyclesChartProps>(loadQuotaCyclesChart);
+
+
+export const loadPerformanceChart = createRouteLoader(() => import('../pages/trends/charts/PerformanceChart'));
+export const LazyPerformanceChart = lazyRoute<PerformanceChartProps>(loadPerformanceChart);
+
 export function preloadDashboardCharts(): Promise<unknown> {
   return loadModelTokenTrend();
 }
@@ -56,5 +69,13 @@ export function preloadInsightsCharts(): Promise<unknown> {
     loadInsightsFlowChart(),
     loadInsightsCompositionChart(),
     loadInsightsHourChart(),
+  ]);
+}
+
+export function preloadTrendsCharts(): Promise<unknown> {
+  return Promise.all([
+    loadQuotaBurnChart(),
+    loadQuotaCyclesChart(),
+    loadPerformanceChart(),
   ]);
 }

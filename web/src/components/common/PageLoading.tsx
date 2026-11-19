@@ -22,6 +22,7 @@ import { DashboardSkeleton } from '../dashboard/DashboardSkeleton';
 export type RouteLoadingBody =
   | 'dashboard'
   | 'insights'
+  | 'trends'
   | 'workspace'
   | 'catalog'
   | 'directory'
@@ -320,6 +321,51 @@ export function PanelsPlaceholder({ count = 3 }: { count?: number }) {
         );
       })}
     </LoadingRegion>
+  );
+}
+
+/** Trends (`/trends`): range controls, 4-col tiles, the quota trend card with its lens, and the speed bench above the fold. */
+export function TrendsSkeleton({
+  hasHeader = true,
+  isImmediate = false,
+}: {
+  hasHeader?: boolean;
+  isImmediate?: boolean;
+}) {
+  return (
+    <div className={clsx(hasHeader && 'terminal-page')}>
+      <LoadingRegion isImmediate={isImmediate} className="placeholder-stack">
+        {hasHeader && (
+          <PageHeadPlaceholder
+            titleWidth={88}
+            actions={(
+              <div className="placeholder-head-tools">
+                <Placeholder width={186} height={32} className="is-control" />
+                <Placeholder width={32} height={32} className="is-control" />
+              </div>
+            )}
+          />
+        )}
+        <StatTilesPlaceholder count={4} withDelta row={0} />
+        <Panel
+          title={<Placeholder width={148} row={1} className="placeholder-line" />}
+          extra={<Placeholder width={132} height={28} row={1} className="is-control" />}
+        >
+          <div className="placeholder-stack">
+            <Placeholder width={220} height={28} row={2} className="is-control" />
+            <Placeholder width={96} height={24} row={2} />
+            <ChartLinesPlaceholder height={260} kind="trend" row={2} />
+            <Placeholder width="100%" height={28} row={2} className="is-control" />
+          </div>
+        </Panel>
+        <Panel
+          title={<Placeholder width={120} row={3} className="placeholder-line" />}
+          extra={<Placeholder width="min(420px, calc(100vw - 72px))" height={28} row={3} className="is-control" />}
+        >
+          <ChartLinesPlaceholder height={280} kind="trend" row={3} />
+        </Panel>
+      </LoadingRegion>
+    </div>
   );
 }
 
@@ -899,6 +945,7 @@ export function ListSkeleton({ isImmediate = false }: { isImmediate?: boolean })
 export const PAGE_SKELETON_REGISTRY: Record<RouteLoadingBody, React.FC<{ isImmediate?: boolean }>> = {
   dashboard: ({ isImmediate }) => <DashboardSkeleton isImmediate={isImmediate} />,
   insights: ({ isImmediate }) => <InsightsSkeleton isImmediate={isImmediate} />,
+  trends: ({ isImmediate }) => <TrendsSkeleton isImmediate={isImmediate} />,
   workspace: ({ isImmediate }) => <ThreadPlaceholder hasHeader hasComposer isImmediate={isImmediate} />,
   catalog: ({ isImmediate }) => <CatalogSkeleton isImmediate={isImmediate} />,
   directory: ({ isImmediate }) => <DirectorySkeleton isImmediate={isImmediate} />,

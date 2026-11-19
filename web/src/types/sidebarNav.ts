@@ -66,6 +66,7 @@ export const STATIC_NAV_GROUP_SPECS: readonly NavGroupSpec[] = [
     labelKey: 'nav.group.observe',
     items: [
       { key: '/insights', labelKey: 'nav.insights', skeletonWidth: 44 },
+      { key: '/trends', labelKey: 'nav.trends', skeletonWidth: 44 },
       { key: '/usage/events', labelKey: 'nav.usage_events', skeletonWidth: 60 },
       { key: '/pricing', labelKey: 'nav.pricing', skeletonWidth: 56 },
       { key: '/logs', labelKey: 'nav.logs', skeletonWidth: 54 },

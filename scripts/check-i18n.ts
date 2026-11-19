@@ -273,7 +273,7 @@ export async function checkCatalogs(): Promise<{ problems: Problem[]; report: st
     'src/types/fonts.ts',
     'src/types/tokenDisplay.ts',
     'src/types/providerIconIds.ts',
-    'src/pages/oauthManagement/credentialSections.ts',
+    'src/pages/quota/quotaWindowNaming.ts',
     'src/demo/recordingTemplate.ts',
   ]);
   for (const file of sourceFiles(path.join(ROOT, 'web', 'src'))) {

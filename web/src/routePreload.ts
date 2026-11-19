@@ -1,5 +1,5 @@
 import { api } from './api/client';
-import { preloadDashboardCharts, preloadInsightsCharts } from './charts/lazyCharts';
+import { preloadDashboardCharts, preloadInsightsCharts, preloadTrendsCharts } from './charts/lazyCharts';
 import {
   dashboardHeatmapSwr,
   dashboardModelsSwr,
@@ -22,6 +22,7 @@ import {
   loadRoutingPage,
   loadDashboardPage,
   loadInsightsPage,
+  loadTrendsPage,
   loadAgentPage,
   loadAuthorizePage,
   loadPlaygroundPage,
@@ -122,6 +123,12 @@ export const ROUTE_DESCRIPTORS: readonly RouteDescriptor[] = [
     loadingBody: 'insights',
     preloadChunk: () => Promise.all([loadInsightsPage(), preloadInsightsCharts()]),
     prefetchData: prefetchInsightsData,
+  },
+  {
+    path: '/trends',
+    priority: 'high',
+    loadingBody: 'trends',
+    preloadChunk: () => Promise.all([loadTrendsPage(), preloadTrendsCharts()]),
   },
   {
     path: '/pricing',
