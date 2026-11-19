@@ -102,14 +102,14 @@ type TrendsTelemetryCoverageDTO struct {
 }
 
 type TrendsTelemetryResponseDTO struct {
-	Window            insightsWindow                   `json:"window"`
-	TPSMode           string                           `json:"tps_mode"`
-	GroupBy           string                           `json:"group_by"`
-	Summary           TrendsTelemetrySummaryDTO        `json:"summary"`
-	Buckets           []TrendsTelemetryBucketDTO       `json:"buckets"`
-	Groups            []trendsGroupName                `json:"groups,omitempty"`
-	Series            []TrendsTelemetryGroupSeriesDTO  `json:"series"`
-	Scatter           []TrendsTelemetryScatterPointDTO `json:"scatter"`
+	Window                 insightsWindow                   `json:"window"`
+	TPSMode                string                           `json:"tps_mode"`
+	GroupBy                string                           `json:"group_by"`
+	Summary                TrendsTelemetrySummaryDTO        `json:"summary"`
+	Buckets                []TrendsTelemetryBucketDTO       `json:"buckets"`
+	Groups                 []trendsGroupName                `json:"groups,omitempty"`
+	Series                 []TrendsTelemetryGroupSeriesDTO  `json:"series"`
+	Scatter                []TrendsTelemetryScatterPointDTO `json:"scatter"`
 	SubstitutionPairs      []TrendsSubstitutionPairDTO      `json:"substitution_pairs"`
 	FailureGroups          []TrendsFailureGroupDTO          `json:"failure_groups"`
 	FailureGroupsTruncated bool                             `json:"failure_groups_truncated,omitempty"`
