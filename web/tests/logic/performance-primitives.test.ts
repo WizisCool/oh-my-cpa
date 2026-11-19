@@ -4,6 +4,7 @@ import { MutationObserver, QueryClient, QueryObserver } from '@tanstack/react-qu
 import { test } from 'vitest';
 import { lineSlotChildren } from '../../src/components/ui/line-slot.tsx';
 
+import { ApiError } from '../../src/api/client.ts';
 import { MUTATION_KEYS, QUERY_KEYS } from '../../src/api/queryKeys.ts';
 import {
   createStateLiveChannel,
@@ -46,6 +47,7 @@ import {
   ROUTE_DESCRIPTORS,
   consoleRouteRegistry,
   prefetchLandingRouteData,
+  retryTrendsQuery,
   trendsQuotaParamsFromSearch,
 } from '../../src/routePreload.ts';
 import { readTrendsView, trendsQuotaParams } from '../../src/pages/trends/trendsLogic.ts';
@@ -1176,16 +1178,23 @@ test('trendsQuotaParamsFromSearch matches readTrendsView + trendsQuotaParams and
   assert.equal(trendsDescriptor?.prefetchData, undefined, 'hover intent on /trends must not invoke upstream CPA quota reads');
 
   const queryClient = new QueryClient();
-  const seenKeys: Array<readonly unknown[]> = [];
+  const seen: Array<{ queryKey: readonly unknown[]; retry: unknown }> = [];
   const originalPrefetch = queryClient.prefetchQuery.bind(queryClient);
   queryClient.prefetchQuery = (async (options: Parameters<typeof originalPrefetch>[0]) => {
-    seenKeys.push(options.queryKey);
+    seen.push({ queryKey: options.queryKey, retry: options.retry });
   }) as typeof queryClient.prefetchQuery;
 
   prefetchLandingRouteData(queryClient, '/dashboard', '?provider=codex');
   prefetchLandingRouteData(queryClient, '/insights', '?provider=codex');
-  assert.deepEqual(seenKeys, [], 'non-trends landing routes must not prefetch trends-quota');
+  assert.deepEqual(seen, [], 'non-trends landing routes must not prefetch trends-quota');
 
   prefetchLandingRouteData(queryClient, '/trends', '?model=gpt-5&provider=codex&auth_index=c1');
-  assert.deepEqual(seenKeys, [['trends-quota', 'provider=codex&auth_index=c1']]);
+  prefetchLandingRouteData(queryClient, '/trends/', '?provider=codex');
+  assert.deepEqual(seen, [
+    { queryKey: ['trends-quota', 'provider=codex&auth_index=c1'], retry: retryTrendsQuery },
+    { queryKey: ['trends-quota', 'provider=codex'], retry: retryTrendsQuery },
+  ]);
+  assert.equal(retryTrendsQuery(0, new Error('transient 500')), true);
+  assert.equal(retryTrendsQuery(2, new Error('transient 500')), false);
+  assert.equal(retryTrendsQuery(0, new ApiError(404, 'uncaptured', { code: 'demo_uncaptured' })), false);
 });

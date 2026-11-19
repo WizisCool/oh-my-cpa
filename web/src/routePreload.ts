@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { api } from './api/client';
+import { api, apiErrorCode } from './api/client';
 import { preloadDashboardCharts, preloadInsightsCharts, preloadTrendsCharts } from './charts/lazyCharts';
 import {
   dashboardHeatmapSwr,
@@ -206,6 +206,16 @@ export function trendsQuotaParamsFromSearch(search: string): string {
   return params.toString();
 }
 
+/** Retry policy shared between `/trends` cold-boot prefetch and `TrendsPage` queries. */
+export function retryTrendsQuery(count: number, error: unknown): boolean {
+  return apiErrorCode(error) !== 'demo_uncaptured' && count < 2;
+}
+
+function normalizeConsolePath(pathname: string): string {
+  const trimmed = pathname.replace(/\/+$/, '');
+  return trimmed || '/';
+}
+
 /**
  * Prefetches preference-independent landing-route data on authenticated cold boot so requests
  * start in parallel with `/preferences` instead of waiting for `TimeZoneProvider`, `AppLayout`,
@@ -219,13 +229,13 @@ export function prefetchLandingRouteData(
   pathname = currentConsolePathname(),
   search = typeof window !== 'undefined' ? window.location.search : '',
 ): void {
-  if (pathname === '/trends') {
+  if (normalizeConsolePath(pathname) === '/trends') {
     const quotaQuery = trendsQuotaParamsFromSearch(search);
     void queryClient.prefetchQuery({
       queryKey: ['trends-quota', quotaQuery],
       queryFn: ({ signal }) => api.getTrendsQuota(quotaQuery, signal),
       staleTime: 30_000,
-      retry: false,
+      retry: retryTrendsQuery,
       meta: { silent: true },
     }).catch(() => undefined);
   }

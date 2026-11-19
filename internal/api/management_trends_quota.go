@@ -312,11 +312,42 @@ func (h *Handler) readTrendsQuota(ctx context.Context, providers, indexes []stri
 		result.Summary.IsMembershipUnknown = !isLive
 		return result, nil
 	}
-	// One batched history read serves both the latest reading (entry 0) and the
-	// 50-reading trajectory for every credential.
-	historyByAuth, err := h.repo.GetQuotaSnapshotHistoryBatch(ctx, authIndexes, 50)
-	if err != nil {
-		return result, err
+	var historyByAuth map[string][]repository.QuotaSnapshotRecord
+	var err error
+	if len(providers) > 0 {
+		// Narrow provider-filtered requests via latest rows before batch-loading
+		// 50-entry trajectories so unmatched credentials never load full histories.
+		var latestByAuth map[string]repository.QuotaSnapshotRecord
+		latestByAuth, err = h.repo.GetLatestQuotaSnapshots(ctx, authIndexes)
+		if err != nil {
+			return result, err
+		}
+		matchedAuths := make([]string, 0, len(authIndexes))
+		for _, index := range authIndexes {
+			provider := quota.DetectProvider(files[index].Type, files[index].Provider)
+			if snap, ok := latestByAuth[index]; ok && snap.Provider != "" {
+				provider = snap.Provider
+			}
+			if trendsMatches(providers, provider) {
+				matchedAuths = append(matchedAuths, index)
+			}
+		}
+		authIndexes = matchedAuths
+		if len(authIndexes) == 0 {
+			result.Summary.IsMembershipUnknown = !isLive
+			return result, nil
+		}
+		historyByAuth, err = h.repo.GetQuotaSnapshotHistoryBatch(ctx, authIndexes, 50)
+		if err != nil {
+			return result, err
+		}
+	} else {
+		// One batched history read serves both the latest reading (entry 0) and the
+		// 50-reading trajectory for every credential.
+		historyByAuth, err = h.repo.GetQuotaSnapshotHistoryBatch(ctx, authIndexes, 50)
+		if err != nil {
+			return result, err
+		}
 	}
 	lastAttempts := h.lastQuotaAttempts(ctx, authIndexes)
 	var activeCooldowns map[string]repository.ActiveCooldownRecord

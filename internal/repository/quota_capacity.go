@@ -684,8 +684,15 @@ func parseCapacityTokenAccountingFast(raw string) (ok, isCanonical bool, promptT
 				return false
 			}
 			i = skipJSONSpace(raw, i+1)
-			if key == "input" && i < len(raw) && raw[i] == '{' {
-				if !parseInputObject() {
+			if key == "input" {
+				if i < len(raw) && raw[i] == '{' {
+					if !parseInputObject() {
+						return false
+					}
+				} else if strings.HasPrefix(raw[i:], "null") {
+					i += 4
+				} else {
+					// Unsupported type for input: fall back to encoding/json.
 					return false
 				}
 			} else if !skipValue() {
@@ -743,7 +750,10 @@ func parseCapacityTokenAccountingFast(raw string) (ok, isCanonical bool, promptT
 				if !parseBreakdownObject() {
 					return false, false, 0, 0
 				}
-			} else if !skipValue() {
+			} else if strings.HasPrefix(raw[i:], "null") {
+				i += 4
+			} else {
+				// Unsupported type for token_breakdown: fall back to encoding/json.
 				return false, false, 0, 0
 			}
 		default:

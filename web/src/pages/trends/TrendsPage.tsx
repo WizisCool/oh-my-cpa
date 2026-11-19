@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Select } from '@/components/ui/select';
 import { api, apiErrorCode } from '../../api/client';
+import { retryTrendsQuery } from '../../routePreload';
 import { useT } from '../../i18n';
 import { usePreference } from '../../hooks/usePreference';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
@@ -82,10 +83,6 @@ const TILE_SECTIONS: Record<TileKey, string> = {
   delivery: 'trends-stability',
 };
 
-function retryUnlessUncaptured(count: number, error: unknown): boolean {
-  return apiErrorCode(error) !== 'demo_uncaptured' && count < 2;
-}
-
 /** A group's name as the page prints it: a key's alias over its mask, the remainder as one word. */
 function groupName(item: { id: string; label: string; alias?: string; mask?: string; folded?: boolean }, folded: string): string {
   if (item.folded) return folded;
@@ -138,7 +135,7 @@ export const TrendsPage: React.FC = () => {
     staleTime: 15_000,
     refetchOnWindowFocus: isPollingActive,
     refetchInterval: (query) => (isPollingActive ? insightsPollInterval(query.state.data?.window) : false),
-    retry: retryUnlessUncaptured,
+    retry: retryTrendsQuery,
     // The page states a failure in place, and an uncaptured demonstration window as a notice.
     meta: { silent: true },
   });
@@ -150,7 +147,7 @@ export const TrendsPage: React.FC = () => {
     staleTime: 15_000,
     refetchOnWindowFocus: isPollingActive,
     refetchInterval: (query) => (isPollingActive ? insightsPollInterval(query.state.data?.window) : false),
-    retry: retryUnlessUncaptured,
+    retry: retryTrendsQuery,
     meta: { silent: true },
   });
   const quotaQuery = useQuery({
@@ -160,7 +157,7 @@ export const TrendsPage: React.FC = () => {
     staleTime: 30_000,
     refetchOnWindowFocus: isPollingActive,
     refetchInterval: isPollingActive ? QUOTA_POLL_MS : false,
-    retry: retryUnlessUncaptured,
+    retry: retryTrendsQuery,
     meta: { silent: true },
   });
 
@@ -190,7 +187,7 @@ export const TrendsPage: React.FC = () => {
     staleTime: 15_000,
     refetchOnWindowFocus: isPollingActive,
     refetchInterval: (query) => (isPollingActive ? insightsPollInterval(query.state.data?.window) : false),
-    retry: retryUnlessUncaptured,
+    retry: retryTrendsQuery,
     meta: { silent: true },
   });
 
