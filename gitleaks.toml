@@ -40,3 +40,12 @@ id = "generic-api-key"
   paths = ['''internal/usage/testdata/golden/error/[^/]+\.golden\.json''']
   regexTarget = "secret"
   regexes = ['''^err-[0-9a-f]{24}$''']
+
+  # The English Trends i18n key `trends.perf.p95_band` sits right after
+  # `'trends.perf.all_group.credential': 'All credentials'`, triggering generic-api-key.
+  [[rules.allowlists]]
+  description = "Trends i18n P95 band key adjacent to credential label in English catalog"
+  condition = "AND"
+  paths = ['''web/src/i18n/locales/en/trends\.ts''']
+  regexTarget = "secret"
+  regexes = ['''^trends\.perf\.p95_band$''']

@@ -348,6 +348,7 @@ try {
   const withProviderSecrets = { pageSecrets: providerSecrets };
   await auditRoutes(page, responseBodies, [
     ['/dashboard', '.dashboard-page .tile-head', withProviderSecrets],
+    ['/trends', '[data-testid="trends-page"] [data-testid="trends-perf-chart"]', withProviderSecrets],
     ['/agent', '[data-testid="agent-page"]', withProviderSecrets],
     ['/playground', '[data-testid="playground-empty"]', withProviderSecrets],
     ['/model-square', '.model-square-page [data-model-identity]', withProviderSecrets],

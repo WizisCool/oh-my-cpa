@@ -1079,10 +1079,12 @@ test('detail window helpers and unknown-plan sentinel localize consistently in E
   assert.equal(quotaDetailWindowName(spark48h, en), 'Spark 48小时配额');
   assert.notEqual(quotaDetailWindowName(spark8h, en), quotaDetailWindowName(spark48h, en));
 
-  // Explicitly custom noncanonical durations (like 4.5h) are not rounded into 5-hour limits.
+  // Explicitly custom noncanonical durations (like 4.5h) are not rounded into 5-hour limits,
+  // and exact unrounded custom durations like 28860s (8.0167h) still display cleanly as "8h".
   const custom45h: QuotaWindow = { id: 'custom_4.5h', label: '4.5小时用量上限 (4.5h)', kind: 'custom', scope: 'standard', period_hours: 4.5 };
   assert.equal(quotaWindowKindOf(custom45h), 'custom');
   assert.equal(quotaDetailWindowName(custom45h, en), '4.5h');
+  assert.equal(quotaDetailWindowName({ id: 'custom_8h', label: '8小时用量上限 (8h)', kind: 'custom', scope: 'standard', period_hours: 28860 / 3600 }, en), '8h');
 
   // Same-group, same-period sibling allowances retain their discriminator in detail and full names.
   const agReq: QuotaWindow = { id: 'ag_req', label: 'Gemini Models · Requests', scope: 'group', period_hours: 5 };

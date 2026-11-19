@@ -1,0 +1,319 @@
+/* Trends: where the deployment is heading. One column of panels; hue appears where it names a
+   series, a measured duration or a state, every other mark is ink. */
+
+.page {
+  max-width: 1440px;
+  overflow-anchor: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.page [data-trend='up'] { color: var(--trend-up); }
+.page [data-trend='down'] { color: var(--trend-down); }
+
+.window-span { font-variant-numeric: tabular-nums; }
+.panel-meta { color: var(--muted); font-size: var(--text-sm); font-weight: 400; }
+.section { scroll-margin-top: 12px; }
+.tone-warn { color: var(--warn); }
+.tone-danger { color: var(--danger); }
+.tone-success { color: var(--success); }
+.tone-muted { color: var(--muted); }
+.figure { font-variant-numeric: tabular-nums; }
+/* A measured duration on the console's green-to-orange ramp; the stops arrive from the caller. */
+
+/* ── Filters: one chip per narrowing, an add picker, and clear at the end ─ */
+.filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 28px; }
+.filter-bar[data-active] {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  margin: -8px 0;
+  padding: 8px 0 7px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 320px;
+  height: 26px;
+  padding: 0 4px 0 8px;
+  border: 0;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-edge);
+  background: var(--surface);
+  font-size: var(--text-sm);
+  animation: trends-chip-in var(--motion-base) var(--ease-standard);
+}
+@keyframes trends-chip-in {
+  from { opacity: 0; transform: translateY(-4px) scale(.96); }
+}
+.filter-chip-dim { color: var(--muted); white-space: nowrap; }
+.filter-chip-value { color: var(--fg); }
+.filter-chip-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+}
+.filter-chip-remove:hover { background: var(--hover); color: var(--fg); }
+.filter-add { color: var(--fg-2); }
+.filter-clear,
+.filter-requests { padding-inline: 4px; }
+
+.filter-menu { display: flex; flex-direction: column; min-width: 180px; padding: 2px 0; }
+.filter-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-md);
+  text-align: left;
+  cursor: pointer;
+}
+.filter-menu-item:hover { background: var(--hover); }
+.filter-menu-count { color: var(--muted); font-size: var(--text-xs); }
+.filter-values { display: flex; flex-direction: column; gap: 8px; width: min(320px, calc(100vw - 48px)); }
+.filter-values-head { display: flex; align-items: center; gap: 4px; color: var(--fg-2); font-size: var(--text-sm); }
+.filter-values-list { display: flex; flex-direction: column; max-height: 300px; overflow-y: auto; }
+.filter-values-empty { padding: 12px 4px; color: var(--muted); font-size: var(--text-sm); }
+.filter-values-loading { display: flex; justify-content: center; padding: 16px 4px; }
+.filter-value {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.filter-value:hover { background: var(--hover); }
+.filter-value-name { min-width: 0; }
+.filter-value-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ── Panel heads ─────────────────────────────────────────────────────────── */
+.panel-tools { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.panel-body { display: flex; flex-direction: column; gap: 14px; }
+.perf-legend-row { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; min-height: 28px; margin-bottom: 8px; }
+.perf-legend-row > ul { margin-bottom: 0; }
+.perf-legend-tools { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.perf-item-select { min-width: 108px; max-width: 240px; }
+
+/* ── Quota burn ──────────────────────────────────────────────────────────── */
+/* One line however many windows a credential reports or however long their names: the credential
+   keeps its width and the window switch scrolls sideways within the rest. */
+.quota-pickers { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.quota-credential-select { flex: none; min-width: 200px; max-width: 320px; }
+.quota-windows { flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+/* A credential or window heading for or at its limit carries a dot after its name, even when
+   selected, so every window's risk remains visible while switching between tabs. */
+.flagged-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.flagged-label > :first-child { min-width: 0; }
+@media (max-width: 640px) {
+  .quota-pickers { flex-wrap: wrap; }
+  .quota-credential-select { flex: 1 1 100%; max-width: none; }
+}
+.cycle-measure { align-self: flex-start; }
+/* The cycle in a few figures, each a quiet label over its value: used, when it runs out, when it
+   resets and how fast it burns. Hue marks only a figure in trouble. */
+.quota-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; }
+.quota-figures { display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 0; min-width: 0; }
+.quota-figure { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.quota-figure > dt { color: var(--muted); font-size: var(--text-xs); line-height: 1.2; }
+.quota-figure > dd {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.quota-figure > dd[data-tone='danger'] { color: var(--danger); }
+.quota-figure > dd[data-tone='warn'] { color: var(--warn); }
+.quota-links { display: inline-flex; flex: none; gap: 4px; }
+
+.burn-chart { position: relative; }
+.burn-chart-host { border-radius: var(--radius-md); outline: none; touch-action: pan-y; }
+.burn-chart-host:focus-visible { box-shadow: var(--shadow-focus); }
+.burn-readout {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  will-change: transform;
+  max-width: min(260px, calc(100% - 24px));
+  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--elevated);
+  box-shadow: var(--shadow-float);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  pointer-events: none;
+}
+/* Once opened at its initial coordinates, the readout glides smoothly between points on the compositor. */
+:global(:root:not([data-reduced-motion='true'])) .burn-readout[data-ready='true'] { transition: transform 110ms var(--ease-out); }
+.burn-readout[hidden] { display: none; }
+
+/* ── Movers ──────────────────────────────────────────────────────────────── */
+/* Each side is a ranked list whose rows share columns through subgrid, so bars and figures line up. */
+.movers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 32px; }
+.movers-column { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.movers-heading { margin: 0 0 2px; padding-inline: 6px; color: var(--fg-2); font-size: var(--text-sm); font-weight: 500; }
+.movers-empty { padding: 8px 6px; color: var(--meta); font-size: var(--text-sm); }
+.mover-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(56px, 30%) auto auto auto;
+  column-gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mover-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  min-height: 36px;
+  padding-inline: 6px;
+}
+.mover-name {
+  display: inline-flex;
+  justify-self: start;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-md);
+  text-align: left;
+  cursor: pointer;
+}
+.mover-name:hover .value-name { text-decoration: underline; text-underline-offset: 2px; }
+.mover-name[aria-pressed='true'] { color: var(--accent); }
+/* Ink is what the group kept, hue is what moved; the track's full length is the panel's largest reading. */
+.mover-bar { display: flex; height: 6px; overflow: hidden; border-radius: var(--radius-xs); background: var(--series-track); }
+.mover-kept { background: color-mix(in oklch, var(--muted) 60%, transparent); }
+.mover-moved { min-width: 2px; background: currentColor; }
+.mover-delta { font-size: var(--text-md); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.mover-relative { color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.mover-requests { opacity: 0; transition: opacity var(--motion-fast) var(--ease-standard); }
+.mover-row:hover .mover-requests,
+.mover-row:focus-within .mover-requests { opacity: 1; }
+@media (hover: none) {
+  .mover-requests { opacity: 1; }
+}
+@media (max-width: 640px) {
+  .movers { grid-template-columns: minmax(0, 1fr); }
+  .mover-list { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+  .mover-bar { display: none; }
+}
+
+/* ── Stability lanes ─────────────────────────────────────────────────────── */
+/* Label, track and total keep one column each, so every lane and the time scale line up. */
+.lanes { display: flex; flex-direction: column; gap: 8px; }
+.lane,
+.lane-scale { display: grid; grid-template-columns: 128px minmax(0, 1fr) 56px; align-items: center; column-gap: 12px; }
+.lane-label { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-2); font-size: var(--text-sm); }
+.lane-total { grid-column: 3; color: var(--fg); font-size: var(--text-sm); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.lane-cells {
+  grid-column: 2;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(1px, 1fr);
+  gap: 2px;
+  height: 20px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--series-track);
+}
+.lane-cell { min-width: 1px; background: var(--series-track); }
+.lane-cell[data-tone='danger'] { background: color-mix(in oklch, var(--danger) var(--lane-weight), var(--series-track)); }
+.lane-cell[data-tone='warn'] { background: color-mix(in oklch, var(--warn) var(--lane-weight), var(--series-track)); }
+/* Past a few dozen buckets a gap would outweigh the cells; they close up into one strip. */
+.lanes[data-dense] .lane-cells { gap: 0; }
+.lane-scale-ticks {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--meta);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A window with nothing to report says so in one line, rather than drawing empty lanes. */
+.stability-clear { display: flex; align-items: center; gap: 8px; min-height: 56px; color: var(--fg-2); font-size: var(--text-md); }
+.stability-clear-icon { flex: none; color: var(--success); font-size: 16px; }
+.pairs-section { padding-top: 12px; border-top: var(--hairline) solid var(--border-soft); }
+.pairs { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.pairs-heading { margin: 0 0 4px; color: var(--fg-2); font-size: var(--text-sm); font-weight: 500; }
+.pair-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 64px auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+  padding: 2px 6px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+.pair-models { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.pair-model { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pair-served { color: var(--warn); }
+.pair-arrow { flex: none; color: var(--muted); }
+.pair-models > :not(.pair-model) { flex: none; }
+.pair-provider { display: inline-flex; justify-content: flex-end; min-width: 0; }
+.pair-count { color: var(--fg); font-variant-numeric: tabular-nums; text-align: right; }
+
+@media (max-width: 640px) {
+  /* Label and count share a line; the lane takes the full width beneath them. */
+  .lane,
+  .lane-scale { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+  .lane-label { grid-column: 1; grid-row: 1; }
+  .lane-total { grid-column: 2; grid-row: 1; }
+  .lane-cells,
+  .lane-scale-ticks { grid-column: 1 / -1; grid-row: 2; }
+  .lane-cells { gap: 1px; }
+  .pair-row { grid-template-columns: minmax(0, 1fr) auto auto; row-gap: 2px; }
+  .pair-models { grid-column: 1 / -1; }
+  .pair-provider { grid-column: 1; justify-content: flex-start; }
+}
+
+.burn-chart-host[data-sweeping] { cursor: ew-resize; }
+
+.footnote { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--meta); font-size: var(--text-sm); }
+
+/* ── Headline tiles ──────────────────────────────────────────────────────── */
+/* Four across leaves each tile too narrow once the shell's sidebar folds; two by two reads whole. */
+@media (max-width: 900px) {
+  .trends-tiles[data-phone] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* One line of quiet facts: whole facts first, and only the last one gives way, with an ellipsis. */
+.tile-foot { flex-wrap: nowrap; column-gap: 10px; max-width: 100%; overflow: hidden; color: var(--fg-2); }
+.tile-foot > :global(.meta-line-item) { flex: none; }
+.tile-foot > :global(.meta-line-item:last-child) { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Identities ──────────────────────────────────────────────────────────── */
+/* A value's mark in a fixed box, then its name, which alone is cut short. */
+.value { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
+.value-mark { display: inline-grid; flex: none; place-items: center; width: 16px; height: 16px; color: var(--muted); }
+.value-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -2,6 +2,7 @@ import shell from './shell';
 import agent from './agent';
 import dashboard from './dashboard';
 import insights from './insights';
+import trends from './trends';
 import logs from './logs';
 import usageEvents from './usageEvents';
 import providers from './providers';
@@ -22,6 +23,7 @@ export default {
   ...agent,
   ...dashboard,
   ...insights,
+  ...trends,
   ...logs,
   ...usageEvents,
   ...providers,

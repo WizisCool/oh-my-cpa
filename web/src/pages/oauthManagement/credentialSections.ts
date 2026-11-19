@@ -85,8 +85,9 @@ function lineTitle(line: QuotaLine, cell: QuotaLineCell, t: TFunc): string {
  */
 export function formatQuotaDuration(hours: number | undefined, t: TFunc): string | undefined {
   if (hours == null || !Number.isFinite(hours) || hours <= 0) return undefined;
-  if (hours >= 24 && hours % 24 === 0) return t('quota.duration_days', { n: hours / 24 });
-  return t('quota.duration_hours', { n: hours });
+  const rounded = hours >= 0.05 ? Math.round(hours * 10) / 10 : Math.round(hours * 100) / 100 || hours;
+  if (rounded >= 24 && rounded % 24 === 0) return t('quota.duration_days', { n: rounded / 24 });
+  return t('quota.duration_hours', { n: rounded });
 }
 
 function legacySlotFallbackName(window: Pick<QuotaWindow, 'id' | 'label' | 'period_hours'>, t: TFunc): string | undefined {
