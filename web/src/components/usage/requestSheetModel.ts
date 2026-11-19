@@ -64,9 +64,9 @@ export type SheetSegment =
    */
   | { kind: 'tag'; text: string; tone: SheetTone; effortStep?: number }
   /**
-   * A reading led by a round dot: the result, and the cache rate. A washed reading is drawn on a
-   * tint of its tone, the way the list sets a failure apart; otherwise only the dot carries the hue
-   * unless the word is given a tone of its own.
+   * A reading led by a round dot: the result (`StatusLabel`), and the cache rate. A washed reading
+   * is drawn as a tinted chip on its own tone (matching `.status-label`); an unwashed reading
+   * draws the dot and label directly.
    */
   | { kind: 'dot'; text: string; tone: SheetTone; textTone?: SheetTone; isWashed?: boolean; cacheRate?: number }
   /**
@@ -248,9 +248,12 @@ export function buildRequestSheet(input: RequestSheetInput): RequestSheet {
       },
       result: {
         lines: [[
-          event.failed
-            ? { kind: 'dot', text: t(eventResultLabelKey(event)), tone: 'danger', isWashed: true }
-            : { kind: 'dot', text: t(eventResultLabelKey(event)), tone: 'success', textTone: 'fg2' },
+          {
+            kind: 'dot',
+            text: t(eventResultLabelKey(event)),
+            tone: event.failed ? 'danger' : 'success',
+            isWashed: true,
+          },
         ]],
       },
       provider: {

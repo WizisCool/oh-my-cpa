@@ -253,12 +253,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px 10px;
+  gap: 4px 10px;
   min-width: 0;
-}
-
-.phone-card-health :global(.status-label) {
-  font-size: var(--text-xs);
 }
 
 .phone-card-traffic {

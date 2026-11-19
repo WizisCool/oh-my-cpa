@@ -138,6 +138,22 @@ test('request export', () => {
     tpsMode: 'exclude_ttft',
     credentials,
   });
+  assert.deepEqual(openSheet.rows[0].cells.result.lines, [[
+    { kind: 'dot', text: 'events.filter_success', tone: 'success', isWashed: true },
+  ]], 'a successful request draws the same tinted status chip as a failed one');
+  const failedSheet = buildRequestSheet({
+    rows: [{ ...events[0], failed: true }],
+    masks: effectiveMasks([], []),
+    colWidths: {},
+    caption: 'caption',
+    t: (key) => key,
+    tokenStyle: 'en-compact',
+    tpsMode: 'exclude_ttft',
+    credentials,
+  });
+  assert.deepEqual(failedSheet.rows[0].cells.result.lines, [[
+    { kind: 'dot', text: 'events.filter_failed', tone: 'danger', isWashed: true },
+  ]], 'a failed request draws the danger tinted status chip');
   assert.deepEqual(openSheet.rows[0].cells.client.lines, [[
     { kind: 'mark', mark: { iconId: 'Codex' } },
     { kind: 'text', text: 'Codex', tone: 'fg2', size: 12, weight: 500, isMono: false },

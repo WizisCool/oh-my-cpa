@@ -17,6 +17,7 @@ import { outlivedResetLine, refreshFailureLine } from './quotaAttempt';
 import styles from './QuotaPresentation.module.css';
 import { Notice } from '../../components/feedback';
 import { SectionHeading } from '../../components/common/SectionHeading';
+import { StatusLabel } from '../../components/common/StatusLabel';
 import { Tag } from '../../components/common/Tag';
 import { describeQuotaCooldown } from './quotaCooldown';
 
@@ -108,7 +109,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
             <Tag>{t('omc.quota_unsupported')}</Tag>
           )}
           {item.recommendation?.action === 'reauth' && (
-            <Tag tone="warn">{t('omc.reauthenticate')}</Tag>
+            <StatusLabel tone="warn">{t('omc.reauthenticate')}</StatusLabel>
           )}
         </div>
         <div className={styles['quota-tools']}>

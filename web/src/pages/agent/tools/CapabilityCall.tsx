@@ -1,6 +1,8 @@
 import React from 'react';
 import { clsx } from 'clsx';
 import { CheckOutlined, CloseOutlined, LoadingOutlined, RightOutlined, WarningOutlined } from '../../../components/icons';
+import { StatusLabel } from '../../../components/common/StatusLabel';
+import { workspaceStatusTone } from '../../../components/workspace/conversationLabels';
 import { CodeBlock } from '../../../components/workspace/ModelMarkdown';
 import workspace from '../../../components/workspace/Workspace.module.css';
 import { useI18n } from '../../../i18n';
@@ -87,10 +89,9 @@ export const CapabilityCall = React.memo(function CapabilityCall({ trace, childr
             <div className={styles['call-detail']}>
               <div className={styles['call-facts']}>
                 <code className={styles['call-name']}>{trace.name}</code>
-                <span className={workspace['status']}>
-                  <span className={workspace['pip']} data-tone={tone} aria-hidden="true" />
+                <StatusLabel size="small" tone={workspaceStatusTone(tone)}>
                   {t(callStatusKey(trace))}
-                </span>
+                </StatusLabel>
                 {!!trace.started_at_ms && <span>{formatClock(trace.started_at_ms, lang)}</span>}
               </div>
               <section className={styles['call-section']}>

@@ -8,6 +8,7 @@ import { CopyButton } from '../../../components/common/CopyButton';
 import { EmptyState } from '../../../components/common/EmptyState';
 import { FactList, type Fact } from '../../../components/common/FactList';
 import { MetaLine } from '../../../components/common/MetaLine';
+import { StatusLabel } from '../../../components/common/StatusLabel';
 import { Tag } from '../../../components/common/Tag';
 import { LoadFailure, Notice } from '../../../components/feedback';
 import { ArrowRightOutlined, DownOutlined } from '../../../components/icons';
@@ -219,7 +220,7 @@ const StabilityEventAccordionRow: React.FC<{
     >
       <summary className={styles['stability-event-summary']}>
         <DownOutlined className={styles['stability-event-chevron']} aria-hidden="true" />
-        <Tag size="small" tone={badge.tone}>{badge.label}</Tag>
+        <StatusLabel size="small" tone={badge.tone}>{badge.label}</StatusLabel>
         <time className={styles['stability-event-time']} dateTime={new Date(event.timestamp_ms).toISOString()}>
           {dayjs(event.timestamp_ms).format('MM-DD HH:mm:ss')}
         </time>

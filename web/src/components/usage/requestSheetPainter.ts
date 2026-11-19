@@ -1,8 +1,8 @@
 import type { MarkArtwork } from '../../types/brandMark';
-import { mixOklch } from '../../theme/colorMath';
+import { mixOklch, mixSrgb, oklchLightness } from '../../theme/colorMath';
 import type { TwoStopMix } from '../../theme/twoStopMix';
 import { brandDataUri, brandDrawing } from '../../assets/brand/markup';
-import type { ThemePalette } from '../../theme/palette';
+import { STATUS_INK_SHARE, type ThemePalette } from '../../theme/palette';
 import { exportPixelRatio } from './requestSelection';
 import { RADIUS } from '../../theme/radius';
 import {
@@ -297,6 +297,11 @@ export async function paintRequestSheet(
     return String(context.fillStyle);
   };
 
+  const statusInk = (hue: string): string => {
+    const share = oklchLightness(palette.bg) < 0.5 ? STATUS_INK_SHARE.dark : STATUS_INK_SHARE.light;
+    return mixSrgb(hue, palette.fg, (100 - share) / 100);
+  };
+
   const drawSegment = (segment: SheetSegment, x: number, centreY: number, width: number) => {
     if (segment.kind === 'mask') {
       wash(palette.fg, 0.2, x, centreY - MASK_HEIGHT / 2, width, MASK_HEIGHT, 2);
@@ -351,12 +356,16 @@ export async function paintRequestSheet(
     if (segment.kind === 'dot') {
       const hue = dotColor(segment);
       const inset = segment.isWashed ? 8 : 0;
-      if (segment.isWashed) wash(hue, 0.1, x, centreY - 10, width, 20, RADIUS.sm);
+      if (segment.isWashed) wash(hue, HUE_TINT, x, centreY - 11, width, 22, RADIUS.sm);
       context.fillStyle = hue;
       context.beginPath();
       context.arc(x + inset + 3, centreY, 3, 0, Math.PI * 2);
       context.fill();
-      context.fillStyle = segment.textTone ? toneColor(palette, segment.textTone) : hue;
+      context.fillStyle = segment.textTone
+        ? toneColor(palette, segment.textTone)
+        : segment.isWashed
+          ? statusInk(hue)
+          : hue;
       context.fillText(segment.text, x + inset + 12, centreY + 0.5);
       return;
     }

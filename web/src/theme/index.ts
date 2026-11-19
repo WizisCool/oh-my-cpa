@@ -14,6 +14,8 @@ export {
   CORE_TOKEN_CONTRAST_ROLES,
   CORE_TOKEN_KEYS,
   EDGE_STEPS,
+  STATUS_INK_SHARE,
+  STATUS_TINT_SHARE,
   THEME_MODES,
   builtInPalettesForMode,
   contrastRatio,

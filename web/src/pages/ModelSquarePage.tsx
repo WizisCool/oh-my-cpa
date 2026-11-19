@@ -189,7 +189,7 @@ const ModelRow: React.FC<ModelRowProps> = React.memo(({ entry, ledger, providers
       <span className={styles['model-price']} data-tip={t('models.price_head')}>
         {price.status === 'priced' && <>{formatRatePer1M(price.price.prompt_price_per_1m)} / {formatRatePer1M(price.price.completion_price_per_1m)}</>}
         {price.status === 'unpriced' && (onSetPrice && ledger.pricingTargets.length > 0
-          ? <button type="button" className={styles['set-price']} onClick={() => onSetPrice(entry.identity)}><StatusLabel tone="warn">{t('pricing.set_price')}</StatusLabel></button>
+          ? <button type="button" className={styles['set-price']} onClick={() => onSetPrice(entry.identity)}><StatusLabel tone="warn" trailing={<RightOutlined />}>{t('pricing.set_price')}</StatusLabel></button>
           : <StatusLabel tone="warn">{t('models.unpriced')}</StatusLabel>)}
       </span>
       <span className={styles['model-sources']}>

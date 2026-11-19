@@ -153,6 +153,9 @@
   --success: #10b981;
   --warn: #f59e0b;
   --danger: #ef4444;
+  /* Semantic share mixed with `--fg` for `StatusLabel` text (`STATUS_INK_SHARE` in `palette.ts`),
+     keeping every toned chip above WCAG AA (4.5:1) on its tinted wash across all palettes. */
+  --status-ink-share: 80%;
   /* The request duration ramp's two stops, mixed in OKLCH by the browser: green at an instant,
      orange from a minute on, every wait in between on the way. Red is deliberately absent - a slow
      request is slow, not broken, and the danger hue belongs to failures. The stops are solved as a
@@ -467,6 +470,7 @@
   --success: #059669;
   --warn: #b45309;
   --danger: #dc2626;
+  --status-ink-share: 65%;
   --timing-green: #057451;
   --timing-orange: #952e02;
   /* The same two hues read as their darker steps on a light page; a saturated
@@ -1097,28 +1101,73 @@ h1, h2, h3, h4 { font-family: inherit; }
 .panel-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel-title-extra { display: inline-flex; align-items: center; gap: 8px; font-weight: 400; }
 
-/* A state as pip + word (`StatusLabel`). The word keeps the reading ink; the pip alone carries tone. */
+/* A state as a tinted chip led by a 6px pip (`StatusLabel`): soft semantic wash without an inset
+   rim, matching pip and tone ink, on the console's shared chip geometry (22px high, 18px small,
+   `--radius-sm`, weight 500) so states across lists, drawers, cards and toolbars speak one visual
+   language. */
 .status-label {
+  --status-tone: var(--fg-2);
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--fg-2);
+  box-sizing: border-box;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  color: var(--status-tone);
   font-size: var(--text-sm);
-  line-height: 1.4;
+  font-weight: 500;
+  line-height: 1;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}
+.status-label.is-small {
+  height: 18px;
+  padding: 0 6px;
+  gap: 5px;
+  font-size: var(--text-xs);
 }
 .status-label-pip {
   flex-shrink: 0;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--meta);
+  background: var(--status-tone);
 }
-.status-label.is-success .status-label-pip { background: var(--success); }
-.status-label.is-warn .status-label-pip { background: var(--warn); }
-.status-label.is-danger .status-label-pip { background: var(--danger); }
-.status-label.is-accent .status-label-pip { background: var(--accent); }
-.status-label.is-neutral { color: var(--muted); }
+.status-label.is-small .status-label-pip {
+  width: 5px;
+  height: 5px;
+}
+.status-label.is-neutral .status-label-pip {
+  background: var(--muted);
+}
+.status-label-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.status-label-trailing {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  margin-inline-start: -2px;
+  font-size: var(--text-xs);
+  opacity: 0.78;
+}
+.status-label.is-success { --status-tone: var(--success); }
+.status-label.is-warn { --status-tone: var(--warn); }
+.status-label.is-danger { --status-tone: var(--danger); }
+.status-label.is-accent { --status-tone: var(--accent); }
+.status-label.is-success,
+.status-label.is-warn,
+.status-label.is-danger,
+.status-label.is-accent {
+  background: color-mix(in srgb, var(--status-tone) 12%, transparent);
+  color: color-mix(in srgb, var(--status-tone) var(--status-ink-share), var(--fg));
+}
 
 /* EmptyState (components/common/EmptyState.tsx). A centred column: the mark, the state, one
    further line, one action. The mark is the rows that are not there - three rules from the border

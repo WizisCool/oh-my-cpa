@@ -16,6 +16,7 @@ import {
 import { successRateTone, type VerdictTone } from '../../types/usageEventMetrics';
 import { EmptyState } from '../common/EmptyState';
 import { SectionHeading } from '../common/SectionHeading';
+import { StatusLabel } from '../common/StatusLabel';
 import { Tag } from '../common/Tag';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { ProviderActivityStrip } from './ProviderActivityStrip';
@@ -279,7 +280,7 @@ function ProviderRow({ provider, blocks, isPhone, hasActivityGrid, activityLabel
             <Tag size="small" tone="accent">{t('dash.providers_type_oauth')}</Tag>
           )}
           {provider.disabled && (
-            <Tag size="small" tone="danger">{t('dash.providers_status_disabled')}</Tag>
+            <StatusLabel size="small" tone="danger">{t('dash.providers_status_disabled')}</StatusLabel>
           )}
           <RightOutlined className="provider-jump-arrow" aria-hidden="true" />
         </div>

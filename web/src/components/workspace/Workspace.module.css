@@ -294,13 +294,6 @@
 .pip[data-tone='warning'] { background: var(--warn); }
 .pip[data-tone='error'] { background: var(--danger); }
 
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
 .answer {
   display: flex;
   flex-direction: column;

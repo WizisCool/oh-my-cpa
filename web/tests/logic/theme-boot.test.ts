@@ -21,6 +21,8 @@ import {
   CONTRAST_FLOORS,
   CORE_TOKEN_CONTRAST_ROLES,
   CORE_TOKEN_KEYS,
+  STATUS_INK_SHARE,
+  STATUS_TINT_SHARE,
   contrastRatio,
   derivePalette,
   exportThemeManifest,
@@ -282,6 +284,39 @@ test('every built-in palette clears all text, hint, quiet, primary and accent co
   }
 });
 
+test('status label chips clear WCAG AA contrast on bg and surface in every built-in palette and match CSS shares', () => {
+  const css = readFileSync(path.join(sourceRoot, 'index.css'), 'utf8');
+  const block = (selector: string) => {
+    const start = css.indexOf(`${selector} {`);
+    return css.slice(start, css.indexOf('\n}', start));
+  };
+  assert.equal(Number(/--status-ink-share:\s*(\d+)%;/.exec(block(':root'))?.[1]), STATUS_INK_SHARE.dark);
+  assert.equal(Number(/--status-ink-share:\s*(\d+)%;/.exec(block(":root[data-theme-mode='light']"))?.[1]), STATUS_INK_SHARE.light);
+
+  const floor = CONTRAST_FLOORS.text ?? 4.5;
+  for (const definition of BUILT_IN_PALETTES) {
+    const { palette } = resolvedBuiltInPalette(definition.id);
+    const inkMix = (100 - STATUS_INK_SHARE[definition.mode]) / 100;
+    const tintMix = STATUS_TINT_SHARE / 100;
+    for (const [groundName, ground] of [['bg', palette.bg], ['surface', palette.surface]] as const) {
+      for (const [toneName, hue] of [
+        ['success', palette.success],
+        ['warn', palette.warn],
+        ['danger', palette.danger],
+        ['accent', palette.accent],
+      ] as const) {
+        const ink = mixSrgb(hue, palette.fg, inkMix);
+        const wash = mixSrgb(ground, hue, tintMix);
+        const ratio = contrastRatio(ink, wash);
+        assert.ok(ratio >= floor, `${definition.id} ${toneName} on ${groundName} (${ratio.toFixed(2)}) < ${floor}`);
+      }
+      const neutralWash = mixSrgb(ground, palette.fg, 0.06);
+      const neutralRatio = contrastRatio(palette.fg2, neutralWash);
+      assert.ok(neutralRatio >= floor, `${definition.id} neutral on ${groundName} (${neutralRatio.toFixed(2)}) < ${floor}`);
+    }
+  }
+});
+
 test('open theme SDK validates manifests, registers external themes, and falls back cleanly on removal', () => {
   const builtInSet = new Set(BUILT_IN_PALETTE_IDS);
   assert.equal(validateThemeManifest({ schemaVersion: 1, id: 'omc-dark', mode: 'dark', label: 'Clash', core: {} }, builtInSet).ok, false);
@@ -457,7 +492,7 @@ test('stylesheets follow the console reduced-motion policy, not the system query
 });
 
 const DOM_FORWARDING_PRIMITIVES = new Set([
-  'Button', 'Input', 'Textarea', 'Checkbox', 'Switch', 'Badge', 'Tag',
+  'Button', 'Input', 'Textarea', 'Checkbox', 'Switch', 'Tag',
   'Select', 'SelectTrigger', 'Combobox', 'AutoComplete', 'NumberInput',
   'TimePicker', 'ColorPicker', 'Slider', 'Segmented', 'ToggleGroup', 'ToggleGroupItem',
   'DropdownMenuTrigger', 'PopoverTrigger', 'DialogTrigger', 'SheetTrigger', 'TabsTrigger',

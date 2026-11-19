@@ -3,7 +3,7 @@ import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { StatusDot } from '@/components/ui/badge';
+import { StatusLabel, type StatusTone } from '../components/common/StatusLabel';
 import clsx from 'clsx';
 import { TablePlaceholder } from '../components/common/ContentPlaceholder';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
@@ -595,14 +595,14 @@ export const UsageEventsPage: React.FC = () => {
       selection,
     ],
   );
-  const ingestTone =
+  const ingestTone: StatusTone =
     !status || ingest.isError
-      ? 'default'
+      ? 'neutral'
       : status.enabled === false
-        ? 'default'
+        ? 'neutral'
         : status.healthy === true && !status.collector?.coverage_gaps
           ? 'success'
-          : 'warning';
+          : 'warn';
   const ingestLabel =
     !status || ingest.isError
       ? 'events.ingest_unknown'
@@ -628,8 +628,8 @@ export const UsageEventsPage: React.FC = () => {
               <Popover>
                 <PopoverTrigger
                   render={
-                    <Button variant="ghost">
-                      <StatusDot status={ingestTone} text={t(ingestLabel)} />
+                    <Button variant="ghost" className="request-ingest-trigger">
+                      <StatusLabel tone={ingestTone}>{t(ingestLabel)}</StatusLabel>
                     </Button>
                   }
                 />

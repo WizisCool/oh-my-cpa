@@ -1,12 +1,12 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { CheckOutlined, FormatPainterOutlined } from '../icons';
+import { FormatPainterOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { parsePluginConfig, pluginConfigSummary } from './pluginConfig';
 import styles from './PluginConfigEditor.module.css';
 import { Notice } from '../feedback';
-import { Tag } from '../common/Tag';
+import { StatusLabel } from '../common/StatusLabel';
 
 
 export interface PluginConfigEditorProps {
@@ -34,11 +34,11 @@ export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, o
       <div className={styles.toolbar}>
         <div className={styles.validity}>
           {parsed.error === 'duplicate-key' ? (
-            <Tag tone="danger">{t('plugin.config_duplicate_key', { key: parsed.key ?? '' })}</Tag>
+            <StatusLabel tone="danger">{t('plugin.config_duplicate_key', { key: parsed.key ?? '' })}</StatusLabel>
           ) : parsed.error ? (
-            <Tag tone="danger">{t('plugin.config_invalid_json')}</Tag>
+            <StatusLabel tone="danger">{t('plugin.config_invalid_json')}</StatusLabel>
           ) : (
-            <Tag tone="success" icon={<CheckOutlined />}>{t('plugin.config_valid')}</Tag>
+            <StatusLabel tone="success">{t('plugin.config_valid')}</StatusLabel>
           )}
           <span className="text-muted-foreground">{t('plugin.config_top_level', { n: summary.length })}</span>
         </div>

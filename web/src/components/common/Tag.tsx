@@ -14,8 +14,9 @@ export interface TagProps extends React.HTMLAttributes<HTMLSpanElement> {
 }
 
 /**
- * A short label on a tinted chip: a kind ("OAuth", "Plugin"), a count, or a verdict that needs more
- * weight than `StatusLabel`'s pip - a banner-level state in a drawer head, a permission on a card.
+ * A short label on a tinted chip: a kind ("OAuth", "Plugin"), a count, or a capability attribute.
+ * Statuses and outcomes belong to `StatusLabel`, which pairs the same chip geometry with a leading
+ * dot and no inset rim.
  *
  * It has no margin. Ant Design's tag carried one, so half its call sites zeroed it inline and the
  * other half depended on it; spacing between a tag and its neighbour belongs to their container.

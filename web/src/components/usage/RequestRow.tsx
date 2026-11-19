@@ -48,6 +48,7 @@ import { useToast } from '../feedback';
 import { isRangeCheckboxClick, rowClickIntent } from '../../types/rowSelection';
 import './RequestList.css';
 import './requestMarks.css';
+import { StatusLabel } from '../common/StatusLabel';
 import { EffortTag, Tag } from '../common/Tag';
 
 export interface RequestRowProps {
@@ -263,29 +264,29 @@ export const RequestRow = React.memo<RequestRowProps>(
           </div>
         </div>
 
-        {/* Column 2: outcome (success/failure pill) */}
+        {/* Column 2: outcome (success/failure status) */}
         <div className={`req-col req-col-result ${requestColumnAlignClass('result')}`}>
           <span className="req-mobile-label">{t('events.col_result')}</span>
           {event.failed && event.fail_status_code ? (
             // The status is what the list knows; the popup reads the upstream's
             // error body for this record when the pill is hovered or focused.
-            <span
-              className="req-result-pill is-failed has-detail"
+            <StatusLabel
+              tone="danger"
+              className="req-result-pill has-detail"
               data-request-failure={event.id}
               data-request-tooltip={`HTTP ${event.fail_status_code}`}
             >
-              <i className="req-result-bullet" />
               {resultLabel}
-            </span>
+            </StatusLabel>
           ) : (
-            <span
-              className={`req-result-pill ${event.failed ? 'is-failed' : 'is-success'}`}
+            <StatusLabel
+              tone={event.failed ? 'danger' : 'success'}
+              className="req-result-pill"
               data-request-tooltip={resultLabel}
               data-request-tooltip-overflow=""
             >
-              <i className="req-result-bullet" />
               {resultLabel}
-            </span>
+            </StatusLabel>
           )}
         </div>
 

@@ -36,6 +36,14 @@ import {
 // Live labels sweep this same foreground over secondary ink; motion adds no palette colour.
 export const THREAD_FILL_SHARES = { field: 5, fieldHover: 8, hairline: 12 } as const;
 
+/**
+ * Semantic share (in percent) kept when mixing `StatusLabel` text toward `--fg` so toned labels
+ * clear WCAG AA (>= 4.5:1) against their 12% tinted wash on both `bg` and `surface` in every
+ * built-in palette. Mirrored by `--status-ink-share` in `index.css` and `requestSheetPainter.ts`.
+ */
+export const STATUS_INK_SHARE: Readonly<Record<ThemeMode, number>> = { dark: 80, light: 65 };
+export const STATUS_TINT_SHARE = 12;
+
 export type ThemeMode = 'dark' | 'light';
 
 export const THEME_MODES: readonly ThemeMode[] = ['dark', 'light'];

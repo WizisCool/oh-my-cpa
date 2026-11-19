@@ -31,6 +31,7 @@ import { FactList } from '../../components/common/FactList';
 import { SearchSelect } from '../../components/common/SearchSelect';
 import { SectionHeading } from '../../components/common/SectionHeading';
 import { SecretInput } from '../../components/common/SecretInput';
+import { StatusLabel } from '../../components/common/StatusLabel';
 import { Tag } from '../../components/common/Tag';
 import { PluginOriginBadge } from '../../components/plugins/PluginParts';
 
@@ -438,12 +439,12 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                           {t('oauth.submit_callback_btn')}
                         </Button>
                         {session?.callbackStatus === 'success' && (
-                          <Tag tone="success" icon={<CheckCircleOutlined />}>{t('oauth.callback_submitted')}</Tag>
+                          <StatusLabel tone="success">{t('oauth.callback_submitted')}</StatusLabel>
                         )}
                         {session?.callbackStatus === 'error' && (
-                          <Tag tone="danger" icon={<CloseCircleOutlined />}>
+                          <StatusLabel tone="danger">
                             {session.callbackError || t('oauth.callback_failed', { msg: '' })}
-                          </Tag>
+                          </StatusLabel>
                         )}
                       </div>
                     </div>
