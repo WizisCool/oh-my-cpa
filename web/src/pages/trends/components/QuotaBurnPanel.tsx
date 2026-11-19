@@ -137,8 +137,9 @@ export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
       ? window.projected_exhaust_at_ms
       : undefined;
     const activeWindowLabel = windowLabels.get(window.window_id) ?? quotaWindowName(window, t, windows);
+    const showCycleMeasure = view === 'cycles' && !isPhysicalUnavailable && cycles.length > 0;
     return (
-      <div className={styles['panel-body']}>
+      <div className={`${styles['panel-body']} ${styles['quota-body']}`}>
         {isStaleOrExpired && (
           <Notice
             tone="warning"
@@ -146,7 +147,7 @@ export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
             description={t('trends.quota.stale_notice', { at: dayjs(credential.observed_at_ms).format('MM-DD HH:mm') })}
           />
         )}
-        <div className={styles['quota-pickers']}>
+        <div className={styles['quota-toolbar']}>
           <Select
             size="small"
             className={styles['quota-credential-select']}
@@ -182,83 +183,98 @@ export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
               />
             </div>
           )}
+          <div className={styles['quota-toolbar-end']}>
+            {showCycleMeasure && (
+              <Segmented
+                size="sm"
+                className={styles['cycle-measure']}
+                value={cycleMeasure}
+                onChange={(next) => setCycleMeasure(next as 'net_tokens' | 'requests')}
+                aria-label={t('trends.quota.cycle_measure')}
+                options={[
+                  { value: 'net_tokens', label: t('trends.metric.net_tokens') },
+                  { value: 'requests', label: t('trends.metric.requests') },
+                ]}
+              />
+            )}
+            <span className={styles['quota-links']}>
+              <ToolButton
+                size="sm"
+                variant="ghost"
+                className="row-action-btn"
+                icon={<LoginOutlined />}
+                label={t('trends.quota.open_credentials')}
+                onClick={() => onNavigate('/oauth-management')}
+              />
+              <ToolButton
+                size="sm"
+                variant="ghost"
+                className="row-action-btn"
+                icon={<HistoryOutlined />}
+                label={t('trends.view_requests')}
+                disabled={!eventsHref}
+                onClick={() => {
+                  const href = isPhysicalUnavailable
+                    ? null
+                    : quotaEventsHref(credential.auth_index, window, resolveNowMs?.() ?? nowMs);
+                  if (href) onNavigate(href);
+                }}
+                data-testid="trends-quota-events"
+              />
+            </span>
+          </div>
         </div>
-        <div className={styles['quota-head']}>
-          <dl className={styles['quota-figures']}>
+        <dl className={styles['quota-figures']}>
+          <div className={styles['quota-figure']}>
+            <dt>{t('trends.quota.used')}</dt>
+            <dd
+              data-tone={window.status === 'limit_reached' ? 'danger' : window.status === 'projected_exhaust' ? 'warn' : undefined}
+              data-testid="trends-quota-used"
+              {...tipCard({
+                rows: isPhysicalUnavailable
+                  ? [{ value: t('trends.quota.physical_unavailable'), tone: 'muted' }]
+                  : [
+                      { value: t('trends.quota.current_net', { value: formatTokens(window.current_net_tokens, style) }) },
+                      { value: t('trends.quota.current_requests', { n: window.current_requests.toLocaleString('en') }) },
+                    ],
+                notes: [
+                  t('trends.quota.observed', { at: dayjs(credential.observed_at_ms).format('MM-DD HH:mm') }),
+                  ...(window.is_approximate && !isPhysicalUnavailable ? [t('trends.quota.approximate_hint')] : []),
+                ],
+              })}
+            >
+              {formatPercent(window.used_percent)}
+            </dd>
+          </div>
+          {isExhausted ? (
             <div className={styles['quota-figure']}>
-              <dt>{t('trends.quota.used')}</dt>
-              <dd
-                data-tone={window.status === 'limit_reached' ? 'danger' : window.status === 'projected_exhaust' ? 'warn' : undefined}
-                data-testid="trends-quota-used"
-                {...tipCard({
-                  rows: isPhysicalUnavailable
-                    ? [{ value: t('trends.quota.physical_unavailable'), tone: 'muted' }]
-                    : [
-                        { value: t('trends.quota.current_net', { value: formatTokens(window.current_net_tokens, style) }) },
-                        { value: t('trends.quota.current_requests', { n: window.current_requests.toLocaleString('en') }) },
-                      ],
-                  notes: [
-                    t('trends.quota.observed', { at: dayjs(credential.observed_at_ms).format('MM-DD HH:mm') }),
-                    ...(window.is_approximate && !isPhysicalUnavailable ? [t('trends.quota.approximate_hint')] : []),
-                  ],
-                })}
-              >
-                {formatPercent(window.used_percent)}
-              </dd>
+              <dt>{t('trends.quota.fact.exhausted')}</dt>
+              <dd data-tone="danger">{instant(window.exhausted_at_ms!)}</dd>
             </div>
-            {isExhausted ? (
-              <div className={styles['quota-figure']}>
-                <dt>{t('trends.quota.fact.exhausted')}</dt>
-                <dd data-tone="danger">{instant(window.exhausted_at_ms!)}</dd>
-              </div>
-            ) : projectedExhaustAt !== undefined ? (
-              <div className={styles['quota-figure']}>
-                <dt>{t('trends.quota.fact.exhaust')}</dt>
-                <dd data-tone="warn">{instant(projectedExhaustAt)}</dd>
-              </div>
-            ) : window.projected_end_percent !== undefined ? (
-              <div className={styles['quota-figure']}>
-                <dt>{t('trends.quota.fact.projected_end')}</dt>
-                <dd>{formatPercent(window.projected_end_percent)}</dd>
-              </div>
-            ) : null}
-            {window.cycle_reset_ms > nowMs && (
-              <div className={styles['quota-figure']}>
-                <dt>{t('trends.quota.fact.reset')}</dt>
-                <dd data-tip={dayjs(window.cycle_reset_ms).format('YYYY-MM-DD HH:mm')}>{countdown(window.cycle_reset_ms - nowMs)}</dd>
-              </div>
-            )}
-            {window.burn_rate_per_hour !== undefined && (
-              <div className={styles['quota-figure']}>
-                <dt>{t('trends.quota.fact.burn')}</dt>
-                <dd>{t('trends.quota.fact.burn_value', { rate: formatPercent(window.burn_rate_per_hour, 2) })}</dd>
-              </div>
-            )}
-          </dl>
-          <span className={styles['quota-links']}>
-            <ToolButton
-              size="sm"
-              variant="ghost"
-              icon={<LoginOutlined />}
-              label={t('trends.quota.open_credentials')}
-              onClick={() => onNavigate('/oauth-management')}
-            />
-            <ToolButton
-              size="sm"
-              variant="ghost"
-              icon={<HistoryOutlined />}
-              label={t('trends.view_requests')}
-              disabled={!eventsHref}
-              onClick={() => {
-                const href = isPhysicalUnavailable
-                  ? null
-                  : quotaEventsHref(credential.auth_index, window, resolveNowMs?.() ?? nowMs);
-                if (href) onNavigate(href);
-              }}
-              data-testid="trends-quota-events"
-            />
-          </span>
-        </div>
+          ) : projectedExhaustAt !== undefined ? (
+            <div className={styles['quota-figure']}>
+              <dt>{t('trends.quota.fact.exhaust')}</dt>
+              <dd data-tone="warn">{instant(projectedExhaustAt)}</dd>
+            </div>
+          ) : window.projected_end_percent !== undefined ? (
+            <div className={styles['quota-figure']}>
+              <dt>{t('trends.quota.fact.projected_end')}</dt>
+              <dd>{formatPercent(window.projected_end_percent)}</dd>
+            </div>
+          ) : null}
+          {window.cycle_reset_ms > nowMs && (
+            <div className={styles['quota-figure']}>
+              <dt>{t('trends.quota.fact.reset')}</dt>
+              <dd data-tip={dayjs(window.cycle_reset_ms).format('YYYY-MM-DD HH:mm')}>{countdown(window.cycle_reset_ms - nowMs)}</dd>
+            </div>
+          )}
+          {window.burn_rate_per_hour !== undefined && (
+            <div className={styles['quota-figure']}>
+              <dt>{t('trends.quota.fact.burn')}</dt>
+              <dd>{t('trends.quota.fact.burn_value', { rate: formatPercent(window.burn_rate_per_hour, 2) })}</dd>
+            </div>
+          )}
+        </dl>
         {view === 'burn' ? (
           points.length === 0 ? (
             <EmptyState size="compact" title={t('trends.quota.no_buckets')} />
@@ -283,22 +299,9 @@ export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
         ) : cycles.length === 0 ? (
           <EmptyState size="compact" title={t('trends.quota.no_cycles')} />
         ) : (
-          <>
-            <Segmented
-              size="sm"
-              className={styles['cycle-measure']}
-              value={cycleMeasure}
-              onChange={(next) => setCycleMeasure(next as 'net_tokens' | 'requests')}
-              aria-label={t('trends.quota.cycle_measure')}
-              options={[
-                { value: 'net_tokens', label: t('trends.metric.net_tokens') },
-                { value: 'requests', label: t('trends.metric.requests') },
-              ]}
-            />
-            <React.Suspense fallback={<div className="chart-placeholder" style={{ height: 260 }} aria-hidden="true" />}>
-              <QuotaCyclesChart cycles={cycles} measure={cycleMeasure} label={t('trends.quota.view.cycles')} />
-            </React.Suspense>
-          </>
+          <React.Suspense fallback={<div className="chart-placeholder" style={{ height: 260 }} aria-hidden="true" />}>
+            <QuotaCyclesChart cycles={cycles} measure={cycleMeasure} label={t('trends.quota.view.cycles')} />
+          </React.Suspense>
         )}
       </div>
     );
