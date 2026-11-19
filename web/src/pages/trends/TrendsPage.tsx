@@ -582,6 +582,8 @@ export const TrendsPage: React.FC = () => {
             filters={view.filters}
             isDemo={isDemo}
             canFilterTrends={!isDemo}
+            isPollingActive={isPollingActive}
+            isStale={telemetry !== undefined && !currentTelemetry}
             pairHref={(pair: TrendsSubstitutionPair) => (currentTelemetry?.window ? substitutionEventsHref(currentTelemetry.window, view.filters, pair, { isDemo }) : null)}
             isEntityFiltered={(dimension, id) => Boolean(view.filters[stabilityFilterKeyForDim(dimension)]?.includes(id))}
             onToggleFilter={(dimension, id) => {

@@ -158,6 +158,8 @@ export default {
   'trends.stability.slice_empty': 'Tiada butiran kegagalan direkodkan untuk rentang ini',
   'trends.stability.demo_slice_unavailable': 'Butiran mengikut selang untuk jenis kegagalan ini tidak disimpan dalam demo',
   'trends.stability.demo_slice_partial': 'Demo hanya menyimpan sebahagian selang ini, jadi senarai penggantian mungkin tidak lengkap',
+  'trends.stability.demo_slice_partial_failures': 'Demo hanya menyimpan sebahagian selang ini, jadi kiraan mencerminkan sampel yang tersedia',
+  'trends.stability.partial_breakdown': 'Menunjukkan {n} kumpulan kegagalan teratas dalam tempoh ini',
   'trends.stability.show_more': 'Tunjuk {n} lagi',
   'trends.stability.show_less': 'Tunjuk kurang',
   'trends.stability.manage_provider': 'Urus penyedia',

@@ -110,9 +110,10 @@ type TrendsTelemetryResponseDTO struct {
 	Groups            []trendsGroupName                `json:"groups,omitempty"`
 	Series            []TrendsTelemetryGroupSeriesDTO  `json:"series"`
 	Scatter           []TrendsTelemetryScatterPointDTO `json:"scatter"`
-	SubstitutionPairs []TrendsSubstitutionPairDTO      `json:"substitution_pairs"`
-	FailureGroups     []TrendsFailureGroupDTO          `json:"failure_groups"`
-	Coverage          TrendsTelemetryCoverageDTO       `json:"coverage"`
+	SubstitutionPairs      []TrendsSubstitutionPairDTO      `json:"substitution_pairs"`
+	FailureGroups          []TrendsFailureGroupDTO          `json:"failure_groups"`
+	FailureGroupsTruncated bool                             `json:"failure_groups_truncated,omitempty"`
+	Coverage               TrendsTelemetryCoverageDTO       `json:"coverage"`
 }
 
 // maxTelemetryPercentileSamples bounds overall sample storage used for
@@ -122,7 +123,6 @@ type TrendsTelemetryResponseDTO struct {
 const maxTelemetryPercentileSamples = 2048
 const maxTelemetryBucketPercentileSamples = 512
 const maxTelemetryFailureGroups = 64
-const maxTelemetryFailureStatusCodes = 6
 
 type trendsTelemetrySampleReservoir struct {
 	count   int
@@ -603,14 +603,19 @@ func (h *Handler) readTrendsTelemetry(ctx context.Context, request *http.Request
 				}
 				return left.Code - right.Code
 			})
-			if len(codes) > maxTelemetryFailureStatusCodes {
-				codes = codes[:maxTelemetryFailureStatusCodes]
-			}
 			dto.StatusCodes = codes
 		}
 		result.FailureGroups = append(result.FailureGroups, dto)
 	}
-	slices.SortFunc(result.FailureGroups, func(left, right TrendsFailureGroupDTO) int {
+	result.FailureGroups, result.FailureGroupsTruncated = boundFailureGroups(result.FailureGroups, maxTelemetryFailureGroups)
+	return result, nil
+}
+
+// boundFailureGroups sorts failure attribution tuples by impact and caps the
+// wire payload to `limit`, ensuring every active failure lane retains its top
+// culprit even when more than `limit` tuples failed in the window.
+func boundFailureGroups(groups []TrendsFailureGroupDTO, limit int) ([]TrendsFailureGroupDTO, bool) {
+	compare := func(left, right TrendsFailureGroupDTO) int {
 		switch {
 		case left.FailedRequests != right.FailedRequests:
 			if left.FailedRequests > right.FailedRequests {
@@ -629,9 +634,49 @@ func (h *Handler) readTrendsTelemetry(ctx context.Context, request *http.Request
 		default:
 			return strings.Compare(left.AuthIndex, right.AuthIndex)
 		}
-	})
-	if len(result.FailureGroups) > maxTelemetryFailureGroups {
-		result.FailureGroups = result.FailureGroups[:maxTelemetryFailureGroups]
 	}
-	return result, nil
+	slices.SortFunc(groups, compare)
+	if limit <= 0 || len(groups) <= limit {
+		return groups, false
+	}
+	kept := make([]bool, len(groups))
+	laneGetters := []func(TrendsFailureGroupDTO) int64{
+		func(g TrendsFailureGroupDTO) int64 { return g.RateLimited429 },
+		func(g TrendsFailureGroupDTO) int64 { return g.Upstream5xx },
+		func(g TrendsFailureGroupDTO) int64 { return g.StreamTruncated },
+		func(g TrendsFailureGroupDTO) int64 { return g.ForceCooldown },
+		func(g TrendsFailureGroupDTO) int64 { return g.OtherFailures },
+	}
+	reserved := 0
+	for _, get := range laneGetters {
+		bestIdx := -1
+		var bestCount int64
+		for i, g := range groups {
+			c := get(g)
+			if c > bestCount {
+				bestCount = c
+				bestIdx = i
+			}
+		}
+		if bestIdx >= 0 && !kept[bestIdx] && reserved < limit {
+			kept[bestIdx] = true
+			reserved++
+		}
+	}
+	bounded := make([]TrendsFailureGroupDTO, 0, limit)
+	for i, g := range groups {
+		if kept[i] {
+			bounded = append(bounded, g)
+		}
+	}
+	for i, g := range groups {
+		if len(bounded) >= limit {
+			break
+		}
+		if !kept[i] {
+			bounded = append(bounded, g)
+		}
+	}
+	slices.SortFunc(bounded, compare)
+	return bounded, true
 }

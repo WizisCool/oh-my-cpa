@@ -766,4 +766,19 @@ test('failure category filter dirties an unfiltered draft, serialises onto the w
   assert.equal(wire.get('model'), 'gpt-5');
   assert.deepEqual(rejectedEventParams(new URLSearchParams('failure=rate_limited_429')), []);
   assert.deepEqual(rejectedEventParams(new URLSearchParams('failure=unknown_lane')), ['failure']);
+
+  // Toolbar result transitions: switching to success clears only `failure` and keeps unrelated filters,
+  // while switching to all or failed preserves `failure`.
+  const withFailure = new URLSearchParams('preset=24h&result=failed&failure=rate_limited_429&model=gpt-5');
+  const currentFilters = readFilterParams(withFailure);
+  const toSuccess = replaceFilters(withFailure, currentFilters, { result: 'success' });
+  assert.equal(toSuccess.get('result'), 'success');
+  assert.equal(toSuccess.get('failure'), null);
+  assert.deepEqual(toSuccess.getAll('model'), ['gpt-5']);
+  const toAll = replaceFilters(withFailure, currentFilters, { result: 'all' });
+  assert.equal(toAll.get('result'), null);
+  assert.equal(toAll.get('failure'), 'rate_limited_429');
+  const toFailed = replaceFilters(toAll, readFilterParams(toAll), { result: 'failed' });
+  assert.equal(toFailed.get('result'), 'failed');
+  assert.equal(toFailed.get('failure'), 'rate_limited_429');
 });

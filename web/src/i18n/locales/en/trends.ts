@@ -158,6 +158,8 @@ export default {
   'trends.stability.slice_empty': 'No failure details recorded for this span',
   'trends.stability.demo_slice_unavailable': 'Per-interval details for this failure type are not captured in the demo',
   'trends.stability.demo_slice_partial': 'The demo captures only part of this interval, so the substitution list may be incomplete',
+  'trends.stability.demo_slice_partial_failures': 'The demo captures only part of this interval, so counts reflect the available sample',
+  'trends.stability.partial_breakdown': 'Showing the top {n} failure groups in this period',
   'trends.stability.show_more': 'Show {n} more',
   'trends.stability.show_less': 'Show fewer',
   'trends.stability.manage_provider': 'Manage provider',

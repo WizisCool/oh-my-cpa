@@ -649,6 +649,25 @@ test('stability failure attribution rolls up model, provider, credential and lan
   assert.equal(cappedRows[0]!.totalRequests, 0);
   assert.equal(cappedRows[0]!.failureRate, null);
 
+  // Truncated live failure groups suppress potentially understated rates via isPartial.
+  const partialLiveRows = aggregateStabilityFailures(groups, 'model', null, { isPartial: true });
+  assert.equal(partialLiveRows[0]!.failures, 14);
+  assert.equal(partialLiveRows[0]!.totalRequests, 0);
+  assert.equal(partialLiveRows[0]!.failureRate, null);
+
+  // When Demo list payloads omit fail_code, omitUncategorizedOther avoids misclassifying
+  // uncoded failures (such as a status-less stream truncation) as other_failures.
+  const uncodedDemo = deriveFailureGroupsFromEvents([
+    {
+      id: 3, event_key: 'e3', timestamp_ms: HOUR, provider: 'codex', auth_index: 'cred-1',
+      model: 'gpt-5', failed: true, generate: true, latency_ms: 100,
+      tokens: { input: 0, output: 0, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, total: 0 },
+      has_request_log: false,
+    },
+  ], { omitUncategorizedOther: true });
+  assert.equal(uncodedDemo[0]!.failed_requests, 1);
+  assert.equal(uncodedDemo[0]!.other_failures, 0);
+
   assert.deepEqual(deriveSubstitutionPairsFromEvents(sampleEvents), [
     { requested_model: 'gpt-5', served_model: 'gpt-5-mini', provider: 'codex', count: 1 },
   ]);
@@ -690,4 +709,11 @@ test('stability failure attribution rolls up model, provider, credential and lan
     target: 'oauth',
     href: '/oauth-management?provider=codex',
   });
+  // Multiple configured providers sharing a family must return null rather than falling through to OAuth.
+  const multiFamilyProviders = [
+    ...providers,
+    { id: 'codex-a', family: 'codex', name: 'Codex A', auth_indexes: [] },
+    { id: 'codex-b', family: 'codex', name: 'Codex B', auth_indexes: [] },
+  ];
+  assert.equal(resolveTrendsManagementTarget('provider', 'codex', credentials, multiFamilyProviders), null);
 });

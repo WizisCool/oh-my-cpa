@@ -18191,6 +18191,9 @@
             "$ref": "#/definitions/api.TrendsFailureGroupDTO"
           }
         },
+        "failure_groups_truncated": {
+          "type": "boolean"
+        },
         "group_by": {
           "type": "string"
         },

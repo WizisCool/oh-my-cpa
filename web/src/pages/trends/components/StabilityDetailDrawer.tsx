@@ -9,7 +9,7 @@ import { EmptyState } from '../../../components/common/EmptyState';
 import { FactList, type Fact } from '../../../components/common/FactList';
 import { MetaLine } from '../../../components/common/MetaLine';
 import { Tag } from '../../../components/common/Tag';
-import { LoadFailure } from '../../../components/feedback';
+import { LoadFailure, Notice } from '../../../components/feedback';
 import { ArrowRightOutlined, DownOutlined } from '../../../components/icons';
 import { useT } from '../../../i18n';
 import dayjs from '../../../utils/time';
@@ -118,6 +118,7 @@ const StabilityEventBody: React.FC<{ event: UsageEvent; isDemo: boolean }> = ({ 
   const body = detail?.fail_body?.trim() ?? '';
   const cause = requestFailureCause(undefined, detail?.fail_code);
   const relatedErrors = detailQuery.data?.related_errors ?? [];
+  const isRelatedErrorsPartial = Boolean(detailQuery.data?.partial_errors?.includes('related_errors'));
   const providerKeyMask = maskKeyText(detail?.provider_key_mask);
 
   return (
@@ -150,23 +151,30 @@ const StabilityEventBody: React.FC<{ event: UsageEvent; isDemo: boolean }> = ({ 
           <p className={styles['stability-event-note']}>{t('events.fail_no_body')}</p>
         )
       )}
-      {relatedErrors.length > 0 && (
+      {(relatedErrors.length > 0 || isRelatedErrorsPartial) && (
         <div className={styles['stability-related-errors']}>
-          <span className={styles['stability-event-meta-label']}>{t('trends.stability.drawer.related_errors', { n: relatedErrors.length })}</span>
-          {relatedErrors.slice(0, 3).map((err) => (
-            <div key={err.id} className={styles['stability-related-item']}>
-              <MetaLine>
-                {err.status_code > 0 && (
-                  <Tag size="small" tone="danger">
-                    {t('trends.stability.drawer.http_status', { code: err.status_code })}
-                  </Tag>
-                )}
-                {err.quota_reason && <span>{err.quota_reason}</span>}
-                {err.code && <span>{err.code}</span>}
-              </MetaLine>
-              {err.body?.trim() && <pre className={styles['stability-error-pre']}>{err.body.trim()}</pre>}
-            </div>
-          ))}
+          {isRelatedErrorsPartial && (
+            <Notice tone="warning" title={t('events.partial_errors')} data-testid="trends-stability-related-partial" />
+          )}
+          {relatedErrors.length > 0 && (
+            <>
+              <span className={styles['stability-event-meta-label']}>{t('trends.stability.drawer.related_errors', { n: relatedErrors.length })}</span>
+              {relatedErrors.slice(0, 3).map((err) => (
+                <div key={err.id} className={styles['stability-related-item']}>
+                  <MetaLine>
+                    {err.status_code > 0 && (
+                      <Tag size="small" tone="danger">
+                        {t('trends.stability.drawer.http_status', { code: err.status_code })}
+                      </Tag>
+                    )}
+                    {err.quota_reason && <span>{err.quota_reason}</span>}
+                    {err.code && <span>{err.code}</span>}
+                  </MetaLine>
+                  {err.body?.trim() && <pre className={styles['stability-error-pre']}>{err.body.trim()}</pre>}
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
       {(event.request_id || providerKeyMask) && (

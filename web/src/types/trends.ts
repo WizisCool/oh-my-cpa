@@ -300,6 +300,7 @@ export interface TrendsTelemetryResponse {
   scatter: TrendsScatterPoint[];
   substitution_pairs: TrendsSubstitutionPair[];
   failure_groups?: TrendsFailureGroup[];
+  failure_groups_truncated?: boolean;
   coverage: {
     fact_requests: number;
     retained_requests: number;

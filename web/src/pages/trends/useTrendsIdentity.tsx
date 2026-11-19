@@ -62,6 +62,7 @@ export function resolveTrendsManagementTarget(
   if (familyMatches.length === 1 && familyMatches[0]!.id) {
     return { target: 'provider', href: `/ai-providers?provider=${encodeURIComponent(familyMatches[0]!.id)}` };
   }
+  if (familyMatches.length > 1) return null;
   const oauthNorm = norm === 'anthropic' ? 'claude' : norm;
   for (const file of credentials.values()) {
     if (!file || file.is_archived) continue;

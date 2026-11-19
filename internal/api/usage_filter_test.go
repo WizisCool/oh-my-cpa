@@ -566,4 +566,27 @@ func TestUsageEventsFailureCategoryFilter(t *testing.T) {
 			}
 		}
 	}
+
+	// Empty stored client_agent rows normalize to "unknown" just like Trends telemetry.
+	if _, err := repo.SQL().ExecContext(t.Context(), `UPDATE usage_events SET client_agent = '' WHERE request_id = 'rl-429'`); err != nil {
+		t.Fatal(err)
+	}
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/usage/events?preset=24h&failure=rate_limited_429&client_agent=unknown")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("client_agent=unknown status=%d body=%s", response.StatusCode, payload)
+	}
+	var unknownPage struct {
+		Items []usageEventResponse `json:"items"`
+	}
+	decodeFilterJSON(t, payload, &unknownPage)
+	foundEmptyClient := false
+	for _, item := range unknownPage.Items {
+		if item.RequestID == "rl-429" {
+			foundEmptyClient = true
+			break
+		}
+	}
+	if !foundEmptyClient {
+		t.Fatalf("client_agent=unknown missed empty client_agent row: %+v", unknownPage.Items)
+	}
 }

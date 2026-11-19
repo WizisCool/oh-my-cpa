@@ -24,7 +24,7 @@ import { useT } from '../../../i18n';
 import dayjs from '../../../utils/time';
 import { useTimeZone } from '../../../utils/TimeZoneProvider';
 import { sharedResizeObserverHub } from '../../../performance/resizeObserverHub';
-import type { InsightsBucket } from '../../../types/insights';
+import { insightsPollInterval, type InsightsBucket } from '../../../types/insights';
 import type { TrendsSubstitutionPair, TrendsTelemetryResponse } from '../../../types/trends';
 import {
   STABILITY_ATTRIBUTION_DIMS,
@@ -70,6 +70,10 @@ export interface StabilityPanelProps {
   isDemo?: boolean;
   /** False in Demo mode where `/trends` window reads do not capture filtered dimensions. */
   canFilterTrends?: boolean;
+  /** Matches the parent Trends polling cadence while a live slice is open. */
+  isPollingActive?: boolean;
+  /** True while `data` is a `keepPreviousData` placeholder for an earlier range or filter set. */
+  isStale?: boolean;
   identity: TrendsIdentity;
   pairHref: (pair: TrendsSubstitutionPair) => string | null;
   isEntityFiltered: (dimension: StabilityAttributionDim, id: string) => boolean;
@@ -146,6 +150,8 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
   filters,
   isDemo = false,
   canFilterTrends = !isDemo,
+  isPollingActive = false,
+  isStale = false,
   identity,
   pairHref,
   isEntityFiltered,
@@ -232,13 +238,17 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
     }
   }, [data, isSelectedCellInWindow, selectedCell]);
 
+  const exactDisplayCell = React.useMemo(() => {
+    if (!selectedCell || !isSelectedCellInWindow) return null;
+    return displayCells.find(
+      (cell) => cell.start_ms === selectedCell.start_ms && cell.end_ms === selectedCell.end_ms,
+    ) ?? null;
+  }, [displayCells, isSelectedCellInWindow, selectedCell]);
+
   const activeCell = React.useMemo(() => {
     if (!selectedCell || !isSelectedCellInWindow) return null;
-    const freshExact = displayCells.find(
-      (cell) => cell.start_ms === selectedCell.start_ms && cell.end_ms === selectedCell.end_ms,
-    );
-    return freshExact ?? selectedCell;
-  }, [displayCells, isSelectedCellInWindow, selectedCell]);
+    return exactDisplayCell ?? selectedCell;
+  }, [exactDisplayCell, isSelectedCellInWindow, selectedCell]);
 
   const activeLane = React.useMemo(() => {
     if (selectedCell && !isSelectedCellInWindow) return null;
@@ -247,14 +257,16 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
 
   // Live deployments fetch the exact slice attribution from `/trends/telemetry`; Demo mode reads
   // all requests in the cell from `/usage/events` (successes + failures) so denominators stay honest.
-  // Demo list items omit `fail_code`, so protocol-level truncation/cooldown slices report unavailable.
+  // Demo list payloads omit `fail_code`, so lanes that depend on it report per-interval unavailable.
   const activeCellSpan = React.useMemo(
     () => (activeCell && data ? stabilityWindowForCell(data.window, activeCell) : null),
     [activeCell, data],
   );
   const isCellSliceUnaddressable = Boolean(activeCell && data && !activeCellSpan);
   const isDemoLaneSliceUnavailable = Boolean(
-    isDemo && activeCell && (activeLane === 'stream_truncated' || activeLane === 'force_cooldown'),
+    isDemo &&
+    activeCell &&
+    (activeLane === 'stream_truncated' || activeLane === 'force_cooldown' || activeLane === 'other_failures'),
   );
   const sliceTelemetryParams = React.useMemo(
     () => (activeCell && data && !isDemo ? stabilitySliceTelemetryParams(data.window, activeCell, filters) : null),
@@ -263,8 +275,10 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
   const sliceTelemetryQuery = useQuery({
     queryKey: ['trends-telemetry-slice', sliceTelemetryParams],
     queryFn: ({ signal }) => api.getTrendsTelemetry(sliceTelemetryParams!, signal),
-    enabled: sliceTelemetryParams !== null,
+    enabled: !isStale && sliceTelemetryParams !== null,
     staleTime: 15_000,
+    refetchOnWindowFocus: isPollingActive,
+    refetchInterval: isPollingActive && !isDemo && data?.window.open_end ? insightsPollInterval(data.window) : false,
     retry: (count, error) => apiErrorCode(error) !== 'demo_uncaptured' && count < 1,
     meta: { silent: true },
   });
@@ -276,14 +290,14 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
   const demoSliceEventsQuery = useQuery({
     queryKey: ['trends-stability-demo-slice', demoSliceEventsParams],
     queryFn: ({ signal }) => api.getUsageEvents(demoSliceEventsParams!, signal),
-    enabled: demoSliceEventsParams !== null,
+    enabled: !isStale && demoSliceEventsParams !== null,
     staleTime: 30_000,
     retry: false,
     meta: { silent: true },
   });
 
   const isSliceQueryEnabled = Boolean(
-    activeCell && !isDemoLaneSliceUnavailable && !isCellSliceUnaddressable && (isDemo ? demoSliceEventsParams !== null : sliceTelemetryParams !== null),
+    !isStale && activeCell && !isDemoLaneSliceUnavailable && !isCellSliceUnaddressable && (isDemo ? demoSliceEventsParams !== null : sliceTelemetryParams !== null),
   );
   const isSlicePending = Boolean(
     isSliceQueryEnabled && (isDemo ? demoSliceEventsQuery.isPending : sliceTelemetryQuery.isPending),
@@ -306,6 +320,12 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
     (demoSliceEventsQuery.data.has_more ||
       (activeCell.total_requests > 0 && demoSliceEventsQuery.data.items.length < activeCell.total_requests)),
   );
+  const isFailureGroupsTruncated = Boolean(
+    activeCell
+      ? (!isDemo && sliceTelemetryQuery.data?.failure_groups_truncated)
+      : data?.failure_groups_truncated,
+  );
+  const isFailureGroupsPartial = isDemoSlicePartial || isFailureGroupsTruncated;
 
   // Never fall back to whole-window or another cell's attribution while the current cell is pending.
   const activeFailureGroups = React.useMemo(() => {
@@ -313,7 +333,10 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
       if (isDemoLaneSliceUnavailable || isCellSliceUnaddressable || sliceError) return [];
       if (isDemo) {
         if (!demoSliceEventsQuery.data) return [];
-        return deriveFailureGroupsFromEvents(demoSliceEventsQuery.data.items, { isCapped: isDemoSlicePartial });
+        return deriveFailureGroupsFromEvents(demoSliceEventsQuery.data.items, {
+          isCapped: isDemoSlicePartial,
+          omitUncategorizedOther: true,
+        });
       }
       return sliceTelemetryQuery.data?.failure_groups ?? [];
     }
@@ -335,8 +358,8 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
 
   const activeFailureLane = isStabilityFailureLane(activeLane) ? activeLane : null;
   const attributionRows = React.useMemo(
-    () => aggregateStabilityFailures(activeFailureGroups, attributionDim, activeFailureLane),
-    [activeFailureGroups, activeFailureLane, attributionDim],
+    () => aggregateStabilityFailures(activeFailureGroups, attributionDim, activeFailureLane, { isPartial: isFailureGroupsPartial }),
+    [activeFailureGroups, activeFailureLane, attributionDim, isFailureGroupsPartial],
   );
   const visibleAttributionRows = showAllRows ? attributionRows : attributionRows.slice(0, ATTRIBUTION_LIMIT);
 
@@ -374,6 +397,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
   };
 
   const toggleLane = (lane: StabilityLane) => {
+    if (isStale) return;
     setShowAllRows(false);
     if (activeLane === lane && activeCell === null) {
       setSelectedLane(null);
@@ -386,7 +410,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
   };
 
   const toggleCell = (lane: StabilityLane, cell: StabilityDisplayBucket) => {
-    if (cell[lane] <= 0) return;
+    if (isStale || cell[lane] <= 0) return;
     setShowAllRows(false);
     if (activeLane === lane && activeCell?.start_ms === cell.start_ms && activeCell?.end_ms === cell.end_ms) {
       setSelectedLane(null);
@@ -406,18 +430,40 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
   const activeCellHeading = activeCell ? formatCellHeading(activeCell, bucket) : undefined;
   const activeScopeCount = React.useMemo(() => {
     if (!data) return undefined;
-    if (activeCell && activeLane) return activeCell[activeLane];
+    if (activeCell && activeLane) {
+      // When no current display cell matches the selected endpoints (e.g. after a resize regrouping),
+      // read the exact count for the clamped query interval from the matching slice response instead
+      // of reusing the stale cell snapshot.
+      if (!exactDisplayCell) {
+        if (isCellSliceUnaddressable || isDemoLaneSliceUnavailable || sliceError) return undefined;
+        if (isDemo) {
+          if (!demoSliceEventsQuery.data || isDemoSlicePartial) return undefined;
+          if (activeLane === 'model_substituted') {
+            return demoSliceEventsQuery.data.items.filter((item) => item.model_substituted).length;
+          }
+          if (activeLane === 'rate_limited_429') {
+            return demoSliceEventsQuery.data.items.filter((item) => item.failed && item.fail_status_code === 429).length;
+          }
+          if (activeLane === 'upstream_5xx') {
+            return demoSliceEventsQuery.data.items.filter((item) => item.failed && (item.fail_status_code ?? 0) >= 500 && (item.fail_status_code ?? 0) < 600).length;
+          }
+          return undefined;
+        }
+        return sliceTelemetryQuery.data?.summary[activeLane];
+      }
+      return exactDisplayCell[activeLane];
+    }
     if (activeLane) return lanes.find((entry) => entry.lane === activeLane)?.total;
     return data.summary.failed_requests;
-  }, [activeCell, activeLane, data, lanes]);
+  }, [activeCell, activeLane, data, demoSliceEventsQuery.data, exactDisplayCell, isCellSliceUnaddressable, isDemo, isDemoLaneSliceUnavailable, isDemoSlicePartial, lanes, sliceError, sliceTelemetryQuery.data]);
 
   const scopedEventsHref = React.useMemo(() => {
-    if (!data) return null;
+    if (!data || isStale) return null;
     return stabilityEventsHref(data.window, filters, { lane: activeLane, cell: activeCell }, { isDemo });
-  }, [activeCell, activeLane, data, filters, isDemo]);
+  }, [activeCell, activeLane, data, filters, isDemo, isStale]);
 
   const openScopeDrawer = () => {
-    if (!data) return;
+    if (!data || isStale) return;
     setInspectTarget({
       lane: activeLane,
       cell: activeCell,
@@ -431,7 +477,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
   };
 
   const openRowDrawer = (row: StabilityAttributionRow) => {
-    if (!data) return;
+    if (!data || isStale) return;
     setInspectTarget({
       lane: activeLane,
       cell: activeCell,
@@ -445,7 +491,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
   };
 
   const resolvePairHref = (pair: TrendsSubstitutionPair): string | null => {
-    if (!data) return null;
+    if (!data || isStale) return null;
     if (!activeCell) return pairHref(pair);
     return activeCellSpan ? substitutionEventsHref(activeCellSpan, filters, pair, { isDemo }) : null;
   };
@@ -583,6 +629,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                         type="button"
                         className={styles['lane-trigger']}
                         aria-pressed={isLaneSelected}
+                        disabled={isStale}
                         onClick={() => toggleLane(lane.lane)}
                         data-testid={`trends-lane-toggle-${lane.lane}`}
                       >
@@ -633,7 +680,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                             heading: formatCellHeading(cell, bucket),
                             rows: tipRows,
                           });
-                          const isInteractive = count > 0;
+                          const isInteractive = count > 0 && !isStale;
                           return (
                             <button
                               key={cell.start_ms}
@@ -650,7 +697,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                               aria-disabled={!isInteractive || undefined}
                               aria-pressed={isInteractive ? isCellSelected : undefined}
                               className={styles['lane-cell']}
-                              data-tone={isInteractive ? laneTone(lane.lane) : undefined}
+                              data-tone={count > 0 ? laneTone(lane.lane) : undefined}
                               data-interactive={isInteractive || undefined}
                               data-selected={isCellSelected || undefined}
                               style={{ '--lane-weight': `${weight}%` } as React.CSSProperties}
@@ -693,7 +740,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                     size="sm"
                     variant="secondary"
                     icon={<SearchOutlined />}
-                    disabled={isSlicePending || isDemoLaneSliceUnavailable || isCellSliceUnaddressable}
+                    disabled={isStale || isSlicePending || isDemoLaneSliceUnavailable || isCellSliceUnaddressable}
                     onClick={openScopeDrawer}
                     data-testid="trends-stability-inspect-scope"
                   >
@@ -747,6 +794,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                         variant="ghost"
                         icon={<SearchOutlined />}
                         label={t('trends.stability.inspect_requests')}
+                        disabled={isStale}
                         onClick={openScopeDrawer}
                         data-testid="trends-stability-inspect-all"
                       />
@@ -768,23 +816,25 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                     onRetry={retrySlice}
                   />
                 ) : visibleAttributionRows.length === 0 ? (
-                  <p className={styles['stability-empty-slice']}>{t('trends.stability.slice_empty')}</p>
+                  <p className={styles['stability-empty-slice']} data-testid={isDemoSlicePartial ? 'trends-attribution-partial' : undefined}>
+                    {t(isDemoSlicePartial ? 'trends.stability.demo_slice_partial_failures' : 'trends.stability.slice_empty')}
+                  </p>
                 ) : (
                   <>
                     <ul
                       className={styles['attribution-list']}
-                      data-loading={isSliceFetching || undefined}
+                      data-loading={isSliceFetching || isStale || undefined}
                       data-testid="trends-failure-attribution"
                     >
                       {visibleAttributionRows.map((row) => {
                         const name = rowDisplayName(row);
                         const canDrill = Boolean(row.id && !row.drillDisabled);
-                        const canFilterPage = canDrill && canFilterTrends;
+                        const canFilterPage = canDrill && canFilterTrends && !isStale;
                         const signals = rowSignalTags(row, activeLane, t);
                         const shownSignals = signals.slice(0, SIGNAL_TAG_LIMIT);
                         const overflowSignals = signals.slice(SIGNAL_TAG_LIMIT);
                         const rateTone = failureRateTone(row.failureRate);
-                        const rowHref = canDrill
+                        const rowHref = canDrill && !isStale
                           ? stabilityEventsHref(
                               data.window,
                               filters,
@@ -792,7 +842,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                               { isDemo },
                             )
                           : null;
-                        const manageTarget = canDrill && (row.dimension === 'provider' || row.dimension === 'credential')
+                        const manageTarget = canDrill && !isStale && (row.dimension === 'provider' || row.dimension === 'credential')
                           ? identity.manage(row.dimension, row.id)
                           : null;
                         const countTipRows: TipRow[] = [
@@ -865,6 +915,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                                 variant="ghost"
                                 icon={<SearchOutlined />}
                                 label={t('trends.stability.inspect_of', { name })}
+                                disabled={isStale}
                                 onClick={() => openRowDrawer(row)}
                                 data-testid="trends-failure-inspect"
                               />
@@ -903,6 +954,13 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                           ? t('trends.stability.show_less')
                           : t('trends.stability.show_more', { n: attributionRows.length - ATTRIBUTION_LIMIT })}
                       </Button>
+                    )}
+                    {isFailureGroupsPartial && (
+                      <p className={styles['stability-empty-slice']} data-testid="trends-attribution-partial">
+                        {isDemoSlicePartial
+                          ? t('trends.stability.demo_slice_partial_failures')
+                          : t('trends.stability.partial_breakdown', { n: activeFailureGroups.length })}
+                      </p>
                     )}
                   </>
                 )}

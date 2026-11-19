@@ -991,7 +991,7 @@ func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 		{"e.reasoning_effort", filter.ReasoningEfforts},
 		{"e.service_tier", filter.ServiceTiers},
 		{RESOLVED_SERVICE_TIER_SQL, filter.ResolvedServiceTiers},
-		{"e.client_agent", filter.ClientAgents},
+		{`COALESCE(NULLIF(TRIM(e.client_agent), ''), 'unknown')`, filter.ClientAgents},
 	}
 	for _, dimension := range dimensions {
 		clause, clauseArgs, err := usageEventInClause(dimension.column, dimension.values)

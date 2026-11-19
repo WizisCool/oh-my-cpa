@@ -823,6 +823,7 @@ describe('trends page', () => {
         has_request_log: false,
       },
       related_errors: [],
+      partial_errors: ['related_errors'],
     }));
 
     mount();
@@ -859,11 +860,13 @@ describe('trends page', () => {
     expect(usageEventsReq?.query.get('from')).toBe(String(HOUR));
     expect(usageEventsReq?.query.get('to')).toBe(String(2 * HOUR - 1));
 
-    // Expanding the failed request lazy-loads /usage/events/901 and renders the upstream error body.
+    // Expanding the failed request lazy-loads /usage/events/901 and renders the upstream error body
+    // plus a warning notice when related_errors correlation partially failed.
     const details = eventList.querySelector('details') as HTMLDetailsElement;
     details.open = true;
     fireEvent(details, new Event('toggle'));
     expect(await within(drawer).findByText('{"error":"quota rate limit exceeded"}')).toBeTruthy();
+    expect(within(drawer).getByTestId('trends-stability-related-partial')).toBeTruthy();
 
     // Footer CTA opens Request records with the exact narrowed scope.
     fireEvent.click(within(drawer).getByTestId('trends-stability-open-events'));
@@ -1052,8 +1055,8 @@ describe('trends page', () => {
         expect(req?.query.get('replay')).toBe('calendar');
       });
       const slicedRow = (await within(await screen.findByTestId('trends-failure-attribution')).findAllByTestId('trends-failure-row'))[0]!;
-      expect(slicedRow.textContent).not.toContain('100%');
-      expect(slicedRow.textContent).not.toContain('50.0%');
+      expect(slicedRow.textContent).not.toMatch(/%/);
+      expect(screen.getByTestId('trends-attribution-partial')).toBeTruthy();
 
       // Clicking a model_substituted cell with partial Demo capture shows the partial-capture notice even when 0 pairs were captured.
       const laneSub = screen.getByTestId('trends-lane-model_substituted');
@@ -1143,8 +1146,10 @@ describe('trends page', () => {
 
       act(() => resizeCb?.({ width: 8, height: 20 }));
       await waitFor(() => expect(within(lane429.querySelector('[role="group"]') as HTMLElement).getAllByRole('button')).toHaveLength(3));
-      // Scope bar and drawer still retain the exact 01:00–02:00 interval instead of widening to the full window.
+      // Scope bar and drawer still retain the exact 01:00–02:00 interval instead of widening to the full window,
+      // and the scope count comes from the matching slice response once the displayed cell is regrouped.
       expect(within(screen.getByTestId('trends-stability-scope')).getByText('01-01 01:00')).toBeTruthy();
+      expect(within(screen.getByTestId('trends-stability-scope')).getByText('1 time')).toBeTruthy();
 
       // Switch to Credential dimension and inspect the unassigned credential: message must say unassigned, not redacted.
       const stability = screen.getByTestId('trends-stability');

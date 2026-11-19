@@ -865,8 +865,10 @@ export function aggregateStabilityFailures(
   groups: readonly TrendsFailureGroup[] | undefined,
   dimension: StabilityAttributionDim,
   activeLane?: UsageFailureCategory | null,
+  options?: { isPartial?: boolean },
 ): StabilityAttributionRow[] {
   if (!groups || groups.length === 0) return [];
+  const isPartial = Boolean(options?.isPartial);
   type Acc = {
     id: string;
     label: string;
@@ -1004,7 +1006,7 @@ export function aggregateStabilityFailures(
       const statusCodes = [...acc.statusCodes.entries()]
         .map(([code, count]) => ({ code, count }))
         .sort((a, b) => b.count - a.count || a.code - b.code);
-      const denominator = acc.totalRequests > 0 ? Math.max(acc.totalRequests, acc.failures) : 0;
+      const denominator = !isPartial && acc.totalRequests > 0 ? Math.max(acc.totalRequests, acc.failures) : 0;
       return {
         dimension,
         id: acc.id,
@@ -1041,10 +1043,11 @@ export function aggregateStabilityFailures(
  */
 export function deriveFailureGroupsFromEvents(
   events: readonly (UsageEvent & { fail_code?: string })[],
-  options?: { isCapped?: boolean },
+  options?: { isCapped?: boolean; omitUncategorizedOther?: boolean },
 ): TrendsFailureGroup[] {
   if (events.length === 0) return [];
   const isCapped = Boolean(options?.isCapped);
+  const omitUncategorizedOther = Boolean(options?.omitUncategorizedOther);
   const modelTotals = new Map<string, number>();
   const providerTotals = new Map<string, number>();
   const credTotals = new Map<string, number>();
@@ -1101,7 +1104,16 @@ export function deriveFailureGroupsFromEvents(
     if (is5xx) acc.up5xx += 1;
     if (isTruncated) acc.truncated += 1;
     if (isCooldown) acc.cooldown += 1;
-    if (event.failed && !is429 && !is5xx && !isTruncated && !isCooldown) acc.other += 1;
+    if (
+      event.failed &&
+      !is429 &&
+      !is5xx &&
+      !isTruncated &&
+      !isCooldown &&
+      (!omitUncategorizedOther || event.fail_code !== undefined)
+    ) {
+      acc.other += 1;
+    }
     if (code > 0) acc.codes.set(code, (acc.codes.get(code) ?? 0) + 1);
     if (event.timestamp_ms > acc.lastMs) acc.lastMs = event.timestamp_ms;
   }

@@ -292,7 +292,12 @@
   position: relative;
   z-index: 2;
   border-radius: var(--radius-xs);
-  box-shadow: inset 0 0 0 1.5px var(--fg), var(--select-drop);
+  box-shadow: var(--shadow-selected);
+  filter: brightness(1.12);
+}
+.lane-cell[data-selected]:focus-visible {
+  z-index: 3;
+  box-shadow: var(--shadow-selected), var(--shadow-focus);
 }
 :global(:root:not([data-reduced-motion='true'])) .lane-cell { transition: opacity var(--motion-fast) var(--ease-standard), filter var(--motion-fast) var(--ease-standard); }
 /* Past a few dozen buckets a gap would outweigh the cells; they close up into one strip. */
@@ -389,7 +394,8 @@
   white-space: nowrap;
 }
 .attribution-count { color: var(--fg); font-weight: 600; font-size: var(--text-md); }
-.attribution-rate { color: var(--muted); font-size: var(--text-xs); }
+.attribution-rate { font-size: var(--text-xs); }
+.attribution-rate:not(.tone-danger):not(.tone-warn) { color: var(--muted); }
 .attribution-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; }
 .attribution-more { margin-top: 4px; padding-inline: 6px; }
 .stability-empty-slice { margin: 8px 6px 4px; color: var(--meta); font-size: var(--text-sm); }
@@ -467,7 +473,7 @@
   font-size: var(--text-xs);
   line-height: 1.5;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .stability-related-errors { display: flex; flex-direction: column; gap: 6px; }
 .stability-related-item { display: flex; flex-direction: column; gap: 4px; }

@@ -548,6 +548,41 @@ func TestTrendsRedactedGroupIDsRoundTripAndConsistentWindowBoundaries(t *testing
 	}
 }
 
+func TestBoundFailureGroupsPreservesActiveLanesAndFlagsTruncation(t *testing.T) {
+	groups := make([]TrendsFailureGroupDTO, 0, maxTelemetryFailureGroups+2)
+	for i := range maxTelemetryFailureGroups + 1 {
+		groups = append(groups, TrendsFailureGroupDTO{
+			Model:          "gpt-5",
+			Provider:       "codex",
+			AuthIndex:      fmt.Sprintf("cred-%03d", i),
+			FailedRequests: 2,
+			Upstream5xx:    2,
+		})
+	}
+	// The lowest-total tuple is the sole 429 culprit; bounding must keep it and mark truncated.
+	groups = append(groups, TrendsFailureGroupDTO{
+		Model:          "gpt-5",
+		Provider:       "codex",
+		AuthIndex:      "sole-429",
+		FailedRequests: 1,
+		RateLimited429: 1,
+	})
+	bounded, truncated := boundFailureGroups(groups, maxTelemetryFailureGroups)
+	if !truncated || len(bounded) != maxTelemetryFailureGroups {
+		t.Fatalf("boundFailureGroups = (%d, %v), want (%d, true)", len(bounded), truncated, maxTelemetryFailureGroups)
+	}
+	foundSole429 := false
+	for _, g := range bounded {
+		if g.AuthIndex == "sole-429" {
+			foundSole429 = true
+			break
+		}
+	}
+	if !foundSole429 {
+		t.Fatalf("sole 429 culprit dropped by failure-group cap")
+	}
+}
+
 func TestTrendsTelemetryReservoirBoundsSamples(t *testing.T) {
 	rng := rand.New(rand.NewPCG(1, 2))
 	var stats trendsTelemetryStats
