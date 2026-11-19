@@ -96,9 +96,11 @@ later hot reload cannot remain hidden behind an unchanged file revision.
 
 The visual editor exposes shared Claude header and OAuth login scope settings through
 the [configuration schema](../web/src/types/configSchema.ts) and the existing change-set
-path. `oauth.providers.claude.oauth-include-create-api-key` stays omitted while it
-matches CPA's default (`true`) and persists an explicit `false` opt-out; CPA owns the
-authorization URL scope assembly. Native-client entrypoint labels extend CPA's built-in entries and still require
+path. When `oauth.providers.claude.oauth-include-create-api-key` is omitted from the
+saved baseline, it stays omitted while matching CPA's default (`true`) and persists an
+explicit `false` opt-out; saved explicit values follow the baseline-aware writer
+(enabling a saved `false` sends an explicit `true` patch). CPA owns authorization URL
+scope assembly. Native-client entrypoint labels extend CPA's built-in entries and still require
 its other strong request signals; an absent or empty list adds no custom entries.
 CPA owns normalization (trim, lowercase, drop blanks and duplicates in order) and
 request detection; OMC accepts the gateway's saved readback without maintaining a

@@ -448,7 +448,7 @@ export default {
   'cfg.f_codex_siwc_identifier': 'Sign in with ChatGPT 标识',
   'cfg.f_codex_siwc_identifier_desc': '授权与请求使用的客户端应用标识',
   'cfg.f_claude_oauth_create_api_key': '请求 org:create_api_key 作用域',
-  'cfg.f_claude_oauth_create_api_key_desc': '在新的 Claude OAuth 授权中附带 org:create_api_key 组织作用域，允许从授权创建 API 密钥',
+  'cfg.f_claude_oauth_create_api_key_desc': '在新的 Claude OAuth 授权中附带 org:create_api_key 作用域，允许从授权创建 API 密钥',
   'cfg.f_claude_tool_search': 'Claude 工具搜索',
   'cfg.f_claude_server_side_fallback': 'Claude 服务端回退',
   'cfg.f_claude_server_side_fallback_desc': '请求体与 Payload 规则均未声明时，为伪装请求补充 Anthropic 服务端拒答回退（当前支持 claude-opus-5-5 -> claude-opus-4-8、claude-fable-5-1 -> claude-opus-5）',
