@@ -9,7 +9,7 @@ import type { TFunc } from '../../i18n';
 import dayjs from '../../utils/time';
 import type { QuotaWindow } from '../../types/quota';
 import { MAX_USAGE_EVENT_FILTER_VALUES } from '../../types/usageEvents';
-import { quotaReadingLabels } from '../oauthManagement/credentialSections';
+import { quotaReadingLabels, roundQuotaPeriodHours } from '../quota/quotaWindowNaming';
 import type {
   TrendsGroupName,
   TrendsQuotaCredential,
@@ -266,7 +266,7 @@ export function quotaWindowNames(windows: readonly TrendsQuotaWindow[], t: TFunc
     if (label) {
       resolved.set(window.window_id, label);
     } else if (window.period_hours !== null && window.period_hours > 0) {
-      const roundedHours = window.period_hours >= 0.05 ? Math.round(window.period_hours * 10) / 10 : Math.round(window.period_hours * 100) / 100 || window.period_hours;
+      const roundedHours = roundQuotaPeriodHours(window.period_hours);
       resolved.set(
         window.window_id,
         roundedHours % 24 === 0
@@ -299,6 +299,34 @@ export function pickQuotaWindow(
   return { credential, window };
 }
 
+export function forecastableWindows(item: TrendsQuotaCredential, nowMs?: number): TrendsQuotaWindow[] {
+  if (STALE_CREDENTIAL_STATUSES.has(item.status)) return [];
+  return chartableWindows(item).filter((window) => nowMs === undefined || window.cycle_reset_ms > nowMs);
+}
+
+/**
+ * Picks the most pressing credential/window from the same active, non-stale set counted by `quotaRisk`.
+ * Historical readings remain available via `pickQuotaWindow`.
+ */
+export function pickForecastableQuotaWindow(
+  items: readonly TrendsQuotaCredential[],
+  nowMs?: number,
+): { credential: TrendsQuotaCredential; window: TrendsQuotaWindow } | null {
+  let best: { credential: TrendsQuotaCredential; window: TrendsQuotaWindow } | null = null;
+  let bestScore = -Infinity;
+  for (const credential of items) {
+    const windows = forecastableWindows(credential, nowMs);
+    if (windows.length === 0) continue;
+    const window = windows.reduce((curr, item) => (urgency(item) > urgency(curr) ? item : curr));
+    const score = urgency(window);
+    if (score > bestScore) {
+      best = { credential, window };
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
 /** The dot a quota window earns: amber while heading for its limit, red once it has reached it. */
 export function quotaWindowAttention(window: TrendsQuotaWindow): 'warn' | 'danger' | null {
   return window.status === 'limit_reached' ? 'danger' : window.status === 'projected_exhaust' ? 'warn' : null;
@@ -322,8 +350,7 @@ export function quotaRisk(items: readonly TrendsQuotaCredential[], nowMs?: numbe
   let limited = 0;
   let projected = 0;
   for (const item of items) {
-    if (STALE_CREDENTIAL_STATUSES.has(item.status)) continue;
-    const windows = chartableWindows(item).filter((window) => nowMs === undefined || window.cycle_reset_ms > nowMs);
+    const windows = forecastableWindows(item, nowMs);
     if (windows.length === 0) continue;
     forecastable += 1;
     if (windows.some((window) => window.status === 'limit_reached')) limited += 1;
@@ -599,7 +626,7 @@ export function perfSeriesForMode(
 export function availablePerfGroups(data: TrendsTelemetryResponse | undefined, includeAllGroups: boolean): readonly TrendsGroupName[] {
   if (!data) return [];
   const source = includeAllGroups && data.groups && data.groups.length > 0 ? data.groups : data.series;
-  return source.filter((item) => item.id !== '');
+  return source.filter((item) => item.id !== '' && !item.filter_disabled);
 }
 
 /** Buckets drawn for TTFT / total-latency mode, preferring in-memory top series before any filtered fallback read. */
@@ -621,6 +648,41 @@ export function perfBucketsHaveSamples(buckets: readonly TrendsTelemetryBucket[]
   return buckets.some((bucket) => (mode === 'ttft' ? bucket.ttft_samples : bucket.latency_samples) > 0);
 }
 
+export function perfModeHasSamples(
+  data: TrendsTelemetryResponse | undefined,
+  mode: PerfMode,
+  activeBuckets: readonly TrendsTelemetryBucket[],
+  modeSeries: readonly TrendsTelemetrySeries[],
+): boolean {
+  if (!data) return false;
+  if (mode === 'ttft' || mode === 'latency') return perfBucketsHaveSamples(activeBuckets, mode);
+  if (mode === 'tps') {
+    return data.buckets.some((bucket) => bucket.tps_samples > 0 && bucket.tps_p50 !== null) || modeSeries.length > 0;
+  }
+  return data.scatter.some((point) => point.ttft_ms !== null && point.latency_ms !== null);
+}
+
+export interface DeliveryCause {
+  key: 'rate_limited' | 'truncated' | 'force_cooldown' | 'upstream_5xx' | 'other_failures' | 'substituted';
+  count: number;
+  tone: 'tone-danger' | 'tone-warn';
+}
+
+/** Top two causes for the delivery tile, prioritizing failures before served model substitutions. */
+export function deliveryFailureCauses(summary: TrendsTelemetrySummary | undefined): DeliveryCause[] {
+  if (!summary) return [];
+  return [
+    ...([
+      { key: 'rate_limited', count: summary.rate_limited_429, tone: 'tone-danger' },
+      { key: 'truncated', count: summary.stream_truncated, tone: 'tone-danger' },
+      { key: 'force_cooldown', count: summary.force_cooldown, tone: 'tone-danger' },
+      { key: 'upstream_5xx', count: summary.upstream_5xx, tone: 'tone-danger' },
+      { key: 'other_failures', count: summary.other_failures, tone: 'tone-danger' },
+    ] as const).filter((cause) => cause.count > 0).sort((left, right) => right.count - left.count),
+    ...(summary.model_substituted > 0 ? [{ key: 'substituted', count: summary.model_substituted, tone: 'tone-warn' } as const] : []),
+  ].slice(0, 2);
+}
+
 export const STABILITY_LANES = ['rate_limited_429', 'stream_truncated', 'force_cooldown', 'upstream_5xx', 'other_failures', 'model_substituted'] as const;
 export type StabilityLane = (typeof STABILITY_LANES)[number];
 
@@ -631,11 +693,78 @@ export interface StabilityLaneRow {
   counts: number[];
 }
 
-export function stabilityLanes(buckets: readonly TrendsTelemetryBucket[]): StabilityLaneRow[] {
+export interface StabilityDisplayBucket {
+  start_ms: number;
+  last_start_ms: number;
+  end_ms: number;
+  span_count: number;
+  rate_limited_429: number;
+  stream_truncated: number;
+  force_cooldown: number;
+  upstream_5xx: number;
+  other_failures: number;
+  model_substituted: number;
+}
+
+/**
+ * Aggregates adjacent telemetry buckets into coarser display cells whenever the bucket count
+ * exceeds the lane track's cell budget so trailing buckets are never clipped.
+ */
+export function stabilityDisplayBuckets(
+  buckets: readonly TrendsTelemetryBucket[],
+  windowEndMs: number,
+  maxCells?: number,
+): StabilityDisplayBucket[] {
+  if (buckets.length === 0) return [];
+  const groupSize = maxCells && maxCells > 0 && buckets.length > maxCells
+    ? Math.ceil(buckets.length / maxCells)
+    : 1;
+  const cells: StabilityDisplayBucket[] = [];
+  for (let index = 0; index < buckets.length; index += groupSize) {
+    const slice = buckets.slice(index, index + groupSize);
+    const first = slice[0]!;
+    const last = slice[slice.length - 1]!;
+    const next = buckets[index + groupSize];
+    const endMs = next ? next.start_ms : Math.max(last.start_ms, windowEndMs);
+    let rate_limited_429 = 0;
+    let stream_truncated = 0;
+    let force_cooldown = 0;
+    let upstream_5xx = 0;
+    let other_failures = 0;
+    let model_substituted = 0;
+    for (const item of slice) {
+      rate_limited_429 += item.rate_limited_429;
+      stream_truncated += item.stream_truncated;
+      force_cooldown += item.force_cooldown;
+      upstream_5xx += item.upstream_5xx;
+      other_failures += item.other_failures;
+      model_substituted += item.model_substituted;
+    }
+    cells.push({
+      start_ms: first.start_ms,
+      last_start_ms: last.start_ms,
+      end_ms: endMs,
+      span_count: slice.length,
+      rate_limited_429,
+      stream_truncated,
+      force_cooldown,
+      upstream_5xx,
+      other_failures,
+      model_substituted,
+    });
+  }
+  return cells;
+}
+
+export function stabilityLanes(buckets: readonly Pick<TrendsTelemetryBucket, StabilityLane>[]): StabilityLaneRow[] {
   return STABILITY_LANES.map((lane) => {
     const counts = buckets.map((bucket) => bucket[lane]);
     return { lane, counts, total: counts.reduce((sum, count) => sum + count, 0), max: Math.max(0, ...counts) };
   });
+}
+
+export function hasStabilityActivity(data: Pick<TrendsTelemetryResponse, 'buckets' | 'substitution_pairs'>): boolean {
+  return data.substitution_pairs.length > 0 || stabilityLanes(data.buckets).some((lane) => lane.total > 0);
 }
 
 /** The share of requests that succeeded, or null without any. */

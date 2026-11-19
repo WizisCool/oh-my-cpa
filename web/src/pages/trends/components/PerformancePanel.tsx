@@ -18,7 +18,7 @@ import {
   PERF_QUANTILES,
   TRENDS_PERF_GROUPS,
   availablePerfGroups,
-  perfBucketsHaveSamples,
+  perfModeHasSamples,
   perfSeriesForMode,
   resolvePerfBuckets,
   type PerfMode,
@@ -110,10 +110,15 @@ export const PerformancePanel: React.FC<PerformancePanelProps> = ({
     () => resolvePerfBuckets(data, mode, activeItem, itemData),
     [activeItem, data, itemData, mode],
   );
-  const hasModeSamples = isPercentile ? perfBucketsHaveSamples(activeBuckets, mode) : hasSamples;
+  const hasModeSamples = perfModeHasSamples(data, mode, activeBuckets, modeSeries);
   const chartHeight = isPhone ? 220 : 280;
   const dimension = data?.group_by ?? group;
-  const providerLabel = React.useCallback((id: string) => identity.label('provider', id), [identity]);
+  const providerLabel = React.useCallback((id: string) => {
+    const matched = dimension === 'provider'
+      ? (filterGroups.find((entry) => entry.id === id) ?? series.find((entry) => entry.id === id))
+      : undefined;
+    return identity.label('provider', matched ?? id);
+  }, [dimension, filterGroups, identity, series]);
 
   const [focusState, setFocusState] = React.useState<{ dimension: string; id: string } | null>(null);
   const focusedKey = React.useMemo(() => {
@@ -265,7 +270,7 @@ export const PerformancePanel: React.FC<PerformancePanelProps> = ({
                   </span>
                 </div>
               ) : (
-                modeSeries.length > 0 && multiLegend
+                hasModeSamples && modeSeries.length > 0 && multiLegend
               )}
               {needsExternalItemData && itemError ? (
                 <LoadFailure tone="warning" title={t('trends.error_title')} error={itemError} onRetry={onRetryItem} />

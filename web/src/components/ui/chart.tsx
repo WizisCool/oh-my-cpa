@@ -331,6 +331,7 @@ export interface ChartTooltipContentProps {
   buildRows?: (payload: readonly ChartTooltipPayloadItem[], label: string | number | undefined) => {
     heading?: React.ReactNode;
     rows: readonly TooltipReadoutRow[];
+    notes?: readonly React.ReactNode[];
   } | null;
   className?: string;
 }
@@ -382,7 +383,7 @@ export function ChartTooltipContent({
           className,
         )}
       >
-        <TooltipReadout heading={hideLabel ? undefined : custom.heading} rows={custom.rows} />
+        <TooltipReadout heading={hideLabel ? undefined : custom.heading} rows={custom.rows} notes={custom.notes} />
       </div>
     );
   }

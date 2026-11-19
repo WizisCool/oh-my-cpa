@@ -238,14 +238,16 @@
   grid-column: 2;
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(1px, 1fr);
+  grid-auto-columns: minmax(0, 1fr);
   gap: 2px;
   height: 20px;
-  overflow: hidden;
   border-radius: var(--radius-sm);
   background: var(--series-track);
 }
-.lane-cell { min-width: 1px; background: var(--series-track); }
+.lane-cell { min-width: 0; background: var(--series-track); }
+.lane-cell:first-child { border-start-start-radius: var(--radius-sm); border-end-start-radius: var(--radius-sm); }
+.lane-cell:last-child { border-start-end-radius: var(--radius-sm); border-end-end-radius: var(--radius-sm); }
+.lane-cell:focus-visible { position: relative; z-index: 1; outline: none; border-radius: var(--radius-xs); box-shadow: var(--shadow-focus); }
 .lane-cell[data-tone='danger'] { background: color-mix(in oklch, var(--danger) var(--lane-weight), var(--series-track)); }
 .lane-cell[data-tone='warn'] { background: color-mix(in oklch, var(--warn) var(--lane-weight), var(--series-track)); }
 /* Past a few dozen buckets a gap would outweigh the cells; they close up into one strip. */

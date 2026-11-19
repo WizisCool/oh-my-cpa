@@ -55,6 +55,7 @@ export interface QuotaBurnPanelProps {
   onChange: (patch: { quotaCredential?: string; quotaWindow?: string; quotaView?: QuotaView }) => void;
   onNavigate: (href: string) => void;
   nowMs: number;
+  resolveNowMs?: () => number;
 }
 
 /**
@@ -63,7 +64,7 @@ export interface QuotaBurnPanelProps {
  * reads the window now - how much is used, when it resets, how fast it burns and where it lands.
  */
 export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
-  data, isLoading, error, onRetry, credentialId, windowId, view, onChange, onNavigate, nowMs,
+  data, isLoading, error, onRetry, credentialId, windowId, view, onChange, onNavigate, nowMs, resolveNowMs,
 }) => {
   useTimeZone();
   const t = useT();
@@ -261,7 +262,12 @@ export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
               icon={<HistoryOutlined />}
               label={t('trends.view_requests')}
               disabled={!eventsHref}
-              onClick={() => eventsHref && onNavigate(eventsHref)}
+              onClick={() => {
+                const href = isPhysicalUnavailable
+                  ? null
+                  : quotaEventsHref(credential.auth_index, window, resolveNowMs?.() ?? nowMs);
+                if (href) onNavigate(href);
+              }}
               data-testid="trends-quota-events"
             />
           </span>

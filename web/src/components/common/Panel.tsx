@@ -30,7 +30,7 @@ export const Panel = React.forwardRef<HTMLDivElement, PanelProps>(function Panel
       {hasHead ? (
         <div
           data-slot="panel-head"
-          className="flex min-h-12 items-center justify-between gap-3 border-b-[length:var(--hairline)] border-b-border-soft px-5 py-3 max-sm:px-4"
+          className="flex min-h-12 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b-[length:var(--hairline)] border-b-border-soft px-5 py-3 max-sm:px-4"
         >
           {title !== undefined ? (
             <div data-slot="panel-head-title" className="min-w-0 flex-1 text-base font-semibold text-foreground">
@@ -39,7 +39,7 @@ export const Panel = React.forwardRef<HTMLDivElement, PanelProps>(function Panel
           ) : (
             <span />
           )}
-          {extra !== undefined ? <div data-slot="panel-head-extra" className="shrink-0">{extra}</div> : null}
+          {extra !== undefined ? <div data-slot="panel-head-extra" className="min-w-0 max-w-full shrink-0">{extra}</div> : null}
         </div>
       ) : null}
       <div data-slot="panel-body" className="p-5 max-sm:p-4">

@@ -7,9 +7,11 @@ import {
   buildQuotaBurnSeries,
   clampLens,
   countdownParts,
+  deliveryFailureCauses,
   filterGroupByForKey,
   filterKeyForGroupBy,
   formatPercent,
+  hasStabilityActivity,
   isRangeWithinHourLimit,
   latencySeriesRows,
   lensFromSweep,
@@ -18,8 +20,10 @@ import {
   panLens,
   percentileRows,
   perfBucketsHaveSamples,
+  perfModeHasSamples,
   perfSeriesForMode,
   perfSeriesKey,
+  pickForecastableQuotaWindow,
   pickQuotaWindow,
   quotaCredentialAttention,
   quotaRisk,
@@ -31,6 +35,7 @@ import {
   quotaWindowName,
   readTrendsView,
   resolvePerfBuckets,
+  stabilityDisplayBuckets,
   stabilityLanes,
   stepPointIndex,
   substitutionEventsHref,
@@ -403,4 +408,89 @@ test('trends quota window names follow OAuth management localization across all 
   const enCatalog = typeof CATALOGS.en === 'function' ? await CATALOGS.en() : CATALOGS.en;
   const tEn: TFunc = (key, vars) => formatMessage(enCatalog[key], vars, languageLocale('en'));
   assert.deepEqual(codexCustom.map((win) => quotaWindowName(win, tEn, codexCustom)), ['8h', '5 hours Spark', 'Weekly Spark']);
+  assert.equal(
+    quotaWindowName(quotaWindow({ window_id: 'short_3m', label: '', scope: 'standard', period_hours: 0.05 }), tEn),
+    '0.05h',
+  );
+  assert.equal(
+    quotaWindowName(quotaWindow({ window_id: 'custom_8h', label: '', scope: 'standard', period_hours: 28860 / 3600 }), tEn),
+    '8h',
+  );
+});
+
+test('quota tile targeting, delivery causes, performance mode samples, and stability aggregation stay consistent', () => {
+  // Stale/expired/unknown credentials are excluded from forecastable risk and tile target selection
+  // while historical readings remain openable via pickQuotaWindow.
+  const staleLimit = credential('stale-1', [quotaWindow({ window_id: '5h', status: 'limit_reached', used_percent: 100 })]);
+  staleLimit.status = 'stale';
+  const unknownCred = credential('unknown-1', [quotaWindow({ window_id: '5h', status: 'normal', used_percent: 60 })]);
+  unknownCred.status = 'unknown';
+  const expiredActive = credential('expired-1', [quotaWindow({ window_id: '5h', status: 'limit_reached', cycle_reset_ms: HOUR })]);
+  const currentProjected = credential('active-1', [quotaWindow({ window_id: '5h', status: 'projected_exhaust', cycle_reset_ms: 5 * HOUR })]);
+  assert.deepEqual(quotaRisk([staleLimit, unknownCred, expiredActive, currentProjected], 2 * HOUR), { forecastable: 1, limited: 0, projected: 1 });
+  assert.equal(pickForecastableQuotaWindow([staleLimit, unknownCred, expiredActive, currentProjected], 2 * HOUR)?.credential.auth_index, 'active-1');
+  assert.equal(pickForecastableQuotaWindow([unknownCred], 2 * HOUR), null);
+  assert.equal(pickQuotaWindow([unknownCred], undefined, undefined)?.credential.auth_index, 'unknown-1');
+
+  // Delivery failure causes include forced cooldowns, rank failures before substitutions, and cap at 2.
+  const baseSummary = telemetryBucket(0, { total_requests: 10, success_requests: 8, failed_requests: 2 });
+  assert.deepEqual(
+    deliveryFailureCauses({ ...baseSummary, force_cooldown: 2, model_substituted: 5 }),
+    [
+      { key: 'force_cooldown', count: 2, tone: 'tone-danger' },
+      { key: 'substituted', count: 5, tone: 'tone-warn' },
+    ],
+  );
+  assert.deepEqual(
+    deliveryFailureCauses({ ...baseSummary, rate_limited_429: 1, upstream_5xx: 1, model_substituted: 3 }),
+    [
+      { key: 'rate_limited', count: 1, tone: 'tone-danger' },
+      { key: 'upstream_5xx', count: 1, tone: 'tone-danger' },
+    ],
+  );
+
+  // Performance mode sample detection checks mode-specific drawability and excludes filter_disabled groups.
+  const latencyOnlyBucket = telemetryBucket(0, { latency_samples: 4, latency_p50_ms: 900, latency_p95_ms: 1400 });
+  const latencyOnlyTelemetry = {
+    window: { preset: '7d', from: 0, to: HOUR - 1, open_end: true, bucket: 'hour' as const, timezone: 'UTC', widened: false },
+    tps_mode: 'exclude_ttft' as const,
+    group_by: 'provider',
+    summary: latencyOnlyBucket,
+    buckets: [latencyOnlyBucket],
+    groups: [
+      { id: 'codex', label: 'codex' },
+      { id: 'endpoint', label: 'endpoint', filter_disabled: true },
+      { id: '', label: 'unknown' },
+    ],
+    series: [{ ...latencyOnlyBucket, id: 'codex', label: 'codex', buckets: [latencyOnlyBucket] }],
+    scatter: [{ timestamp_ms: 100, group_id: 'codex', model: 'gpt-5', provider: 'codex', ttft_ms: null, latency_ms: 900, tps: null, output_tokens: 10, failed: false, model_substituted: false }],
+    substitution_pairs: [],
+    coverage: { fact_requests: 4, retained_requests: 4, is_truncated_by_retention: false },
+  };
+  assert.deepEqual(availablePerfGroups(latencyOnlyTelemetry, true).map((g) => g.id), ['codex']);
+  assert.equal(perfModeHasSamples(latencyOnlyTelemetry, 'tps', [latencyOnlyBucket], []), false);
+  assert.equal(perfModeHasSamples(latencyOnlyTelemetry, 'scatter', [latencyOnlyBucket], []), false);
+  assert.equal(perfModeHasSamples(latencyOnlyTelemetry, 'latency', [latencyOnlyBucket], []), true);
+
+  // Clean windows have no stability activity; dense windows aggregate adjacent buckets without dropping trailing counts.
+  const cleanBuckets = [telemetryBucket(0), telemetryBucket(HOUR)];
+  assert.equal(hasStabilityActivity({ buckets: cleanBuckets, substitution_pairs: [] }), false);
+
+  const manyBuckets = Array.from({ length: 10 }, (_, index) =>
+    telemetryBucket(index * HOUR, {
+      rate_limited_429: index === 9 ? 4 : 1,
+      force_cooldown: index === 0 ? 2 : 0,
+    }),
+  );
+  const aggregated = stabilityDisplayBuckets(manyBuckets, 10 * HOUR, 4);
+  assert.equal(aggregated.length, 4);
+  assert.deepEqual(aggregated.map((cell) => [cell.start_ms, cell.last_start_ms, cell.span_count, cell.rate_limited_429]), [
+    [0, 2 * HOUR, 3, 3],
+    [3 * HOUR, 5 * HOUR, 3, 3],
+    [6 * HOUR, 8 * HOUR, 3, 3],
+    [9 * HOUR, 9 * HOUR, 1, 4],
+  ]);
+  const lanes = stabilityLanes(aggregated);
+  assert.equal(lanes.find((l) => l.lane === 'rate_limited_429')?.total, 13);
+  assert.equal(lanes.find((l) => l.lane === 'force_cooldown')?.total, 2);
 });

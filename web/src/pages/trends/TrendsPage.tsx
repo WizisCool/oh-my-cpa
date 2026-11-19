@@ -6,7 +6,9 @@ import { api, apiErrorCode } from '../../api/client';
 import { useT } from '../../i18n';
 import { usePreference } from '../../hooks/usePreference';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
-import { useViewSearchParams } from '../../hooks/useViewSearchParams';
+import { useViewSearchParams, type ViewChangeOptions } from '../../hooks/useViewSearchParams';
+import { useVisibleNow } from '../../hooks/useVisibleNow';
+import { isMotionReduced } from '../../utils/motionPreference';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import dayjs from '../../utils/time';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
@@ -45,10 +47,12 @@ import {
   HOUR_LIMIT_MS,
   TRENDS_USAGE_GROUPS,
   availablePerfGroups,
+  deliveryFailureCauses,
   filterKeyForGroupBy,
   formatPercent,
+  hasTrendsFilters,
   isRangeWithinHourLimit,
-  pickQuotaWindow,
+  pickForecastableQuotaWindow,
   quotaRisk,
   readTrendsView,
   relativeChange,
@@ -106,10 +110,11 @@ export const TrendsPage: React.FC = () => {
   const isDemo = isDemoMode();
   const { modelView, style } = useTokenDisplayStyle();
 
+  const visibleNow = useVisibleNow();
   const [search, setSearch] = useViewSearchParams();
   const view = React.useMemo(() => readTrendsView(search), [search]);
-  const setView = React.useCallback((patch: Partial<TrendsViewState>) => {
-    setSearch((current) => writeTrendsView({ ...readTrendsView(current), ...patch }));
+  const setView = React.useCallback((patch: Partial<TrendsViewState>, options?: ViewChangeOptions) => {
+    setSearch((current) => writeTrendsView({ ...readTrendsView(current), ...patch }), options);
   }, [setSearch]);
 
   const { value: range, ready: isRangeReady, loaded: isRangeStored, set: setRange } = usePreference<InsightsRange>(
@@ -118,7 +123,7 @@ export const TrendsPage: React.FC = () => {
 
   const usageGroup = usageGroupBy(view.usageGroup, modelView);
   const perfGroup = usageGroupBy(view.perfGroup, modelView);
-  const effectiveBucket: InsightsBucketChoice = view.bucket === 'hour' && !isRangeWithinHourLimit(range)
+  const effectiveBucket: InsightsBucketChoice = view.bucket === 'hour' && !isRangeWithinHourLimit(range, visibleNow)
     ? 'auto'
     : view.bucket;
   const usageQueryString = trendsWindowParams(range, effectiveBucket, usageGroup, view.filters);
@@ -204,28 +209,38 @@ export const TrendsPage: React.FC = () => {
   const usage = usageQuery.isPlaceholderData && usageQuery.isError ? undefined : usageQuery.data;
   const telemetry = telemetryQuery.isPlaceholderData && telemetryQuery.isError ? undefined : telemetryQuery.data;
   const quota = quotaQuery.data;
+  const quotaFetchedAtMs = quotaQuery.dataUpdatedAt;
+  const quotaElapsedMs = quota && quotaFetchedAtMs > 0 ? Math.max(0, visibleNow - quotaFetchedAtMs) : 0;
+  const quotaNowMs = quota ? quota.as_of_ms + quotaElapsedMs : visibleNow;
+  const resolveQuotaNowMs = React.useCallback(
+    () => (quota && quotaFetchedAtMs > 0 ? quota.as_of_ms + Math.max(0, Date.now() - quotaFetchedAtMs) : Date.now()),
+    [quota, quotaFetchedAtMs],
+  );
   const currentUsage = usage && !usageQuery.isPlaceholderData ? usage : undefined;
   const currentTelemetry = telemetry && !telemetryQuery.isPlaceholderData ? telemetry : undefined;
   const shownWindow = currentUsage?.window ?? currentTelemetry?.window;
-  const nowMs = quota?.as_of_ms ?? Date.now();
 
   React.useEffect(() => {
     if (!isRangeReady || view.bucket !== 'hour') return;
-    const code = apiErrorCode(usageQuery.error) ?? apiErrorCode(telemetryQuery.error);
+    const isHourLimitError =
+      apiErrorCode(usageQuery.error) === 'insights_bucket_hour_limit' ||
+      apiErrorCode(telemetryQuery.error) === 'insights_bucket_hour_limit' ||
+      apiErrorCode(telemetryItemQuery.error) === 'insights_bucket_hour_limit';
     if (
-      code === 'insights_bucket_hour_limit' ||
-      !isRangeWithinHourLimit(range, nowMs) ||
+      isHourLimitError ||
+      !isRangeWithinHourLimit(range, visibleNow) ||
       (shownWindow && shownWindow.to - shownWindow.from > HOUR_LIMIT_MS)
     ) {
-      setView({ bucket: 'auto' });
+      setView({ bucket: 'auto' }, { replace: true });
     }
-  }, [isRangeReady, nowMs, range, setView, shownWindow, telemetryQuery.error, usageQuery.error, view.bucket]);
+  }, [isRangeReady, range, setView, shownWindow, telemetryItemQuery.error, telemetryQuery.error, usageQuery.error, view.bucket, visibleNow]);
 
   const isUsageUncaptured = apiErrorCode(usageQuery.error) === 'demo_uncaptured';
   const isTelemetryUncaptured = apiErrorCode(telemetryQuery.error) === 'demo_uncaptured';
   const isQuotaUncaptured = apiErrorCode(quotaQuery.error) === 'demo_uncaptured';
   const isUncaptured = isUsageUncaptured || isTelemetryUncaptured || isQuotaUncaptured;
   const hasActiveRangeOverride = view.bucket !== 'auto' || range.preset !== DEFAULT_INSIGHTS_RANGE.preset || range.from !== undefined;
+  const canRestoreCapturedView = hasActiveRangeOverride || hasTrendsFilters(view.filters);
 
   // The names the reads gave each group, so a filter chip keeps reading as a name after the group
   // has scrolled out of the current view.
@@ -268,11 +283,11 @@ export const TrendsPage: React.FC = () => {
   const clearFilters = React.useCallback(() => setView({ filters: {} }), [setView]);
 
   const changeRange = React.useCallback((next: InsightsRange) => {
-    if (view.bucket === 'hour' && !isRangeWithinHourLimit(next, nowMs)) {
-      setView({ bucket: 'auto' });
+    if (view.bucket === 'hour' && !isRangeWithinHourLimit(next, visibleNow)) {
+      setView({ bucket: 'auto' }, { replace: true });
     }
     void setRange(next);
-  }, [nowMs, setRange, setView, view.bucket]);
+  }, [setRange, setView, view.bucket, visibleNow]);
 
   const brush = React.useCallback((next: { from: number; to: number | null }) => {
     changeRange(next);
@@ -284,10 +299,13 @@ export const TrendsPage: React.FC = () => {
   const [focusedTile, setFocusedTile] = React.useState<TileKey | null>(null);
   const selectTile = (key: TileKey) => {
     setFocusedTile(key);
-    // The quota tile counts credentials at risk; opening it shows the window that runs out first.
-    const pressingPair = key === 'quota' && quota ? pickQuotaWindow(quota.items, undefined, undefined) : null;
+    // The quota tile counts active forecastable credentials; opening it targets the most pressing one.
+    const pressingPair = key === 'quota' && quota ? pickForecastableQuotaWindow(quota.items, quotaNowMs) : null;
     if (pressingPair) setView({ quotaCredential: pressingPair.credential.auth_index, quotaWindow: pressingPair.window.window_id, quotaView: 'burn' });
-    document.getElementById(TILE_SECTIONS[key])?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+    document.getElementById(TILE_SECTIONS[key])?.scrollIntoView?.({
+      block: 'start',
+      behavior: isMotionReduced() ? 'instant' : 'smooth',
+    });
   };
 
   const isHourAllowed = !shownWindow || shownWindow.to - shownWindow.from <= HOUR_LIMIT_MS;
@@ -387,18 +405,10 @@ export const TrendsPage: React.FC = () => {
   // quiet facts that say why: whether any subscription runs out, how fast answers stream, how the
   // token volume compares, and what the failures are.
   const isQuotaMembershipUnknown = Boolean(quota?.summary.is_membership_unknown);
-  const risk = quota ? quotaRisk(quota.items, nowMs) : null;
+  const risk = quota ? quotaRisk(quota.items, quotaNowMs) : null;
   const rateTone = rate === null ? 'neutral' : successRateTone(rate * 100);
   // The two largest causes, failures first; a substitution is served traffic, so it trails them.
-  const failureCauses = summary ? [
-    ...([
-      { key: 'rate_limited', count: summary.rate_limited_429, tone: 'tone-danger' },
-      { key: 'truncated', count: summary.stream_truncated, tone: 'tone-danger' },
-      { key: 'upstream_5xx', count: summary.upstream_5xx, tone: 'tone-danger' },
-      { key: 'other_failures', count: summary.other_failures, tone: 'tone-danger' },
-    ] as const).filter((cause) => cause.count > 0).sort((left, right) => right.count - left.count),
-    ...(summary.model_substituted > 0 ? [{ key: 'substituted', count: summary.model_substituted, tone: 'tone-warn' } as const] : []),
-  ].slice(0, 2) : [];
+  const failureCauses = deliveryFailureCauses(summary);
 
   const tiles = [
     {
@@ -470,10 +480,10 @@ export const TrendsPage: React.FC = () => {
       <TrendsFilterBar
         filters={view.filters}
         range={range}
-        bucket={view.bucket}
+        bucket={effectiveBucket}
         modelView={modelView}
-        usage={usage}
-        telemetry={telemetry}
+        usage={currentUsage}
+        telemetry={currentTelemetry}
         isRangeReady={isRangeReady}
         isDemo={isDemo}
         isPollingActive={isPollingActive}
@@ -490,13 +500,15 @@ export const TrendsPage: React.FC = () => {
           tone="info"
           data-testid="trends-uncaptured"
           description={t('trends.uncaptured')}
-          action={hasActiveRangeOverride ? (
+          action={canRestoreCapturedView ? (
             <button
               type="button"
               className="underline font-medium"
               onClick={() => {
-                setView({ bucket: 'auto' });
-                void setRange(DEFAULT_INSIGHTS_RANGE);
+                setView({ bucket: 'auto', filters: {} });
+                if (range.preset !== DEFAULT_INSIGHTS_RANGE.preset || range.from !== undefined) {
+                  void setRange(DEFAULT_INSIGHTS_RANGE);
+                }
               }}
             >
               {t('trends.window.demo_reset')}
@@ -526,7 +538,8 @@ export const TrendsPage: React.FC = () => {
         view={view.quotaView}
         onChange={(patch) => setView(patch)}
         onNavigate={navigate}
-        nowMs={nowMs}
+        nowMs={quotaNowMs}
+        resolveNowMs={resolveQuotaNowMs}
       />
       {!isUsageUncaptured && usageQuery.isError && (
         <LoadFailure tone="warning" title={t('trends.error_title')} error={usageQuery.error} onRetry={() => void usageQuery.refetch()} />

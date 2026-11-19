@@ -52,6 +52,7 @@ export default {
   'trends.tile.delivery': 'Success rate',
   'trends.tile.rate_limited': '{n} rate limited (429)',
   'trends.tile.truncated': '{n} truncated',
+  'trends.tile.force_cooldown': '{n} forced cooldown',
   'trends.tile.upstream_5xx': '{n} upstream 5xx',
   'trends.tile.other_failures': '{n} other failed',
   'trends.tile.substituted': '{n} substituted',
@@ -101,7 +102,7 @@ export default {
   'trends.quota.approximate_hint': 'Approximated from rolled-up 15-minute usage facts',
   'trends.quota.physical_unavailable': 'Feature quota usage is not tracked per request',
 
-  'trends.window.demo_reset': 'Reset to default range',
+  'trends.window.demo_reset': 'Reset range and filters',
 
   'trends.perf.title': 'Speed bench',
   'trends.perf.mode_label': 'Speed view',

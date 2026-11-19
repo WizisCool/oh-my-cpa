@@ -52,6 +52,7 @@ export default {
   'trends.tile.delivery': '成功率',
   'trends.tile.rate_limited': '429 限流 {n}',
   'trends.tile.truncated': '串流截斷 {n}',
+  'trends.tile.force_cooldown': '強制冷卻 {n}',
   'trends.tile.upstream_5xx': '上游 5xx {n}',
   'trends.tile.other_failures': '其他失敗 {n}',
   'trends.tile.substituted': '換模 {n}',
@@ -101,7 +102,7 @@ export default {
   'trends.quota.approximate_hint': '基於分桶匯總推算的近似口徑',
   'trends.quota.physical_unavailable': '該功能配額暫無請求用量明細',
 
-  'trends.window.demo_reset': '恢復預設範圍',
+  'trends.window.demo_reset': '恢復預設範圍與篩選',
 
   'trends.perf.title': '性能測速',
   'trends.perf.mode_label': '測速視圖',

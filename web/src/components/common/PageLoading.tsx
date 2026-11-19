@@ -360,7 +360,7 @@ export function TrendsSkeleton({
         </Panel>
         <Panel
           title={<Placeholder width={120} row={3} className="placeholder-line" />}
-          extra={<Placeholder width={420} height={28} row={3} className="is-control" />}
+          extra={<Placeholder width="min(420px, calc(100vw - 72px))" height={28} row={3} className="is-control" />}
         >
           <ChartLinesPlaceholder height={280} kind="trend" row={3} />
         </Panel>

@@ -49,6 +49,7 @@ export default {
   'trends.tile.delivery': '成功率',
   'trends.tile.rate_limited': '429 限流 {n}',
   'trends.tile.truncated': '流截断 {n}',
+  'trends.tile.force_cooldown': '强制冷却 {n}',
   'trends.tile.upstream_5xx': '上游 5xx {n}',
   'trends.tile.other_failures': '其他失败 {n}',
   'trends.tile.substituted': '换模 {n}',
@@ -98,7 +99,7 @@ export default {
   'trends.quota.approximate_hint': '基于分桶汇总推算的近似口径',
   'trends.quota.physical_unavailable': '该功能配额暂无请求用量明细',
 
-  'trends.window.demo_reset': '恢复默认范围',
+  'trends.window.demo_reset': '恢复默认范围与筛选',
 
   'trends.perf.title': '性能测速',
   'trends.perf.mode_label': '测速视图',

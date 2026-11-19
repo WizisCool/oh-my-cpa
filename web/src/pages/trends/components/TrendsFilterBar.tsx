@@ -1,5 +1,5 @@
 import React from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -85,7 +85,6 @@ export const TrendsFilterBar: React.FC<TrendsFilterBarProps> = ({
     queryKey: ['trends-usage', queryString],
     queryFn: () => api.getTrendsUsage(queryString),
     enabled: isOpen && dimension !== null && isRangeReady,
-    placeholderData: keepPreviousData,
     staleTime: 15_000,
     refetchOnWindowFocus: isPollingActive,
     refetchInterval: (query) => (isPollingActive ? insightsPollInterval(query.state.data?.window) : false),
@@ -95,14 +94,30 @@ export const TrendsFilterBar: React.FC<TrendsFilterBarProps> = ({
 
   const matchingUsage = React.useMemo(() => {
     if (!dimension) return undefined;
-    if (optionsQuery.data && optionsQuery.data.group_by === targetGroupBy) return optionsQuery.data;
-    if (usage && usage.group_by === targetGroupBy && (!filters[dimension]?.length || isDemo)) return usage;
+    if (optionsQuery.data && !optionsQuery.isPlaceholderData && optionsQuery.data.group_by === targetGroupBy) {
+      return optionsQuery.data;
+    }
+    if (
+      usage
+      && usage.group_by === targetGroupBy
+      && (!filters[dimension]?.length || isDemo)
+      && trendsWindowParams(range, bucket, usage.group_by, isDemo ? {} : filters) === queryString
+    ) {
+      return usage;
+    }
     return undefined;
-  }, [dimension, filters, isDemo, optionsQuery.data, targetGroupBy, usage]);
+  }, [bucket, dimension, filters, isDemo, optionsQuery.data, optionsQuery.isPlaceholderData, queryString, range, targetGroupBy, usage]);
+
+  const matchingTelemetry = React.useMemo(() => {
+    if (!dimension || !matchingUsage || !telemetry || filters[dimension]?.length) return undefined;
+    if (telemetry.group_by !== matchingUsage.group_by) return undefined;
+    if (telemetry.window.from !== matchingUsage.window.from || telemetry.window.to !== matchingUsage.window.to) return undefined;
+    return telemetry;
+  }, [dimension, filters, matchingUsage, telemetry]);
 
   const options = React.useMemo(
-    () => (dimension ? trendsFilterOptions(matchingUsage, telemetry) : []),
-    [dimension, matchingUsage, telemetry],
+    () => (dimension ? trendsFilterOptions(matchingUsage, matchingTelemetry) : []),
+    [dimension, matchingTelemetry, matchingUsage],
   );
 
   const needle = search.trim().toLowerCase();
@@ -122,9 +137,9 @@ export const TrendsFilterBar: React.FC<TrendsFilterBarProps> = ({
   };
 
   const panel = dimension === null ? (
-    <div className={styles['filter-menu']} role="menu">
+    <div className={styles['filter-menu']}>
       {dimensions.map((item) => (
-        <button key={item} type="button" role="menuitem" className={styles['filter-menu-item']} onClick={() => setDimension(item)}>
+        <button key={item} type="button" className={styles['filter-menu-item']} onClick={() => setDimension(item)}>
           {t(`trends.filter.${item}`)}
           {(filters[item]?.length ?? 0) > 0 && <span className={styles['filter-menu-count']}>{filters[item]!.length}</span>}
         </button>

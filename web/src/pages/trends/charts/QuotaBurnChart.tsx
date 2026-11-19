@@ -403,7 +403,7 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
   const hostWidthRef = React.useRef<number>(760);
   const readoutRef = React.useRef<HTMLDivElement | null>(null);
   const [readoutSize, setReadoutSize] = React.useState(READOUT_FALLBACK);
-  const [activeState, setActiveState] = React.useState<{ index: number; follow: 'pointer' | 'key' } | null>(null);
+  const [activeState, setActiveState] = React.useState<{ t: number; isExhaustMilestone: boolean; follow: 'pointer' | 'key' } | null>(null);
   const [isReadoutAnimated, setIsReadoutAnimated] = React.useState(false);
   const isTouchReadingRef = React.useRef(false);
 
@@ -443,9 +443,21 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
     [visiblePoints],
   );
 
-  const active = activeState && activeState.index >= 0 && activeState.index < data.length
-    ? (data[activeState.index]!.t >= viewStart && data[activeState.index]!.t <= viewEnd ? data[activeState.index]! : null)
-    : null;
+  const activePoint = React.useMemo(() => {
+    if (!activeState) return null;
+    return data.find((point) => (
+      point.t === activeState.t && Boolean(point.isExhaustMilestone) === activeState.isExhaustMilestone
+    )) ?? null;
+  }, [activeState, data]);
+
+  React.useEffect(() => {
+    if (activeState && !activePoint) {
+      isTouchReadingRef.current = false;
+      setActiveState(null);
+    }
+  }, [activePoint, activeState]);
+
+  const active = activePoint && activePoint.t >= viewStart && activePoint.t <= viewEnd ? activePoint : null;
 
   React.useEffect(() => {
     const host = hostRef.current;
@@ -581,9 +593,10 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
       const instant = instantAt(event.clientX);
       if (instant !== null) {
         const index = snapPointForInstant(instant);
-        if (index >= 0) {
+        const point = index >= 0 ? data[index] : undefined;
+        if (point) {
           isTouchReadingRef.current = true;
-          setActiveState({ index, follow: 'pointer' });
+          setActiveState({ t: point.t, isExhaustMilestone: Boolean(point.isExhaustMilestone), follow: 'pointer' });
         }
       }
       return;
@@ -615,12 +628,18 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
       }
     }
     const index = snapPointForInstant(instant);
-    if (index < 0) {
+    const point = index >= 0 ? data[index] : undefined;
+    if (!point) {
       clearReading();
       return;
     }
+    const isMilestone = Boolean(point.isExhaustMilestone);
     isTouchReadingRef.current = false;
-    setActiveState((curr) => (curr && curr.index === index && curr.follow === 'pointer' ? curr : { index, follow: 'pointer' }));
+    setActiveState((curr) => (
+      curr && curr.t === point.t && curr.isExhaustMilestone === isMilestone && curr.follow === 'pointer'
+        ? curr
+        : { t: point.t, isExhaustMilestone: isMilestone, follow: 'pointer' }
+    ));
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -686,12 +705,17 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
       clearReading();
       return;
     }
-    const position = activeState === null ? -1 : visible.indexOf(activeState.index);
-    const next = stepPointIndex(position < 0 ? null : position, event.key, visible.length);
+    const position = active
+      ? visiblePoints.findIndex((point) => (
+        point.t === active.t && Boolean(point.isExhaustMilestone) === Boolean(active.isExhaustMilestone)
+      ))
+      : -1;
+    const next = stepPointIndex(position < 0 ? null : position, event.key, visiblePoints.length);
     if (next === position || (next === null && position < 0)) return;
     event.preventDefault();
     isTouchReadingRef.current = false;
-    setActiveState(next === null ? null : { index: visible[next]!, follow: 'key' });
+    const nextPoint = next === null ? null : visiblePoints[next];
+    setActiveState(nextPoint ? { t: nextPoint.t, isExhaustMilestone: Boolean(nextPoint.isExhaustMilestone), follow: 'key' } : null);
   };
 
   const formatSpan = (point: QuotaBurnPoint) => {

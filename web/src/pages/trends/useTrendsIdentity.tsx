@@ -101,8 +101,10 @@ export function useTrendsIdentity(): TrendsIdentity {
         const item = typeof value === 'string' ? { id: value } : value;
         const given = item.label?.trim();
         switch (dimension) {
-          case 'provider':
-            return names.label('provider', item.id);
+          case 'provider': {
+            const namedProvider = names.label('provider', item.id);
+            return namedProvider === item.id && given && given !== item.id ? given : namedProvider;
+          }
           case 'credential':
           case 'auth_index': {
             // An index nothing in the directory claims falls back to the name the read carried.

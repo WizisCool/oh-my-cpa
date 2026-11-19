@@ -52,6 +52,7 @@ export default {
   'trends.tile.delivery': 'Kadar berjaya',
   'trends.tile.rate_limited': '{n} dihadkan (429)',
   'trends.tile.truncated': '{n} terpotong',
+  'trends.tile.force_cooldown': '{n} penyejukan paksa',
   'trends.tile.upstream_5xx': '{n} 5xx huluan',
   'trends.tile.other_failures': '{n} gagal lain',
   'trends.tile.substituted': '{n} model diganti',
@@ -101,7 +102,7 @@ export default {
   'trends.quota.approximate_hint': 'Dianggarkan daripada ringkasan penggunaan 15 minit',
   'trends.quota.physical_unavailable': 'Penggunaan kuota ciri ini tidak dijejaki mengikut permintaan',
 
-  'trends.window.demo_reset': 'Tetapkan semula julat lalai',
+  'trends.window.demo_reset': 'Tetapkan semula julat dan penapis',
 
   'trends.perf.title': 'Ujian kelajuan',
   'trends.perf.mode_label': 'Paparan kelajuan',

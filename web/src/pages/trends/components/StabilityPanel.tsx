@@ -9,9 +9,17 @@ import { ArrowRightOutlined, CheckCircleOutlined, HistoryOutlined } from '../../
 import { useT } from '../../../i18n';
 import dayjs from '../../../utils/time';
 import { useTimeZone } from '../../../utils/TimeZoneProvider';
+import { sharedResizeObserverHub } from '../../../performance/resizeObserverHub';
 import type { InsightsBucket } from '../../../types/insights';
 import type { TrendsSubstitutionPair, TrendsTelemetryResponse } from '../../../types/trends';
-import { stabilityLanes, successRate, formatPercent, type StabilityLane } from '../trendsLogic';
+import {
+  stabilityDisplayBuckets,
+  stabilityLanes,
+  successRate,
+  formatPercent,
+  type StabilityDisplayBucket,
+  type StabilityLane,
+} from '../trendsLogic';
 import { ModelMark } from '../../../components/ModelMark';
 import type { TrendsIdentity } from '../useTrendsIdentity';
 import styles from '../trends.module.css';
@@ -21,6 +29,8 @@ const AXIS_FORMATS: Record<InsightsBucket, string> = { hour: 'MM-DD HH:mm', day:
 const PAIR_LIMIT = 6;
 /** Past this many buckets the cells close up, so none of them thins to nothing. */
 const DENSE_BUCKETS = 72;
+/** Minimum pixel width of one displayed stability cell before adjacent buckets aggregate. */
+const MIN_CELL_PX = 2;
 /** The faintest a bucket with any event is drawn, so a single failure is never invisible. */
 const MIN_WEIGHT = 22;
 
@@ -37,6 +47,15 @@ function laneTone(lane: StabilityLane): 'danger' | 'warn' {
   return lane === 'model_substituted' ? 'warn' : 'danger';
 }
 
+function formatCellHeading(cell: StabilityDisplayBucket, bucket: InsightsBucket): string {
+  const start = dayjs(cell.start_ms);
+  if (cell.span_count <= 1) return start.format(TOOLTIP_FORMATS[bucket]);
+  const endInstant = bucket === 'hour' ? cell.end_ms : cell.last_start_ms;
+  const end = dayjs(endInstant);
+  const endFormat = bucket === 'hour' && start.isSame(end, 'day') ? 'HH:mm' : TOOLTIP_FORMATS[bucket];
+  return `${start.format(TOOLTIP_FORMATS[bucket])} – ${end.format(endFormat)}`;
+}
+
 /**
  * Failures and silent model substitutions as lanes over the window: a cell per bucket, as strong
  * as that bucket's count against the lane's busiest one. The substitutions read as pairs below -
@@ -45,15 +64,54 @@ function laneTone(lane: StabilityLane): 'danger' | 'warn' {
 export const StabilityPanel: React.FC<StabilityPanelProps> = ({ data, identity, pairHref, onNavigate, isUnavailable }) => {
   useTimeZone();
   const t = useT();
+  const [trackNode, setTrackNode] = React.useState<HTMLSpanElement | null>(null);
+  const [trackWidth, setTrackWidth] = React.useState<number | null>(null);
+  const [focusedCells, setFocusedCells] = React.useState<Partial<Record<StabilityLane, number>>>({});
+  const cellRefs = React.useRef<Record<string, Array<HTMLSpanElement | null>>>({});
+
+  React.useEffect(() => {
+    if (!trackNode) return undefined;
+    return sharedResizeObserverHub.observe(
+      trackNode,
+      ({ width }) => {
+        const rounded = Math.round(width);
+        if (rounded > 0) setTrackWidth((curr) => (curr === rounded ? curr : rounded));
+      },
+      { epsilonPx: 4, allowZeroHeight: true },
+    );
+  }, [trackNode]);
+
+  const maxCells = trackWidth && trackWidth > 0 ? Math.max(1, Math.floor(trackWidth / MIN_CELL_PX)) : undefined;
+  const displayCells = React.useMemo(
+    () => (data ? stabilityDisplayBuckets(data.buckets, data.window.to + 1, maxCells) : []),
+    [data, maxCells],
+  );
   // A lane with nothing in it reads as a placeholder, so only the lanes that saw an event are drawn.
-  const lanes = React.useMemo(() => (data ? stabilityLanes(data.buckets).filter((lane) => lane.total > 0) : []), [data]);
+  const lanes = React.useMemo(() => (data ? stabilityLanes(displayCells).filter((lane) => lane.total > 0) : []), [data, displayCells]);
   const rate = data ? successRate(data.summary) : null;
   const bucket = (data?.window.bucket ?? 'day') as InsightsBucket;
-  const starts = data?.buckets.map((item) => item.start_ms) ?? [];
-  // A short window has fewer than three distinct buckets; each tick names a different one.
-  const scale = starts.length > 0
-    ? [...new Set([starts[0]!, starts[Math.floor((starts.length - 1) / 2)]!, starts[starts.length - 1]!])].map((ms) => dayjs(ms).format(AXIS_FORMATS[bucket]))
-    : [];
+  const isDense = displayCells.length > DENSE_BUCKETS || (trackWidth !== null && trackWidth > 0 && displayCells.length * 4 > trackWidth);
+
+  const scale = React.useMemo(() => {
+    if (displayCells.length === 0) return [];
+    const first = displayCells[0]!;
+    const last = displayCells[displayCells.length - 1]!;
+    const endInstant = last.span_count > 1 && bucket === 'hour' ? last.end_ms : last.last_start_ms;
+    const raw = displayCells.length === 1
+      ? (last.span_count > 1 ? [first.start_ms, endInstant] : [first.start_ms])
+      : [first.start_ms, displayCells[Math.floor((displayCells.length - 1) / 2)]!.start_ms, endInstant];
+    return [...new Set(raw.map((ms) => dayjs(ms).format(AXIS_FORMATS[bucket])))];
+  }, [bucket, displayCells]);
+
+  const stepLaneCell = (currentIndex: number, key: string): number | null => {
+    const count = displayCells.length;
+    if (count === 0) return null;
+    if (key === 'Home') return 0;
+    if (key === 'End') return count - 1;
+    if (key === 'ArrowLeft') return Math.max(0, currentIndex - 1);
+    if (key === 'ArrowRight') return Math.min(count - 1, currentIndex + 1);
+    return null;
+  };
 
   return (
     <Panel
@@ -80,31 +138,63 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({ data, identity, 
       ) : (
         <div className={styles['panel-body']}>
           {lanes.length > 0 && (
-            <div className={styles.lanes} role="list" aria-label={t('trends.stability.title')} data-dense={starts.length > DENSE_BUCKETS || undefined}>
-              {lanes.map((lane) => (
-                <div key={lane.lane} className={styles.lane} role="listitem" data-testid={`trends-lane-${lane.lane}`}>
-                  <span className={styles['lane-label']}>{t(`trends.stability.lane.${lane.lane}`)}</span>
-                  <span className={styles['lane-cells']}>
-                    {lane.counts.map((count, index) => {
-                      const start = data.buckets[index]?.start_ms ?? 0;
-                      const weight = count === 0 || lane.max === 0 ? 0 : Math.round(MIN_WEIGHT + (100 - MIN_WEIGHT) * (count / lane.max));
-                      return (
-                        <span
-                          key={start}
-                          className={styles['lane-cell']}
-                          data-tone={count > 0 ? laneTone(lane.lane) : undefined}
-                          style={{ '--lane-weight': `${weight}%` } as React.CSSProperties}
-                          {...tipCard({
-                            heading: dayjs(start).format(TOOLTIP_FORMATS[bucket]),
-                            rows: [{ label: t(`trends.stability.lane.${lane.lane}`), value: count.toLocaleString('en'), tone: count > 0 ? laneTone(lane.lane) : 'muted' }],
-                          })}
-                        />
-                      );
-                    })}
-                  </span>
-                  <span className={styles['lane-total']}>{lane.total.toLocaleString('en')}</span>
-                </div>
-              ))}
+            <div className={styles.lanes} role="list" aria-label={t('trends.stability.title')} data-dense={isDense || undefined}>
+              {lanes.map((lane, laneIndex) => {
+                const laneLabel = t(`trends.stability.lane.${lane.lane}`);
+                const activeCellIndex = Math.min(Math.max(0, displayCells.length - 1), Math.max(0, focusedCells[lane.lane] ?? 0));
+                return (
+                  <div key={lane.lane} className={styles.lane} role="listitem" data-testid={`trends-lane-${lane.lane}`}>
+                    <span className={styles['lane-label']}>{laneLabel}</span>
+                    <span
+                      ref={laneIndex === 0 ? setTrackNode : undefined}
+                      className={styles['lane-cells']}
+                      role="group"
+                      aria-label={laneLabel}
+                      onKeyDown={(event) => {
+                        const target = (event.target as Element | null)?.closest<HTMLElement>(`.${styles['lane-cell']}`);
+                        const currentIndex = target?.dataset.cellIndex !== undefined
+                          ? Number(target.dataset.cellIndex)
+                          : activeCellIndex;
+                        const nextIndex = stepLaneCell(currentIndex, event.key);
+                        if (nextIndex === null || nextIndex === currentIndex) return;
+                        event.preventDefault();
+                        setFocusedCells((curr) => ({ ...curr, [lane.lane]: nextIndex }));
+                        cellRefs.current[lane.lane]?.[nextIndex]?.focus();
+                      }}
+                    >
+                      {lane.counts.map((count, index) => {
+                        const cell = displayCells[index]!;
+                        const weight = count === 0 || lane.max === 0 ? 0 : Math.round(MIN_WEIGHT + (100 - MIN_WEIGHT) * (count / lane.max));
+                        const tip = tipCard({
+                          heading: formatCellHeading(cell, bucket),
+                          rows: [{ label: laneLabel, value: count.toLocaleString('en'), tone: count > 0 ? laneTone(lane.lane) : 'muted' }],
+                        });
+                        return (
+                          <span
+                            key={cell.start_ms}
+                            ref={(node) => {
+                              const list = (cellRefs.current[lane.lane] ??= []);
+                              list.length = displayCells.length;
+                              list[index] = node;
+                            }}
+                            role="img"
+                            tabIndex={index === activeCellIndex ? 0 : -1}
+                            data-cell-index={index}
+                            data-focus-ring="outer"
+                            aria-label={tip['data-tip']}
+                            className={styles['lane-cell']}
+                            data-tone={count > 0 ? laneTone(lane.lane) : undefined}
+                            style={{ '--lane-weight': `${weight}%` } as React.CSSProperties}
+                            onFocus={() => setFocusedCells((curr) => (curr[lane.lane] === index ? curr : { ...curr, [lane.lane]: index }))}
+                            {...tip}
+                          />
+                        );
+                      })}
+                    </span>
+                    <span className={styles['lane-total']}>{lane.total.toLocaleString('en')}</span>
+                  </div>
+                );
+              })}
               {scale.length > 0 && (
                 <div className={styles['lane-scale']} aria-hidden="true">
                   <span className={styles['lane-scale-ticks']}>

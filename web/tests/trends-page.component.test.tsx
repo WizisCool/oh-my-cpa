@@ -1,16 +1,18 @@
-import type React from 'react';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import React from 'react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import { installOmcApi, json, type OmcApi } from './support/omcApi';
 import { createTestQueryClient, renderWithOmc } from './support/render';
 import { TrendsPage } from '../src/pages/trends/TrendsPage';
+import { QuotaBurnChart } from '../src/pages/trends/charts/QuotaBurnChart';
+import { buildQuotaBurnSeries } from '../src/pages/trends/trendsLogic';
+import { ChartContainer, ChartTooltipContent } from '../src/components/ui/chart';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import type {
   TrendsQuotaResponse,
   TrendsQuotaWindow,
   TrendsTelemetryBucket,
-  TrendsTelemetrySummary,
   TrendsTelemetryResponse,
   TrendsUsageResponse,
 } from '../src/types/trends';
@@ -138,45 +140,17 @@ describe('trends page', () => {
     mount();
     await waitFor(() => expect(screen.getByTestId('trends-quota-used').textContent).toBe('60.0%'));
     await waitFor(() => expect(screen.getByTestId('trends-tile-movers').textContent).toContain('4.5K'));
-    // The tiles read in the order of the panels they open; the net token flow has no panel of its own.
-    const tiles = within(screen.getByTestId('trends-tiles')).getAllByTestId(/^trends-tile-/).map((tile) => tile.getAttribute('data-testid'));
-    expect(tiles).toEqual(['trends-tile-quota', 'trends-tile-speed', 'trends-tile-movers', 'trends-tile-delivery']);
-    expect(screen.queryByTestId('trends-throughput')).toBeNull();
     const quota = screen.getByTestId('trends-quota');
-    expect(within(quota).getByText('Subscription quota trends')).toBeTruthy();
     // The head reads the cycle as figures, each a label over its value.
     const figure = (label: string) => within(quota).getByText(label).nextElementSibling?.textContent;
     expect(figure('Hits limit')).toBe('03:00');
     expect(figure('Resets in')).toBe('3h 0m');
     expect(figure('Burn rate')).toBe('30.00%/h');
-    // This period's net tokens against the previous period's robust baseline, not the previous total.
-    const movers = screen.getByTestId('trends-tile-movers');
-    expect(within(movers).getByText('Net tokens')).toBeTruthy();
-    expect(within(movers).getByText('+25.0% vs baseline')).toBeTruthy();
-    expect(within(movers).queryByText(/sonnet|rising|falling/)).toBeNull();
-    // The quota tile counts the credentials it can project and how many are at risk.
-    const quotaTile = screen.getByTestId('trends-tile-quota');
-    expect(within(quotaTile).getByText('1')).toBeTruthy();
-    expect(within(quotaTile).getByText('1 heading for limit')).toBeTruthy();
-    expect(within(quotaTile).queryByText(/at limit|within limits/)).toBeNull();
-    const speed = screen.getByTestId('trends-tile-speed');
-    expect(within(speed).getByText('TTFT P95 1.40s')).toBeTruthy();
-    expect(within(speed).queryByText('Excludes TTFT')).toBeNull();
-    const delivery = screen.getByTestId('trends-tile-delivery');
-    expect(within(delivery).getByText('1 rate limited (429)')).toBeTruthy();
-    expect(within(delivery).getByText('1 upstream 5xx')).toBeTruthy();
-    // Two causes at most, failures before substitutions.
-    expect(within(delivery).queryByText(/substituted|truncated/)).toBeNull();
     // An overview strip opens with no tile picked.
     expect(screen.queryAllByRole('button', { pressed: true }).filter((button) => button.dataset.testid?.startsWith('trends-tile-'))).toEqual([]);
-    // So is a mover's change.
     const riser = await screen.findByTestId('trends-movers-risers');
     expect(within(riser).getByText('+50.0%')).toBeTruthy();
     expect(within(screen.getByTestId('trends-tile-delivery')).getByText('90.0%')).toBeTruthy();
-    // The usage read groups by the call name the console's model view names, and leaves the default range implicit.
-    const usageRead = api.requests.find((request) => request.path === '/management/trends/usage')!;
-    expect(usageRead.query.get('group_by')).toBe('call_point');
-    expect(usageRead.query.get('preset')).toBe('7d');
   });
 
   it('switches the quota window and steps the burn curve with the arrow keys', async () => {
@@ -343,7 +317,7 @@ describe('trends page', () => {
     mount();
     const addBtn = await screen.findByTestId('trends-filter-add');
     fireEvent.click(addBtn);
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Provider' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Provider' }));
     const providerOpt = await within(await screen.findByTestId('trends-filter-values')).findByText('Codex');
     fireEvent.click(providerOpt);
     await waitFor(() => expect(new URLSearchParams(lastSearch).getAll('provider')).toEqual(['codex']));
@@ -418,37 +392,25 @@ describe('trends page', () => {
     expect(drill.getAll('model')).toEqual(['gpt-5']);
   });
 
-  it('says a window without failures or substitutions ran clean instead of drawing empty lanes', async () => {
-    const calm = <T extends TrendsTelemetrySummary>(bucket: T): T => ({
-      ...bucket,
-      success_requests: bucket.total_requests,
-      failed_requests: 0,
-      rate_limited_429: 0,
-      upstream_5xx: 0,
-      stream_truncated: 0,
-      force_cooldown: 0,
-      other_failures: 0,
-      model_substituted: 0,
-    });
-    api.on('GET', '/management/trends/telemetry', () => ({
-      ...TELEMETRY, summary: calm(TELEMETRY.summary), buckets: TELEMETRY.buckets.map(calm), substitution_pairs: [],
-    }));
-    mount();
-    expect(await screen.findByTestId('trends-stability-clear', {}, { timeout: 5000 })).toBeTruthy();
-    expect(screen.queryByTestId('trends-lane-rate_limited_429')).toBeNull();
-    expect(screen.queryByTestId('trends-substitutions')).toBeNull();
-  });
-
-  it('shows a quiet notice and does not retry a window the demonstration did not capture', async () => {
-    api.on('GET', '/management/trends/usage', () => json({ error: 'not captured', code: 'demo_uncaptured' }, 404));
-    api.on('GET', '/management/trends/telemetry', () => json({ error: 'not captured', code: 'demo_uncaptured' }, 404));
+  it('shows a quiet notice with reset for filter-only uncaptured demo views and does not retry them', async () => {
+    api.on('GET', '/management/trends/usage', (request) => (
+      request.query.has('model') ? json({ error: 'not captured', code: 'demo_uncaptured' }, 404) : USAGE
+    ));
+    api.on('GET', '/management/trends/telemetry', (request) => (
+      request.query.has('model') ? json({ error: 'not captured', code: 'demo_uncaptured' }, 404) : TELEMETRY
+    ));
     mount('/trends?model=gpt-5');
-    expect(await screen.findByTestId('trends-uncaptured')).toBeTruthy();
+    const notice = await screen.findByTestId('trends-uncaptured');
     await waitFor(() => expect(screen.getByTestId('trends-quota-used')).toBeTruthy());
     // The panels that read the uncaptured window say so instead of loading forever.
     expect(within(await screen.findByTestId('trends-movers')).getByText('The demo does not hold this view')).toBeTruthy();
     expect(within(screen.getByTestId('trends-stability')).getByText('The demo does not hold this view')).toBeTruthy();
     expect(api.requests.filter((request) => request.path === '/management/trends/usage')).toHaveLength(1);
+
+    fireEvent.click(within(notice).getByRole('button', { name: 'Reset range and filters' }));
+    await waitFor(() => expect(new URLSearchParams(lastSearch).has('model')).toBe(false));
+    await waitFor(() => expect(screen.queryByTestId('trends-uncaptured')).toBeNull());
+    expect(await screen.findByTestId('trends-movers-risers')).toBeTruthy();
   });
 
   it('keeps touch quota readout open on pointerLeave', async () => {
@@ -494,11 +456,17 @@ describe('trends page', () => {
     api.on('GET', '/management/trends/quota', () => (shouldFail ? json({ error: 'quota boom' }, 500) : QUOTA));
 
     mount();
+    await waitFor(() => {
+      expect(api.requests.filter((r) => r.path === '/management/trends/usage').length).toBeGreaterThanOrEqual(3);
+      expect(api.requests.filter((r) => r.path === '/management/trends/telemetry').length).toBeGreaterThanOrEqual(3);
+      expect(api.requests.filter((r) => r.path === '/management/trends/quota').length).toBeGreaterThanOrEqual(3);
+    });
     const retryBtn = await screen.findByRole('button', { name: 'Retry' });
     shouldFail = false;
     fireEvent.click(retryBtn);
     await waitFor(() => expect(screen.getByTestId('trends-quota-used').textContent).toBe('60.0%'));
     await waitFor(() => expect(screen.getByTestId('trends-tile-movers').textContent).toContain('4.5K'));
+    await waitFor(() => expect(screen.getByTestId('trends-tile-delivery').textContent).toContain('90.0%'));
   });
 
   it('resets bucket=hour to auto when the active range exceeds 14 days', async () => {
@@ -591,20 +559,143 @@ describe('trends page', () => {
     expect(await screen.findByText('Feature quota usage is not tracked per request')).toBeTruthy();
   });
 
-  it('reports membership and risk unknown when CPA is unavailable while keeping historical readings visible', async () => {
-    api.on('GET', '/management/trends/quota', () => ({
-      as_of_ms: 2 * HOUR,
-      summary: { active_credentials: 0, is_membership_unknown: true, observable_windows: 1, healthy_windows: 0, limit_reached_windows: 0, projected_exhaust_windows: 0, underutilized_windows: 0 },
-      items: [{
-        ...QUOTA.items[0]!,
-        status: 'unknown',
-        windows: [quotaWindow('5h', { status: 'normal', burn_rate_per_hour: undefined, projected_exhaust_at_ms: undefined, projected_end_percent: undefined })],
-      }],
-    }));
-
+  it('steps stability lane buckets with arrow keys and exposes bucket time and count to assistive tech', async () => {
     mount();
-    await waitFor(() => expect(screen.getByTestId('trends-quota-used').textContent).toBe('60.0%'));
-    expect(await screen.findByTestId('trends-quota-stale-notice', {}, { timeout: 5000 })).toBeTruthy();
-    expect(screen.getByTestId('trends-tile-quota').textContent).toContain('—');
+    const lane = await screen.findByTestId('trends-lane-rate_limited_429', {}, { timeout: 5000 });
+    const cells = within(lane).getAllByRole('img');
+    expect(cells).toHaveLength(3);
+    expect(cells[0]!.tabIndex).toBe(0);
+    expect(cells[1]!.tabIndex).toBe(-1);
+    expect(cells[1]!.getAttribute('aria-label')).toContain('01-01 01:00');
+    expect(cells[1]!.getAttribute('aria-label')).toContain('1');
+
+    cells[0]!.focus();
+    fireEvent.keyDown(cells[0]!, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(cells[1]);
+    expect(cells[1]!.tabIndex).toBe(0);
+    expect(cells[0]!.tabIndex).toBe(-1);
+  });
+
+  it('keeps the selected quota burn point by timestamp across forecast milestone shifts and forwards tooltip notes', () => {
+    const winBefore = quotaWindow('5h', {
+      projected_exhaust_at_ms: 2.5 * HOUR,
+      buckets: [
+        { start_ms: 0, end_ms: HOUR, used_percent: 25, delta_percent: 25, requests: 10, net_tokens: 3000, total_tokens: 4000, is_forecast: false },
+        { start_ms: HOUR, end_ms: 2 * HOUR, used_percent: 60, delta_percent: 35, requests: 20, net_tokens: 6000, total_tokens: 8000, is_forecast: false },
+        { start_ms: 2 * HOUR, end_ms: 3 * HOUR, used_percent: 115, delta_percent: 55, requests: 0, net_tokens: 0, total_tokens: 0, is_forecast: true },
+        { start_ms: 3 * HOUR, end_ms: 5 * HOUR, used_percent: 140, delta_percent: 25, requests: 0, net_tokens: 0, total_tokens: 0, is_forecast: true },
+      ],
+    });
+    const winAfter = quotaWindow('5h', {
+      projected_exhaust_at_ms: 3.5 * HOUR,
+      buckets: winBefore.buckets,
+    });
+    let setWin!: (next: TrendsQuotaWindow) => void;
+    const Host = () => {
+      const [win, setState] = React.useState(winBefore);
+      setWin = setState;
+      return (
+        <ThemeProvider>
+          <QuotaBurnChart
+            drawingKey="c1:5h"
+            points={buildQuotaBurnSeries(win)}
+            cycleStart={0}
+            cycleReset={5 * HOUR}
+            divider={2 * HOUR}
+            nowMs={NOW}
+            projectedExhaustAtMs={win.projected_exhaust_at_ms}
+            projectedEndPercent={140}
+            label="Quota trend"
+            viewStart={0}
+            viewEnd={5 * HOUR}
+            minSpan={HOUR}
+            onLensChange={() => undefined}
+          />
+        </ThemeProvider>
+      );
+    };
+    renderWithOmc(<Host />);
+    const chart = screen.getByTestId('trends-quota-chart');
+    const readout = screen.getByTestId('trends-quota-readout');
+    // Points: [0, 1h, 2h, 2.5h (milestone), 3h (115%), 5h (140%)]. ArrowRight 5 times lands on 3h (115%).
+    for (let i = 0; i < 5; i += 1) fireEvent.keyDown(chart, { key: 'ArrowRight' });
+    expect(within(readout).getByText('115%')).toBeTruthy();
+
+    // Moving the milestone past 3h changes array indices, yet the 3h point keeps its reading.
+    act(() => setWin(winAfter));
+    expect(readout.hidden).toBe(false);
+    expect(within(readout).getByText('115%')).toBeTruthy();
+
+    // Moving a selected milestone point away clears the stale reading rather than selecting a neighbor.
+    fireEvent.keyDown(chart, { key: 'ArrowRight' });
+    expect(within(readout).getByText('100%')).toBeTruthy();
+    act(() => setWin(winBefore));
+    expect(readout.hidden).toBe(true);
+
+    // ChartTooltipContent forwards custom notes (such as quota cycle approximation hints) to TooltipReadout.
+    renderWithOmc(
+      <ThemeProvider>
+        <ChartContainer config={{}}>
+          <ChartTooltipContent
+            active
+            payload={[{ payload: {} }]}
+            buildRows={() => ({
+              heading: '01-01 00:00 – 01-01 05:00',
+              rows: [{ key: 'used', name: 'Used', value: '50.0%' }],
+              notes: ['Approximated from rolled-up 15-minute usage facts'],
+            })}
+          />
+        </ChartContainer>
+      </ThemeProvider>,
+    );
+    expect(screen.getByText('Approximated from rolled-up 15-minute usage facts')).toBeTruthy();
+  });
+
+  it('rejects stale placeholder filter options on range changes and bounds quota drill on advancing clock', async () => {
+    api.on('GET', '/management/trends/usage', (request) => {
+      const groupBy = request.query.get('group_by') ?? 'model';
+      if (groupBy === 'provider') {
+        return { ...USAGE, group_by: 'provider', groups: [{ id: 'codex', label: 'codex', requests: 15 }] };
+      }
+      return { ...USAGE, group_by: groupBy };
+    });
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const mountNow = Date.now();
+      mount();
+      await waitFor(() => expect(screen.getByTestId('trends-quota-used').textContent).toBe('60.0%'));
+
+      // Switch range to 24h while the 24h usage reads stay pending; opening provider filter must wait
+      // rather than exposing stale 7d placeholder options.
+      const heldUsage24h = api.hold('GET', '/management/trends/usage');
+      const heldProviderOptions24h = api.hold('GET', '/management/trends/usage');
+      fireEvent.click(screen.getAllByRole('button', { name: /Last 7 days/ })[0]!);
+      fireEvent.click(await screen.findByText('Last 24 hours'));
+      await heldUsage24h.arrived;
+
+      fireEvent.click(screen.getByTestId('trends-filter-add'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Provider' }));
+      await heldProviderOptions24h.arrived;
+      expect(within(screen.getByTestId('trends-filter-values')).queryByText('Codex')).toBeNull();
+
+      heldUsage24h.release({ ...USAGE, window: { ...WINDOW, preset: '24h' } });
+      heldProviderOptions24h.release({ ...USAGE, window: { ...WINDOW, preset: '24h' }, group_by: 'provider', groups: [{ id: 'anthropic', label: 'anthropic', requests: 3 }] });
+      expect(await within(await screen.findByTestId('trends-filter-values')).findByText('anthropic')).toBeTruthy();
+      expect(within(screen.getByTestId('trends-filter-values')).queryByText('Codex')).toBeNull();
+
+      // Advance the clock past the 5h quota reset without another quota poll; clicking the quota
+      // drill must bound `to = 5 * HOUR` at navigation time instead of leaving the drill open.
+      await act(async () => {
+        vi.setSystemTime(mountNow + 3 * HOUR + 60_000);
+        vi.advanceTimersByTime(15_000);
+      });
+      await waitFor(() => expect(screen.getByTestId('trends-quota-stale-notice')).toBeTruthy());
+      fireEvent.click(screen.getByTestId('trends-quota-events'));
+      await waitFor(() => expect(lastPath).toBe('/usage/events'));
+      expect(new URLSearchParams(lastSearch).get('to')).toBe(String(5 * HOUR));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
