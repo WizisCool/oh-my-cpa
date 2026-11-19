@@ -38,6 +38,7 @@ import {
   NoteOutlined,
   PlusOutlined,
   ProfileOutlined,
+  RightOutlined,
   RenameOutlined,
   RollbackOutlined,
   StopOutlined,
@@ -248,7 +249,7 @@ export function CredentialTraits({ record, facts, actions }: { record: OAuthWork
       {/* The plan says what the account can do, so it leads what is said about it. */}
       {planLabel && <Tag size="small">{planLabel}</Tag>}
       {plan?.subscription_active === false && (
-        <Tag size="small" tone="warn" data-subscription-inactive="true">{t('quota.subscription_inactive')}</Tag>
+        <StatusLabel size="small" tone="warn" data-subscription-inactive="true">{t('quota.subscription_inactive')}</StatusLabel>
       )}
       <PriorityBadge priority={record.file.priority} weight={record.file.weight} />
       {facts.credits > 0 && (
@@ -325,7 +326,7 @@ export function CredentialState({ record, facts, actions, nowMS, hasSIWC = true,
               aria-label={`${t('omc.reauthenticate')}: ${t(status.labelKey)}`}
               data-status-explained={explanation ? 'true' : undefined}
             >
-              <StatusLabel tone={status.tone}>{t(status.labelKey)}</StatusLabel>
+              <StatusLabel tone={status.tone} trailing={<RightOutlined />}>{t(status.labelKey)}</StatusLabel>
             </button>
           ) : (
             <StatusLabel tone={status.tone} tabIndex={0} data-status-explained={explanation ? 'true' : undefined}>{t(status.labelKey)}</StatusLabel>

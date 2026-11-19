@@ -46,14 +46,34 @@
 }
 
 .stat-tile-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   max-width: 100%;
-  overflow: hidden;
+  min-width: 0;
   color: var(--fg-2);
   font-size: var(--text-sm);
   font-weight: 500;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.stat-tile-label-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat-tile-pip {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.pip-success { background: var(--success); }
+.pip-warn { background: var(--warn); }
+.pip-danger { background: var(--danger); }
+.pip-accent { background: var(--accent); }
 
 /* The chosen tile's name reads in the ink its figure does: it is the one being read. */
 .stat-tile-active .stat-tile-label {
@@ -164,19 +184,16 @@
     box-shadow: none;
   }
   .stat-tiles[data-phone='segmented'] .stat-tile-label {
+    gap: 4px;
     min-width: 0;
-    overflow: visible;
     font-size: var(--text-xs);
     line-height: 1.25;
     text-align: center;
     white-space: normal;
   }
-  /* A status label keeps the segment's small type, so its word fits beside the pip. */
-  .stat-tiles[data-phone='segmented'] .stat-tile-label :global(.status-label) {
-    gap: 4px;
-    font-size: inherit;
-    line-height: 1.25;
-    white-space: normal;
+  .stat-tiles[data-phone='segmented'] .stat-tile-label-text {
+    overflow: visible;
+    text-overflow: clip;
   }
   .stat-tiles[data-phone='segmented'] .stat-tile-value {
     flex: none;

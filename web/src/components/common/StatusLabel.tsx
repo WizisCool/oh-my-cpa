@@ -6,26 +6,33 @@ export type StatusTone = 'success' | 'warn' | 'danger' | 'accent' | 'neutral';
 
 export interface StatusLabelProps extends React.HTMLAttributes<HTMLSpanElement> {
   tone: StatusTone;
+  /** `small` matches `Tag size="small"` (18px) for compact inline rows and annotations. */
+  size?: 'default' | 'small';
+  /** Optional trailing cue inside the chip (for example a chevron on an interactive status trigger). */
+  trailing?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }
 
 /**
- * A state, as a 7px pip and the word for it.
+ * A state as a tinted chip led by a 6px pip: soft semantic wash, tone ink and matching pip, on the
+ * console's shared chip geometry (22px high, 18px small, `--radius-sm`, weight 500).
  *
- * The console states a state in text and paints it with the pip, never with colour alone and
- * never with a filled tag: a tag per row turned every table into a column of coloured boxes,
- * and the box itself carried no information the word did not. The label keeps the reading
- * colour (`--fg-2`) so a column of states scans as text, and the pip alone carries the tone.
+ * Every status in the console - request verdicts, credential health, quota states, config sync,
+ * system topology, audit results and agent/playground turn states - renders through this component
+ * so a state reads the same way in lists, drawers, cards and toolbars.
  */
 // Tooltip's trigger owns the DOM ref and pointer handlers; forwarding both keeps it on the label.
 export const StatusLabel = React.forwardRef<HTMLSpanElement, StatusLabelProps>(function StatusLabel(
-  { tone, children, className, ...attributes }, ref,
+  { tone, size = 'default', trailing, children, className, ...attributes }, ref,
 ) {
   return (
-    <span {...attributes} ref={ref} className={clsx('status-label', `is-${tone}`, className)}>
+    <span {...attributes} ref={ref} className={clsx('status-label', `is-${tone}`, size === 'small' && 'is-small', className)}>
       <span className="status-label-pip" aria-hidden="true" />
       <span className="status-label-text">{children}</span>
+      {trailing !== undefined && trailing !== null && (
+        <span className="status-label-trailing" aria-hidden="true">{trailing}</span>
+      )}
     </span>
   );
 });

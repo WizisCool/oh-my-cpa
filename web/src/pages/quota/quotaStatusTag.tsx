@@ -1,15 +1,9 @@
 import React from 'react';
 
-import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  HourglassOutlined,
-  WarningOutlined,
-} from '../../components/icons';
 import type { TFunc } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
 import { describeQuotaCooldown } from './quotaCooldown';
-import { Tag } from '../../components/common/Tag';
+import { StatusLabel } from '../../components/common/StatusLabel';
 import { Tooltip } from '../../components/common/Tooltip';
 
 /**
@@ -23,33 +17,31 @@ export function quotaStatusTag(item: QuotaItem, t: TFunc): React.ReactNode {
     const reason = item.active_cooldown?.reason;
     return (
       <Tooltip title={describeQuotaCooldown(reason, t('quota.cooldown_active_desc'))}>
-        {/* Cooling down is a wait the credential comes back from on its own clock; the dashboard's
-            quota row draws the same hourglass. */}
-        <Tag tone="danger" icon={<HourglassOutlined />}>{t('quota.status_cooldown')}</Tag>
+        <StatusLabel tone="danger">{t('quota.status_cooldown')}</StatusLabel>
       </Tooltip>
     );
   }
   if ((item.model_cooldowns?.length ?? 0) > 0 && ['healthy', 'idle', 'unpublished', 'warning'].includes(item.status)) {
-    return <Tag tone="warn" icon={<HourglassOutlined />}>{t('quota.model_cooldown_status')}</Tag>;
+    return <StatusLabel tone="warn">{t('quota.model_cooldown_status')}</StatusLabel>;
   }
   switch (item.status) {
     case 'healthy':
-      return <Tag tone="success" icon={<CheckCircleOutlined />}>{t('quota.status_normal')}</Tag>;
+      return <StatusLabel tone="success">{t('quota.status_normal')}</StatusLabel>;
     case 'warning':
-      return <Tag tone="warn" icon={<WarningOutlined />}>{t('quota.status_warning')}</Tag>;
+      return <StatusLabel tone="warn">{t('quota.status_warning')}</StatusLabel>;
     case 'exhausted':
-      return <Tag tone="danger" icon={<CloseCircleOutlined />}>{t('quota.status_exceeded')}</Tag>;
+      return <StatusLabel tone="danger">{t('quota.status_exceeded')}</StatusLabel>;
     case 'error':
-      return <Tag tone="danger">{t('quota.status_error')}</Tag>;
+      return <StatusLabel tone="danger">{t('quota.status_error')}</StatusLabel>;
     case 'stale':
-      return <Tag>{t('quota.status_stale')}</Tag>;
+      return <StatusLabel tone="neutral">{t('quota.status_stale')}</StatusLabel>;
     case 'unpublished':
       // Distinct from idle: the read happened, and the provider published no window. The two must
       // not share a label, because only one of them is worth repeating.
-      return <Tag>{t('quota.status_unpublished')}</Tag>;
+      return <StatusLabel tone="neutral">{t('quota.status_unpublished')}</StatusLabel>;
     case 'loading':
-      return <Tag tone="accent">{t('common.loading')}</Tag>;
+      return <StatusLabel tone="accent">{t('common.loading')}</StatusLabel>;
     default:
-      return <Tag>{t('quota.status_idle')}</Tag>;
+      return <StatusLabel tone="neutral">{t('quota.status_idle')}</StatusLabel>;
   }
 }

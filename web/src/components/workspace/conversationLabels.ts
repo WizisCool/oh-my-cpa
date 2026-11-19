@@ -1,4 +1,16 @@
+import type { StatusTone } from '../common/StatusLabel';
 import { messageKey, type MessageKey } from '../../i18n/catalog';
+
+/** Maps workspace/call semantic tones to the console's shared `StatusLabel` tones. */
+export function workspaceStatusTone(tone: 'success' | 'processing' | 'warning' | 'error' | 'default'): StatusTone {
+  switch (tone) {
+    case 'success': return 'success';
+    case 'processing': return 'accent';
+    case 'warning': return 'warn';
+    case 'error': return 'danger';
+    default: return 'neutral';
+  }
+}
 /**
  * The statuses a turn can legitimately carry.
  *

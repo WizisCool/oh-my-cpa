@@ -89,12 +89,12 @@ interface ProviderTableProps {
  * of a hole wherever the surplus happened to land.
  */
 const COLUMN_BASE_WIDTHS = {
-  name: 280,
+  name: 248,
   protocol: 184,
-  base_url: 184,
+  base_url: 156,
   models_headers: 128,
   traffic: 132,
-  status: 72,
+  status: 132,
   switch: 58,
   actions: 88,
 } as const;
@@ -448,12 +448,12 @@ export function ProviderTable({
     const isLowRate = row !== undefined && row.total > 0 && (tone === 'warn' || tone === 'danger');
     // The same verdicts the status tiles count, so a card and the tile it falls under agree.
     const health = !isEnabled
-      ? <StatusLabel tone="warn">{t('pro.status_disabled')}</StatusLabel>
+      ? <StatusLabel size="small" tone="warn">{t('pro.status_disabled')}</StatusLabel>
       : keyCount === 0
-        ? <StatusLabel tone="danger">{t('pro.health_no_key')}</StatusLabel>
+        ? <StatusLabel size="small" tone="danger">{t('pro.health_no_key')}</StatusLabel>
         : isLowRate
-          ? <StatusLabel tone="danger">{t('pro.stat_attention')}</StatusLabel>
-          : <StatusLabel tone="success">{t('pro.status_active')}</StatusLabel>;
+          ? <StatusLabel size="small" tone="danger">{t('pro.stat_attention')}</StatusLabel>
+          : <StatusLabel size="small" tone="success">{t('pro.status_active')}</StatusLabel>;
     const isRenaming = renamingID === record.id;
     const confirmDelete = () => modal.confirm({
       title: t('pro.delete_provider_confirm'),

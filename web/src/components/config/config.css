@@ -4,11 +4,6 @@
   margin-inline: auto;
 }
 .config-notice { margin-bottom: 16px; }
-.config-sync-badge {
-  font-size: var(--text-sm);
-  padding: 1px 7px;
-  font-weight: 500;
-}
 .config-toolbar-actions {
   display: flex;
   align-items: center;

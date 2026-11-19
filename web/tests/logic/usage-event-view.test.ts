@@ -1552,8 +1552,8 @@ test('usage event view', () => {
 
   // buildGridTemplateColumns: the two name columns share the spare room; every other column is a rigid track
   const defaultGrid = buildGridTemplateColumns({});
-  assert.ok(defaultGrid.includes('minmax(140px, 1fr)'));
-  assert.ok(defaultGrid.includes('minmax(130px, 1fr)'));
+  assert.ok(defaultGrid.includes('minmax(136px, 1fr)'));
+  assert.ok(defaultGrid.includes('minmax(126px, 1fr)'));
   assert.equal(defaultGrid.split(' ').filter((track) => track.startsWith('minmax(')).length, 2);
   assert.ok(defaultGrid.startsWith('20px ')); // selection track
   assert.ok(defaultGrid.endsWith('14px')); // chevron track
@@ -1572,14 +1572,14 @@ test('usage event view', () => {
   assert.ok(manualGrid.endsWith('14px'));
 
   // computeGridMinWidth: fixed defaults + flexible mins + the two fixed tracks + 13 gaps + inline padding
-  // 96 + 68 + 140 + 130 + 84 + 78 + 88 + 140 + 56 + 52 + 136 + 120 = 1188; selection 20 + chevron 14 = 34;
+  // 96 + 76 + 136 + 126 + 84 + 78 + 88 + 140 + 56 + 52 + 136 + 120 = 1188; selection 20 + chevron 14 = 34;
   // gaps 13*16 = 208; padding 40 = 1470
   const baseMin = 1188 + 34;
   assert.equal(computeGridMinWidth({}), baseMin + 208 + 40);
   // A manual override replaces the flexible minimum with the requested width
-  assert.equal(computeGridMinWidth({ provider: 300 }), baseMin - 140 + 300 + 208 + 40);
+  assert.equal(computeGridMinWidth({ provider: 300 }), baseMin - 136 + 300 + 208 + 40);
   // Out-of-range overrides are clamped exactly as the template builder clamps them
-  assert.equal(computeGridMinWidth({ provider: 9999 }), baseMin - 140 + 480 + 208 + 40);
+  assert.equal(computeGridMinWidth({ provider: 9999 }), baseMin - 136 + 480 + 208 + 40);
   // The sheet drops both fixed tracks and the two gaps that separated them from the data.
   assert.equal(computeGridMinWidth({}, 16, 20, SHEET_GRID_CHROME), 1188 + 176 + 40);
   assert.ok(computeGridMinWidth({}, 8, 12) < computeGridMinWidth({}, 12, 12));

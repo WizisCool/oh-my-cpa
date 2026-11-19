@@ -6,6 +6,8 @@ import { ActionBarPrimitive, ComposerPrimitive, MessagePrimitive, useAuiState } 
 import { clsx } from 'clsx';
 import { BugOutlined, ClockCircleOutlined, DatabaseOutlined, EditOutlined, FieldTimeOutlined, HistoryOutlined, ReloadOutlined, ThunderboltOutlined } from '../../components/icons';
 import { CopyButton } from '../../components/common/CopyButton';
+import { StatusLabel } from '../../components/common/StatusLabel';
+import { workspaceStatusTone } from '../../components/workspace/conversationLabels';
 import { ModelMarkdown } from '../../components/workspace/ModelMarkdown';
 import { ReasoningBlock } from '../../components/workspace/ReasoningBlock';
 import workspace from '../../components/workspace/Workspace.module.css';
@@ -143,10 +145,9 @@ const AssistantContent = React.memo(function AssistantContent({ turn, isLast, ca
     <div className={workspace['answer']} data-testid="playground-answer">
       <div className={workspace['message-head']}>
         <span className={workspace['message-model']}>{effectiveModel(turn.request)}</span>
-        <span className={workspace['status']}>
-          <span className={workspace['pip']} data-tone={turnTone(turn.status)} aria-hidden="true" />
+        <StatusLabel tone={workspaceStatusTone(turnTone(turn.status))}>
           {t(`pg.status.${turn.status}`)}
-        </span>
+        </StatusLabel>
       </div>
       {(thought || isThinking) && <ReasoningBlock text={thought} isThinking={isThinking} />}
       {reply ? (

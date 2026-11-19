@@ -65,7 +65,7 @@ export function SIWCBindingPanel({ file, canEdit, bindings }: { file: Management
         What the verdict does and does not mean is a tap away rather than a paragraph under it. */}
     <div className={styles['status-card']}>
       <div className={styles['status-head']}>
-        <StatusLabel tone={statusTone} className={styles['status-label']}>{t(statusKey)}</StatusLabel>
+        <StatusLabel tone={statusTone}>{t(statusKey)}</StatusLabel>
         <Tooltip title={t('siwc.summary_hint')} isTapReadable>
           <button type="button" className={styles['info']} aria-label={t('siwc.about_status')}><InfoCircleOutlined /></button>
         </Tooltip>

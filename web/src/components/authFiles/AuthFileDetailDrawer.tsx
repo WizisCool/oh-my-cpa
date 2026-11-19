@@ -1,6 +1,7 @@
 import { CredentialRecoveryPanel } from './CredentialRecoveryPanel';
 import { MetaLine } from '../common/MetaLine';
 import { SecretInput } from '../common/SecretInput';
+import { StatusLabel } from '../common/StatusLabel';
 import type { MessageKey } from '../../i18n/catalog';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Field } from '@/components/ui/field';
@@ -543,13 +544,13 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   const isDisabled = file ? isAuthFileDisabled(file) : false;
   const hasWarning = file ? hasAuthFileStatusWarning(file) : false;
   const statusBadge = file?.runtime_only ? (
-    <Tag>{t('af.runtime_only_badge')}</Tag>
+    <StatusLabel tone="neutral">{t('af.runtime_only_badge')}</StatusLabel>
   ) : isDisabled ? (
-    <Tag tone="danger">{t('af.disabled')}</Tag>
+    <StatusLabel tone="danger">{t('af.disabled')}</StatusLabel>
   ) : isProblem ? (
-    <Tag tone="warn">{t('af.status_problem')}</Tag>
+    <StatusLabel tone="warn">{t('af.status_problem')}</StatusLabel>
   ) : (
-    <Tag tone="success">{t('af.enabled')}</Tag>
+    <StatusLabel tone="success">{t('af.enabled')}</StatusLabel>
   );
 
   const providerKey = provider || file?.provider || file?.type || '';

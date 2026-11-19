@@ -26,6 +26,9 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+.request-ingest-trigger {
+  padding-inline: 6px;
+}
 .request-stream-slot {
   flex: 1;
   min-height: 310px;

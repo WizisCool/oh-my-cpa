@@ -1,7 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 
-import { StatusLabel, type StatusTone } from './StatusLabel';
+import { type StatusTone } from './StatusLabel';
 import styles from './StatTiles.module.css';
 import { Tooltip } from './Tooltip';
 import { useSelectionThumb } from '@/components/ui/selection-thumb';
@@ -83,7 +83,10 @@ export function StatTiles<K extends string>({
             data-testid={tileTestIdPrefix ? `${tileTestIdPrefix}-${tile.key}` : undefined}
           >
             <span className={styles['stat-tile-label']}>
-              {tone === 'neutral' ? tile.label : <StatusLabel tone={tone}>{tile.label}</StatusLabel>}
+              {tone !== 'neutral' && (
+                <span className={clsx(styles['stat-tile-pip'], styles[`pip-${tone}`])} aria-hidden="true" />
+              )}
+              <span className={styles['stat-tile-label-text']}>{tile.label}</span>
             </span>
             <span className={clsx(styles['stat-tile-value'], isToned && styles[`stat-${tone}`])}>
               {tile.value === undefined ? '—' : isCount ? (tile.value as number).toLocaleString() : tile.value}

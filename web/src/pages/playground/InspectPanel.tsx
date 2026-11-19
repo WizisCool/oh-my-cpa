@@ -4,6 +4,8 @@ import { Tabs } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { HistoryOutlined } from '../../components/icons';
 import { CopyButton } from '../../components/common/CopyButton';
+import { StatusLabel } from '../../components/common/StatusLabel';
+import { workspaceStatusTone } from '../../components/workspace/conversationLabels';
 import { CodeBlock } from '../../components/workspace/ModelMarkdown';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { useI18n } from '../../i18n';
@@ -66,10 +68,9 @@ export const InspectPanel = React.memo(function InspectPanel({ turn, defaultUser
             <span className={styles['inspect-model']}>{effectiveModel(turn.request)}</span>
             <span className={styles['inspect-key']}>{turn.keyLabel}</span>
           </div>
-          <span className={workspace['status']}>
-            <span className={workspace['pip']} data-tone={turnTone(turn.status)} aria-hidden="true" />
+          <StatusLabel tone={workspaceStatusTone(turnTone(turn.status))}>
             {t(`pg.status.${turn.status}`)}
-          </span>
+          </StatusLabel>
         </div>
         <dl className={styles['metrics']}>
           {metrics.map(([label, value]) => (

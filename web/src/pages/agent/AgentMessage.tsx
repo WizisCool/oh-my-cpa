@@ -16,6 +16,8 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { CheckOutlined, ClockCircleOutlined, CopyOutlined, DatabaseOutlined, EditOutlined, FileTextOutlined, PaperClipOutlined, ReloadOutlined, RightOutlined, StepsOutlined } from '../../components/icons';
 import { ModelMarkdown } from '../../components/workspace/ModelMarkdown';
 import { ReasoningBlock } from '../../components/workspace/ReasoningBlock';
+import { StatusLabel } from '../../components/common/StatusLabel';
+import { workspaceStatusTone } from '../../components/workspace/conversationLabels';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { agentSnapshot } from '../../agent/conversationSnapshot';
 import { useConversationExport } from '../../components/workspace/useConversationExport';
@@ -290,10 +292,13 @@ function TurnFooter({ turn }: { turn: Turn }) {
       <Tooltip card={detail}>
         {/* Focusable so the clock and the round and call counts are reachable from the keyboard and
             by touch: a tooltip that only answers a pointer hides them from everyone else. */}
-        <span className={workspace['status']} data-testid="agent-status" tabIndex={detail ? 0 : undefined}>
-          <span className={workspace['pip']} data-tone={statusTone(turn.status, turn.code)} aria-hidden="true" />
+        <StatusLabel
+          tone={workspaceStatusTone(statusTone(turn.status, turn.code))}
+          data-testid="agent-status"
+          tabIndex={detail ? 0 : undefined}
+        >
           {t(isAwaitingAnswer(turn) ? 'agent.status.question' : turnLabelKey(turn))}
-        </span>
+        </StatusLabel>
       </Tooltip>
       {duration !== undefined && (
         <span className={workspace['metric']}><ClockCircleOutlined aria-hidden="true" />{formatDuration(duration)}</span>
