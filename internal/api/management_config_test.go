@@ -882,3 +882,79 @@ func TestManagementConfigSaveAuditFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestManagementConfigPatchModelsCatalogRefreshesProvenance(t *testing.T) {
+	fixture := &configFixtureCPA{
+		yamlData: configFixtureYAML,
+	}
+	var handler *Handler
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve, func(h *Handler) {
+		handler = h
+	})
+
+	// Drain any startup signal so the assertion reflects only this config save.
+	select {
+	case <-handler.modelSquareRefreshSignal():
+	default:
+	}
+
+	catalogURL := "https://mirror.example.test/models.json?ref=main"
+	codexPath := "/etc/cpa/codex_client_models.json"
+	body, err := json.Marshal(map[string]any{
+		"revision": configyaml.ComputeRevision(configFixtureYAML),
+		"changes": []management.ConfigChange{
+			{
+				Path: []string{"models"},
+				Value: map[string]any{
+					"catalog":       catalogURL,
+					"codex-catalog": codexPath,
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, payload := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/config", string(body))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("patch models catalog failed: %d body %s", resp.StatusCode, payload)
+	}
+
+	writes, bodies := fixture.recordedWrites()
+	if len(writes) != 1 || writes[0] != "PUT /config/models" {
+		t.Fatalf("expected single PUT /config/models write, got %v (bodies=%v)", writes, bodies)
+	}
+	var sent map[string]string
+	if err := json.Unmarshal([]byte(bodies[0]), &sent); err != nil {
+		t.Fatalf("decode upstream models payload %q: %v", bodies[0], err)
+	}
+	if sent["catalog"] != catalogURL || sent["codex-catalog"] != codexPath {
+		t.Fatalf("upstream models payload = %v, want catalog=%q codex-catalog=%q", sent, catalogURL, codexPath)
+	}
+
+	select {
+	case <-handler.modelSquareRefreshSignal():
+	default:
+		t.Fatalf("expected config save to queue a Model Square provenance refresh")
+	}
+
+	// Safe YAML projection must preserve catalog URLs (including query params) and local paths verbatim.
+	fixture.mu.Lock()
+	fixture.yamlData = configFixtureYAML + fmt.Sprintf("models:\n    catalog: %s\n    codex-catalog: %s\n", catalogURL, codexPath)
+	fixture.mu.Unlock()
+
+	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/config")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("config GET failed: %d body %s", resp.StatusCode, payload)
+	}
+	var configRes struct {
+		SafeYAML string `json:"safe_yaml"`
+	}
+	if err := json.Unmarshal(payload, &configRes); err != nil {
+		t.Fatalf("decode config GET: %v", err)
+	}
+	if !strings.Contains(configRes.SafeYAML, catalogURL) || !strings.Contains(configRes.SafeYAML, codexPath) {
+		t.Fatalf("safe_yaml altered model catalog sources:\n%s", configRes.SafeYAML)
+	}
+}

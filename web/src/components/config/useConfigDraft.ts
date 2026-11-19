@@ -423,6 +423,9 @@ export function useConfigDraft() {
       setValidateTrigger(0);
       void queryClient.invalidateQueries({ queryKey: ['management-config'] });
       void queryClient.invalidateQueries({ queryKey: ['management-config-backups'] });
+      void queryClient.invalidateQueries({ queryKey: ['model-square'] });
+      void queryClient.invalidateQueries({ queryKey: ['auth-file-models'] });
+      void queryClient.invalidateQueries({ queryKey: ['management-oauth-provider-models'] });
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError && apiErrorCode(err) === 'config_conflict') {
