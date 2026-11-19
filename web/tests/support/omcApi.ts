@@ -115,6 +115,11 @@ const BUILT_IN_ROUTES: Route[] = [
     },
   },
   { method: 'GET', path: '/management/plugins', handler: (_request, state) => ({ plugins: state.plugins }) },
+  {
+    method: 'GET',
+    path: '/management/config',
+    handler: () => ({ scalars: {}, supported_keys: [], revision: 'test-rev', safe_yaml: '', stored_layout: 'v8' }),
+  },
   { method: 'GET', path: '/management/providers', handler: (_request, state) => ({ providers: state.providers }) },
   {
     method: 'GET', path: '/management/identity-directory', handler: (_request, state) => ({

@@ -163,6 +163,29 @@
   line-height: 1.4;
 }
 
+.scope-summary {
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  box-shadow: var(--shadow-edge);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.scope-summary :global(.fact-list-row) {
+  padding: 0;
+}
+
+.scope-list {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .connect-actions {
   display: flex;
   justify-content: flex-end;

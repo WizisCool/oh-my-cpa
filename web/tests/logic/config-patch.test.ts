@@ -1507,3 +1507,82 @@ test('payloadReplaceRules schema registration, searchability, patch emission, an
   ]);
 });
 
+test('Claude OAuth create_api_key scope switch stays omitted at default and persists explicit false', () => {
+  const scopeField = field('claudeOAuthIncludeCreateAPIKey');
+  assert.equal(scopeField.sectionId, 'providers');
+  assert.equal(scopeField.type, 'switch');
+  assert.equal(scopeField.defaultValue, true);
+  assert.deepEqual(scopeField.yamlPath, ['oauth', 'providers', 'claude', 'oauth-include-create-api-key']);
+  assert.equal(scopeField.legacyYamlPath, undefined);
+  for (const keyword of ['claude', 'oauth', 'scope', 'create_api_key']) {
+    assert.ok(scopeField.keywords?.includes(keyword), `expected keyword ${keyword}`);
+  }
+  const claudeGroup = CONFIG_GROUPS.find((group) => group.id === 'grp_claude_behavior');
+  assert.ok(claudeGroup?.fieldIds.includes('claudeOAuthIncludeCreateAPIKey'));
+
+  // Default install: omitted key reads as true and never writes a redundant line.
+  const defaultServer = parseDocument(SERVER_YAML);
+  const defaultDraft = defaultServer.clone();
+  assert.equal(getFieldSemanticValue(defaultServer, scopeField), true);
+  updateFieldWithBaseline(defaultDraft, defaultServer, scopeField, true);
+  assert.deepEqual(computeConfigChanges(defaultServer, defaultDraft), []);
+  assert.equal(defaultDraft.toString(), defaultServer.toString());
+
+  // Toggling OFF writes explicit false; toggling back ON before save prunes empty ancestors.
+  updateFieldWithBaseline(defaultDraft, defaultServer, scopeField, false);
+  assert.deepEqual(computeConfigChanges(defaultServer, defaultDraft), [
+    { path: ['oauth'], value: { providers: { claude: { 'oauth-include-create-api-key': false } } } },
+  ]);
+  updateFieldWithBaseline(defaultDraft, defaultServer, scopeField, true);
+  assert.equal(defaultDraft.has('oauth'), false);
+  assert.deepEqual(computeConfigChanges(defaultServer, defaultDraft), []);
+  assert.equal(defaultDraft.toString(), defaultServer.toString());
+
+  // Explicit false survives subsequent unrelated edits and reads back as false.
+  const optedOutYaml = `${SERVER_YAML}oauth:
+    providers:
+        claude:
+            oauth-include-create-api-key: false # org policy
+        antigravity:
+            tos-pause-window: 10m
+`;
+  const optedOutServer = parseDocument(optedOutYaml);
+  const optedOutDraft = optedOutServer.clone();
+  assert.equal(getFieldSemanticValue(optedOutServer, scopeField), false);
+  updateFieldWithBaseline(optedOutDraft, optedOutServer, field('debug'), true);
+  assert.deepEqual(computeConfigChanges(optedOutServer, optedOutDraft), [
+    { path: ['observability', 'logs', 'debug'], value: true },
+  ]);
+  assert.equal(optedOutDraft.getIn(['oauth', 'providers', 'claude', 'oauth-include-create-api-key']), false);
+
+  // Toggling explicit false back to true updates only the leaf key and reverting restores comments.
+  const reenableDraft = optedOutServer.clone();
+  updateFieldWithBaseline(reenableDraft, optedOutServer, scopeField, true);
+  assert.deepEqual(computeConfigChanges(optedOutServer, reenableDraft), [
+    { path: ['oauth', 'providers', 'claude', 'oauth-include-create-api-key'], value: true },
+  ]);
+  assert.equal(reenableDraft.getIn(['oauth', 'providers', 'antigravity', 'tos-pause-window']), '10m');
+  updateFieldWithBaseline(reenableDraft, optedOutServer, scopeField, false);
+  assert.equal(reenableDraft.toString(), optedOutServer.toString());
+
+  // Explicit null in YAML matches Go *bool nil semantics (defaults to true).
+  const nullServer = parseDocument('oauth:\n    providers:\n        claude:\n            oauth-include-create-api-key: null\n');
+  assert.equal(getFieldSemanticValue(nullServer, scopeField), true);
+
+  // Rebasing an opt-out onto a newer server baseline preserves sibling OAuth provider settings.
+  const rebaseBase = parseDocument(SERVER_YAML);
+  const rebaseEdit = rebaseBase.clone();
+  updateFieldWithBaseline(rebaseEdit, rebaseBase, scopeField, false);
+  const newerWithSibling = `${SERVER_YAML}oauth:
+    providers:
+        antigravity:
+            tos-pause-window: 15m
+`;
+  const rebased = parseDocument(rebaseDraft(rebaseBase, rebaseEdit, newerWithSibling) ?? '');
+  assert.equal(rebased.getIn(['oauth', 'providers', 'antigravity', 'tos-pause-window']), '15m');
+  assert.equal(rebased.getIn(['oauth', 'providers', 'claude', 'oauth-include-create-api-key']), false);
+  assert.deepEqual(computeConfigChanges(parseDocument(newerWithSibling), rebased), [
+    { path: ['oauth', 'providers', 'claude'], value: { 'oauth-include-create-api-key': false } },
+  ]);
+});
+

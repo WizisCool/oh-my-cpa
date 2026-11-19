@@ -228,7 +228,16 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_claude_behavior',
     descKey: 'cfg.grp_claude_behavior_desc',
     variant: 'settings-list',
-    fieldIds: ['claudeModelLevelCooling', 'claudeToolSearch', 'claudeServerSideFallback', 'claudeSessionDatePinDays', 'claudeDisableCloakMode', 'claudeDisableCloakingModelList', 'claudeShowCodexCommentary'],
+    fieldIds: [
+      'claudeOAuthIncludeCreateAPIKey',
+      'claudeModelLevelCooling',
+      'claudeToolSearch',
+      'claudeServerSideFallback',
+      'claudeSessionDatePinDays',
+      'claudeDisableCloakMode',
+      'claudeDisableCloakingModelList',
+      'claudeShowCodexCommentary',
+    ],
   },
   {
     id: 'grp_claude_headers',
@@ -1254,6 +1263,19 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     max: 65535,
     defaultValue: 0,
     keywords: ['codex', 'live', 'udp', 'port'],
+  },
+  {
+    id: 'claudeOAuthIncludeCreateAPIKey',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_oauth_create_api_key',
+    descKey: 'cfg.f_claude_oauth_create_api_key_desc',
+    // CPA treats an absent value as true to match native Claude Code.
+    // This governs OAuth login authorization scope rather than upstream request
+    // handling, so it belongs under oauth.providers.claude with no legacy path.
+    yamlPath: ['oauth', 'providers', 'claude', 'oauth-include-create-api-key'],
+    type: 'switch',
+    defaultValue: true,
+    keywords: ['claude', 'oauth', 'scope', 'create_api_key', 'org:create_api_key'],
   },
   {
     id: 'claudeToolSearch',
