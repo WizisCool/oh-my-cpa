@@ -1276,6 +1276,25 @@ export function stabilityLanes(buckets: readonly Pick<TrendsTelemetryBucket, Sta
   });
 }
 
+/** The failure share at which a stability cell reaches full strength: the attribution table's danger band. */
+export const STABILITY_SATURATION_RATE = 0.2;
+/** The faintest a cell with any event is drawn, so a single failure stays visible on the track. */
+const STABILITY_MIN_WEIGHT = 24;
+/** The strongest a cell is drawn; even an outage stops short of the raw state hue. */
+const STABILITY_MAX_WEIGHT = 88;
+
+/**
+ * How strongly a stability cell is tinted, in percent of its lane hue. Strength follows the share of
+ * the cell's requests the lane caught, not the count against the lane's own peak: one failure among
+ * thousands of answers stays a faint mark instead of a full red block. The square root keeps small
+ * shares distinguishable from each other.
+ */
+export function stabilityCellWeight(count: number, totalRequests: number): number {
+  if (count <= 0) return 0;
+  const share = totalRequests > 0 ? Math.min(1, count / totalRequests / STABILITY_SATURATION_RATE) : 1;
+  return Math.round(STABILITY_MIN_WEIGHT + (STABILITY_MAX_WEIGHT - STABILITY_MIN_WEIGHT) * Math.sqrt(share));
+}
+
 export function hasStabilityActivity(data: Pick<TrendsTelemetryResponse, 'buckets' | 'substitution_pairs'>): boolean {
   return data.substitution_pairs.length > 0 || stabilityLanes(data.buckets).some((lane) => lane.total > 0);
 }

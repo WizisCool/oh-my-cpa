@@ -37,6 +37,7 @@ import {
   stabilityDemoSliceEventsQueryString,
   stabilityDisplayBuckets,
   stabilityEventsHref,
+  stabilityCellWeight,
   stabilityLanes,
   stabilitySliceTelemetryParams,
   stabilityWindowForCell,
@@ -252,6 +253,13 @@ test('telemetry gaps stay gaps and stability lanes count each failure kind', () 
   assert.equal(successRate({ total_requests: 20, success_requests: 18 }), 0.9);
   assert.equal(formatPercent(0.9 * 100), '90.0%');
   assert.equal(successRate({ total_requests: 0, success_requests: 0 }), null);
+
+  // A cell's tint follows the share of its requests the lane caught, so a stray failure stays faint.
+  assert.equal(stabilityCellWeight(0, 100), 0);
+  assert.ok(stabilityCellWeight(1, 1000) < 30);
+  assert.ok(stabilityCellWeight(1, 1000) < stabilityCellWeight(10, 1000));
+  assert.equal(stabilityCellWeight(20, 100), stabilityCellWeight(100, 100));
+  assert.equal(stabilityCellWeight(3, 0), stabilityCellWeight(100, 100));
 
   // Performance latency filtering resolves in-memory top series or an on-demand item read.
   const modelBucket = telemetryBucket(0, { ttft_p50_ms: 250, ttft_p95_ms: 400, ttft_samples: 2 });
