@@ -47,11 +47,10 @@ import {
   HOUR_LIMIT_MS,
   TRENDS_USAGE_GROUPS,
   availablePerfGroups,
-  deliveryFailureCauses,
   filterKeyForGroupBy,
-  formatPercent,
   hasTrendsFilters,
   isRangeWithinHourLimit,
+  percentReadout,
   pickForecastableQuotaWindow,
   quotaRisk,
   readTrendsView,
@@ -401,14 +400,12 @@ export const TrendsPage: React.FC = () => {
   const rate = summary ? successRate(summary) : null;
   const ttftP95 = summary?.ttft_p95_ms ?? null;
 
-  // Each tile answers one question a reader brings to the page, with its figure and at most two
-  // quiet facts that say why: whether any subscription runs out, how fast answers stream, how the
-  // token volume compares, and what the failures are.
+  // Each tile answers one question a reader brings to the page, with its figure and a concise
+  // supporting fact: whether any subscription runs out, how fast answers stream, how the token
+  // volume compares, and how many requests failed.
   const isQuotaMembershipUnknown = Boolean(quota?.summary.is_membership_unknown);
   const risk = quota ? quotaRisk(quota.items, quotaNowMs) : null;
   const rateTone = rate === null ? 'neutral' : successRateTone(rate * 100);
-  // The two largest causes, failures first; a substitution is served traffic, so it trails them.
-  const failureCauses = deliveryFailureCauses(summary);
 
   const tiles = [
     {
@@ -461,13 +458,15 @@ export const TrendsPage: React.FC = () => {
     {
       key: 'delivery' as const,
       label: t('trends.tile.delivery'),
-      value: summary ? (rate === null ? '—' : (
-        <span className={rateTone === 'warn' || rateTone === 'danger' ? styles[`tone-${rateTone}`] : undefined}>{formatPercent(rate * 100)}</span>
-      )) : undefined,
+      value: summary ? (
+        <span className={rateTone === 'warn' || rateTone === 'danger' ? styles[`tone-${rateTone}`] : undefined}>
+          <RollingNumber readout={percentReadout(rate === null ? null : rate * 100)} />
+        </span>
+      ) : undefined,
       foot: summary ? (
         <MetaLine className={styles['tile-foot']}>
-          {failureCauses.length > 0
-            ? failureCauses.map((cause) => <span key={cause.key} className={styles[cause.tone]}>{t(`trends.tile.${cause.key}`, { n: cause.count })}</span>)
+          {summary.failed_requests > 0
+            ? <span className={styles['tone-danger']}>{t('trends.tile.errors', { n: summary.failed_requests })}</span>
             : <span>{t('trends.tile.requests', { n: summary.total_requests })}</span>}
         </MetaLine>
       ) : null,

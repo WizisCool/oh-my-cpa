@@ -456,7 +456,11 @@ describe('trends page', () => {
     fireEvent.click(retryBtn);
     await waitFor(() => expect(screen.getByTestId('trends-quota-used').textContent).toBe('60.0%'));
     await waitFor(() => expect(screen.getByTestId('trends-tile-movers').textContent).toContain('4.5K'));
-    await waitFor(() => expect(screen.getByTestId('trends-tile-delivery').textContent).toContain('90.0%'));
+    await waitFor(() => {
+      const delivery = screen.getByTestId('trends-tile-delivery').textContent ?? '';
+      expect(delivery).toContain('90.0%');
+      expect(delivery).toContain('2 errors');
+    });
   });
 
   it('resets bucket=hour to auto when the active range exceeds 14 days', async () => {

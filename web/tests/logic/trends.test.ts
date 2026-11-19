@@ -7,7 +7,6 @@ import {
   buildQuotaBurnSeries,
   clampLens,
   countdownParts,
-  deliveryFailureCauses,
   filterGroupByForKey,
   filterKeyForGroupBy,
   formatPercent,
@@ -18,6 +17,7 @@ import {
   nearestPointIndex,
   omitTrendsFilter,
   panLens,
+  percentReadout,
   percentileRows,
   perfBucketsHaveSamples,
   perfModeHasSamples,
@@ -426,7 +426,7 @@ test('trends quota window names follow OAuth management localization across all 
   );
 });
 
-test('quota tile targeting, delivery causes, performance mode samples, and stability aggregation stay consistent', () => {
+test('quota tile targeting, percentage readouts, performance mode samples, and stability aggregation stay consistent', () => {
   // Stale/expired/unknown credentials are excluded from forecastable risk and tile target selection
   // while historical readings remain openable via pickQuotaWindow.
   const staleLimit = credential('stale-1', [quotaWindow({ window_id: '5h', status: 'limit_reached', used_percent: 100 })]);
@@ -440,22 +440,18 @@ test('quota tile targeting, delivery causes, performance mode samples, and stabi
   assert.equal(pickForecastableQuotaWindow([unknownCred], 2 * HOUR), null);
   assert.equal(pickQuotaWindow([unknownCred], undefined, undefined)?.credential.auth_index, 'unknown-1');
 
-  // Delivery failure causes include forced cooldowns, rank failures before substitutions, and cap at 2.
-  const baseSummary = telemetryBucket(0, { total_requests: 10, success_requests: 8, failed_requests: 2 });
-  assert.deepEqual(
-    deliveryFailureCauses({ ...baseSummary, force_cooldown: 2, model_substituted: 5 }),
-    [
-      { key: 'force_cooldown', count: 2, tone: 'tone-danger' },
-      { key: 'substituted', count: 5, tone: 'tone-warn' },
-    ],
-  );
-  assert.deepEqual(
-    deliveryFailureCauses({ ...baseSummary, rate_limited_429: 1, upstream_5xx: 1, model_substituted: 3 }),
-    [
-      { key: 'rate_limited', count: 1, tone: 'tone-danger' },
-      { key: 'upstream_5xx', count: 1, tone: 'tone-danger' },
-    ],
-  );
+  // Percentage readouts mirror formatPercent rounding so the delivery tile rolls and aligns beside sibling tiles.
+  assert.equal(percentReadout(null), undefined);
+  assert.deepEqual(percentReadout(95.8), {
+    number: 95.8,
+    suffix: '%',
+    format: { minimumFractionDigits: 1, maximumFractionDigits: 1 },
+  });
+  assert.deepEqual(percentReadout(99.96), {
+    number: 100,
+    suffix: '%',
+    format: { minimumFractionDigits: 0, maximumFractionDigits: 0 },
+  });
 
   // Performance mode sample detection checks mode-specific drawability and excludes filter_disabled groups.
   const latencyOnlyBucket = telemetryBucket(0, { latency_samples: 4, latency_p50_ms: 900, latency_p95_ms: 1400 });

@@ -58,6 +58,7 @@ export function StatTiles<K extends string>({
   // On a phone a filter strip is a segmented control, and its selection glides like every other one.
   const thumbRef = useSelectionThumb<HTMLDivElement>('[aria-pressed="true"]', 'aria-pressed');
   const isSegmentedOnPhone = phoneLayout === 'segmented';
+  const hasFoot = tiles.some((tile) => tile.foot !== undefined);
   return (
     <div
       ref={isSegmentedOnPhone ? thumbRef : undefined}
@@ -87,7 +88,7 @@ export function StatTiles<K extends string>({
             <span className={clsx(styles['stat-tile-value'], isToned && styles[`stat-${tone}`])}>
               {tile.value === undefined ? '—' : isCount ? (tile.value as number).toLocaleString() : tile.value}
             </span>
-            {tile.foot !== undefined && <span className={styles['stat-tile-foot']}>{tile.foot}</span>}
+            {hasFoot && <span className={styles['stat-tile-foot']}>{tile.foot ?? null}</span>}
           </button>
         );
         return tile.hint ? <Tooltip key={tile.key} title={tile.hint}>{button}</Tooltip> : button;

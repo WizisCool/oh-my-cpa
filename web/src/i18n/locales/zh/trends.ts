@@ -47,12 +47,7 @@ export default {
   'trends.tile.movers': '净 Token',
   'trends.tile.requests': '{n} 次请求',
   'trends.tile.delivery': '成功率',
-  'trends.tile.rate_limited': '429 限流 {n}',
-  'trends.tile.truncated': '流截断 {n}',
-  'trends.tile.force_cooldown': '强制冷却 {n}',
-  'trends.tile.upstream_5xx': '上游 5xx {n}',
-  'trends.tile.other_failures': '其他失败 {n}',
-  'trends.tile.substituted': '换模 {n}',
+  'trends.tile.errors': '错误 {n}',
 
   'trends.quota.title': '定额配额趋势',
   'trends.quota.fact.exhaust': '预计达到限额',

@@ -50,12 +50,7 @@ export default {
   'trends.tile.movers': 'Net tokens',
   'trends.tile.requests': '{n, plural, one {# request} other {# requests}}',
   'trends.tile.delivery': 'Success rate',
-  'trends.tile.rate_limited': '{n} rate limited (429)',
-  'trends.tile.truncated': '{n} truncated',
-  'trends.tile.force_cooldown': '{n} forced cooldown',
-  'trends.tile.upstream_5xx': '{n} upstream 5xx',
-  'trends.tile.other_failures': '{n} other failed',
-  'trends.tile.substituted': '{n} substituted',
+  'trends.tile.errors': '{n, plural, one {# error} other {# errors}}',
 
   'trends.quota.title': 'Subscription quota trends',
   'trends.quota.fact.exhaust': 'Hits limit',
