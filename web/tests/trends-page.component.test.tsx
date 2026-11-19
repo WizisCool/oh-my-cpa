@@ -193,50 +193,31 @@ describe('trends page', () => {
     expect(within(within(screen.getByTestId('trends-quota-window')).getByRole('radio', { name: /5 hours/ })).getByRole('img', { name: 'Hits limit' })).toBeTruthy();
   });
 
-  it('zooms and pans the quota chart via wheel modifiers and starts each window on its whole cycle', async () => {
+  it('keeps the full cycle fixed on both trends charts without drag-brush or wheel zoom', async () => {
     mount();
-    const chart = await screen.findByTestId('trends-quota-chart', {}, { timeout: 5000 });
-    expect(screen.queryByTestId('trends-quota-lens')).toBeNull();
-    expect(screen.queryByTestId('trends-perf-window')).toBeNull();
+    const quotaChart = await screen.findByTestId('trends-quota-chart', {}, { timeout: 5000 });
+    const perfChart = await screen.findByTestId('trends-perf-chart', {}, { timeout: 5000 });
+    expect(quotaChart.querySelector('[data-testid="trends-quota-sweep"]')).toBeNull();
+    expect(quotaChart.querySelector('.omc-bucket-brush')).toBeNull();
+    expect(perfChart.querySelector('.omc-bucket-brush')).toBeNull();
+
+    // Neither plain nor modifier wheel events are intercepted to zoom or pan.
+    expect(fireEvent.wheel(quotaChart, { deltaY: 100 })).toBe(true);
+    expect(fireEvent.wheel(quotaChart, { deltaY: -460, clientX: 400, ctrlKey: true })).toBe(true);
+    expect(fireEvent.wheel(quotaChart, { deltaY: 200, shiftKey: true })).toBe(true);
+
+    // Dragging across the quota chart does not enter sweep mode or narrow the cycle bounds.
+    fireEvent.pointerDown(quotaChart, { pointerId: 1, button: 0, buttons: 1, clientX: 120, clientY: 80 });
+    fireEvent.pointerMove(quotaChart, { pointerId: 1, buttons: 1, clientX: 360, clientY: 80 });
+    expect(quotaChart.hasAttribute('data-sweeping')).toBe(false);
+    fireEvent.pointerUp(quotaChart, { pointerId: 1, button: 0, clientX: 360, clientY: 80 });
+
     const readout = screen.getByTestId('trends-quota-readout');
-
-    // A plain wheel is left to scroll the page.
-    expect(fireEvent.wheel(chart, { deltaY: 100 })).toBe(true);
-
-    // Ctrl with the wheel zooms in around the pointer: only 2h (60.0%) and the 3h milestone (100%) stay visible.
-    expect(fireEvent.wheel(chart, { deltaY: -460, clientX: 400, ctrlKey: true })).toBe(false);
-    fireEvent.keyDown(chart, { key: 'Home' });
-    expect(within(readout).getByText('60.0%')).toBeTruthy();
-    fireEvent.keyDown(chart, { key: 'End' });
-    expect(within(readout).getByText('100%')).toBeTruthy();
-    expect(within(readout).getByText(/Projected to hit the limit/)).toBeTruthy();
-    fireEvent.keyDown(chart, { key: 'Escape' });
-
-    // Shift with the wheel pans toward the end of the cycle without zooming out to 0h.
-    expect(fireEvent.wheel(chart, { deltaY: 200, shiftKey: true })).toBe(false);
-    fireEvent.keyDown(chart, { key: 'Home' });
-    expect(within(readout).getByText('100%')).toBeTruthy();
-    fireEvent.keyDown(chart, { key: 'End' });
-    expect(within(readout).getByText('140%')).toBeTruthy();
-    fireEvent.keyDown(chart, { key: 'Escape' });
-
-    // Ctrl with positive wheel delta zooms back out to the whole cycle.
-    expect(fireEvent.wheel(chart, { deltaY: 1000, clientX: 400, ctrlKey: true })).toBe(false);
-    fireEvent.keyDown(chart, { key: 'Home' });
+    fireEvent.keyDown(quotaChart, { key: 'Home' });
     expect(within(readout).getByText('0.0%')).toBeTruthy();
-    fireEvent.keyDown(chart, { key: 'Escape' });
-
-    // Another window opens on its own whole cycle even if the previous window was zoomed in.
-    expect(fireEvent.wheel(chart, { deltaY: -460, clientX: 400, ctrlKey: true })).toBe(false);
-    fireEvent.click(within(screen.getByTestId('trends-quota-window')).getByRole('radio', { name: 'Weekly' }));
-    await waitFor(() => expect(screen.getByTestId('trends-quota-used').textContent).toBe('12.0%'));
-    const weeklyChart = await screen.findByTestId('trends-quota-chart');
-    const weeklyReadout = screen.getByTestId('trends-quota-readout');
-    fireEvent.keyDown(weeklyChart, { key: 'Home' });
-    expect(within(weeklyReadout).getByText('0.0%')).toBeTruthy();
-    fireEvent.keyDown(weeklyChart, { key: 'End' });
-    expect(within(weeklyReadout).getByText('140%')).toBeTruthy();
-    fireEvent.keyDown(weeklyChart, { key: 'Escape' });
+    fireEvent.keyDown(quotaChart, { key: 'End' });
+    expect(within(readout).getByText('140%')).toBeTruthy();
+    fireEvent.keyDown(quotaChart, { key: 'Escape' });
   });
 
   it('keeps each panel mode in the URL and drills into the request list', async () => {
@@ -600,10 +581,6 @@ describe('trends page', () => {
             projectedExhaustAtMs={win.projected_exhaust_at_ms}
             projectedEndPercent={140}
             label="Quota trend"
-            viewStart={0}
-            viewEnd={5 * HOUR}
-            minSpan={HOUR}
-            onLensChange={() => undefined}
           />
         </ThemeProvider>
       );

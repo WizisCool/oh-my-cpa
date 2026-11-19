@@ -3,20 +3,18 @@ import { Area, CartesianGrid, ComposedChart, Line, Scatter, ScatterChart, XAxis,
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import type { TooltipReadoutRow } from '../../../components/common/Tooltip';
 import { useMorphedProps } from '../../../charts/useChartMorph';
-import { BucketBrush } from '../../../charts/BucketBrush';
 import dayjs from '../../../utils/time';
 import { useTimeZone } from '../../../utils/TimeZoneProvider';
 import { useT } from '../../../i18n';
 import { useTheme } from '../../../theme/ThemeContext';
 import { formatLatency } from '../../../types/insightsFormat';
-import type { InsightsBucket, InsightsWindow } from '../../../types/insights';
+import type { InsightsBucket } from '../../../types/insights';
 import type { TrendsScatterPoint, TrendsTelemetryBucket, TrendsTelemetrySeries } from '../../../types/trends';
 import { GLOBAL_SERIES_ID, latencySeriesRows, percentileRows, perfSeriesKey, tpsRows, type PerfMode, type PerfQuantile } from '../trendsLogic';
 
 export interface PerformanceChartProps {
   mode: PerfMode;
   bucket: InsightsBucket;
-  window: Pick<InsightsWindow, 'from' | 'to' | 'open_end'>;
   buckets: readonly TrendsTelemetryBucket[];
   series: readonly TrendsTelemetrySeries[];
   scatter: readonly TrendsScatterPoint[];
@@ -34,8 +32,6 @@ export interface PerformanceChartProps {
   focusedKey?: string | null;
   onFocusGroup?: (id: string) => void;
   onClearFocus?: () => void;
-  /** A stretch of buckets was swept on a time mode: resolved range from the rendered drawing's buckets. */
-  onBrush?: (range: { from: number; to: number | null }) => void;
 }
 
 const LABEL_FORMATS: Record<InsightsBucket, string> = { hour: 'HH:mm', day: 'MM-DD', week: 'MM-DD', month: 'YYYY-MM' };
@@ -46,8 +42,8 @@ function formatTps(value: number | null | undefined): string {
 }
 
 const PerformanceChartView: React.FC<PerformanceChartProps> = ({
-  mode, bucket, window, buckets, series, scatter, isMultiSeries = true, quantile = 'p50', colorOf, labelOf, providerLabel, label, height = 280,
-  focusedKey = null, onFocusGroup, onClearFocus, onBrush,
+  mode, bucket, buckets, series, scatter, isMultiSeries = true, quantile = 'p50', colorOf, labelOf, providerLabel, label, height = 280,
+  focusedKey = null, onFocusGroup, onClearFocus,
 }) => {
   useTimeZone();
   const t = useT();
@@ -55,14 +51,6 @@ const PerformanceChartView: React.FC<PerformanceChartProps> = ({
   const { timingGreen, timingOrange } = theme.palette;
   const didInteractSeriesRef = React.useRef(false);
   const isLineMulti = mode === 'tps' || ((mode === 'ttft' || mode === 'latency') && isMultiSeries);
-
-  const handleBrush = React.useCallback((fromIndex: number, toIndex: number) => {
-    if (!onBrush) return;
-    const from = Math.max(buckets[fromIndex]?.start_ms ?? window.from, window.from);
-    const isThroughNow = window.open_end && toIndex >= buckets.length - 1;
-    const to = Math.min((buckets[toIndex + 1]?.start_ms ?? window.to + 1) - 1, window.to);
-    onBrush({ from, to: isThroughNow ? null : to });
-  }, [buckets, onBrush, window]);
 
   const lineData = React.useMemo<Array<Record<string, unknown>>>(() => {
     if (mode === 'tps' || (isLineMulti && (mode === 'ttft' || mode === 'latency'))) {
@@ -335,7 +323,6 @@ const PerformanceChartView: React.FC<PerformanceChartProps> = ({
             <Line dataKey="p50" type="monotone" stroke={timingGreen} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} />
           </>
         )}
-        {onBrush && <BucketBrush bucketCount={lineData.length} onBrush={handleBrush} />}
       </ComposedChart>
     </ChartContainer>
   );

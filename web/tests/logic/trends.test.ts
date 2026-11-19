@@ -5,7 +5,6 @@ import {
   HOUR_LIMIT_MS,
   availablePerfGroups,
   buildQuotaBurnSeries,
-  clampLens,
   countdownParts,
   filterGroupByForKey,
   filterKeyForGroupBy,
@@ -13,10 +12,8 @@ import {
   hasStabilityActivity,
   isRangeWithinHourLimit,
   latencySeriesRows,
-  lensFromSweep,
   nearestPointIndex,
   omitTrendsFilter,
-  panLens,
   percentReadout,
   percentileRows,
   perfBucketsHaveSamples,
@@ -31,7 +28,6 @@ import {
   quotaCycleBars,
   quotaDivider,
   quotaEventsHref,
-  quotaLensMinSpan,
   quotaWindowName,
   readTrendsView,
   resolvePerfBuckets,
@@ -49,7 +45,6 @@ import {
   trendsWindowParams,
   usageGroupBy,
   writeTrendsView,
-  zoomLens,
   GLOBAL_SERIES_ID,
 } from '../../src/pages/trends/trendsLogic.ts';
 import { readEventQuery } from '../../src/types/usageEventQuery.ts';
@@ -345,29 +340,6 @@ test('trends drill links open the request list on the records the page counted',
   assert.deepEqual(running.getAll('auth_index'), ['c1']);
   const finished = new URLSearchParams(quotaEventsHref('c1', quotaWindow(), 6 * HOUR)!.split('?')[1]);
   assert.equal(finished.get('to'), String(5 * HOUR));
-});
-
-test('the quota lens zooms, pans and sweeps inside its cycle', () => {
-  const bounds = { start: 0, end: 10 * HOUR };
-  const min = quotaLensMinSpan(quotaWindow());
-  // One bucket of the cycle, never under a quarter hour.
-  assert.equal(min, HOUR);
-  assert.equal(quotaLensMinSpan({ ...quotaWindow(), buckets: [{ ...quotaWindow().buckets[0]!, end_ms: 60_000 }] }), 15 * 60_000);
-
-  // Zooming about an instant keeps that instant where it was on screen.
-  const zoomed = zoomLens(bounds, bounds, 0.5, min, 2 * HOUR);
-  assert.deepEqual(zoomed, { start: HOUR, end: 6 * HOUR });
-  assert.deepEqual(zoomLens(zoomed, bounds, 0.01, min), { start: 3 * HOUR, end: 4 * HOUR });
-  assert.deepEqual(zoomLens(zoomed, bounds, 4, min), bounds);
-
-  // A pan past an edge slides back to it without narrowing.
-  assert.deepEqual(panLens(zoomed, bounds, -3 * HOUR, min), { start: 0, end: 5 * HOUR });
-  assert.deepEqual(panLens(zoomed, bounds, 9 * HOUR, min), { start: 5 * HOUR, end: 10 * HOUR });
-
-  // A sweep reads either way, and one narrower than the minimum widens about its middle.
-  assert.deepEqual(lensFromSweep(4 * HOUR, 2 * HOUR, bounds, min), { start: 2 * HOUR, end: 4 * HOUR });
-  assert.deepEqual(lensFromSweep(HOUR, 1.2 * HOUR, bounds, min), { start: 0.6 * HOUR, end: 1.6 * HOUR });
-  assert.deepEqual(clampLens({ start: -HOUR, end: 20 * HOUR }, bounds, min), bounds);
 });
 
 test('the analytical hour bucket limit holds for ranges up to 14 days', () => {

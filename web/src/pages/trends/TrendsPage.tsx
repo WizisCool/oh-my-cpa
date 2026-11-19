@@ -288,10 +288,6 @@ export const TrendsPage: React.FC = () => {
     void setRange(next);
   }, [setRange, setView, view.bucket, visibleNow]);
 
-  const brush = React.useCallback((next: { from: number; to: number | null }) => {
-    changeRange(next);
-  }, [changeRange]);
-
   const eventsHref = shownWindow ? trendsEventsHref(shownWindow, view.filters, {}, { isDemo }) : null;
   const moverFilterKey = usage ? filterKeyForGroupBy(usage.group_by) : null;
 
@@ -565,7 +561,6 @@ export const TrendsPage: React.FC = () => {
           onItemChange={(perfItem) => setView({ perfItem })}
           isUnavailable={isTelemetryUncaptured}
           bucketControl={bucketControl}
-          onBrush={isPhone ? undefined : brush}
         />
       </DeferredPanel>
       <DeferredPanel priority="p2" fallback={<><Panel /><Panel /></>}>

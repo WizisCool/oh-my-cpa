@@ -73,7 +73,7 @@ export default {
   'trends.quota.exhaust_marker': 'Limit {at}',
   'trends.quota.open_credentials': 'Open OAuth management',
   'trends.quota.chart_role': 'Quota trend chart',
-  'trends.quota.chart_label': '{window} quota trend for {name}; step with the arrow keys, sweep to zoom',
+  'trends.quota.chart_label': '{window} quota trend for {name}; step with the arrow keys',
   'trends.quota.measured': 'Measured',
   'trends.quota.forecast': 'Projected',
   'trends.quota.limit_line': 'Limit',
