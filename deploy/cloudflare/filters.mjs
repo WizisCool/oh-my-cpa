@@ -266,6 +266,7 @@ export function filterUsageEvents(decoded, url, { deltaMs = 0 } = {}) {
     (params.get('cost') && params.get('cost') !== 'all') ||
     (params.get('served') && params.get('served') !== 'all') ||
     (params.get('transport') && params.get('transport') !== 'all') ||
+    (params.get('failure') && params.get('failure') !== 'all') ||
     params.has('min_latency_ms') ||
     params.has('max_latency_ms') ||
     params.has('from') ||
@@ -423,6 +424,7 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
   const cost = (params.get('cost') ?? 'all').toLowerCase();
   const served = (params.get('served') ?? '').trim().toLowerCase();
   const transport = (params.get('transport') ?? 'all').toLowerCase();
+  const failure = (params.get('failure') ?? '').trim().toLowerCase();
   const minLatency = params.has('min_latency_ms') ? Number(params.get('min_latency_ms')) : null;
   const maxLatency = params.has('max_latency_ms') ? Number(params.get('max_latency_ms')) : null;
 
@@ -467,6 +469,18 @@ function matchUsageItems(items, params, deltaMs, resolvedWindow = null) {
     if (cost === 'unpriced' && item.pricing_status === 'priced') return false;
     if (served === 'substituted' && item.model_substituted !== true) return false;
     if (served === 'matched' && (item.model_substituted === true || !item.response_model)) return false;
+    if (failure) {
+      const code = Number(item.fail_status_code ?? 0);
+      const failCode = String(item.fail_code ?? '');
+      if (failure === 'rate_limited_429' && !(item.failed && code === 429)) return false;
+      if (failure === 'upstream_5xx' && !(item.failed && code >= 500 && code < 600)) return false;
+      if (failure === 'stream_truncated' && failCode !== 'stream_truncated') return false;
+      if (failure === 'force_cooldown' && failCode !== 'force_cooldown') return false;
+      if (
+        failure === 'other_failures' &&
+        !(item.failed && code !== 429 && !(code >= 500 && code < 600) && failCode !== 'stream_truncated' && failCode !== 'force_cooldown')
+      ) return false;
+    }
     if (transport === 'stream' && item.stream !== true) return false;
     if (transport === 'non_stream' && item.stream !== false) return false;
     if (minLatency !== null && Number.isFinite(minLatency) && (item.latency_ms ?? 0) < minLatency) return false;

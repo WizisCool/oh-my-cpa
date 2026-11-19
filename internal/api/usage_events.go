@@ -333,14 +333,15 @@ func usageEventRangeValid(key string, min, max *int64) error {
 func usageEventFilterFromRequest(request *http.Request, window dashboardWindow) (repository.UsageEventFilter, error) {
 	query := request.URL.Query()
 	filter := repository.UsageEventFilter{
-		InstanceID:  defaultInstanceID(),
-		FromMS:      window.FromMS,
-		ToMS:        window.ToMS,
-		Result:      strings.ToLower(strings.TrimSpace(query.Get("result"))),
-		CostState:   strings.ToLower(strings.TrimSpace(query.Get("cost"))),
-		ServedModel: strings.ToLower(strings.TrimSpace(query.Get("served"))),
-		Transport:   strings.ToLower(strings.TrimSpace(query.Get("transport"))),
-		Cursor:      query.Get("cursor"),
+		InstanceID:      defaultInstanceID(),
+		FromMS:          window.FromMS,
+		ToMS:            window.ToMS,
+		Result:          strings.ToLower(strings.TrimSpace(query.Get("result"))),
+		CostState:       strings.ToLower(strings.TrimSpace(query.Get("cost"))),
+		ServedModel:     strings.ToLower(strings.TrimSpace(query.Get("served"))),
+		Transport:       strings.ToLower(strings.TrimSpace(query.Get("transport"))),
+		FailureCategory: strings.ToLower(strings.TrimSpace(query.Get("failure"))),
+		Cursor:          query.Get("cursor"),
 	}
 	multi := []struct {
 		key    string
@@ -504,6 +505,7 @@ type UsageFacetsResponseDTO struct {
 // @Param cost query string false "Cost state filter" Enums(priced, unpriced)
 // @Param served query string false "Served model filter" Enums(substituted, matched)
 // @Param transport query string false "Transport filter" Enums(websocket, sse, http)
+// @Param failure query string false "Failure category filter" Enums(rate_limited_429, upstream_5xx, stream_truncated, force_cooldown, other_failures)
 // @Param cursor query string false "Keyset pagination cursor"
 // @Param since query integer false "Record ID boundary for arrived_count"
 // @Param limit query integer false "Page size"
@@ -551,6 +553,10 @@ func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Requ
 	}
 	if !validTransport(filter.Transport) {
 		writeError(writer, http.StatusBadRequest, "transport must be one of websocket, sse or http")
+		return
+	}
+	if !validFailureCategory(filter.FailureCategory) {
+		writeError(writer, http.StatusBadRequest, "failure must be one of rate_limited_429, upstream_5xx, stream_truncated, force_cooldown or other_failures")
 		return
 	}
 	if err := repository.ValidUsageCursor(filter.Cursor); err != nil {
@@ -986,6 +992,21 @@ func validServedModel(value string) bool {
 func validTransport(value string) bool {
 	switch value {
 	case repository.TransportAny, repository.TransportWebsocket, repository.TransportSSE, repository.TransportHTTP:
+		return true
+	default:
+		return false
+	}
+}
+
+// validFailureCategory mirrors the repository's accepted failure category vocabulary.
+func validFailureCategory(value string) bool {
+	switch value {
+	case repository.FailureCategoryAny,
+		repository.FailureCategoryRateLimited429,
+		repository.FailureCategoryUpstream5xx,
+		repository.FailureCategoryStreamTruncated,
+		repository.FailureCategoryForceCooldown,
+		repository.FailureCategoryOther:
 		return true
 	default:
 		return false

@@ -49,6 +49,7 @@ export function replaceFilters(
   if (options.result !== undefined) {
     if (options.result === 'all') next.delete('result');
     else next.set('result', options.result);
+    if (options.result === 'success') next.delete('failure');
   }
   return next;
 }

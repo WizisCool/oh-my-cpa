@@ -303,6 +303,22 @@ export function isUsageTransport(value: unknown): value is UsageTransport {
   return value === 'websocket' || value === 'sse' || value === 'http';
 }
 
+/** Canonical failure categories shared with Trends reliability lanes so drilling
+ *  down from a stability lane or bucket matches the exact same failed records. */
+export const USAGE_FAILURE_CATEGORIES = [
+  'rate_limited_429',
+  'upstream_5xx',
+  'stream_truncated',
+  'force_cooldown',
+  'other_failures',
+] as const;
+export type UsageFailureCategory = (typeof USAGE_FAILURE_CATEGORIES)[number];
+export type UsageFailureFilter = 'all' | UsageFailureCategory;
+
+export function isUsageFailureCategory(value: unknown): value is UsageFailureCategory {
+  return typeof value === 'string' && (USAGE_FAILURE_CATEGORIES as readonly string[]).includes(value);
+}
+
 /** Dimensions whose several selected values mean "any of these" (OR). Two
  *  different dimensions still mean AND, which is what makes the panel narrow as
  *  the operator adds a filter and widen as they remove one. */
@@ -536,6 +552,7 @@ export interface UsageEventQuery {
   cost?: UsageCostFilter;
   served?: UsageServedFilter;
   transport?: UsageTransportFilter;
+  failure?: UsageFailureFilter;
   /** Repeated-parameter dimensions, OR within each list. */
   filters?: Partial<Record<UsageMultiFilterKey, string[]>>;
   /** Literal substring dimensions. */
@@ -598,6 +615,7 @@ export function usageEventParams(query: UsageEventQuery): string {
   assign('cost', query.cost);
   if (isUsageServedState(query.served)) assign('served', query.served);
   if (isUsageTransport(query.transport)) assign('transport', query.transport);
+  if (isUsageFailureCategory(query.failure)) assign('failure', query.failure);
   assign('cursor', query.cursor);
   assign('limit', query.limit);
   if (query.replay === 'calendar') search.set('replay', 'calendar');

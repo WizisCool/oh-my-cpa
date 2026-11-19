@@ -1,6 +1,13 @@
 import type { MessageKey } from '../i18n/catalog';
-import type { UsageCostFilter, UsageResultFilter, UsageServedFilter, UsageTransportFilter } from './usageEvents';
+import type {
+  UsageCostFilter,
+  UsageFailureFilter,
+  UsageResultFilter,
+  UsageServedFilter,
+  UsageTransportFilter,
+} from './usageEvents';
 import {
+  isUsageFailureCategory,
   isUsageServedState,
   isUsageTransport,
   USAGE_MULTI_FILTER_KEYS,
@@ -54,6 +61,7 @@ export interface UsageEventsFilterDraft {
   cost: UsageCostFilter;
   served: UsageServedFilter;
   transport: UsageTransportFilter;
+  failure: UsageFailureFilter;
   result: UsageResultFilter;
 }
 
@@ -64,6 +72,7 @@ export const EMPTY_FILTER_DRAFT: UsageEventsFilterDraft = {
   cost: 'all',
   served: 'all',
   transport: 'all',
+  failure: 'all',
   result: 'all',
 };
 
@@ -94,6 +103,7 @@ export function draftFromView(view: UsageEventsView): UsageEventsFilterDraft {
     cost: 'all',
     served: 'all',
     transport: 'all',
+    failure: 'all',
     result: view.result,
   };
   for (const key of EVENT_FILTER_KEYS) {
@@ -114,6 +124,10 @@ export function draftFromView(view: UsageEventsView): UsageEventsFilterDraft {
     }
     if (key === 'transport') {
       if (isUsageTransport(values[0])) draft.transport = values[0];
+      continue;
+    }
+    if (key === 'failure') {
+      if (isUsageFailureCategory(values[0])) draft.failure = values[0];
       continue;
     }
     const rangeSide = rangeSideOf(key);
@@ -156,6 +170,10 @@ export function draftToView(draft: UsageEventsFilterDraft): UsageEventsView {
     }
     if (key === 'transport') {
       if (isUsageTransport(draft.transport)) params.transport = [draft.transport];
+      continue;
+    }
+    if (key === 'failure') {
+      if (isUsageFailureCategory(draft.failure)) params.failure = [draft.failure];
       continue;
     }
     const rangeSide = rangeSideOf(key);

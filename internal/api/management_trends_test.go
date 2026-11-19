@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -181,6 +182,17 @@ func TestTrendsTelemetryModesClassificationsAndRetention(t *testing.T) {
 	}
 	if len(result.SubstitutionPairs) != 1 || result.SubstitutionPairs[0] != (TrendsSubstitutionPairDTO{RequestedModel: "gpt-main", ServedModel: "gpt-served", Provider: "codex", Count: 1}) {
 		t.Fatalf("substitutions=%+v", result.SubstitutionPairs)
+	}
+	if len(result.FailureGroups) != 1 {
+		t.Fatalf("expected 1 failure group, got %+v", result.FailureGroups)
+	}
+	fg := result.FailureGroups[0]
+	if fg.Model != "gpt-error" || fg.Provider != "codex" || fg.FailedRequests != 5 || fg.TotalRequests != 5 || fg.ModelTotalRequests != 5 || fg.ProviderTotalRequests != 13 || fg.RateLimited429 != 2 || fg.Upstream5xx != 2 || fg.StreamTruncated != 1 || fg.ForceCooldown != 1 || fg.OtherFailures != 1 || fg.LastFailedAtMS != at.UnixMilli() {
+		t.Fatalf("unexpected failure group=%+v", fg)
+	}
+	wantCodes := []TrendsStatusCountDTO{{Code: 429, Count: 2}, {Code: 400, Count: 1}, {Code: 502, Count: 1}, {Code: 503, Count: 1}}
+	if !slices.Equal(fg.StatusCodes, wantCodes) {
+		t.Fatalf("failure status codes=%+v want %+v", fg.StatusCodes, wantCodes)
 	}
 	if err := repo.PutPreference(ctx, repository.PreferenceTpsCalculationMode, `"exclude_ttft"`); err != nil {
 		t.Fatal(err)
@@ -510,6 +522,64 @@ func TestTrendsRedactedGroupIDsRoundTripAndConsistentWindowBoundaries(t *testing
 	}
 	if len(telemetryResp.SubstitutionPairs) != 1 || strings.Contains(telemetryResp.SubstitutionPairs[0].ServedModel, "bob@example.com") {
 		t.Fatalf("substitution pair leaked email: %+v", telemetryResp.SubstitutionPairs)
+	}
+	// Verify failure attribution also redacts sensitive model/credential strings without losing opaque filter IDs.
+	failEvent := eventFor("redacted-fail-1", now.Add(-20*time.Second), usage.TokenStats{}, true)
+	failEvent.Model = "claude-alice@example.com-sk-ant-api03-secret"
+	failEvent.Provider = "anthropic"
+	failEvent.AuthIndex = "cred-carol@example.com"
+	failEvent.FailStatusCode = 429
+	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{failEvent}); err != nil {
+		t.Fatal(err)
+	}
+	redactedFailResp := trendsTestRead[TrendsTelemetryResponseDTO](t, client, telemetryURL)
+	if len(redactedFailResp.FailureGroups) != 1 {
+		t.Fatalf("expected 1 redacted failure group, got %+v", redactedFailResp.FailureGroups)
+	}
+	rfg := redactedFailResp.FailureGroups[0]
+	if strings.Contains(rfg.Model, "alice@example.com") || strings.Contains(rfg.Model, "sk-ant-api03") || strings.Contains(rfg.AuthIndex, "carol@example.com") {
+		t.Fatalf("failure group leaked sensitive data: %+v", rfg)
+	}
+	if !strings.HasPrefix(rfg.ModelID, repository.TrendsRedactedPrefix) || !strings.HasPrefix(rfg.AuthIndexID, repository.TrendsRedactedPrefix) || rfg.DrillDisabled {
+		t.Fatalf("expected opaque redacted drill IDs on failure group, got %+v", rfg)
+	}
+	if rfg.CredentialTotalRequests != 1 || rfg.RateLimited429 != 1 {
+		t.Fatalf("unexpected redacted failure group counts: %+v", rfg)
+	}
+}
+
+func TestBoundFailureGroupsPreservesActiveLanesAndFlagsTruncation(t *testing.T) {
+	groups := make([]TrendsFailureGroupDTO, 0, maxTelemetryFailureGroups+2)
+	for i := range maxTelemetryFailureGroups + 1 {
+		groups = append(groups, TrendsFailureGroupDTO{
+			Model:          "gpt-5",
+			Provider:       "codex",
+			AuthIndex:      fmt.Sprintf("cred-%03d", i),
+			FailedRequests: 2,
+			Upstream5xx:    2,
+		})
+	}
+	// The lowest-total tuple is the sole 429 culprit; bounding must keep it and mark truncated.
+	groups = append(groups, TrendsFailureGroupDTO{
+		Model:          "gpt-5",
+		Provider:       "codex",
+		AuthIndex:      "sole-429",
+		FailedRequests: 1,
+		RateLimited429: 1,
+	})
+	bounded, truncated := boundFailureGroups(groups, maxTelemetryFailureGroups)
+	if !truncated || len(bounded) != maxTelemetryFailureGroups {
+		t.Fatalf("boundFailureGroups = (%d, %v), want (%d, true)", len(bounded), truncated, maxTelemetryFailureGroups)
+	}
+	foundSole429 := false
+	for _, g := range bounded {
+		if g.AuthIndex == "sole-429" {
+			foundSole429 = true
+			break
+		}
+	}
+	if !foundSole429 {
+		t.Fatalf("sole 429 culprit dropped by failure-group cap")
 	}
 }
 

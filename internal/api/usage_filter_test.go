@@ -53,6 +53,7 @@ func TestUsageEventsRejectMalformedFilters(t *testing.T) {
 		"cost=maybe":                        "cost must be one of",
 		"served=maybe":                      "served must be one of",
 		"transport=grpc":                    "transport must be one of",
+		"failure=timeout":                   "failure must be one of",
 		"q=" + strings.Repeat("x", 300):     "at most",
 		"model=" + strings.Repeat("m", 300): "at most",
 	} {
@@ -501,5 +502,91 @@ func TestUsageEventsModelAliasFacetAndFilter(t *testing.T) {
 	decodeFilterJSON(t, payload, &page)
 	if len(page.Items) != 1 || page.Items[0].RequestID != "aliased" {
 		t.Fatalf("alias filter = %+v", page.Items)
+	}
+}
+
+func TestUsageEventsFailureCategoryFilter(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	now := time.Now().UTC()
+	seedEvents(t, repo, now, []repository.UsageDecoded{
+		{Event: filterEventFor("ok", now.Add(-6*time.Minute), nil)},
+		{Event: filterEventFor("rl-429", now.Add(-5*time.Minute), func(e *usage.Event) {
+			e.Failed = true
+			e.FailStatusCode = 429
+		})},
+		{Event: filterEventFor("up-503", now.Add(-4*time.Minute), func(e *usage.Event) {
+			e.Failed = true
+			e.FailStatusCode = 503
+		})},
+		{Event: filterEventFor("trunc-502", now.Add(-3*time.Minute), func(e *usage.Event) {
+			e.Failed = true
+			e.FailStatusCode = 502
+			e.FailCode = usage.FailureStreamTruncated
+		})},
+		{Event: filterEventFor("cool-429", now.Add(-2*time.Minute), func(e *usage.Event) {
+			e.Failed = true
+			e.FailStatusCode = 429
+			e.FailCode = usage.FailureForceCooldown
+		})},
+		{Event: filterEventFor("other-401", now.Add(-time.Minute), func(e *usage.Event) {
+			e.Failed = true
+			e.FailStatusCode = 401
+		})},
+	})
+
+	cases := []struct {
+		category string
+		want     []string
+	}{
+		{repository.FailureCategoryRateLimited429, []string{"cool-429", "rl-429"}},
+		{repository.FailureCategoryUpstream5xx, []string{"trunc-502", "up-503"}},
+		{repository.FailureCategoryStreamTruncated, []string{"trunc-502"}},
+		{repository.FailureCategoryForceCooldown, []string{"cool-429"}},
+		{repository.FailureCategoryOther, []string{"other-401"}},
+	}
+	for _, tc := range cases {
+		response, payload := getJSON(t, client, baseURL+"/omc/api/v1/usage/events?preset=24h&failure="+tc.category)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("failure=%s status=%d body=%s", tc.category, response.StatusCode, payload)
+		}
+		var page struct {
+			Items []usageEventResponse `json:"items"`
+		}
+		decodeFilterJSON(t, payload, &page)
+		got := make([]string, 0, len(page.Items))
+		for _, item := range page.Items {
+			got = append(got, item.RequestID)
+		}
+		if len(got) != len(tc.want) {
+			t.Fatalf("failure=%s got %v want %v", tc.category, got, tc.want)
+		}
+		for i := range tc.want {
+			if got[i] != tc.want[i] {
+				t.Fatalf("failure=%s got %v want %v", tc.category, got, tc.want)
+			}
+		}
+	}
+
+	// Empty stored client_agent rows normalize to "unknown" just like Trends telemetry.
+	if _, err := repo.SQL().ExecContext(t.Context(), `UPDATE usage_events SET client_agent = '' WHERE request_id = 'rl-429'`); err != nil {
+		t.Fatal(err)
+	}
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/usage/events?preset=24h&failure=rate_limited_429&client_agent=unknown")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("client_agent=unknown status=%d body=%s", response.StatusCode, payload)
+	}
+	var unknownPage struct {
+		Items []usageEventResponse `json:"items"`
+	}
+	decodeFilterJSON(t, payload, &unknownPage)
+	foundEmptyClient := false
+	for _, item := range unknownPage.Items {
+		if item.RequestID == "rl-429" {
+			foundEmptyClient = true
+			break
+		}
+	}
+	if !foundEmptyClient {
+		t.Fatalf("client_agent=unknown missed empty client_agent row: %+v", unknownPage.Items)
 	}
 }

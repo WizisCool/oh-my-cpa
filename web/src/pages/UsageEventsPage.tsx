@@ -421,6 +421,7 @@ export const UsageEventsPage: React.FC = () => {
     cost: 'events.filter_chip_cost_state',
     served: 'events.filter_chip_served_model',
     transport: 'events.filter_chip_transport',
+    failure: 'events.filter_chip_failure',
     client_agent: 'events.filter_chip_client_agent',
   };
 
@@ -462,6 +463,13 @@ export const UsageEventsPage: React.FC = () => {
           websocket: t('events.transport_websocket'),
           sse: t('events.transport_sse'),
           http: t('events.transport_http'),
+        },
+        failureLabels: {
+          rate_limited_429: t('events.failure_rate_limited_429'),
+          upstream_5xx: t('events.failure_upstream_5xx'),
+          stream_truncated: t('events.failure_stream_truncated'),
+          force_cooldown: t('events.failure_force_cooldown'),
+          other_failures: t('events.failure_other_failures'),
         },
       });
       return { label: t(chipLabels[key], { val: shown }) };

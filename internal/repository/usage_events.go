@@ -63,6 +63,18 @@ const (
 	TransportHTTP      = "http"
 )
 
+// Failure category vocabulary: mirrors the Trends reliability lanes so
+// drilling down from a stability lane or bucket selects the exact same set of
+// failed request records.
+const (
+	FailureCategoryAny             = ""
+	FailureCategoryRateLimited429  = "rate_limited_429"
+	FailureCategoryUpstream5xx     = "upstream_5xx"
+	FailureCategoryStreamTruncated = "stream_truncated"
+	FailureCategoryForceCooldown   = "force_cooldown"
+	FailureCategoryOther           = "other_failures"
+)
+
 // websocketExecutorSQL matches the WebSocket executors by the suffix CPA's
 // type names share. SQLite's LIKE ignores ASCII case.
 const websocketExecutorSQL = `e.executor_type LIKE '%WebsocketsExecutor'`
@@ -160,6 +172,11 @@ type UsageEventFilter struct {
 
 	// Transport narrows by upstream transport (TransportWebsocket/SSE/HTTP).
 	Transport string
+
+	// FailureCategory narrows records by the canonical Trends reliability lane
+	// (rate_limited_429, upstream_5xx, stream_truncated, force_cooldown,
+	// other_failures).
+	FailureCategory string
 
 	// SinceID asks for a count of matching records ingested after this row id,
 	// reported as ArrivedCount. It does not change which rows are returned.
@@ -974,7 +991,7 @@ func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 		{"e.reasoning_effort", filter.ReasoningEfforts},
 		{"e.service_tier", filter.ServiceTiers},
 		{RESOLVED_SERVICE_TIER_SQL, filter.ResolvedServiceTiers},
-		{"e.client_agent", filter.ClientAgents},
+		{`COALESCE(NULLIF(TRIM(e.client_agent), ''), 'unknown')`, filter.ClientAgents},
 	}
 	for _, dimension := range dimensions {
 		clause, clauseArgs, err := usageEventInClause(dimension.column, dimension.values)
@@ -1081,6 +1098,22 @@ func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 		where = append(where, `e.stream = 0 AND NOT `+websocketExecutorSQL)
 	default:
 		return nil, nil, fmt.Errorf("%w: unknown transport %q", ErrUsageFilterInvalid, filter.Transport)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(filter.FailureCategory)) {
+	case FailureCategoryAny:
+	case FailureCategoryRateLimited429:
+		where = append(where, `e.failed = 1 AND e.fail_status_code = 429`)
+	case FailureCategoryUpstream5xx:
+		where = append(where, `e.failed = 1 AND e.fail_status_code >= 500 AND e.fail_status_code < 600`)
+	case FailureCategoryStreamTruncated:
+		where = append(where, `e.fail_code = 'stream_truncated'`)
+	case FailureCategoryForceCooldown:
+		where = append(where, `e.fail_code = 'force_cooldown'`)
+	case FailureCategoryOther:
+		where = append(where, `e.failed = 1 AND COALESCE(e.fail_status_code, 0) <> 429 AND NOT (COALESCE(e.fail_status_code, 0) >= 500 AND COALESCE(e.fail_status_code, 0) < 600) AND COALESCE(e.fail_code, '') NOT IN ('stream_truncated', 'force_cooldown')`)
+	default:
+		return nil, nil, fmt.Errorf("%w: unknown failure category %q", ErrUsageFilterInvalid, filter.FailureCategory)
 	}
 
 	switch strings.ToLower(strings.TrimSpace(filter.Result)) {
