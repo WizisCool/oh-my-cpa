@@ -420,12 +420,13 @@ func resolveEventTokenSemantics(provider, executorType, endpoint string) int {
 		}
 		return 0
 	}
+	ep := strings.ToLower(endpoint)
 	switch {
-	case strings.Contains(endpoint, "/v1/messages"):
+	case strings.Contains(ep, "/v1/messages"):
 		return 2
-	case strings.Contains(endpoint, ":generateContent") || strings.Contains(endpoint, ":streamGenerateContent"):
+	case strings.Contains(ep, ":generatecontent") || strings.Contains(ep, ":streamgeneratecontent"):
 		return 3
-	case strings.Contains(endpoint, "/chat/completions") || strings.Contains(endpoint, "/responses"):
+	case strings.Contains(ep, "/chat/completions") || strings.Contains(ep, "/responses"):
 		return 1
 	default:
 		return 0

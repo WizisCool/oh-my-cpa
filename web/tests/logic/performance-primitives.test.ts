@@ -4,6 +4,7 @@ import { MutationObserver, QueryClient, QueryObserver } from '@tanstack/react-qu
 import { test } from 'vitest';
 import { lineSlotChildren } from '../../src/components/ui/line-slot.tsx';
 
+import { ApiError } from '../../src/api/client.ts';
 import { MUTATION_KEYS, QUERY_KEYS } from '../../src/api/queryKeys.ts';
 import {
   createStateLiveChannel,
@@ -42,7 +43,14 @@ import { isDiscreteWheel, keyScrollFor, pageDistance, type WheelSample } from '.
 import { isSameDrawing } from '../../src/charts/useChartMorph.ts';
 import { isSameReadout } from '../../src/components/dashboard/RollingNumber.tsx';
 import { PAGE_SKELETON_REGISTRY } from '../../src/components/common/PageLoading.tsx';
-import { ROUTE_DESCRIPTORS, consoleRouteRegistry } from '../../src/routePreload.ts';
+import {
+  ROUTE_DESCRIPTORS,
+  consoleRouteRegistry,
+  prefetchLandingRouteData,
+  retryTrendsQuery,
+  trendsQuotaParamsFromSearch,
+} from '../../src/routePreload.ts';
+import { readTrendsView, trendsQuotaParams } from '../../src/pages/trends/trendsLogic.ts';
 import { buildNavGroupSpecs } from '../../src/types/sidebarNav.ts';
 
 test('frame scheduler separates priority tiers across slices, caps per-slice jobs, and yields across frames', () => {
@@ -1152,4 +1160,41 @@ test('lineSlotChildren recursively wraps fragment text children in spans while p
   assert.equal(inner[0]?.props.children, 'a-long-credential-name');
   assert.equal(inner[1]?.type, 'span');
   assert.equal(inner[1]?.props.children, 42);
+});
+
+test('trendsQuotaParamsFromSearch matches readTrendsView + trendsQuotaParams and landing prefetch targets /trends only', async () => {
+  const cases = [
+    '',
+    '?provider=codex&model=gpt-5',
+    '?auth_index=cred-2&provider=claude&provider=codex&provider=claude&auth_index=%20cred-2%20&auth_index=%20%20',
+    '?bucket=hour&group=provider&quota_view=cycles',
+  ];
+  for (const search of cases) {
+    const expected = trendsQuotaParams(readTrendsView(new URLSearchParams(search)).filters);
+    assert.equal(trendsQuotaParamsFromSearch(search), expected, `mismatch for search=${search}`);
+  }
+
+  const trendsDescriptor = consoleRouteRegistry.resolve('/trends');
+  assert.equal(trendsDescriptor?.prefetchData, undefined, 'hover intent on /trends must not invoke upstream CPA quota reads');
+
+  const queryClient = new QueryClient();
+  const seen: Array<{ queryKey: readonly unknown[]; retry: unknown }> = [];
+  const originalPrefetch = queryClient.prefetchQuery.bind(queryClient);
+  queryClient.prefetchQuery = (async (options: Parameters<typeof originalPrefetch>[0]) => {
+    seen.push({ queryKey: options.queryKey, retry: options.retry });
+  }) as typeof queryClient.prefetchQuery;
+
+  prefetchLandingRouteData(queryClient, '/dashboard', '?provider=codex');
+  prefetchLandingRouteData(queryClient, '/insights', '?provider=codex');
+  assert.deepEqual(seen, [], 'non-trends landing routes must not prefetch trends-quota');
+
+  prefetchLandingRouteData(queryClient, '/trends', '?model=gpt-5&provider=codex&auth_index=c1');
+  prefetchLandingRouteData(queryClient, '/trends/', '?provider=codex');
+  assert.deepEqual(seen, [
+    { queryKey: ['trends-quota', 'provider=codex&auth_index=c1'], retry: retryTrendsQuery },
+    { queryKey: ['trends-quota', 'provider=codex'], retry: retryTrendsQuery },
+  ]);
+  assert.equal(retryTrendsQuery(0, new Error('transient 500')), true);
+  assert.equal(retryTrendsQuery(2, new Error('transient 500')), false);
+  assert.equal(retryTrendsQuery(0, new ApiError(404, 'uncaptured', { code: 'demo_uncaptured' })), false);
 });

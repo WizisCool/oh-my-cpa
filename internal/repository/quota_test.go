@@ -909,3 +909,146 @@ func TestQuotaCapacityCycleReplacesPlanMetadata(t *testing.T) {
 		t.Fatalf("same-reset plan replacement lost metadata or points: %+v", stored)
 	}
 }
+
+func TestParseCapacityTokenAccountingMatchesJSON(t *testing.T) {
+	cases := []struct {
+		name      string
+		raw       string
+		wantCanon bool
+		wantIn    int64
+		wantCache int64
+	}{
+		{"empty", "", false, 0, 0},
+		{"non_complete", `{"version":2,"status":"inconsistent","token_breakdown":{"input":{"total_tokens":1200,"cache_read_tokens":200}}}`, false, 0, 0},
+		{"canonical_compact", `{"version":2,"status":"complete","raw_tokens":{"input_tokens":1000,"output_tokens":300,"cache_read_tokens":200,"total_tokens":1500},"token_breakdown":{"schema_version":2,"quality":"complete","total_tokens":1500,"input":{"total_tokens":1200,"uncached_tokens":1000,"cache_read_tokens":200,"cache_write_tokens":0},"output":{"total_tokens":300}}}`, true, 1200, 200},
+		{"canonical_whitespace_and_reordered", `{ "token_breakdown" : { "output" : { "total_tokens" : 99 }, "input" : { "cache_read_tokens" : 45 , "total_tokens" : 500 } }, "status" : "complete" }`, true, 500, 45},
+		{"canonical_without_breakdown", `{"version":2,"status":"complete"}`, true, 0, 0},
+		{"canonical_null_breakdown", `{"version":2,"status":"complete","token_breakdown":null}`, true, 0, 0},
+		{"canonical_null_input", `{"version":2,"status":"complete","token_breakdown":{"input":null}}`, true, 0, 0},
+		{"wrong_type_breakdown_string", `{"status":"complete","token_breakdown":"bad"}`, false, 0, 0},
+		{"wrong_type_breakdown_array", `{"status":"complete","token_breakdown":[]}`, false, 0, 0},
+		{"wrong_type_input_string", `{"status":"complete","token_breakdown":{"input":"bad"}}`, false, 0, 0},
+		{"wrong_type_input_number", `{"status":"complete","token_breakdown":{"input":123}}`, false, 0, 0},
+		{"canonical_with_escapes", `{"status":"complete","note":"escaped \"quote\"","token_breakdown":{"input":{"total_tokens":321,"cache_read_tokens":12}}}`, true, 321, 12},
+		{"canonical_nested_complete_only", `{"status":"invalid","token_breakdown":{"quality":"complete","input":{"total_tokens":900,"cache_read_tokens":100}}}`, false, 0, 0},
+		{"canonical_array_field", `{"status":"complete","tags":["a",{"input":{"total_tokens":999}}],"token_breakdown":{"input":{"total_tokens":77,"cache_read_tokens":7}}}`, true, 77, 7},
+		{"malformed_json", `{"status":"complete","token_breakdown":`, false, 0, 0},
+		{"malformed_bare_value", `{"status":"complete","extra":oops}`, false, 0, 0},
+		{"malformed_nested_value", `{"status":"complete","extra":{"bad":nope}}`, false, 0, 0},
+		{"trailing_garbage", `{"status":"complete","token_breakdown":{"input":{"total_tokens":10}}} extra`, false, 0, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotCanon, gotIn, gotCache := parseCapacityTokenAccounting(tc.raw)
+			if gotCanon != tc.wantCanon || gotIn != tc.wantIn || gotCache != tc.wantCache {
+				t.Fatalf("parseCapacityTokenAccounting(%q) = (%v, %d, %d), want (%v, %d, %d)",
+					tc.raw, gotCanon, gotIn, gotCache, tc.wantCanon, tc.wantIn, tc.wantCache)
+			}
+		})
+	}
+}
+
+func TestQuotaSnapshotHistoryAndCyclesBatch(t *testing.T) {
+	ctx := context.Background()
+	repo := usageTestRepository(t)
+	const hour = int64(3600 * 1000)
+	reset := time.Now().UnixMilli() + 2*hour
+	start := reset - 5*hour
+
+	for _, auth := range []string{"batch-a", "batch-b"} {
+		for step := 1; step <= 4; step++ {
+			obs := start + int64(step)*30*60*1000
+			if err := repo.SaveQuotaSnapshot(ctx, QuotaSnapshotRecord{
+				ID:           fmt.Sprintf("%s-%d", auth, step),
+				AuthIndex:    auth,
+				Provider:     "codex",
+				Status:       "healthy",
+				WindowsJSON:  fmt.Sprintf(`[{"id":"five_hour","scope":"standard","used_percent":%d,"reset_at_ms":%d,"period_hours":5,"reset_accuracy":"exact"}]`, step*10, reset),
+				ObservedAtMS: obs,
+				CreatedAtMS:  obs,
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	histBatch, err := repo.GetQuotaSnapshotHistoryBatch(ctx, []string{"batch-a", "batch-b", "batch-a", "missing", " "}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(histBatch["batch-a"]) != 2 || histBatch["batch-a"][0].ID != "batch-a-4" || histBatch["batch-a"][1].ID != "batch-a-3" {
+		t.Fatalf("batch-a history mismatch: %+v", histBatch["batch-a"])
+	}
+	if len(histBatch["batch-b"]) != 2 || histBatch["batch-b"][0].ID != "batch-b-4" {
+		t.Fatalf("batch-b history mismatch: %+v", histBatch["batch-b"])
+	}
+	if len(histBatch["missing"]) != 0 {
+		t.Fatalf("unexpected history for missing auth: %+v", histBatch["missing"])
+	}
+
+	cyclesBatch, err := repo.LoadCapacityCyclesBatch(ctx, []string{"batch-a", "batch-b", "missing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, auth := range []string{"batch-a", "batch-b"} {
+		single, err := repo.LoadCapacityCycles(ctx, auth)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := cyclesBatch[auth]["codex|five_hour|standard|"]
+		want := single["codex|five_hour|standard|"]
+		if len(got) != len(want) || len(got) != 1 || len(got[0].Points) != len(want[0].Points) {
+			t.Fatalf("%s batch cycles = %+v, want %+v", auth, got, want)
+		}
+	}
+}
+
+func TestQueryLateCapacityEntriesLargeWatermarkGap(t *testing.T) {
+	ctx := context.Background()
+	repo := usageTestRepository(t)
+	const hour = int64(3600 * 1000)
+	start := time.Date(2026, 10, 21, 10, 0, 0, 0, time.UTC).UnixMilli()
+	obs := start + 2*hour
+	reset := start + 5*hour
+
+	if err := repo.SaveQuotaSnapshot(ctx, QuotaSnapshotRecord{
+		ID:           "gap-snap",
+		AuthIndex:    "auth-gap",
+		Provider:     "codex",
+		Status:       "healthy",
+		WindowsJSON:  fmt.Sprintf(`[{"id":"five_hour","scope":"standard","used_percent":20,"reset_at_ms":%d,"period_hours":5,"reset_accuracy":"exact"}]`, reset),
+		ObservedAtMS: obs,
+		CreatedAtMS:  obs,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Insert > lateCapacityPKScanThreshold unrelated events so maxID - watermark
+	// exercises the secondary-index path, plus one delayed arrival for auth-gap.
+	if _, err := repo.SQL().ExecContext(ctx, `
+		WITH RECURSIVE seq(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n < 4200)
+		INSERT INTO usage_events (instance_id, event_key, api_group_key, auth_index, model, timestamp_ms, created_at_ms, total_tokens)
+		SELECT 'default', 'other-' || n, 'group', 'auth-other', 'gpt-5', ?, ?, 10 FROM seq`,
+		obs+1000, obs+1000,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.SQL().ExecContext(ctx, `
+		INSERT INTO usage_events (instance_id, event_key, api_group_key, auth_index, model, timestamp_ms, created_at_ms, input_tokens, output_tokens, total_tokens, cost_nanos)
+		VALUES ('default', 'late-gap-ev', 'group', 'auth-gap', 'gpt-5', ?, ?, 80, 20, 100, 500)`,
+		start+hour, obs+2000,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	cycles, err := repo.LoadCapacityCycles(ctx, "auth-gap")
+	if err != nil {
+		t.Fatal(err)
+	}
+	period := 5.0
+	used := 20.0
+	window := quota.QuotaWindow{ID: "five_hour", Scope: "standard", PeriodHours: &period, UsedPercent: &used, ResetAtMS: &reset, ResetAccuracy: "exact"}
+	reconciled := repo.ReconcileLiveCycleForRead(ctx, "auth-gap", window, nil, obs, cycles["codex|five_hour|standard|"])
+	if len(reconciled) != 1 || len(reconciled[0].Points) != 1 || reconciled[0].Points[0].Requests != 1 || reconciled[0].Points[0].Tokens != 100 {
+		t.Fatalf("large-gap late reconciliation failed: %+v", reconciled)
+	}
+}

@@ -312,9 +312,42 @@ func (h *Handler) readTrendsQuota(ctx context.Context, providers, indexes []stri
 		result.Summary.IsMembershipUnknown = !isLive
 		return result, nil
 	}
-	latest, err := h.repo.GetLatestQuotaSnapshots(ctx, authIndexes)
-	if err != nil {
-		return result, err
+	var historyByAuth map[string][]repository.QuotaSnapshotRecord
+	var err error
+	if len(providers) > 0 {
+		// Narrow provider-filtered requests via latest rows before batch-loading
+		// 50-entry trajectories so unmatched credentials never load full histories.
+		var latestByAuth map[string]repository.QuotaSnapshotRecord
+		latestByAuth, err = h.repo.GetLatestQuotaSnapshots(ctx, authIndexes)
+		if err != nil {
+			return result, err
+		}
+		matchedAuths := make([]string, 0, len(authIndexes))
+		for _, index := range authIndexes {
+			provider := quota.DetectProvider(files[index].Type, files[index].Provider)
+			if snap, ok := latestByAuth[index]; ok && snap.Provider != "" {
+				provider = snap.Provider
+			}
+			if trendsMatches(providers, provider) {
+				matchedAuths = append(matchedAuths, index)
+			}
+		}
+		authIndexes = matchedAuths
+		if len(authIndexes) == 0 {
+			result.Summary.IsMembershipUnknown = !isLive
+			return result, nil
+		}
+		historyByAuth, err = h.repo.GetQuotaSnapshotHistoryBatch(ctx, authIndexes, 50)
+		if err != nil {
+			return result, err
+		}
+	} else {
+		// One batched history read serves both the latest reading (entry 0) and the
+		// 50-reading trajectory for every credential.
+		historyByAuth, err = h.repo.GetQuotaSnapshotHistoryBatch(ctx, authIndexes, 50)
+		if err != nil {
+			return result, err
+		}
 	}
 	lastAttempts := h.lastQuotaAttempts(ctx, authIndexes)
 	var activeCooldowns map[string]repository.ActiveCooldownRecord
@@ -333,12 +366,20 @@ func (h *Handler) readTrendsQuota(ctx context.Context, providers, indexes []stri
 	for _, entry := range archived {
 		archive[entry.AuthIndex] = entry
 	}
+
+	preparedCreds := make([]*trendsQuotaPreparedCred, 0, len(authIndexes))
+	credAuthsWithSnap := make([]string, 0, len(authIndexes))
 	for _, index := range authIndexes {
 		file, previous := files[index], archive[index]
 		if !isLive && previous.Kind == "apikey" {
 			continue
 		}
-		snapshot, hasStoredReading := latest[index]
+		history := historyByAuth[index]
+		var snapshot repository.QuotaSnapshotRecord
+		hasStoredReading := len(history) > 0
+		if hasStoredReading {
+			snapshot = history[0]
+		}
 		provider := quota.DetectProvider(file.Type, file.Provider)
 		if snapshot.Provider != "" {
 			provider = snapshot.Provider
@@ -400,16 +441,80 @@ func (h *Handler) readTrendsQuota(ctx context.Context, providers, indexes []stri
 		if plan := planFromSnapshot(snapshot); plan != nil {
 			item.PlanType, item.PlanTier = trendsQuotaLabel(plan.PlanType, file), trendsQuotaLabel(plan.Tier, file)
 		}
+		cred := &trendsQuotaPreparedCred{
+			index:                index,
+			file:                 file,
+			snapshot:             snapshot,
+			history:              history,
+			item:                 item,
+			isTrustworthyReading: isTrustworthyReading,
+		}
+		preparedCreds = append(preparedCreds, cred)
 		if snapshot.ObservedAtMS > 0 {
-			windows, err := h.readTrendsQuotaWindows(ctx, index, file, snapshot, nowMS, isTrustworthyReading)
-			if err != nil {
+			credAuthsWithSnap = append(credAuthsWithSnap, index)
+		}
+	}
+
+	var cyclesByAuth map[string]map[string][]quota.CycleCalibration
+	if len(credAuthsWithSnap) > 0 {
+		cyclesByAuth, err = h.repo.LoadCapacityCyclesBatch(ctx, credAuthsWithSnap)
+		if err != nil {
+			return result, err
+		}
+	}
+
+	zone := h.insightsZone()
+	credByAuth := make(map[string]*trendsQuotaPreparedCred, len(preparedCreds))
+	spans := make([]repository.QuotaTrendCredentialSpan, 0, len(credAuthsWithSnap))
+	for _, cred := range preparedCreds {
+		if cred.snapshot.ObservedAtMS <= 0 {
+			continue
+		}
+		prepareTrendsQuotaCredentialWindows(cred, cyclesByAuth[cred.index], nowMS, zone)
+		if cred.hasSpan {
+			credByAuth[cred.index] = cred
+			spans = append(spans, repository.QuotaTrendCredentialSpan{
+				AuthIndex:     cred.index,
+				FromMS:        cred.minFromMS,
+				ToMS:          cred.maxToMS,
+				NeedModel:     cred.hasScopedWindow,
+				NeedCapFromMS: cred.capMinFromMS,
+				NeedCapToMS:   cred.capMaxToMS,
+			})
+		}
+	}
+
+	var dbWatermark int64
+	if len(spans) > 0 {
+		batchFacts, err := h.repo.ReadQuotaTrendBatch(
+			ctx,
+			defaultInstanceID(),
+			spans,
+			func(authIndex string, watermarkID int64, ev repository.QuotaTrendStreamEvent) {
+				if cred := credByAuth[authIndex]; cred != nil {
+					accumulateTrendsQuotaEvent(cred, ev, watermarkID)
+				}
+			},
+		)
+		if err != nil {
+			return result, err
+		}
+		dbWatermark = batchFacts.WatermarkID
+		for authIndex, cred := range credByAuth {
+			if err := ctx.Err(); err != nil {
 				return result, err
 			}
-			item.Windows = windows
+			applyTrendsQuotaDeletedFacts(cred, batchFacts.HorizonMS, batchFacts.FactsByAuth[authIndex])
 		}
-		for _, window := range item.Windows {
+	}
+
+	for _, cred := range preparedCreds {
+		if len(cred.windows) > 0 {
+			cred.item.Windows = finalizeTrendsQuotaWindows(cred, nowMS, dbWatermark)
+		}
+		for _, window := range cred.item.Windows {
 			result.Summary.ObservableWindows++
-			if !isTrustworthyReading || window.CycleResetMS <= nowMS {
+			if !cred.isTrustworthyReading || window.CycleResetMS <= nowMS {
 				continue
 			}
 			switch window.Status {
@@ -423,7 +528,7 @@ func (h *Handler) readTrendsQuota(ctx context.Context, providers, indexes []stri
 				result.Summary.HealthyWindows++
 			}
 		}
-		result.Items = append(result.Items, item)
+		result.Items = append(result.Items, cred.item)
 	}
 	if isLive {
 		result.Summary.ActiveCredentials = len(result.Items)
@@ -433,11 +538,163 @@ func (h *Handler) readTrendsQuota(ctx context.Context, providers, indexes []stri
 	return result, nil
 }
 
-type trendsQuotaRetainedEntry struct {
-	StartedMS   int64
-	CompletedMS int64
-	Model       string
-	Measures    repository.UsageMeasures
+const (
+	capScopeUnset uint8 = iota
+	capScopeMatch
+	capScopeUnmatched
+	capScopeIgnored
+)
+
+type trendsQuotaPriorCycleAcc struct {
+	cycleStartMS  int64
+	cycleResetMS  int64
+	measuredToMS  int64
+	lastPoint     quota.CalibrationPoint
+	physical      TrendsUsageTotalsDTO
+	isApproximate bool
+}
+
+type trendsQuotaPreparedWindow struct {
+	dto              TrendsQuotaWindowDTO
+	source           quota.QuotaWindow
+	observation      *quota.NormalizedQuota
+	start            int64
+	at               int64
+	actualEnd        int64
+	capacityTo       int64
+	used             float64
+	points           []trendsQuotaPoint
+	cycles           []quota.CycleCalibration
+	live             int
+	isFeature        bool
+	isScoped         bool
+	supportsCapacity bool
+	needsCapacity    bool
+	scopeReason      string
+
+	displayedPhysical TrendsUsageTotalsDTO
+	snapshotPhysical  TrendsUsageTotalsDTO
+	postPhysical      TrendsUsageTotalsDTO
+	isApproximate     bool
+	priorCycles       []trendsQuotaPriorCycleAcc
+
+	canReconcileLive    bool
+	isLegacyReconcile   bool
+	liveCycleStartMS    int64
+	liveStartLowerMS    int64
+	liveLastObservedMS  int64
+	liveLastWatermarkID int64
+	legacyPointAcc      []quota.WindowUsage
+	latePointDelta      []quota.WindowUsage
+
+	capStartLowerMS       int64
+	capLive               quota.WindowUsage
+	hasLatestPoint        bool
+	latestPointObservedMS int64
+	capPostFromMS         int64
+	capPost               quota.WindowUsage
+
+	physicalScopeMemo map[string]bool
+	capScopeMemo      map[string]uint8
+}
+
+type trendsQuotaPreparedCred struct {
+	index                string
+	file                 management.AuthFile
+	snapshot             repository.QuotaSnapshotRecord
+	history              []repository.QuotaSnapshotRecord
+	item                 TrendsQuotaCredentialDTO
+	isTrustworthyReading bool
+	windows              []*trendsQuotaPreparedWindow
+	minFromMS            int64
+	maxToMS              int64
+	hasSpan              bool
+	capMinFromMS         int64
+	capMaxToMS           int64
+	hasCapSpan           bool
+	hasScopedWindow      bool
+}
+
+func (c *trendsQuotaPreparedCred) expandSpan(fromMS, toMS int64) {
+	if toMS <= fromMS {
+		return
+	}
+	if !c.hasSpan {
+		c.minFromMS, c.maxToMS, c.hasSpan = fromMS, toMS, true
+		return
+	}
+	c.minFromMS = min(c.minFromMS, fromMS)
+	c.maxToMS = max(c.maxToMS, toMS)
+}
+
+func (c *trendsQuotaPreparedCred) expandCapSpan(fromMS, toMS int64) {
+	if toMS <= fromMS {
+		return
+	}
+	if !c.hasCapSpan {
+		c.capMinFromMS, c.capMaxToMS, c.hasCapSpan = fromMS, toMS, true
+		return
+	}
+	c.capMinFromMS = min(c.capMinFromMS, fromMS)
+	c.capMaxToMS = max(c.capMaxToMS, toMS)
+}
+
+func (w *trendsQuotaPreparedWindow) isModelInPhysicalScope(model string) bool {
+	if !w.isScoped {
+		return true
+	}
+	if w.physicalScopeMemo == nil {
+		w.physicalScopeMemo = make(map[string]bool, 8)
+	}
+	if matched, ok := w.physicalScopeMemo[model]; ok {
+		return matched
+	}
+	matched := quota.IsModelInWindowScope(w.source, model)
+	w.physicalScopeMemo[model] = matched
+	return matched
+}
+
+func (w *trendsQuotaPreparedWindow) classifyCapacityModel(model string) uint8 {
+	if !w.isScoped {
+		return capScopeMatch
+	}
+	if w.capScopeMemo == nil {
+		w.capScopeMemo = make(map[string]uint8, 8)
+	}
+	if cls, ok := w.capScopeMemo[model]; ok {
+		return cls
+	}
+	selected, reason := quota.SelectWindowUsage(w.source, []quota.ModelWindowUsage{{
+		Model: model,
+		Usage: quota.WindowUsage{Requests: 1},
+	}})
+	var cls uint8
+	switch {
+	case reason != "":
+		cls = capScopeIgnored
+	case selected.Requests > 0:
+		cls = capScopeMatch
+	case selected.UnmatchedRequests > 0:
+		cls = capScopeUnmatched
+	default:
+		cls = capScopeIgnored
+	}
+	w.capScopeMemo[model] = cls
+	return cls
+}
+
+func addCapacityUsageSample(dst *quota.WindowUsage, ev quota.WindowUsage, scopeClass uint8) {
+	switch scopeClass {
+	case capScopeMatch:
+		dst.Requests += ev.Requests
+		dst.PricedRequests += ev.PricedRequests
+		dst.Tokens += ev.Tokens
+		dst.PromptTokens += ev.PromptTokens
+		dst.CachedTokens += ev.CachedTokens
+		dst.CostNanos += ev.CostNanos
+	case capScopeUnmatched:
+		dst.UnmatchedRequests += ev.Requests
+	}
 }
 
 func isTrendsQuotaFeatureWindow(window quota.QuotaWindow) bool {
@@ -450,28 +707,13 @@ func isTrendsQuotaFeatureWindow(window quota.QuotaWindow) bool {
 	return window.Scope != ""
 }
 
-type trendsQuotaPhysicalSnapshot struct {
-	horizon  int64
-	facts    []repository.UsageFactRow
-	retained []trendsQuotaRetainedEntry
-}
-
-func (h *Handler) readTrendsQuotaWindows(ctx context.Context, index string, file management.AuthFile, snapshot repository.QuotaSnapshotRecord, nowMS int64, isTrustworthyReading bool) ([]TrendsQuotaWindowDTO, error) {
-	result := []TrendsQuotaWindowDTO{}
-	observation := normalizedQuotaFromSnapshot(index, snapshot)
+func prepareTrendsQuotaCredentialWindows(cred *trendsQuotaPreparedCred, cyclesByKey map[string][]quota.CycleCalibration, nowMS int64, zone *time.Location) {
+	observation := normalizedQuotaFromSnapshot(cred.index, cred.snapshot)
 	if len(observation.Windows) == 0 {
-		return result, nil
-	}
-	history, err := h.repo.GetQuotaSnapshotHistory(ctx, index, 50)
-	if err != nil {
-		return nil, err
-	}
-	cycles, err := h.repo.LoadCapacityCycles(ctx, index)
-	if err != nil {
-		return nil, err
+		return
 	}
 	reads := make(map[string][]trendsQuotaReading)
-	for _, record := range slices.Backward(history) {
+	for _, record := range slices.Backward(cred.history) {
 		var windows []quota.QuotaWindow
 		if json.Unmarshal([]byte(record.WindowsJSON), &windows) != nil {
 			continue
@@ -484,81 +726,483 @@ func (h *Handler) readTrendsQuotaWindows(ctx context.Context, index string, file
 		}
 	}
 
-	type preparedQuotaWindow struct {
-		source     quota.QuotaWindow
-		start, at  int64
-		used       float64
-		reconciled []quota.CycleCalibration
-	}
-	prepared := make([]preparedQuotaWindow, 0, len(observation.Windows))
-	var minFromMS, maxToMS int64
-	hasSpan := false
-	expandSpan := func(fromMS, toMS int64) {
-		if toMS <= fromMS {
-			return
-		}
-		if !hasSpan {
-			minFromMS, maxToMS, hasSpan = fromMS, toMS, true
-			return
-		}
-		minFromMS = min(minFromMS, fromMS)
-		maxToMS = max(maxToMS, toMS)
-	}
-	for _, window := range observation.Windows {
-		start, at, reason := quota.WindowCycleRange(window, snapshot.ObservedAtMS, snapshot.ObservedAtMS)
-		used, ok := quota.WindowUsedPercent(window)
+	cred.windows = make([]*trendsQuotaPreparedWindow, 0, len(observation.Windows))
+	for _, source := range observation.Windows {
+		start, at, reason := quota.WindowCycleRange(source, cred.snapshot.ObservedAtMS, cred.snapshot.ObservedAtMS)
+		used, ok := quota.WindowUsedPercent(source)
 		if reason != "" || !ok {
 			continue
 		}
-		key := quota.CapacityWindowKey(snapshot.Provider, window)
-		reconciled := h.repo.ReconcileLiveCycleForRead(ctx, index, window, observation.Plan, snapshot.ObservedAtMS, cycles[key])
-		live := quota.LiveCycleIndex(window, observation.ObservedAtMS, reconciled)
-		prepared = append(prepared, preparedQuotaWindow{source: window, start: start, at: at, used: used, reconciled: reconciled})
+		key := quota.CapacityWindowKey(cred.snapshot.Provider, source)
+		rawCycles := cyclesByKey[key]
+		cycles := slices.Clone(rawCycles)
+		live := quota.LiveCycleIndex(source, observation.ObservedAtMS, cycles)
+		if live >= 0 {
+			cycles[live].Points = slices.Clone(cycles[live].Points)
+		}
 
-		endUpper := min(max(at, nowMS), *window.ResetAtMS)
-		if !isTrendsQuotaFeatureWindow(window) {
-			expandSpan(start, endUpper)
-			for idx, cycle := range reconciled {
+		dto := TrendsQuotaWindowDTO{
+			WindowID: trendsQuotaLabel(source.ID, cred.file), Label: trendsQuotaLabel(source.Label, cred.file),
+			Kind: trendsQuotaLabel(source.Kind, cred.file), Scope: trendsQuotaLabel(source.Scope, cred.file),
+			Model: trendsQuotaLabel(source.Model, cred.file), PeriodHours: source.PeriodHours,
+			CycleStartMS: start, CycleResetMS: *source.ResetAtMS, UsedPercent: used, RemainingPercent: 100 - used,
+			Status: trendsQuotaNormal, Cycles: []TrendsQuotaCycleHistoryDTO{},
+		}
+		points := trendsQuotaPoints(dto, source, observation, reads[key], cycles, live)
+		active := trendsQuotaActivePoints(points)
+		actualEnd := min(at, dto.CycleResetMS)
+		capacityTo := min(at, dto.CycleResetMS)
+		emitForecast := cred.isTrustworthyReading && nowMS < dto.CycleResetMS
+		if used >= 100 {
+			cutoffAt := actualEnd
+			if cutoff, _, ok := quota.ExhaustionCutoffPoint(source, observation.Plan, observation.ObservedAtMS, cycles); ok {
+				cutoffAt = max(start, min(at, cutoff.ObservedAtMS))
+			} else {
+				for _, point := range active {
+					if point.used >= 100 {
+						cutoffAt = point.at
+						break
+					}
+				}
+			}
+			capacityTo = cutoffAt
+			dto.ExhaustedAtMS = &cutoffAt
+			if emitForecast {
+				dto.Status = trendsQuotaLimitReached
+				actualEnd = cutoffAt
+			} else if cred.isTrustworthyReading {
+				actualEnd = dto.CycleResetMS
+			}
+		} else if emitForecast {
+			// Measurements and projections track wall-clock time (`nowMS`), not the stale timestamp of the
+			// last snapshot (`at`), so an unexhausted window's "Now" marker and exhaustion ETA never fall behind.
+			actualEnd = max(at, min(nowMS, dto.CycleResetMS))
+			if rate := trendsQuotaBurnRate(active); rate != nil {
+				dto.BurnRatePerHour = rate
+				remaining := float64(dto.CycleResetMS-actualEnd) / float64(repository.HourBucketMS)
+				projected := used + *rate*remaining
+				dto.ProjectedEndPercent = &projected
+				if *rate > 0 {
+					msToExhaustion := math.Ceil((100 - used) / *rate * float64(repository.HourBucketMS))
+					if msToExhaustion <= float64(math.MaxInt64-actualEnd-1) {
+						projectedMS := actualEnd + int64(msToExhaustion)
+						dto.ProjectedExhaustAtMS = &projectedMS
+						if projectedMS < dto.CycleResetMS {
+							dto.Status = trendsQuotaProjectedExhaust
+						}
+					}
+				}
+				if dto.Status == trendsQuotaNormal && float64(max(nowMS, at)-start)/float64(dto.CycleResetMS-start) > 0.60 && projected < 35 {
+					dto.Status = trendsQuotaUnderutilized
+				}
+			}
+		} else if cred.isTrustworthyReading {
+			actualEnd = dto.CycleResetMS
+		}
+
+		buckets := trendsQuotaGrid(start, dto.CycleResetMS, actualEnd, zone)
+		if !cred.isTrustworthyReading {
+			buckets = slices.DeleteFunc(buckets, func(b TrendsQuotaBucketDTO) bool { return b.IsForecast })
+		}
+		dto.Buckets = buckets
+
+		isFeature := isTrendsQuotaFeatureWindow(source)
+		isScoped := source.Scope == "model" || source.Scope == "group"
+		scopeReason := ""
+		if isScoped {
+			_, scopeReason = quota.SelectWindowUsage(source, nil)
+		}
+		supportsCapacity := quota.SupportsWindowCapacity(observation.Provider, source)
+		needsCapacity := supportsCapacity && cred.isTrustworthyReading && nowMS < dto.CycleResetMS
+
+		w := &trendsQuotaPreparedWindow{
+			dto:              dto,
+			source:           source,
+			observation:      observation,
+			start:            start,
+			at:               at,
+			actualEnd:        actualEnd,
+			capacityTo:       capacityTo,
+			used:             used,
+			points:           points,
+			cycles:           cycles,
+			live:             live,
+			isFeature:        isFeature,
+			isScoped:         isScoped,
+			supportsCapacity: supportsCapacity,
+			needsCapacity:    needsCapacity,
+			scopeReason:      scopeReason,
+			capStartLowerMS:  max(0, start-repository.CapacityLatencyLookbackMS),
+		}
+
+		if isScoped {
+			cred.hasScopedWindow = true
+		}
+		if live >= 0 && quota.SameCalibrationPlan(cycles[live], observation.Plan) && len(cycles[live].Points) > 0 && scopeReason == "" {
+			liveCycle := &cycles[live]
+			lastPt := liveCycle.Points[len(liveCycle.Points)-1]
+			w.canReconcileLive = true
+			w.isLegacyReconcile = repository.CycleNeedsLegacyReconcile(liveCycle.Points)
+			w.liveCycleStartMS = liveCycle.CycleStartMS()
+			w.liveStartLowerMS = max(0, w.liveCycleStartMS-repository.CapacityLatencyLookbackMS)
+			w.liveLastObservedMS = lastPt.ObservedAtMS
+			w.liveLastWatermarkID = lastPt.UsageWatermarkID
+			if w.isLegacyReconcile {
+				w.legacyPointAcc = make([]quota.WindowUsage, len(liveCycle.Points))
+			} else {
+				w.latePointDelta = make([]quota.WindowUsage, len(liveCycle.Points))
+			}
+			cred.expandSpan(w.liveCycleStartMS, w.liveLastObservedMS)
+			cred.expandCapSpan(w.liveCycleStartMS, w.liveLastObservedMS)
+		}
+
+		if needsCapacity && scopeReason == "" {
+			cred.expandSpan(start, capacityTo)
+			cred.expandCapSpan(start, capacityTo)
+			if latest, ok := quota.LatestLiveCalibrationPoint(source, observation.Plan, capacityTo, cycles); ok {
+				w.hasLatestPoint = true
+				w.latestPointObservedMS = latest.ObservedAtMS
+				w.capPostFromMS = max(start, latest.ObservedAtMS)
+			}
+		}
+
+		if !isFeature {
+			cred.expandSpan(start, actualEnd)
+			for idx, cycle := range cycles {
 				if idx == live || cycle.CycleResetAtMS > start || len(cycle.Points) == 0 {
 					continue
 				}
 				last := trendsQuotaCycleMeasurement(cycle.Points)
-				expandSpan(cycle.CycleStartMS(), min(last.ObservedAtMS, cycle.CycleResetAtMS))
+				measuredTo := min(last.ObservedAtMS, cycle.CycleResetAtMS)
+				w.priorCycles = append(w.priorCycles, trendsQuotaPriorCycleAcc{
+					cycleStartMS: cycle.CycleStartMS(),
+					cycleResetMS: cycle.CycleResetAtMS,
+					measuredToMS: measuredTo,
+					lastPoint:    last,
+				})
+				cred.expandSpan(cycle.CycleStartMS(), measuredTo)
 			}
 		}
+
+		cred.windows = append(cred.windows, w)
 	}
-	if len(prepared) == 0 {
-		return result, nil
+}
+
+func findQuotaBucketIndex(buckets []TrendsQuotaBucketDTO, at int64) int {
+	if len(buckets) == 0 {
+		return -1
 	}
-	var physicalData trendsQuotaPhysicalSnapshot
-	if hasSpan {
-		snapHorizon, facts, retained, err := h.repo.ReadQuotaTrendPhysical(ctx, defaultInstanceID(), index, minFromMS, maxToMS)
-		if err != nil {
-			return nil, err
+	bucketIndex, _ := slices.BinarySearchFunc(buckets, at, func(bucket TrendsQuotaBucketDTO, at int64) int {
+		if at >= bucket.EndMS {
+			return -1
 		}
-		physicalData.horizon = snapHorizon
-		physicalData.facts = facts.Rows
-		if len(retained) > 0 {
-			physicalData.retained = make([]trendsQuotaRetainedEntry, len(retained))
-			for i, entry := range retained {
-				physicalData.retained[i] = trendsQuotaRetainedEntry{
-					StartedMS:   entry.StartedMS,
-					CompletedMS: entry.CompletedMS,
-					Model:       entry.Model,
-					Measures:    entry.Measures,
+		if at < bucket.StartMS {
+			return 1
+		}
+		return 0
+	})
+	if bucketIndex < len(buckets) && at < buckets[bucketIndex].EndMS && at >= buckets[bucketIndex].StartMS {
+		return bucketIndex
+	}
+	return -1
+}
+
+func applyTrendsQuotaDeletedFacts(cred *trendsQuotaPreparedCred, horizonMS int64, factRows []repository.UsageFactRow) {
+	if horizonMS <= 0 || len(factRows) == 0 {
+		return
+	}
+	applySpan := func(
+		isScoped bool,
+		fromMS, splitMS, toMS int64,
+		buckets []TrendsQuotaBucketDTO,
+		displayed, beforeSplit, afterSplit *TrendsUsageTotalsDTO,
+		isApprox *bool,
+	) {
+		if toMS <= fromMS || horizonMS <= fromMS {
+			return
+		}
+		if splitMS < fromMS {
+			splitMS = fromMS
+		}
+		if splitMS > toMS {
+			splitMS = toMS
+		}
+		factEnd := min(toMS, horizonMS)
+		if isScoped {
+			// Permanent 15m facts store requested model rather than serving model;
+			// mark scoped history approximate when deleted fact residuals remain.
+			for _, row := range factRows {
+				rowEnd := row.StartMS + repository.QuarterHourBucketMS
+				if rowEnd > fromMS && row.StartMS < factEnd && row.Requests > 0 {
+					*isApprox = true
+					break
+				}
+			}
+			return
+		}
+		for _, row := range factRows {
+			rowEnd := row.StartMS + repository.QuarterHourBucketMS
+			if rowEnd <= fromMS || row.StartMS >= factEnd || row.Requests <= 0 {
+				continue
+			}
+			if row.StartMS < fromMS || rowEnd > factEnd {
+				*isApprox = true
+				continue
+			}
+			// Permanent 15m facts bucket by request start time (`timestamp_ms`) rather
+			// than completion time (`completed_at_ms`), and aggregate failures together with
+			// zero-token rows, so any deleted-detail fact span is marked approximate.
+			*isApprox = true
+			physical := trendsUsageMeasures(row.UsageMeasures)
+			displayed.add(physical)
+			if beforeSplit != nil {
+				if rowEnd <= splitMS {
+					beforeSplit.add(physical)
+				} else if row.StartMS >= splitMS {
+					afterSplit.add(physical)
+				} else if splitMS < toMS {
+					*isApprox = true
+				}
+			}
+			if len(buckets) > 0 {
+				if bucketIndex := findQuotaBucketIndex(buckets, row.StartMS); bucketIndex >= 0 {
+					bucket := &buckets[bucketIndex]
+					bucket.Requests += physical.Requests
+					bucket.NetTokens += physical.NetTokens
+					bucket.TotalTokens += physical.TotalTokens
 				}
 			}
 		}
 	}
-	for _, item := range prepared {
-		key := quota.CapacityWindowKey(snapshot.Provider, item.source)
-		built, err := h.readTrendsQuotaWindow(ctx, index, item.source, observation, file, item.start, item.at, nowMS, item.used, reads[key], item.reconciled, &physicalData, isTrustworthyReading)
-		if err != nil {
-			return nil, err
+
+	for _, w := range cred.windows {
+		if w.isFeature {
+			continue
 		}
-		result = append(result, built)
+		applySpan(w.isScoped, w.start, w.capacityTo, w.actualEnd, w.dto.Buckets, &w.displayedPhysical, &w.snapshotPhysical, &w.postPhysical, &w.isApproximate)
+		for i := range w.priorCycles {
+			pc := &w.priorCycles[i]
+			applySpan(w.isScoped, pc.cycleStartMS, pc.measuredToMS, pc.measuredToMS, nil, &pc.physical, nil, nil, &pc.isApproximate)
+		}
 	}
-	return result, nil
+}
+
+func accumulateTrendsQuotaEvent(cred *trendsQuotaPreparedCred, ev repository.QuotaTrendStreamEvent, dbWatermark int64) {
+	physical := trendsUsageMeasures(ev.Measures)
+	for _, w := range cred.windows {
+		if !w.isFeature {
+			if ev.CompletedMS >= w.start && ev.CompletedMS < w.actualEnd && w.isModelInPhysicalScope(ev.Model) {
+				w.displayedPhysical.add(physical)
+				splitMS := min(max(w.capacityTo, w.start), w.actualEnd)
+				if ev.CompletedMS+1 <= splitMS {
+					w.snapshotPhysical.add(physical)
+				} else if ev.CompletedMS >= splitMS {
+					w.postPhysical.add(physical)
+				}
+				if bucketIndex := findQuotaBucketIndex(w.dto.Buckets, ev.CompletedMS); bucketIndex >= 0 {
+					bucket := &w.dto.Buckets[bucketIndex]
+					bucket.Requests += physical.Requests
+					bucket.NetTokens += physical.NetTokens
+					bucket.TotalTokens += physical.TotalTokens
+				}
+			}
+			for i := range w.priorCycles {
+				pc := &w.priorCycles[i]
+				if ev.CompletedMS >= pc.cycleStartMS && ev.CompletedMS < pc.measuredToMS && w.isModelInPhysicalScope(ev.Model) {
+					pc.physical.add(physical)
+				}
+			}
+		}
+
+		if !ev.HasCapacityTokens || w.scopeReason != "" {
+			continue
+		}
+
+		var capClass uint8
+		resolveCapClass := func() uint8 {
+			if capClass == capScopeUnset {
+				capClass = w.classifyCapacityModel(ev.Model)
+			}
+			return capClass
+		}
+
+		if w.canReconcileLive && ev.StartedMS >= w.liveStartLowerMS && ev.CompletedMS >= w.liveCycleStartMS && ev.CompletedMS < w.liveLastObservedMS {
+			effectiveWatermark := max(dbWatermark, w.liveLastWatermarkID)
+			if ev.ID <= effectiveWatermark {
+				if w.isLegacyReconcile {
+					cls := resolveCapClass()
+					if cls == capScopeMatch || cls == capScopeUnmatched {
+						pts := w.cycles[w.live].Points
+						for p := range pts {
+							if ev.CompletedMS < pts[p].ObservedAtMS {
+								addCapacityUsageSample(&w.legacyPointAcc[p], ev.CapacityUsage, cls)
+							}
+						}
+					}
+				} else if effectiveWatermark > w.liveLastWatermarkID && ev.ID > w.liveLastWatermarkID {
+					cls := resolveCapClass()
+					if cls == capScopeMatch || cls == capScopeUnmatched {
+						pts := w.cycles[w.live].Points
+						for p := range pts {
+							if ev.CompletedMS < pts[p].ObservedAtMS {
+								addCapacityUsageSample(&w.latePointDelta[p], ev.CapacityUsage, cls)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if w.needsCapacity && ev.StartedMS >= w.capStartLowerMS && ev.CompletedMS < w.capacityTo {
+			if ev.CompletedMS >= w.start {
+				addCapacityUsageSample(&w.capLive, ev.CapacityUsage, resolveCapClass())
+			}
+			if w.hasLatestPoint && w.latestPointObservedMS < w.capacityTo && ev.CompletedMS >= w.capPostFromMS {
+				addCapacityUsageSample(&w.capPost, ev.CapacityUsage, resolveCapClass())
+			}
+		}
+	}
+}
+
+func finalizeTrendsQuotaWindows(cred *trendsQuotaPreparedCred, nowMS, dbWatermark int64) []TrendsQuotaWindowDTO {
+	out := make([]TrendsQuotaWindowDTO, 0, len(cred.windows))
+	for _, w := range cred.windows {
+		if w.canReconcileLive {
+			pts := w.cycles[w.live].Points
+			effectiveWatermark := max(dbWatermark, w.liveLastWatermarkID)
+			if w.isLegacyReconcile {
+				for idx := range pts {
+					point := &pts[idx]
+					fresh := w.legacyPointAcc[idx]
+					if fresh.Requests > point.Requests {
+						point.Requests = fresh.Requests
+						point.PricedRequests = fresh.PricedRequests
+						point.Tokens = fresh.Tokens
+						point.PromptTokens = fresh.PromptTokens
+						point.CachedTokens = fresh.CachedTokens
+						point.CostNanos = fresh.CostNanos
+					}
+					if fresh.UnmatchedRequests > point.UnmatchedRequests {
+						point.UnmatchedRequests = fresh.UnmatchedRequests
+					}
+					if idx > 0 {
+						prev := &pts[idx-1]
+						if prev.Requests > point.Requests {
+							point.Requests = prev.Requests
+							point.PricedRequests = max(point.PricedRequests, prev.PricedRequests)
+							point.Tokens = max(point.Tokens, prev.Tokens)
+							point.PromptTokens = max(point.PromptTokens, prev.PromptTokens)
+							point.CachedTokens = max(point.CachedTokens, prev.CachedTokens)
+							point.CostNanos = max(point.CostNanos, prev.CostNanos)
+						}
+						if prev.UnmatchedRequests > point.UnmatchedRequests {
+							point.UnmatchedRequests = prev.UnmatchedRequests
+						}
+					}
+					point.HasUsageGap = false
+				}
+				pts[len(pts)-1].UsageWatermarkID = effectiveWatermark
+			} else if effectiveWatermark > w.liveLastWatermarkID {
+				for idx := range pts {
+					delta := w.latePointDelta[idx]
+					if delta.Requests == 0 && delta.UnmatchedRequests == 0 {
+						continue
+					}
+					point := &pts[idx]
+					point.Requests += delta.Requests
+					point.PricedRequests += delta.PricedRequests
+					point.Tokens += delta.Tokens
+					point.PromptTokens += delta.PromptTokens
+					point.CachedTokens += delta.CachedTokens
+					point.CostNanos += delta.CostNanos
+					point.UnmatchedRequests += delta.UnmatchedRequests
+				}
+				pts[len(pts)-1].UsageWatermarkID = effectiveWatermark
+			}
+		}
+
+		fillTrendsQuotaBuckets(w.dto.Buckets, w.points, w.dto, w.actualEnd)
+		isApproximate := w.isApproximate
+		snapshotPhysical := w.snapshotPhysical
+		reconciledFromCalibration := false
+		if w.supportsCapacity {
+			if !cred.isTrustworthyReading {
+				w.dto.CapacityUnavailable = quota.CapacityReasonNoReading
+			} else if nowMS >= w.dto.CycleResetMS {
+				w.dto.CapacityUnavailable = quota.CapacityReasonExpired
+			} else if w.scopeReason != "" {
+				w.dto.CapacityUnavailable = w.scopeReason
+			} else {
+				liveUsage := w.capLive
+				liveUsage.FromMS, liveUsage.ToMS = w.start, w.capacityTo
+				liveUsage.CacheRate = quota.ComputeCacheRate(liveUsage.CachedTokens, liveUsage.PromptTokens)
+				usage := quota.EffectiveWindowUsage(w.source, w.observation.Plan, w.capacityTo, liveUsage, w.cycles)
+				if latest, ok := quota.LatestLiveCalibrationPoint(w.source, w.observation.Plan, w.capacityTo, w.cycles); ok {
+					fromPoint := quota.WindowUsage{
+						FromMS:            w.start,
+						ToMS:              w.capacityTo,
+						Requests:          latest.Requests,
+						PricedRequests:    latest.PricedRequests,
+						Tokens:            latest.Tokens,
+						PromptTokens:      latest.PromptTokens,
+						CachedTokens:      latest.CachedTokens,
+						CacheRate:         quota.ComputeCacheRate(latest.CachedTokens, latest.PromptTokens),
+						CostNanos:         latest.CostNanos,
+						UnmatchedRequests: latest.UnmatchedRequests,
+					}
+					if latest.ObservedAtMS < w.capacityTo {
+						postPoint := w.capPost
+						postPoint.FromMS, postPoint.ToMS = w.capPostFromMS, w.capacityTo
+						postPoint.CacheRate = quota.ComputeCacheRate(postPoint.CachedTokens, postPoint.PromptTokens)
+						fromPoint = quota.AddWindowUsage(fromPoint, postPoint)
+					}
+					if fromPoint.Requests > usage.Requests {
+						usage = fromPoint
+					}
+				}
+				w.dto.CurrentUsage = trendsQuotaWindowUsageDTO(usage)
+				estimated, capReason := quota.EstimateWindowCapacity(w.source, w.observation.Plan, w.observation.ObservedAtMS, nowMS, &usage, w.cycles)
+				w.dto.Capacity, w.dto.CapacityUnavailable = trendsQuotaWindowCapacityDTO(estimated), capReason
+				if usage.Requests > snapshotPhysical.Requests && w.live >= 0 {
+					var netApprox bool
+					snapshotPhysical, netApprox = mergeTrendsQuotaUsage(snapshotPhysical, usage)
+					isApproximate = isApproximate || netApprox
+					reconciledFromCalibration = true
+				}
+			}
+		}
+
+		physical := w.displayedPhysical
+		if reconciledFromCalibration {
+			reconciled := snapshotPhysical
+			if w.actualEnd > w.capacityTo {
+				reconciled.add(w.postPhysical)
+			}
+			if reconciled.Requests > physical.Requests {
+				physical = reconciled
+			}
+		}
+		w.dto.CurrentRequests, w.dto.CurrentNetTokens, w.dto.CurrentTotalTokens, w.dto.CurrentCostNanos = physical.Requests, physical.NetTokens, physical.TotalTokens, physical.CostNanos
+		w.dto.IsApproximate = isApproximate
+		w.dto.IsPhysicalUnavailable = w.isFeature
+		w.dto.Cycles = append(w.dto.Cycles, trendsQuotaCycle(w.start, w.dto.CycleResetMS, w.used, physical, snapshotPhysical, true, isApproximate, w.supportsCapacity))
+		for _, pc := range w.priorCycles {
+			prior := pc.physical
+			priorApproximate := pc.isApproximate
+			if pc.lastPoint.Requests > prior.Requests {
+				var netApprox bool
+				prior, netApprox = mergeTrendsQuotaUsage(prior, quota.WindowUsage{
+					Requests: pc.lastPoint.Requests, Tokens: pc.lastPoint.Tokens,
+					PromptTokens: pc.lastPoint.PromptTokens, CachedTokens: pc.lastPoint.CachedTokens,
+					PricedRequests: pc.lastPoint.PricedRequests, CostNanos: pc.lastPoint.CostNanos,
+				})
+				priorApproximate = priorApproximate || netApprox
+			}
+			w.dto.Cycles = append(w.dto.Cycles, trendsQuotaCycle(pc.cycleStartMS, pc.cycleResetMS, pc.lastPoint.UsedPercent, prior, prior, false, priorApproximate, w.supportsCapacity))
+		}
+		out = append(out, w.dto)
+	}
+	return out
 }
 
 type trendsQuotaReading struct {
@@ -637,130 +1281,6 @@ func trendsQuotaBurnRate(points []trendsQuotaPoint) *float64 {
 	}
 	median, _ := trendsPercentiles(slopes)
 	return median
-}
-
-func (h *Handler) readTrendsQuotaWindow(ctx context.Context, index string, source quota.QuotaWindow, observation *quota.NormalizedQuota, file management.AuthFile, start, at, nowMS int64, used float64, reads []trendsQuotaReading, cycles []quota.CycleCalibration, physicalData *trendsQuotaPhysicalSnapshot, isTrustworthyReading bool) (TrendsQuotaWindowDTO, error) {
-	result := TrendsQuotaWindowDTO{
-		WindowID: trendsQuotaLabel(source.ID, file), Label: trendsQuotaLabel(source.Label, file), Kind: trendsQuotaLabel(source.Kind, file), Scope: trendsQuotaLabel(source.Scope, file),
-		Model: trendsQuotaLabel(source.Model, file), PeriodHours: source.PeriodHours, CycleStartMS: start, CycleResetMS: *source.ResetAtMS, UsedPercent: used, RemainingPercent: 100 - used, Status: trendsQuotaNormal,
-		Cycles: []TrendsQuotaCycleHistoryDTO{},
-	}
-	live := quota.LiveCycleIndex(source, observation.ObservedAtMS, cycles)
-	points := trendsQuotaPoints(result, source, observation, reads, cycles, live)
-	active := trendsQuotaActivePoints(points)
-	actualEnd := min(at, result.CycleResetMS)
-	capacityTo := min(at, result.CycleResetMS)
-	emitForecast := isTrustworthyReading && nowMS < result.CycleResetMS
-	if used >= 100 {
-		cutoffAt := actualEnd
-		if cutoff, _, ok := quota.ExhaustionCutoffPoint(source, observation.Plan, observation.ObservedAtMS, cycles); ok {
-			cutoffAt = max(start, min(at, cutoff.ObservedAtMS))
-		} else {
-			for _, point := range active {
-				if point.used >= 100 {
-					cutoffAt = point.at
-					break
-				}
-			}
-		}
-		capacityTo = cutoffAt
-		result.ExhaustedAtMS = &cutoffAt
-		if emitForecast {
-			result.Status = trendsQuotaLimitReached
-			actualEnd = cutoffAt
-		} else if isTrustworthyReading {
-			actualEnd = result.CycleResetMS
-		}
-	} else if emitForecast {
-		// Measurements and projections track wall-clock time (`nowMS`), not the stale timestamp of the
-		// last snapshot (`at`), so an unexhausted window's "Now" marker and exhaustion ETA never fall behind.
-		actualEnd = max(at, min(nowMS, result.CycleResetMS))
-		if rate := trendsQuotaBurnRate(active); rate != nil {
-			result.BurnRatePerHour = rate
-			remaining := float64(result.CycleResetMS-actualEnd) / float64(repository.HourBucketMS)
-			projected := used + *rate*remaining
-			result.ProjectedEndPercent = &projected
-			if *rate > 0 {
-				msToExhaustion := math.Ceil((100 - used) / *rate * float64(repository.HourBucketMS))
-				if msToExhaustion <= float64(math.MaxInt64-actualEnd-1) {
-					projectedMS := actualEnd + int64(msToExhaustion)
-					result.ProjectedExhaustAtMS = &projectedMS
-					if projectedMS < result.CycleResetMS {
-						result.Status = trendsQuotaProjectedExhaust
-					}
-				}
-			}
-			if result.Status == trendsQuotaNormal && float64(max(nowMS, at)-start)/float64(result.CycleResetMS-start) > 0.60 && projected < 35 {
-				result.Status = trendsQuotaUnderutilized
-			}
-		}
-	} else if isTrustworthyReading {
-		actualEnd = result.CycleResetMS
-	}
-
-	zone := h.insightsZone()
-	buckets := trendsQuotaGrid(start, result.CycleResetMS, actualEnd, zone)
-	if !isTrustworthyReading {
-		buckets = slices.DeleteFunc(buckets, func(b TrendsQuotaBucketDTO) bool { return b.IsForecast })
-	}
-	displayedPhysical, snapshotPhysical, postPhysical, isApproximate := readTrendsQuotaPhysicalFromData(physicalData, source, start, capacityTo, actualEnd, buckets)
-	result.Buckets = buckets
-	fillTrendsQuotaBuckets(result.Buckets, points, result, actualEnd)
-	supportsCapacity := quota.SupportsWindowCapacity(observation.Provider, source)
-	reconciledFromCalibration := false
-	if supportsCapacity {
-		if !isTrustworthyReading {
-			result.CapacityUnavailable = quota.CapacityReasonNoReading
-		} else if nowMS >= result.CycleResetMS {
-			result.CapacityUnavailable = quota.CapacityReasonExpired
-		} else {
-			usage, reason, err := h.resolveCurrentCycleUsage(ctx, index, source, observation.Plan, capacityTo, start, capacityTo, cycles)
-			if err != nil {
-				return result, err
-			}
-			result.CapacityUnavailable = reason
-			if reason == "" {
-				result.CurrentUsage = trendsQuotaWindowUsageDTO(usage)
-				estimated, capReason := quota.EstimateWindowCapacity(source, observation.Plan, observation.ObservedAtMS, nowMS, &usage, cycles)
-				result.Capacity, result.CapacityUnavailable = trendsQuotaWindowCapacityDTO(estimated), capReason
-				if usage.Requests > snapshotPhysical.Requests && live >= 0 {
-					var netApprox bool
-					snapshotPhysical, netApprox = mergeTrendsQuotaUsage(snapshotPhysical, usage)
-					isApproximate = isApproximate || netApprox
-					reconciledFromCalibration = true
-				}
-			}
-		}
-	}
-	physical := displayedPhysical
-	if reconciledFromCalibration {
-		reconciled := snapshotPhysical
-		if actualEnd > capacityTo {
-			reconciled.add(postPhysical)
-		}
-		if reconciled.Requests > physical.Requests {
-			physical = reconciled
-		}
-	}
-	result.CurrentRequests, result.CurrentNetTokens, result.CurrentTotalTokens, result.CurrentCostNanos = physical.Requests, physical.NetTokens, physical.TotalTokens, physical.CostNanos
-	result.IsApproximate = isApproximate
-	result.IsPhysicalUnavailable = isTrendsQuotaFeatureWindow(source)
-	result.Cycles = append(result.Cycles, trendsQuotaCycle(start, result.CycleResetMS, used, physical, snapshotPhysical, true, isApproximate, supportsCapacity))
-	for idx, cycle := range cycles {
-		if idx == live || cycle.CycleResetAtMS > start || len(cycle.Points) == 0 {
-			continue
-		}
-		last := trendsQuotaCycleMeasurement(cycle.Points)
-		measuredTo := min(last.ObservedAtMS, cycle.CycleResetAtMS)
-		prior, _, _, priorApproximate := readTrendsQuotaPhysicalFromData(physicalData, source, cycle.CycleStartMS(), measuredTo, measuredTo, nil)
-		if last.Requests > prior.Requests {
-			var netApprox bool
-			prior, netApprox = mergeTrendsQuotaUsage(prior, quota.WindowUsage{Requests: last.Requests, Tokens: last.Tokens, PromptTokens: last.PromptTokens, CachedTokens: last.CachedTokens, PricedRequests: last.PricedRequests, CostNanos: last.CostNanos})
-			priorApproximate = priorApproximate || netApprox
-		}
-		result.Cycles = append(result.Cycles, trendsQuotaCycle(cycle.CycleStartMS(), cycle.CycleResetAtMS, last.UsedPercent, prior, prior, false, priorApproximate, supportsCapacity))
-	}
-	return result, nil
 }
 
 func trendsQuotaCycleMeasurement(points []quota.CalibrationPoint) quota.CalibrationPoint {
@@ -858,97 +1378,6 @@ func trendsQuotaGrid(start, reset, measuredTo int64, zone *time.Location) []Tren
 		cursor = end
 	}
 	return buckets
-}
-
-func readTrendsQuotaPhysicalFromData(data *trendsQuotaPhysicalSnapshot, window quota.QuotaWindow, fromMS, splitMS, toMS int64, buckets []TrendsQuotaBucketDTO) (displayed, beforeSplit, afterSplit TrendsUsageTotalsDTO, isApproximate bool) {
-	if data == nil || toMS <= fromMS || isTrendsQuotaFeatureWindow(window) {
-		return displayed, beforeSplit, afterSplit, false
-	}
-	if splitMS < fromMS {
-		splitMS = fromMS
-	}
-	if splitMS > toMS {
-		splitMS = toMS
-	}
-	isScoped := window.Scope == "model" || window.Scope == "group"
-	findBucket := func(at int64) int {
-		if len(buckets) == 0 {
-			return -1
-		}
-		bucketIndex, _ := slices.BinarySearchFunc(buckets, at, func(bucket TrendsQuotaBucketDTO, at int64) int {
-			if at >= bucket.EndMS {
-				return -1
-			}
-			if at < bucket.StartMS {
-				return 1
-			}
-			return 0
-		})
-		if bucketIndex < len(buckets) && at < buckets[bucketIndex].EndMS && at >= buckets[bucketIndex].StartMS {
-			return bucketIndex
-		}
-		return -1
-	}
-	accumulate := func(at, endAt int64, model string, measures repository.UsageMeasures, addToBuckets bool) {
-		if isScoped && !quota.IsModelInWindowScope(window, model) {
-			return
-		}
-		physical := trendsUsageMeasures(measures)
-		displayed.add(physical)
-		if endAt <= splitMS {
-			beforeSplit.add(physical)
-		} else if at >= splitMS {
-			afterSplit.add(physical)
-		} else if splitMS < toMS {
-			isApproximate = true
-		}
-		if addToBuckets {
-			if bucketIndex := findBucket(at); bucketIndex >= 0 {
-				bucket := &buckets[bucketIndex]
-				bucket.Requests += physical.Requests
-				bucket.NetTokens += physical.NetTokens
-				bucket.TotalTokens += physical.TotalTokens
-			}
-		}
-	}
-	snapshotHorizon := data.horizon
-	if snapshotHorizon > fromMS {
-		factEnd := min(toMS, snapshotHorizon)
-		if isScoped {
-			// Permanent 15m facts store requested model rather than serving model;
-			// mark scoped history approximate when deleted fact residuals remain.
-			for _, row := range data.facts {
-				rowEnd := row.StartMS + repository.QuarterHourBucketMS
-				if rowEnd > fromMS && row.StartMS < factEnd && row.Requests > 0 {
-					isApproximate = true
-					break
-				}
-			}
-		} else {
-			for _, row := range data.facts {
-				rowEnd := row.StartMS + repository.QuarterHourBucketMS
-				if rowEnd <= fromMS || row.StartMS >= factEnd || row.Requests <= 0 {
-					continue
-				}
-				if row.StartMS < fromMS || rowEnd > factEnd {
-					isApproximate = true
-					continue
-				}
-				// Permanent 15m facts bucket by request start time (`timestamp_ms`) rather
-				// than completion time (`completed_at_ms`), and aggregate failures together with
-				// zero-token rows, so any deleted-detail fact span is marked approximate.
-				isApproximate = true
-				accumulate(row.StartMS, rowEnd, row.Keys[0], row.UsageMeasures, true)
-			}
-		}
-	}
-	for _, entry := range data.retained {
-		if entry.CompletedMS < fromMS || entry.CompletedMS >= toMS {
-			continue
-		}
-		accumulate(entry.CompletedMS, entry.CompletedMS+1, entry.Model, entry.Measures, true)
-	}
-	return displayed, beforeSplit, afterSplit, isApproximate
 }
 
 func fillTrendsQuotaBuckets(buckets []TrendsQuotaBucketDTO, readings []trendsQuotaPoint, window TrendsQuotaWindowDTO, measuredEndMS int64) {
