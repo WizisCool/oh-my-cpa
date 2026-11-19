@@ -29,12 +29,12 @@ const UsageDimensionResponseModel UsageDimension = "response_model"
 // UsageTelemetrySample contains only the columns needed for trends, never
 // request identities, payloads, headers, or upstream error text.
 type UsageTelemetrySample struct {
-	GroupID, Model, Provider, ResponseModel, FailCode string
-	StartMS, TimestampMS, OutputTokens, LatencyMS     int64
-	TTFTMS                                            *int64
-	TPS                                               *float64
-	FailStatusCode                                    int
-	IsFailed, IsModelSubstituted, IsTopSeries         bool
+	GroupID, Model, Provider, AuthIndex, ResponseModel, FailCode string
+	StartMS, TimestampMS, OutputTokens, LatencyMS                int64
+	TTFTMS                                                       *int64
+	TPS                                                          *float64
+	FailStatusCode                                               int
+	IsFailed, IsModelSubstituted, IsTopSeries                    bool
 }
 
 // ReadUsageTelemetry streams the retained request records on the same civil
@@ -182,7 +182,7 @@ func readUsageTelemetryWithQuerier(ctx context.Context, q sqlQuerier, query Usag
 		clientClause = " AND generate = 1"
 	}
 	rows, err := q.QueryContext(ctx, `SELECT `+groupExpr+`, `+grid.bucket("timestamp_ms")+`, timestamp_ms,
-		model, `+usageDimensionExpressions[UsageDimensionProvider]+`, response_model, fail_code, fail_status_code,
+		model, `+usageDimensionExpressions[UsageDimensionProvider]+`, `+usageDimensionExpressions[UsageDimensionCredential]+`, response_model, fail_code, fail_status_code,
 		failed, model_substituted, generate, latency_ms, ttft_ms,
 		COALESCE(json_extract(token_accounting, '$.status') = 'complete', 0), provider, executor_type, endpoint,
 		input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens
@@ -199,7 +199,7 @@ func readUsageTelemetryWithQuerier(ctx context.Context, q sqlQuerier, query Usag
 		var ttft sql.NullInt64
 		var input EventPartitionInput
 		if err := rows.Scan(&sample.GroupID, &wallStart, &sample.TimestampMS, &sample.Model, &sample.Provider,
-			&sample.ResponseModel, &sample.FailCode, &sample.FailStatusCode, &sample.IsFailed, &sample.IsModelSubstituted,
+			&sample.AuthIndex, &sample.ResponseModel, &sample.FailCode, &sample.FailStatusCode, &sample.IsFailed, &sample.IsModelSubstituted,
 			&isGenerate, &sample.LatencyMS, &ttft, &input.IsCanonical, &input.Provider, &input.ExecutorType, &input.Endpoint,
 			&input.InputTokens, &input.OutputTokens, &input.ReasoningTokens, &input.CachedTokens,
 			&input.CacheReadTokens, &input.CacheCreationTokens, &input.TotalTokens); err != nil {

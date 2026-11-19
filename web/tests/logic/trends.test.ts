@@ -31,8 +31,15 @@ import {
   quotaWindowName,
   readTrendsView,
   resolvePerfBuckets,
+  aggregateStabilityFailures,
+  deriveFailureGroupsFromEvents,
+  deriveSubstitutionPairsFromEvents,
+  stabilityDemoSliceEventsQueryString,
   stabilityDisplayBuckets,
+  stabilityEventsHref,
   stabilityLanes,
+  stabilitySliceTelemetryParams,
+  stabilityWindowForCell,
   stepPointIndex,
   substitutionEventsHref,
   successRate,
@@ -47,9 +54,10 @@ import {
   writeTrendsView,
   GLOBAL_SERIES_ID,
 } from '../../src/pages/trends/trendsLogic.ts';
+import { resolveTrendsManagementTarget } from '../../src/pages/trends/useTrendsIdentity.tsx';
 import { readEventQuery } from '../../src/types/usageEventQuery.ts';
 import { MAX_USAGE_EVENT_FILTER_VALUES } from '../../src/types/usageEvents.ts';
-import type { TrendsQuotaCredential, TrendsQuotaWindow, TrendsTelemetryBucket } from '../../src/types/trends.ts';
+import type { TrendsFailureGroup, TrendsQuotaCredential, TrendsQuotaWindow, TrendsTelemetryBucket } from '../../src/types/trends.ts';
 import type { TFunc } from '../../src/i18n/index.tsx';
 import { CATALOGS } from '../../src/i18n/resources.ts';
 import { formatMessage } from '../../src/i18n/format.ts';
@@ -468,4 +476,218 @@ test('quota tile targeting, percentage readouts, performance mode samples, and s
   const lanes = stabilityLanes(aggregated);
   assert.equal(lanes.find((l) => l.lane === 'rate_limited_429')?.total, 13);
   assert.equal(lanes.find((l) => l.lane === 'force_cooldown')?.total, 2);
+});
+
+test('stability failure attribution rolls up model, provider, credential and lane scopes with exact totals and ops links', () => {
+  const groups: TrendsFailureGroup[] = [
+    {
+      model: 'gpt-5',
+      provider: 'codex',
+      auth_index: 'cred-1',
+      total_requests: 20,
+      model_total_requests: 120,
+      provider_total_requests: 100,
+      credential_total_requests: 40,
+      failed_requests: 10,
+      rate_limited_429: 8,
+      upstream_5xx: 2,
+      stream_truncated: 0,
+      force_cooldown: 1,
+      other_failures: 0,
+      status_codes: [{ code: 429, count: 8 }, { code: 503, count: 2 }],
+      last_failed_at_ms: 2 * HOUR,
+    },
+    {
+      model: 'gpt-5',
+      provider: 'relay-a',
+      auth_index: '',
+      total_requests: 10,
+      model_total_requests: 120,
+      provider_total_requests: 50,
+      failed_requests: 4,
+      rate_limited_429: 0,
+      upstream_5xx: 0,
+      stream_truncated: 0,
+      force_cooldown: 0,
+      other_failures: 4,
+      status_codes: [{ code: 401, count: 4 }],
+      last_failed_at_ms: 3 * HOUR,
+    },
+  ];
+
+  // Model rollup uses the exact window-wide denominator (120), not only failing channels (30).
+  const byModel = aggregateStabilityFailures(groups, 'model', null);
+  assert.equal(byModel.length, 1);
+  assert.equal(byModel[0]!.failures, 14);
+  assert.equal(byModel[0]!.totalRequests, 120);
+  assert.equal(byModel[0]!.failureRate, 14 / 120);
+  assert.deepEqual(byModel[0]!.peers.map((p) => [p.id, p.count]), [['codex', 10], ['relay-a', 4]]);
+  assert.equal(byModel[0]!.credentialCount, 1);
+
+  // Lane narrowing filters both failure counts and HTTP status codes cleanly.
+  const only429 = aggregateStabilityFailures(groups, 'provider', 'rate_limited_429');
+  assert.deepEqual(only429.map((r) => [r.id, r.failures, r.statusCodes]), [['codex', 8, [{ code: 429, count: 8 }]]]);
+
+  const onlyOther = aggregateStabilityFailures(groups, 'credential', 'other_failures');
+  assert.equal(onlyOther.length, 1);
+  assert.equal(onlyOther[0]!.id, '');
+  assert.equal(onlyOther[0]!.drillDisabled, true);
+  assert.equal(onlyOther[0]!.totalRequests, 0);
+  assert.equal(onlyOther[0]!.failureRate, null);
+  assert.deepEqual(onlyOther[0]!.statusCodes, [{ code: 401, count: 4 }]);
+
+  // Selected-lane aggregation isolates lane counts (never leaking tuple-wide sibling lanes)
+  // and omits lastFailedAtMs when the tuple also contains sibling failure types.
+  assert.equal(only429[0]!.lanes.force_cooldown, 0);
+  assert.equal(only429[0]!.lastFailedAtMs, 0);
+  const exclusive429 = aggregateStabilityFailures([{
+    ...groups[0]!,
+    failed_requests: 8,
+    upstream_5xx: 0,
+    force_cooldown: 0,
+    status_codes: [{ code: 429, count: 8 }],
+  }], 'provider', 'rate_limited_429');
+  assert.equal(exclusive429[0]!.lastFailedAtMs, 2 * HOUR);
+
+  // Shared tuple status histograms are omitted for protocol-level truncation/cooldown lanes
+  // so co-occurring HTTP status codes (e.g. 502/503 from sibling failures) are never misattributed.
+  const overlappingGroup: TrendsFailureGroup = {
+    model: 'claude-sonnet',
+    provider: 'anthropic',
+    auth_index: 'cred-2',
+    total_requests: 10,
+    model_total_requests: 10,
+    provider_total_requests: 10,
+    credential_total_requests: 10,
+    failed_requests: 3,
+    rate_limited_429: 0,
+    upstream_5xx: 2,
+    stream_truncated: 1,
+    force_cooldown: 1,
+    other_failures: 1,
+    status_codes: [{ code: 502, count: 1 }, { code: 503, count: 1 }, { code: 400, count: 1 }],
+    last_failed_at_ms: 4 * HOUR,
+  };
+  const truncatedRows = aggregateStabilityFailures([overlappingGroup], 'model', 'stream_truncated');
+  assert.equal(truncatedRows[0]!.failures, 1);
+  assert.deepEqual(truncatedRows[0]!.statusCodes, []);
+  const cooldownRows = aggregateStabilityFailures([overlappingGroup], 'model', 'force_cooldown');
+  assert.equal(cooldownRows[0]!.failures, 1);
+  assert.deepEqual(cooldownRows[0]!.statusCodes, []);
+  const ambiguousOtherRows = aggregateStabilityFailures([overlappingGroup], 'model', 'other_failures');
+  assert.equal(ambiguousOtherRows[0]!.failures, 1);
+  assert.deepEqual(ambiguousOtherRows[0]!.statusCodes, []);
+  const upstreamRows = aggregateStabilityFailures([overlappingGroup], 'model', 'upstream_5xx');
+  assert.deepEqual(upstreamRows[0]!.statusCodes, [{ code: 502, count: 1 }, { code: 503, count: 1 }]);
+
+  // Cell clamping guarantees to > from, returns null for single-millisecond intersections rather
+  // than spilling into the next bucket, and builds exact slice/events URLs.
+  const win = { from: 0, to: 10 * HOUR - 1, open_end: false as const };
+  const cell = { start_ms: HOUR, end_ms: 2 * HOUR };
+  assert.deepEqual(stabilityWindowForCell(win, cell), { from: HOUR, to: 2 * HOUR - 1, open_end: false });
+  assert.equal(stabilityWindowForCell({ from: 999, to: 10_000 }, { start_ms: 0, end_ms: 1000 }), null);
+  assert.equal(stabilitySliceTelemetryParams({ from: 999, to: 10_000 }, { start_ms: 0, end_ms: 1000 }, {}), null);
+  assert.equal(stabilityDemoSliceEventsQueryString({ from: 999, to: 10_000 }, {}, { start_ms: 0, end_ms: 1000 }), null);
+  assert.equal(stabilityEventsHref({ from: 999, to: 10_000, open_end: false }, {}, { lane: 'rate_limited_429', cell: { start_ms: 0, end_ms: 1000 } }), null);
+  assert.equal(stabilitySliceTelemetryParams(win, cell, { provider: ['codex'] }), `from=${HOUR}&to=${2 * HOUR - 1}&top=1&provider=codex`);
+
+  const href = stabilityEventsHref(win, { api_key: ['hmac:k1'] }, {
+    lane: 'rate_limited_429',
+    cell,
+    entity: { dimension: 'credential', id: 'cred-1' },
+  });
+  assert.ok(href);
+  const parsed = readEventQuery(new URL(href, 'http://localhost').searchParams);
+  assert.equal(parsed.from, HOUR);
+  assert.equal(parsed.to, 2 * HOUR - 1);
+  assert.equal(parsed.result, 'failed');
+  assert.equal(parsed.failure, 'rate_limited_429');
+  assert.deepEqual(parsed.filters?.auth_index, ['cred-1']);
+  assert.deepEqual(parsed.filters?.api_key, ['hmac:k1']);
+
+  const truncatedHref = stabilityEventsHref(win, {}, { lane: 'stream_truncated', cell });
+  assert.ok(truncatedHref);
+  const parsedTruncated = readEventQuery(new URL(truncatedHref, 'http://localhost').searchParams);
+  assert.equal(parsedTruncated.result, 'all');
+  assert.equal(parsedTruncated.failure, 'stream_truncated');
+
+  const demoSliceQuery = stabilityDemoSliceEventsQueryString(win, {}, cell);
+  assert.ok(demoSliceQuery);
+  const demoParams = new URLSearchParams(demoSliceQuery);
+  assert.equal(demoParams.get('result'), 'all');
+  assert.equal(demoParams.get('replay'), 'calendar');
+  assert.equal(demoParams.get('from'), String(HOUR));
+  assert.equal(demoParams.get('to'), String(2 * HOUR - 1));
+
+  // Demo fallback derives failure groups (preserving truncation/cooldown overlap and capping rates)
+  // and substitution pairs from raw usage events.
+  const sampleEvents = [
+    {
+      id: 1, event_key: 'e1', timestamp_ms: HOUR, provider: 'codex', auth_index: 'cred-1',
+      model: 'gpt-5', failed: true, fail_status_code: 502, fail_code: 'stream_truncated', generate: true, latency_ms: 100,
+      tokens: { input: 0, output: 0, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, total: 0 },
+      has_request_log: false,
+    },
+    {
+      id: 2, event_key: 'e2', timestamp_ms: HOUR + 1000, provider: 'codex', auth_index: 'cred-1',
+      model: 'gpt-5', response_model: 'gpt-5-mini', model_substituted: true, failed: false, generate: true, latency_ms: 100,
+      tokens: { input: 0, output: 0, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, total: 0 },
+      has_request_log: false,
+    },
+  ];
+  const derived = deriveFailureGroupsFromEvents(sampleEvents);
+  assert.equal(derived.length, 1);
+  assert.equal(derived[0]!.failed_requests, 1);
+  assert.equal(derived[0]!.total_requests, 2);
+  assert.equal(derived[0]!.upstream_5xx, 1);
+  assert.equal(derived[0]!.stream_truncated, 1);
+  assert.equal(derived[0]!.other_failures, 0);
+
+  const capped = deriveFailureGroupsFromEvents(sampleEvents, { isCapped: true });
+  const cappedRows = aggregateStabilityFailures(capped, 'model', null);
+  assert.equal(cappedRows[0]!.failures, 1);
+  assert.equal(cappedRows[0]!.totalRequests, 0);
+  assert.equal(cappedRows[0]!.failureRate, null);
+
+  assert.deepEqual(deriveSubstitutionPairsFromEvents(sampleEvents), [
+    { requested_model: 'gpt-5', served_model: 'gpt-5-mini', provider: 'codex', count: 1 },
+  ]);
+
+  // Live management target resolution avoids dead shortcuts for archived or redacted entities.
+  const credentials = new Map([
+    ['oauth-live', { name: 'team.json', provider: 'codex', auth_index: 'oauth-live' }],
+    ['oauth-archived', { name: 'old.json', provider: 'codex', auth_index: 'oauth-archived', is_archived: true }],
+  ]);
+  const providers = [
+    { id: 'prov-relay', family: 'openai-compatibility', name: 'Relay A', upstream_name: 'relay-a', auth_indexes: ['key-idx-1', 'shared-idx'] },
+    { id: 'prov-alias', family: 'openai-compatibility', name: 'team-west', upstream_name: 'dup-upstream', auth_indexes: ['shared-idx'] },
+    { id: 'team-west', family: 'openai-compatibility', name: 'West Exact', upstream_name: 'dup-upstream', auth_indexes: [] },
+  ];
+  assert.deepEqual(resolveTrendsManagementTarget('credential', 'oauth-live', credentials, providers), {
+    target: 'oauth',
+    href: '/oauth-management?q=oauth-live',
+  });
+  assert.deepEqual(resolveTrendsManagementTarget('credential', 'key-idx-1', credentials, providers), {
+    target: 'provider',
+    href: '/ai-providers?provider=prov-relay',
+  });
+  // Ambiguous credential index claimed by multiple configured providers must hide the shortcut.
+  assert.equal(resolveTrendsManagementTarget('credential', 'shared-idx', credentials, providers), null);
+  assert.equal(resolveTrendsManagementTarget('credential', 'oauth-archived', credentials, providers), null);
+  assert.equal(resolveTrendsManagementTarget('credential', 'redacted:abc', credentials, providers), null);
+  assert.deepEqual(resolveTrendsManagementTarget('provider', 'openai-compatible-relay-a', credentials, providers), {
+    target: 'provider',
+    href: '/ai-providers?provider=prov-relay',
+  });
+  // Exact provider ID match takes precedence over an earlier provider with that display name.
+  assert.deepEqual(resolveTrendsManagementTarget('provider', 'team-west', credentials, providers), {
+    target: 'provider',
+    href: '/ai-providers?provider=team-west',
+  });
+  // Ambiguous upstream name shared by two providers hides the shortcut.
+  assert.equal(resolveTrendsManagementTarget('provider', 'dup-upstream', credentials, providers), null);
+  assert.deepEqual(resolveTrendsManagementTarget('provider', 'codex', credentials, providers), {
+    target: 'oauth',
+    href: '/oauth-management?provider=codex',
+  });
 });

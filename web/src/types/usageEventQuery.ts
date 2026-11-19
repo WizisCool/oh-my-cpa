@@ -6,6 +6,7 @@ import {
   compareCostBounds,
   formatUsageRangeBound,
   isCostRange,
+  isUsageFailureCategory,
   isUsageServedState,
   isUsageTransport,
   parseUsageRangeBound,
@@ -51,6 +52,7 @@ export const EVENT_FILTER_KEYS = [
   'cost',
   'served',
   'transport',
+  'failure',
 ] as const;
 
 export type EventFilterKey = (typeof EVENT_FILTER_KEYS)[number];
@@ -88,6 +90,8 @@ export function readEventQuery(params: URLSearchParams): UsageEventQuery {
   if (isUsageServedState(served)) query.served = served;
   const transport = params.get('transport')?.trim();
   if (isUsageTransport(transport)) query.transport = transport;
+  const failure = params.get('failure')?.trim();
+  if (isUsageFailureCategory(failure)) query.failure = failure;
   if (params.get('replay') === 'calendar') query.replay = 'calendar';
 
   const from = Number(params.get('from'));
@@ -170,6 +174,7 @@ export function queryToFilterParams(query: UsageEventQuery): Partial<Record<Even
   if (query.cost === 'priced' || query.cost === 'unpriced') result.cost = [query.cost];
   if (isUsageServedState(query.served)) result.served = [query.served];
   if (isUsageTransport(query.transport)) result.transport = [query.transport];
+  if (isUsageFailureCategory(query.failure)) result.failure = [query.failure];
   return result;
 }
 
@@ -231,6 +236,10 @@ export function rejectedEventParams(params: URLSearchParams): string[] {
     }
     if (key === 'transport') {
       if (!isUsageTransport(raw.trim())) rejected.push(key);
+      continue;
+    }
+    if (key === 'failure') {
+      if (!isUsageFailureCategory(raw.trim())) rejected.push(key);
       continue;
     }
     // Every other dimension is a literal string, so it is unusable only when it is

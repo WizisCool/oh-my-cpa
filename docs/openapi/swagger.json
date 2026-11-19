@@ -12786,6 +12786,19 @@
             "in": "query"
           },
           {
+            "enum": [
+              "rate_limited_429",
+              "upstream_5xx",
+              "stream_truncated",
+              "force_cooldown",
+              "other_failures"
+            ],
+            "type": "string",
+            "description": "Failure category filter",
+            "name": "failure",
+            "in": "query"
+          },
+          {
             "type": "string",
             "description": "Keyset pagination cursor",
             "name": "cursor",
@@ -17525,6 +17538,71 @@
         }
       }
     },
+    "api.TrendsFailureGroupDTO": {
+      "type": "object",
+      "properties": {
+        "auth_index": {
+          "type": "string"
+        },
+        "auth_index_id": {
+          "type": "string"
+        },
+        "credential_total_requests": {
+          "type": "integer"
+        },
+        "drill_disabled": {
+          "type": "boolean"
+        },
+        "failed_requests": {
+          "type": "integer"
+        },
+        "force_cooldown": {
+          "type": "integer"
+        },
+        "last_failed_at_ms": {
+          "type": "integer"
+        },
+        "model": {
+          "type": "string"
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "model_total_requests": {
+          "type": "integer"
+        },
+        "other_failures": {
+          "type": "integer"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "provider_id": {
+          "type": "string"
+        },
+        "provider_total_requests": {
+          "type": "integer"
+        },
+        "rate_limited_429": {
+          "type": "integer"
+        },
+        "status_codes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/api.TrendsStatusCountDTO"
+          }
+        },
+        "stream_truncated": {
+          "type": "integer"
+        },
+        "total_requests": {
+          "type": "integer"
+        },
+        "upstream_5xx": {
+          "type": "integer"
+        }
+      }
+    },
     "api.TrendsMoverItemDTO": {
       "type": "object",
       "properties": {
@@ -17896,6 +17974,17 @@
         }
       }
     },
+    "api.TrendsStatusCountDTO": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer"
+        },
+        "count": {
+          "type": "integer"
+        }
+      }
+    },
     "api.TrendsSubstitutionPairDTO": {
       "type": "object",
       "properties": {
@@ -18095,6 +18184,12 @@
         },
         "coverage": {
           "$ref": "#/definitions/api.TrendsTelemetryCoverageDTO"
+        },
+        "failure_groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/api.TrendsFailureGroupDTO"
+          }
         },
         "group_by": {
           "type": "string"

@@ -262,6 +262,33 @@ export interface TrendsSubstitutionPair {
   count: number;
 }
 
+export interface TrendsStatusCount {
+  code: number;
+  count: number;
+}
+
+export interface TrendsFailureGroup {
+  model: string;
+  model_id?: string;
+  provider: string;
+  provider_id?: string;
+  auth_index?: string;
+  auth_index_id?: string;
+  drill_disabled?: boolean;
+  total_requests: number;
+  model_total_requests: number;
+  provider_total_requests: number;
+  credential_total_requests?: number;
+  failed_requests: number;
+  rate_limited_429: number;
+  upstream_5xx: number;
+  stream_truncated: number;
+  force_cooldown: number;
+  other_failures: number;
+  status_codes?: TrendsStatusCount[];
+  last_failed_at_ms?: number;
+}
+
 export interface TrendsTelemetryResponse {
   window: InsightsWindow;
   tps_mode: 'exclude_ttft' | 'include_ttft';
@@ -272,6 +299,7 @@ export interface TrendsTelemetryResponse {
   series: TrendsTelemetrySeries[];
   scatter: TrendsScatterPoint[];
   substitution_pairs: TrendsSubstitutionPair[];
+  failure_groups?: TrendsFailureGroup[];
   coverage: {
     fact_requests: number;
     retained_requests: number;

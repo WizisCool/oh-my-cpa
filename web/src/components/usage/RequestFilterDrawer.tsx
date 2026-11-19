@@ -11,6 +11,7 @@ import type {
   UsageCostFilter,
   UsageFacetValue,
   UsageFacets,
+  UsageFailureFilter,
   UsageRegexField,
   UsageResultFilter,
   UsageServedFilter,
@@ -469,7 +470,14 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
               id="req-result-segmented"
               aria-label={t('events.col_result')}
               value={draft.result}
-              onChange={(value) => setDraft((prev) => ({ ...prev, result: value as UsageResultFilter }))}
+              onChange={(value) => {
+                const nextResult = value as UsageResultFilter;
+                setDraft((prev) => ({
+                  ...prev,
+                  result: nextResult,
+                  failure: nextResult === 'success' ? 'all' : prev.failure,
+                }));
+              }}
               options={[
                 {
                   value: 'all',
@@ -495,6 +503,30 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
                     </span>
                   ),
                 },
+              ]}
+            />,
+          )}
+          {row(
+            'events.failure_category',
+            'req-failure-select',
+            <Select<UsageFailureFilter>
+              id="req-failure-select"
+              aria-label={t('events.failure_category')}
+              className={styles['select']}
+              value={draft.failure}
+              popupMatchSelectWidth={false}
+              onChange={(failure) => setDraft((prev) => ({
+                ...prev,
+                failure,
+                result: failure !== 'all' && prev.result === 'success' ? 'failed' : prev.result,
+              }))}
+              options={[
+                { value: 'all', label: t('events.filter_all') },
+                { value: 'rate_limited_429', label: t('events.failure_rate_limited_429') },
+                { value: 'upstream_5xx', label: t('events.failure_upstream_5xx') },
+                { value: 'stream_truncated', label: t('events.failure_stream_truncated') },
+                { value: 'force_cooldown', label: t('events.failure_force_cooldown') },
+                { value: 'other_failures', label: t('events.failure_other_failures') },
               ]}
             />,
           )}

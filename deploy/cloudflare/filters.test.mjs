@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { filterAuditEvents, filterServiceLogs, summarizeAuditEvents } from './filters.mjs';
+import { filterAuditEvents, filterServiceLogs, filterUsageEvents, summarizeAuditEvents } from './filters.mjs';
 
 const TRAIL = {
   events: [
@@ -68,5 +68,26 @@ describe('the demonstration service log', () => {
     const limited = filterServiceLogs(page, url('?limit=1'));
     assert.deepEqual(limited.records, [{ seq: 3 }]);
     assert.equal(limited.gap, true);
+  });
+});
+
+describe('the demonstration usage events filter', () => {
+  it('filters failed requests by canonical stability failure category', () => {
+    const page = {
+      items: [
+        { id: 1, failed: false, timestamp_ms: 1000 },
+        { id: 2, failed: true, fail_status_code: 429, timestamp_ms: 2000 },
+        { id: 3, failed: true, fail_status_code: 503, timestamp_ms: 3000 },
+        { id: 4, failed: true, fail_status_code: 401, timestamp_ms: 4000 },
+      ],
+      limit: 50,
+      has_more: false,
+      next_cursor: '',
+    };
+    const run = (query) =>
+      filterUsageEvents(structuredClone(page), new URL(`https://demo.test/api/v1/usage/events${query}`)).items.map((item) => item.id);
+    assert.deepEqual(run('?failure=rate_limited_429'), [2]);
+    assert.deepEqual(run('?failure=upstream_5xx'), [3]);
+    assert.deepEqual(run('?failure=other_failures'), [4]);
   });
 });

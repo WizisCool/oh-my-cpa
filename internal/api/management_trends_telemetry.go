@@ -67,6 +67,33 @@ type TrendsSubstitutionPairDTO struct {
 	Count          int64  `json:"count"`
 }
 
+type TrendsStatusCountDTO struct {
+	Code  int   `json:"code"`
+	Count int64 `json:"count"`
+}
+
+type TrendsFailureGroupDTO struct {
+	Model                   string                 `json:"model"`
+	ModelID                 string                 `json:"model_id,omitempty"`
+	Provider                string                 `json:"provider"`
+	ProviderID              string                 `json:"provider_id,omitempty"`
+	AuthIndex               string                 `json:"auth_index,omitempty"`
+	AuthIndexID             string                 `json:"auth_index_id,omitempty"`
+	DrillDisabled           bool                   `json:"drill_disabled,omitempty"`
+	TotalRequests           int64                  `json:"total_requests"`
+	ModelTotalRequests      int64                  `json:"model_total_requests"`
+	ProviderTotalRequests   int64                  `json:"provider_total_requests"`
+	CredentialTotalRequests int64                  `json:"credential_total_requests,omitempty"`
+	FailedRequests          int64                  `json:"failed_requests"`
+	RateLimited429          int64                  `json:"rate_limited_429"`
+	Upstream5xx             int64                  `json:"upstream_5xx"`
+	StreamTruncated         int64                  `json:"stream_truncated"`
+	ForceCooldown           int64                  `json:"force_cooldown"`
+	OtherFailures           int64                  `json:"other_failures"`
+	StatusCodes             []TrendsStatusCountDTO `json:"status_codes,omitempty"`
+	LastFailedAtMS          int64                  `json:"last_failed_at_ms,omitempty"`
+}
+
 type TrendsTelemetryCoverageDTO struct {
 	FactRequests           int64  `json:"fact_requests"`
 	RetainedRequests       int64  `json:"retained_requests"`
@@ -84,6 +111,7 @@ type TrendsTelemetryResponseDTO struct {
 	Series            []TrendsTelemetryGroupSeriesDTO  `json:"series"`
 	Scatter           []TrendsTelemetryScatterPointDTO `json:"scatter"`
 	SubstitutionPairs []TrendsSubstitutionPairDTO      `json:"substitution_pairs"`
+	FailureGroups     []TrendsFailureGroupDTO          `json:"failure_groups"`
 	Coverage          TrendsTelemetryCoverageDTO       `json:"coverage"`
 }
 
@@ -93,6 +121,8 @@ type TrendsTelemetryResponseDTO struct {
 // reservoir approximation is used while counters and means stay exact.
 const maxTelemetryPercentileSamples = 2048
 const maxTelemetryBucketPercentileSamples = 512
+const maxTelemetryFailureGroups = 64
+const maxTelemetryFailureStatusCodes = 6
 
 type trendsTelemetrySampleReservoir struct {
 	count   int
@@ -125,6 +155,40 @@ func (stats *trendsTelemetryStats) add(sample repository.UsageTelemetrySample, r
 	stats.addWithLimit(sample, maxTelemetryPercentileSamples, rng)
 }
 
+type telemetryFailureFlags struct {
+	isRateLimited   bool
+	isUpstreamError bool
+	isTruncated     bool
+	isCooldown      bool
+	isOther         bool
+}
+
+func classifyTelemetryFailure(sample repository.UsageTelemetrySample) telemetryFailureFlags {
+	isRateLimited := sample.IsFailed && sample.FailStatusCode == http.StatusTooManyRequests
+	isUpstreamError := sample.IsFailed && sample.FailStatusCode >= 500 && sample.FailStatusCode < 600
+	isTruncated := sample.FailCode == "stream_truncated"
+	isCooldown := sample.FailCode == "force_cooldown"
+	isOther := sample.IsFailed && !isRateLimited && !isUpstreamError && !isTruncated && !isCooldown
+	return telemetryFailureFlags{
+		isRateLimited:   isRateLimited,
+		isUpstreamError: isUpstreamError,
+		isTruncated:     isTruncated,
+		isCooldown:      isCooldown,
+		isOther:         isOther,
+	}
+}
+
+type trendsFailureAccumulator struct {
+	failedRequests  int64
+	rateLimited429  int64
+	upstream5xx     int64
+	streamTruncated int64
+	forceCooldown   int64
+	otherFailures   int64
+	statusCodes     map[int]int64
+	lastFailedAtMS  int64
+}
+
 func (stats *trendsTelemetryStats) addWithLimit(sample repository.UsageTelemetrySample, limit int, rng *rand.Rand) {
 	stats.TotalRequests++
 	if sample.IsFailed {
@@ -132,23 +196,20 @@ func (stats *trendsTelemetryStats) addWithLimit(sample repository.UsageTelemetry
 	} else {
 		stats.SuccessRequests++
 	}
-	isRateLimited := sample.IsFailed && sample.FailStatusCode == http.StatusTooManyRequests
-	isUpstreamError := sample.IsFailed && sample.FailStatusCode >= 500 && sample.FailStatusCode < 600
-	isTruncated := sample.FailCode == "stream_truncated"
-	isCooldown := sample.FailCode == "force_cooldown"
-	if isRateLimited {
+	flags := classifyTelemetryFailure(sample)
+	if flags.isRateLimited {
 		stats.RateLimited429++
 	}
-	if isUpstreamError {
+	if flags.isUpstreamError {
 		stats.Upstream5xx++
 	}
-	if isTruncated {
+	if flags.isTruncated {
 		stats.StreamTruncated++
 	}
-	if isCooldown {
+	if flags.isCooldown {
 		stats.ForceCooldown++
 	}
-	if sample.IsFailed && !isRateLimited && !isUpstreamError && !isTruncated && !isCooldown {
+	if flags.isOther {
 		stats.OtherFailures++
 	}
 	if sample.IsModelSubstituted {
@@ -272,6 +333,7 @@ func (h *Handler) readTrendsTelemetry(ctx context.Context, request *http.Request
 	result := TrendsTelemetryResponseDTO{
 		Window: window, GroupBy: string(group), Series: []TrendsTelemetryGroupSeriesDTO{},
 		Scatter: []TrendsTelemetryScatterPointDTO{}, SubstitutionPairs: []TrendsSubstitutionPairDTO{},
+		FailureGroups: []TrendsFailureGroupDTO{},
 	}
 	zone := h.insightsZone()
 	query, err := h.trendsFactQuery(ctx, request, window, nil, zone)
@@ -288,6 +350,11 @@ func (h *Handler) readTrendsTelemetry(ctx context.Context, request *http.Request
 	buckets := map[int64]*trendsTelemetryStats{}
 	groups := map[string]*trendsTelemetryGroup{}
 	pairs := map[[3]string]int64{}
+	modelTotals := map[string]int64{}
+	providerTotals := map[string]int64{}
+	credentialTotals := map[string]int64{}
+	comboTotals := map[[3]string]int64{}
+	failureAcc := map[[3]string]*trendsFailureAccumulator{}
 	// A deterministic reservoir samples the entire range, not the first burst.
 	random := rand.New(rand.NewPCG(0, 1))
 	const maxListedGroups = 50
@@ -302,6 +369,48 @@ func (h *Handler) readTrendsTelemetry(ctx context.Context, request *http.Request
 		sample.StartMS = trendsBucketStart(window.Bucket, sample.StartMS, zone)
 		overall.add(sample, random)
 		trendsTelemetryAdd(buckets, sample, maxTelemetryBucketPercentileSamples, random)
+		modelTotals[sample.Model]++
+		providerTotals[sample.Provider]++
+		if sample.AuthIndex != "" {
+			credentialTotals[sample.AuthIndex]++
+		}
+		comboKey := [3]string{sample.Model, sample.Provider, sample.AuthIndex}
+		comboTotals[comboKey]++
+		flags := classifyTelemetryFailure(sample)
+		if sample.IsFailed || flags.isTruncated || flags.isCooldown {
+			acc := failureAcc[comboKey]
+			if acc == nil {
+				acc = &trendsFailureAccumulator{}
+				failureAcc[comboKey] = acc
+			}
+			if sample.IsFailed {
+				acc.failedRequests++
+			}
+			if flags.isRateLimited {
+				acc.rateLimited429++
+			}
+			if flags.isUpstreamError {
+				acc.upstream5xx++
+			}
+			if flags.isTruncated {
+				acc.streamTruncated++
+			}
+			if flags.isCooldown {
+				acc.forceCooldown++
+			}
+			if flags.isOther {
+				acc.otherFailures++
+			}
+			if sample.FailStatusCode > 0 {
+				if acc.statusCodes == nil {
+					acc.statusCodes = map[int]int64{}
+				}
+				acc.statusCodes[sample.FailStatusCode]++
+			}
+			if sample.TimestampMS > acc.lastFailedAtMS {
+				acc.lastFailedAtMS = sample.TimestampMS
+			}
+		}
 		if sample.IsTopSeries {
 			entry := groups[sample.GroupID]
 			if entry == nil {
@@ -433,5 +542,96 @@ func (h *Handler) readTrendsTelemetry(ctx context.Context, request *http.Request
 			return strings.Compare(left.Provider, right.Provider)
 		}
 	})
+	for key, acc := range failureAcc {
+		dto := TrendsFailureGroupDTO{
+			TotalRequests:         comboTotals[key],
+			ModelTotalRequests:    modelTotals[key[0]],
+			ProviderTotalRequests: providerTotals[key[1]],
+			FailedRequests:        acc.failedRequests,
+			RateLimited429:        acc.rateLimited429,
+			Upstream5xx:           acc.upstream5xx,
+			StreamTruncated:       acc.streamTruncated,
+			ForceCooldown:         acc.forceCooldown,
+			OtherFailures:         acc.otherFailures,
+			LastFailedAtMS:        acc.lastFailedAtMS,
+		}
+		if key[0] != "" {
+			modelProj := h.trendsGroupProjection(repository.UsageDimensionModel, key[0])
+			dto.Model = modelProj.Label
+			if modelProj.ID != key[0] {
+				if strings.HasPrefix(modelProj.ID, repository.TrendsRedactedPrefix) {
+					dto.ModelID = modelProj.ID
+				} else {
+					dto.DrillDisabled = true
+				}
+			}
+		}
+		if key[1] != "" {
+			provProj := h.trendsGroupProjection(repository.UsageDimensionProvider, key[1])
+			dto.Provider = provProj.Label
+			if provProj.ID != key[1] {
+				if strings.HasPrefix(provProj.ID, repository.TrendsRedactedPrefix) {
+					dto.ProviderID = provProj.ID
+				} else {
+					dto.DrillDisabled = true
+				}
+			}
+		}
+		if key[2] != "" {
+			credProj := h.trendsGroupProjection(repository.UsageDimensionCredential, key[2])
+			dto.AuthIndex = credProj.Label
+			dto.CredentialTotalRequests = credentialTotals[key[2]]
+			if credProj.ID != key[2] {
+				if strings.HasPrefix(credProj.ID, repository.TrendsRedactedPrefix) {
+					dto.AuthIndexID = credProj.ID
+				} else {
+					dto.DrillDisabled = true
+				}
+			}
+		}
+		if len(acc.statusCodes) > 0 {
+			codes := make([]TrendsStatusCountDTO, 0, len(acc.statusCodes))
+			for code, count := range acc.statusCodes {
+				codes = append(codes, TrendsStatusCountDTO{Code: code, Count: count})
+			}
+			slices.SortFunc(codes, func(left, right TrendsStatusCountDTO) int {
+				if left.Count != right.Count {
+					if left.Count > right.Count {
+						return -1
+					}
+					return 1
+				}
+				return left.Code - right.Code
+			})
+			if len(codes) > maxTelemetryFailureStatusCodes {
+				codes = codes[:maxTelemetryFailureStatusCodes]
+			}
+			dto.StatusCodes = codes
+		}
+		result.FailureGroups = append(result.FailureGroups, dto)
+	}
+	slices.SortFunc(result.FailureGroups, func(left, right TrendsFailureGroupDTO) int {
+		switch {
+		case left.FailedRequests != right.FailedRequests:
+			if left.FailedRequests > right.FailedRequests {
+				return -1
+			}
+			return 1
+		case left.LastFailedAtMS != right.LastFailedAtMS:
+			if left.LastFailedAtMS > right.LastFailedAtMS {
+				return -1
+			}
+			return 1
+		case left.Model != right.Model:
+			return strings.Compare(left.Model, right.Model)
+		case left.Provider != right.Provider:
+			return strings.Compare(left.Provider, right.Provider)
+		default:
+			return strings.Compare(left.AuthIndex, right.AuthIndex)
+		}
+	})
+	if len(result.FailureGroups) > maxTelemetryFailureGroups {
+		result.FailureGroups = result.FailureGroups[:maxTelemetryFailureGroups]
+	}
 	return result, nil
 }

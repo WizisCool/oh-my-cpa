@@ -19,8 +19,8 @@
  * label template comes from the dictionary so every language stays localized.
  */
 import type { EventFilterKey } from '../../types/usageEventQuery';
-import type { UsageFacets, UsageTransport } from '../../types/usageEvents';
-import { isUsageTransport } from '../../types/usageEvents';
+import type { UsageFacets, UsageFailureCategory, UsageTransport } from '../../types/usageEvents';
+import { isUsageFailureCategory, isUsageTransport } from '../../types/usageEvents';
 import { displayEffortName } from '../../theme/effortScale';
 
 export interface ChipDisplayInput {
@@ -39,6 +39,8 @@ export interface ChipDisplayInput {
   servedLabels: { substituted: string; matched: string };
   /** The dictionary's names for the three transports. */
   transportLabels: Record<UsageTransport, string>;
+  /** The dictionary's names for the five canonical failure categories. */
+  failureLabels?: Record<UsageFailureCategory, string>;
   /** Names a normalised client program (`claude-code` reads Claude Code). */
   clientAgentName?: (value: string) => string;
 }
@@ -59,6 +61,7 @@ export function chipDisplayValue({
   costLabels,
   servedLabels,
   transportLabels,
+  failureLabels,
   clientAgentName,
 }: ChipDisplayInput): string {
   if (key === 'auth_index') return credentialNames.get(value) || value;
@@ -73,6 +76,7 @@ export function chipDisplayValue({
   if (key === 'served') return value === 'matched' ? servedLabels.matched : servedLabels.substituted;
   if (key === 'client_agent') return clientAgentName?.(value) ?? value;
   if (key === 'transport') return isUsageTransport(value) ? transportLabels[value] : value;
+  if (key === 'failure') return isUsageFailureCategory(value) && failureLabels ? failureLabels[value] : value;
   if (key.endsWith('_min') || key.endsWith('_max')) {
     // Cost bounds are nano-dollars on the wire and are shown in dollars, so the
     // sign is added here rather than stored.

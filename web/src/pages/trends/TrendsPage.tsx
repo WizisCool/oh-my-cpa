@@ -55,6 +55,7 @@ import {
   quotaRisk,
   readTrendsView,
   relativeChange,
+  stabilityFilterKeyForDim,
   substitutionEventsHref,
   successRate,
   toggleTrendsFilter,
@@ -578,7 +579,14 @@ export const TrendsPage: React.FC = () => {
           <StabilityPanel
             identity={identity}
             data={telemetry}
+            filters={view.filters}
+            isDemo={isDemo}
+            canFilterTrends={!isDemo}
             pairHref={(pair: TrendsSubstitutionPair) => (currentTelemetry?.window ? substitutionEventsHref(currentTelemetry.window, view.filters, pair, { isDemo }) : null)}
+            isEntityFiltered={(dimension, id) => Boolean(view.filters[stabilityFilterKeyForDim(dimension)]?.includes(id))}
+            onToggleFilter={(dimension, id) => {
+              if (!isDemo) toggleFilter(stabilityFilterKeyForDim(dimension), id);
+            }}
             onNavigate={navigate}
             isUnavailable={isTelemetryUncaptured}
           />
