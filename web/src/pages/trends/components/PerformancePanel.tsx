@@ -48,8 +48,6 @@ export interface PerformancePanelProps {
   isUnavailable?: boolean;
   identity: TrendsIdentity;
   bucketControl: React.ReactNode;
-  /** A stretch of buckets swept on a time mode narrows the page to it. */
-  onBrush?: (range: { from: number; to: number | null }) => void;
 }
 
 /**
@@ -76,7 +74,6 @@ export const PerformancePanel: React.FC<PerformancePanelProps> = ({
   isUnavailable,
   identity,
   bucketControl,
-  onBrush,
 }) => {
   const t = useT();
   const { theme } = useTheme();
@@ -285,7 +282,6 @@ export const PerformancePanel: React.FC<PerformancePanelProps> = ({
                   <PerformanceChart
                     mode={mode}
                     bucket={data.window.bucket as InsightsBucket}
-                    window={data.window}
                     buckets={activeBuckets}
                     series={modeSeries}
                     scatter={data.scatter}
@@ -300,7 +296,6 @@ export const PerformancePanel: React.FC<PerformancePanelProps> = ({
                     focusedKey={isInteractiveLegend ? focusedKey : null}
                     onFocusGroup={isInteractiveLegend ? toggleSeriesFocus : undefined}
                     onClearFocus={isInteractiveLegend ? clearSeriesFocus : undefined}
-                    onBrush={mode === 'scatter' ? undefined : onBrush}
                   />
                 </React.Suspense>
               )}

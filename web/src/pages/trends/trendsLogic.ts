@@ -783,55 +783,6 @@ export function successRate(summary: Pick<TrendsTelemetrySummary, 'total_request
   return summary.total_requests > 0 ? summary.success_requests / summary.total_requests : null;
 }
 
-// ── Lenses ─────────────────────────────────────────────────────────────────
-
-/** A span of time a chart is looking at, inclusive of both ends. */
-export interface TimeSpan {
-  start: number;
-  end: number;
-}
-
-/** The closest a quota lens zooms: one bucket of the cycle, and never under a quarter hour. */
-export function quotaLensMinSpan(window: TrendsQuotaWindow): number {
-  const bucketSpans = window.buckets.map((bucket) => bucket.end_ms - bucket.start_ms).filter((span) => span > 0);
-  const bucket = bucketSpans.length > 0 ? Math.min(...bucketSpans) : 0;
-  return Math.min(window.cycle_reset_ms - window.cycle_start_ms, Math.max(15 * 60_000, bucket));
-}
-
-/**
- * Holds a lens inside its bounds without changing its width where it can: a lens pushed past an
- * edge slides back rather than shrinking, and one narrower than the minimum widens about its centre.
- */
-export function clampLens(lens: TimeSpan, bounds: TimeSpan, minSpan: number): TimeSpan {
-  const total = bounds.end - bounds.start;
-  let span = Math.min(total, Math.max(minSpan, lens.end - lens.start));
-  if (!Number.isFinite(span) || span <= 0) span = total;
-  const centre = (lens.start + lens.end) / 2;
-  let start = centre - span / 2;
-  if (lens.end - lens.start >= minSpan) start = lens.start;
-  start = Math.min(Math.max(start, bounds.start), bounds.end - span);
-  return { start, end: start + span };
-}
-
-/** Zooms a lens by `factor` (under 1 closes in) about an instant, which keeps its place on screen. */
-export function zoomLens(lens: TimeSpan, bounds: TimeSpan, factor: number, minSpan: number, anchor = (lens.start + lens.end) / 2): TimeSpan {
-  const span = lens.end - lens.start;
-  const next = Math.min(bounds.end - bounds.start, Math.max(minSpan, span * factor));
-  const share = span > 0 ? (anchor - lens.start) / span : 0.5;
-  const start = anchor - next * share;
-  return clampLens({ start, end: start + next }, bounds, minSpan);
-}
-
-/** Slides a lens by a stretch of time, stopping at the bounds. */
-export function panLens(lens: TimeSpan, bounds: TimeSpan, deltaMs: number, minSpan: number): TimeSpan {
-  return clampLens({ start: lens.start + deltaMs, end: lens.end + deltaMs }, bounds, minSpan);
-}
-
-/** The lens a sweep between two instants selects, in either direction. */
-export function lensFromSweep(a: number, b: number, bounds: TimeSpan, minSpan: number): TimeSpan {
-  return clampLens({ start: Math.min(a, b), end: Math.max(a, b) }, bounds, minSpan);
-}
-
 export const HOUR_LIMIT_MS = 14 * 24 * 60 * 60 * 1000;
 
 export function isRangeWithinHourLimit(range: InsightsRange, nowMs = Date.now()): boolean {

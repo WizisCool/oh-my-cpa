@@ -15,7 +15,6 @@ import { TooltipReadout } from '../../../components/common/Tooltip';
 import { useMorphedProps } from '../../../charts/useChartMorph';
 import { clampSparklineTooltipX } from '../../../charts/monotoneSparkline';
 import { sharedResizeObserverHub } from '../../../performance/resizeObserverHub';
-import { RADIUS } from '../../../theme/radius';
 import dayjs from '../../../utils/time';
 import { useTimeZone } from '../../../utils/TimeZoneProvider';
 import { useT } from '../../../i18n';
@@ -25,13 +24,9 @@ import { formatTokens } from '../../../types/tokenDisplay';
 import {
   QUOTA_AXIS_MAX,
   formatPercent,
-  lensFromSweep,
   nearestPointIndex,
-  panLens,
   stepPointIndex,
-  zoomLens,
   type QuotaBurnPoint,
-  type TimeSpan,
 } from '../trendsLogic';
 import styles from '../trends.module.css';
 
@@ -50,19 +45,8 @@ export interface QuotaBurnChartProps {
   isPhysicalUnavailable?: boolean;
   label: string;
   height?: number;
-  /** The stretch of the cycle in view; the whole cycle when the reader has not zoomed. */
-  viewStart: number;
-  viewEnd: number;
-  /** The narrowest stretch the lens closes in on. */
-  minSpan: number;
-  /** The reader swept a stretch, or zoomed or panned with the wheel. */
-  onLensChange: (lens: TimeSpan) => void;
 }
 
-/** Travel, in pixels, before a press becomes a sweep rather than a look at a point. */
-const SWEEP_THRESHOLD = 4;
-/** How far one notch of the wheel zooms or pans, as a share of the stretch in view. */
-const WHEEL_ZOOM = 0.0015;
 /** How far the readout stands off the hovered bucket's x position. */
 const READOUT_OFFSET = 18;
 /** Pixel radius around the projected-exhaustion marker that snaps straight onto the milestone. */
@@ -73,7 +57,6 @@ const READOUT_FALLBACK = { width: 220, height: 136 };
 type PlotBox = { x: number; y: number; width: number; height: number };
 
 type OverlayRefs = {
-  sweep: SVGPathElement | SVGRectElement | null;
   crosshair: SVGLineElement | null;
   halo: SVGCircleElement | null;
   dot: SVGCircleElement | null;
@@ -107,22 +90,11 @@ function PlotProbe({
 
 /**
  * Lightweight SVG overlay elements inside `<ComposedChart>`. Positions update through DOM refs so
- * hovering and sweeping never re-render the chart SVG, hatch pattern, or axes.
+ * hovering never re-renders the chart SVG, hatch pattern, or axes.
  */
 function QuotaChartOverlay({ overlayRef, strokeBg }: { overlayRef: React.MutableRefObject<OverlayRefs>; strokeBg: string }) {
   return (
     <g aria-hidden="true">
-      <rect
-        ref={(node) => { overlayRef.current.sweep = node; }}
-        className="omc-bucket-brush"
-        rx={RADIUS.xs}
-        ry={RADIUS.xs}
-        x={0}
-        y={0}
-        width={0}
-        height={0}
-        data-testid="trends-quota-sweep"
-      />
       <line
         ref={(node) => { overlayRef.current.crosshair = node; }}
         strokeWidth={1}
@@ -158,8 +130,8 @@ type BurnRow = QuotaBurnPoint & { actualShown: number | null; forecastShown: num
 interface QuotaBurnPlotProps {
   id: string;
   data: readonly BurnRow[];
-  viewStart: number;
-  viewEnd: number;
+  cycleStart: number;
+  cycleReset: number;
   isSameDay: boolean;
   tickFormat: string;
   hasForecast: boolean;
@@ -176,8 +148,8 @@ interface QuotaBurnPlotProps {
 const QuotaBurnPlot = React.memo<QuotaBurnPlotProps>(({
   id,
   data,
-  viewStart,
-  viewEnd,
+  cycleStart,
+  cycleReset,
   isSameDay,
   tickFormat,
   hasForecast,
@@ -192,7 +164,7 @@ const QuotaBurnPlot = React.memo<QuotaBurnPlotProps>(({
 }) => {
   const t = useT();
   const { theme } = useTheme();
-  const span = Math.max(1, viewEnd - viewStart);
+  const span = Math.max(1, cycleReset - cycleStart);
   const nowMarker = nowMs ?? divider;
   const showExhaustMilestone = Boolean(
     hasForecast &&
@@ -200,14 +172,14 @@ const QuotaBurnPlot = React.memo<QuotaBurnPlotProps>(({
     projectedExhaustAtMs !== undefined &&
     projectedExhaustAtMs > divider &&
     projectedExhaustAtMs < lastForecast.t &&
-    projectedExhaustAtMs >= viewStart &&
-    projectedExhaustAtMs <= viewEnd,
+    projectedExhaustAtMs >= cycleStart &&
+    projectedExhaustAtMs <= cycleReset,
   );
   const showEndDot = Boolean(
     lastForecast &&
     projectedEndPercent !== undefined &&
-    lastForecast.t >= viewStart &&
-    lastForecast.t <= viewEnd,
+    lastForecast.t >= cycleStart &&
+    lastForecast.t <= cycleReset,
   );
 
   return (
@@ -227,7 +199,7 @@ const QuotaBurnPlot = React.memo<QuotaBurnPlotProps>(({
         dataKey="t"
         type="number"
         scale="time"
-        domain={[viewStart, viewEnd]}
+        domain={[cycleStart, cycleReset]}
         allowDataOverflow
         tickLine={false}
         axisLine={false}
@@ -292,7 +264,7 @@ const QuotaBurnPlot = React.memo<QuotaBurnPlotProps>(({
           isAnimationActive={false}
         />
       )}
-      {nowMarker > viewStart && nowMarker < viewEnd && (
+      {nowMarker > cycleStart && nowMarker < cycleReset && (
         <ReferenceLine
           x={nowMarker}
           stroke={theme.palette.muted}
@@ -321,7 +293,7 @@ const QuotaBurnPlot = React.memo<QuotaBurnPlotProps>(({
             const vx = viewBox?.x;
             const vy = viewBox?.y;
             if (vx === undefined || vy === undefined) return null;
-            const ratio = (projectedExhaustAtMs - viewStart) / span;
+            const ratio = (projectedExhaustAtMs - cycleStart) / span;
             const anchor = ratio >= 0.85 ? 'end' : ratio <= 0.12 ? 'start' : 'middle';
             const dx = anchor === 'end' ? -6 : anchor === 'start' ? 6 : 0;
             const timeLabel = dayjs(projectedExhaustAtMs).format(isSameDay ? 'HH:mm' : 'MM-DD HH:mm');
@@ -387,10 +359,6 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
   isPhysicalUnavailable = false,
   label,
   height = 260,
-  viewStart,
-  viewEnd,
-  minSpan,
-  onLensChange,
 }) => {
   useTimeZone();
   const t = useT();
@@ -407,13 +375,11 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
   const [isReadoutAnimated, setIsReadoutAnimated] = React.useState(false);
   const isTouchReadingRef = React.useRef(false);
 
-  const overlayRef = React.useRef<OverlayRefs>({ sweep: null, crosshair: null, halo: null, dot: null });
-  const sweepRef = React.useRef<{ pointerId: number; originX: number; from: number; to: number; isActive: boolean } | null>(null);
+  const overlayRef = React.useRef<OverlayRefs>({ crosshair: null, halo: null, dot: null });
 
-  const span = Math.max(1, viewEnd - viewStart);
-  const isSameDay = dayjs(viewStart).isSame(dayjs(viewEnd), 'day');
+  const span = Math.max(1, cycleReset - cycleStart);
+  const isSameDay = dayjs(cycleStart).isSame(dayjs(cycleReset), 'day');
   const tickFormat = span <= 2 * 86_400_000 ? 'HH:mm' : 'MM-DD';
-  const bounds = React.useMemo<TimeSpan>(() => ({ start: cycleStart, end: cycleReset }), [cycleReset, cycleStart]);
 
   const data = React.useMemo<BurnRow[]>(
     () => points.map((point) => ({ ...point, actualShown: clampAxis(point.actual), forecastShown: clampAxis(point.forecast) })),
@@ -432,10 +398,10 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
     forecastShown: { label: t('trends.quota.forecast'), color: theme.palette.warn },
   }), [t, theme.palette.success, theme.palette.warn]);
 
-  // The points inside the lens: the crosshair and the arrow keys only ever land on what is drawn.
+  // The points inside the cycle: the crosshair and the arrow keys only ever land on what is drawn.
   const visible = React.useMemo(
-    () => data.flatMap((point, index) => (point.t >= viewStart && point.t <= viewEnd ? [index] : [])),
-    [data, viewEnd, viewStart],
+    () => data.flatMap((point, index) => (point.t >= cycleStart && point.t <= cycleReset ? [index] : [])),
+    [cycleReset, cycleStart, data],
   );
   const visiblePoints = React.useMemo(() => visible.map((index) => data[index]!), [data, visible]);
   const milestoneVisibleIndex = React.useMemo(
@@ -457,7 +423,7 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
     }
   }, [activePoint, activeState]);
 
-  const active = activePoint && activePoint.t >= viewStart && activePoint.t <= viewEnd ? activePoint : null;
+  const active = activePoint && activePoint.t >= cycleStart && activePoint.t <= cycleReset ? activePoint : null;
 
   React.useEffect(() => {
     const host = hostRef.current;
@@ -492,26 +458,6 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
     return () => window.cancelAnimationFrame(frame);
   }, [active, isReadoutAnimated]);
 
-  const drawSweepRect = React.useCallback((sweep: { from: number; to: number; isActive: boolean } | null) => {
-    const band = overlayRef.current.sweep;
-    const plot = plotRef.current;
-    if (!band) return;
-    if (!sweep?.isActive || !plot || plot.width <= 0) {
-      band.removeAttribute('data-shown');
-      band.setAttribute('width', '0');
-      return;
-    }
-    const minT = Math.min(sweep.from, sweep.to);
-    const maxT = Math.max(sweep.from, sweep.to);
-    const x1 = plot.x + ((minT - viewStart) / span) * plot.width;
-    const x2 = plot.x + ((maxT - viewStart) / span) * plot.width;
-    band.setAttribute('x', String(x1));
-    band.setAttribute('width', String(Math.max(1, x2 - x1)));
-    band.setAttribute('y', String(plot.y));
-    band.setAttribute('height', String(plot.height));
-    band.setAttribute('data-shown', '');
-  }, [span, viewStart]);
-
   // Keep SVG crosshair, halo, and active dot synchronized via direct DOM attributes (0 chart re-renders).
   React.useLayoutEffect(() => {
     const { crosshair, halo, dot } = overlayRef.current;
@@ -523,7 +469,7 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
       dot.setAttribute('display', 'none');
       return;
     }
-    const cx = plot.x + ((active.t - viewStart) / span) * plot.width;
+    const cx = plot.x + ((active.t - cycleStart) / span) * plot.width;
     const cy = plot.y + (1 - (clampAxis(active.used) ?? 0) / QUOTA_AXIS_MAX) * plot.height;
     const color = active.isForecast ? theme.palette.warn : theme.palette.success;
 
@@ -543,23 +489,14 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
     dot.setAttribute('cy', String(cy));
     dot.setAttribute('fill', color);
     dot.removeAttribute('display');
-  }, [active, plotBox, span, theme.palette.fg2, theme.palette.success, theme.palette.warn, viewStart]);
+  }, [active, cycleStart, plotBox, span, theme.palette.fg2, theme.palette.success, theme.palette.warn]);
 
   const instantAt = (clientX: number): number | null => {
     const plot = plotRef.current;
     const host = hostRef.current;
     if (!plot || !host || plot.width <= 0) return null;
     const x = clientX - host.getBoundingClientRect().left;
-    return viewStart + ((x - plot.x) / plot.width) * span;
-  };
-  const isInPlot = (clientX: number, clientY: number) => {
-    const plot = plotRef.current;
-    const host = hostRef.current;
-    if (!plot || !host) return false;
-    const box = host.getBoundingClientRect();
-    const x = clientX - box.left;
-    const y = clientY - box.top;
-    return x >= plot.x && x <= plot.x + plot.width && y >= plot.y && y <= plot.y + plot.height;
+    return cycleStart + ((x - plot.x) / plot.width) * span;
   };
 
   const snapPointForInstant = (instant: number): number => {
@@ -577,56 +514,22 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
     setActiveState((curr) => (curr === null ? null : null));
   }, []);
 
-  const endSweep = React.useCallback((commit: boolean) => {
-    const current = sweepRef.current;
-    if (!current) return;
-    sweepRef.current = null;
-    hostRef.current?.removeAttribute('data-sweeping');
-    drawSweepRect(null);
-    if (commit && current.isActive && current.from !== current.to) {
-      onLensChange(lensFromSweep(current.from, current.to, bounds, minSpan));
-    }
-  }, [bounds, drawSweepRect, minSpan, onLensChange]);
-
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === 'touch') {
-      const instant = instantAt(event.clientX);
-      if (instant !== null) {
-        const index = snapPointForInstant(instant);
-        const point = index >= 0 ? data[index] : undefined;
-        if (point) {
-          isTouchReadingRef.current = true;
-          setActiveState({ t: point.t, isExhaustMilestone: Boolean(point.isExhaustMilestone), follow: 'pointer' });
-        }
-      }
-      return;
+    if (event.pointerType !== 'touch') return;
+    const instant = instantAt(event.clientX);
+    if (instant === null) return;
+    const index = snapPointForInstant(instant);
+    const point = index >= 0 ? data[index] : undefined;
+    if (point) {
+      isTouchReadingRef.current = true;
+      setActiveState({ t: point.t, isExhaustMilestone: Boolean(point.isExhaustMilestone), follow: 'pointer' });
     }
-    if (event.button !== 0 || !isInPlot(event.clientX, event.clientY)) return;
-    const at = instantAt(event.clientX);
-    if (at === null) return;
-    sweepRef.current = { pointerId: event.pointerId, originX: event.clientX, from: at, to: at, isActive: false };
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'touch') return;
     const instant = instantAt(event.clientX);
     if (instant === null) return;
-    const sweep = sweepRef.current;
-    if (sweep && event.pointerId === sweep.pointerId) {
-      if ((event.buttons & 1) === 0) {
-        endSweep(false);
-      } else if (sweep.isActive || Math.abs(event.clientX - sweep.originX) >= SWEEP_THRESHOLD) {
-        if (!sweep.isActive) {
-          event.currentTarget.setPointerCapture?.(event.pointerId);
-          event.currentTarget.setAttribute('data-sweeping', '');
-          clearReading();
-        }
-        sweep.isActive = true;
-        sweep.to = Math.min(bounds.end, Math.max(bounds.start, instant));
-        drawSweepRect(sweep);
-        return;
-      }
-    }
     const index = snapPointForInstant(instant);
     const point = index >= 0 ? data[index] : undefined;
     if (!point) {
@@ -640,12 +543,6 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
         ? curr
         : { t: point.t, isExhaustMilestone: isMilestone, follow: 'pointer' }
     ));
-  };
-
-  const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (sweepRef.current && event.pointerId === sweepRef.current.pointerId) {
-      endSweep(true);
-    }
   };
 
   // Dismiss touch tooltips on outside tap or scroll so mobile never leaves a stuck overlay.
@@ -663,42 +560,6 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
       document.removeEventListener('scroll', clearReading, true);
     };
   }, [clearReading, isTouchShowing]);
-
-  React.useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && sweepRef.current?.isActive) endSweep(false);
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [endSweep]);
-
-  // Ctrl/Cmd with the wheel zooms about the pointer and Shift with it pans; a plain wheel scrolls the
-  // page as it always does. React's wheel listener is passive, so this one is attached by hand.
-  const wheelRef = React.useRef({ viewStart, viewEnd, bounds, minSpan, onLensChange, instantAt });
-  React.useLayoutEffect(() => {
-    wheelRef.current = { viewStart, viewEnd, bounds, minSpan, onLensChange, instantAt };
-  });
-  React.useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return undefined;
-    const onWheel = (event: WheelEvent) => {
-      const isZoom = event.ctrlKey || event.metaKey;
-      if (!isZoom && !event.shiftKey) return;
-      const current = wheelRef.current;
-      const lens = { start: current.viewStart, end: current.viewEnd };
-      const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
-      if (delta === 0) return;
-      event.preventDefault();
-      if (isZoom) {
-        const anchor = current.instantAt(event.clientX) ?? (lens.start + lens.end) / 2;
-        current.onLensChange(zoomLens(lens, current.bounds, Math.exp(delta * WHEEL_ZOOM), current.minSpan, anchor));
-      } else {
-        current.onLensChange(panLens(lens, current.bounds, delta * WHEEL_ZOOM * (lens.end - lens.start) * 4, current.minSpan));
-      }
-    };
-    host.addEventListener('wheel', onWheel, { passive: false });
-    return () => host.removeEventListener('wheel', onWheel);
-  }, []);
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
@@ -731,13 +592,13 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
     if (!active) return { x: 0, y: 0 };
     const plot = plotBox ?? plotRef.current;
     const anchorX = plot && plot.width > 0
-      ? plot.x + ((active.t - viewStart) / span) * plot.width
+      ? plot.x + ((active.t - cycleStart) / span) * plot.width
       : 0;
     const hostWidth = hostRef.current?.clientWidth || hostWidthRef.current || 760;
     const x = clampSparklineTooltipX(anchorX, hostWidth, readoutSize.width, READOUT_OFFSET);
     const y = Math.max(8, Math.round((plot?.y ?? 16) - 4));
     return { x, y };
-  }, [active, plotBox, readoutSize.width, span, viewStart]);
+  }, [active, cycleStart, plotBox, readoutSize.width, span]);
 
   return (
     <div className={styles['burn-chart']} ref={hostRef}>
@@ -753,12 +614,9 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
         initialDimension={{ width: 760, height }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
         onPointerCancel={(event) => {
-          endSweep(false);
           if (event.pointerType === 'touch') clearReading();
         }}
-        onLostPointerCapture={() => endSweep(false)}
         onPointerLeave={(event) => {
           if (event.pointerType !== 'touch') clearReading();
         }}
@@ -768,8 +626,8 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
         <QuotaBurnPlot
           id={id}
           data={data}
-          viewStart={viewStart}
-          viewEnd={viewEnd}
+          cycleStart={cycleStart}
+          cycleReset={cycleReset}
           isSameDay={isSameDay}
           tickFormat={tickFormat}
           hasForecast={hasForecast}
@@ -836,22 +694,12 @@ const QuotaBurnChartView: React.FC<QuotaBurnChartProps> = ({
 
 const QuotaBurnChartPlot = React.memo(QuotaBurnChartView);
 
-/**
- * A new credential or window cross-fades in; the same cycle advancing is redrawn in place. The lens
- * stays outside the morph: zooming and panning move the camera at once rather than fading pictures.
- */
-export const QuotaBurnChart = React.memo<QuotaBurnChartProps>(({ viewStart, viewEnd, minSpan, onLensChange, ...drawing }) => {
-  const { shown, scopeRef } = useMorphedProps(drawing);
+/** A new credential or window cross-fades in; the same cycle advancing is redrawn in place. */
+export const QuotaBurnChart = React.memo<QuotaBurnChartProps>((props) => {
+  const { shown, scopeRef } = useMorphedProps(props);
   return (
     <div ref={scopeRef} className="omc-chart-morph">
-      <QuotaBurnChartPlot
-        key={shown.drawingKey}
-        {...shown}
-        viewStart={viewStart}
-        viewEnd={viewEnd}
-        minSpan={minSpan}
-        onLensChange={onLensChange}
-      />
+      <QuotaBurnChartPlot key={shown.drawingKey} {...shown} />
     </div>
   );
 });

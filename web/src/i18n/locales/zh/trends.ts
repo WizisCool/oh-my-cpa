@@ -70,7 +70,7 @@ export default {
   'trends.quota.exhaust_marker': '{at} 达到限额',
   'trends.quota.open_credentials': '打开 OAuth 管理',
   'trends.quota.chart_role': '定额配额趋势图',
-  'trends.quota.chart_label': '{name} 的 {window} 配额趋势，方向键逐段查看，拖选放大',
+  'trends.quota.chart_label': '{name} 的 {window} 配额趋势，方向键逐段查看',
   'trends.quota.measured': '实测',
   'trends.quota.forecast': '推演',
   'trends.quota.limit_line': '上限',

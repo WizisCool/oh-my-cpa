@@ -73,7 +73,7 @@ export default {
   'trends.quota.exhaust_marker': '{at} 達到限額',
   'trends.quota.open_credentials': '打開 OAuth 管理',
   'trends.quota.chart_role': '定額配額趨勢圖',
-  'trends.quota.chart_label': '{name} 的 {window} 配額趨勢，方向鍵逐段查看，拖選放大',
+  'trends.quota.chart_label': '{name} 的 {window} 配額趨勢，方向鍵逐段查看',
   'trends.quota.measured': '實測',
   'trends.quota.forecast': '推演',
   'trends.quota.limit_line': '上限',

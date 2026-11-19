@@ -29,16 +29,13 @@ import {
   pickQuotaWindow,
   quotaCycleBars,
   quotaDivider,
-  clampLens,
   quotaEventsHref,
-  quotaLensMinSpan,
   quotaCredentialName as credentialName,
   quotaWindowName,
   quotaWindowNames,
   quotaCredentialAttention,
   quotaWindowAttention,
   type QuotaView,
-  type TimeSpan,
 } from '../trendsLogic';
 import { Notice } from '../../../components/feedback';
 import { TrendsValue } from '../useTrendsIdentity';
@@ -81,17 +78,7 @@ export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
   );
   const points = React.useMemo(() => (picked ? buildQuotaBurnSeries(picked.window) : []), [picked]);
   const cycles = React.useMemo(() => (picked ? quotaCycleBars(picked.window, cycleMeasure) : []), [cycleMeasure, picked]);
-
-  // The lens belongs to one credential's window: picking another starts on its whole cycle.
   const drawingKey = picked ? `${picked.credential.auth_index}:${picked.window.window_id}` : '';
-  const [lensState, setLensState] = React.useState<{ key: string; lens: TimeSpan } | null>(null);
-  const bounds = React.useMemo<TimeSpan | null>(
-    () => (picked ? { start: picked.window.cycle_start_ms, end: picked.window.cycle_reset_ms } : null),
-    [picked],
-  );
-  const minSpan = picked ? quotaLensMinSpan(picked.window) : 0;
-  const lens = bounds && lensState?.key === drawingKey ? clampLens(lensState.lens, bounds, minSpan) : bounds;
-  const setLens = React.useCallback((next: TimeSpan) => setLensState({ key: drawingKey, lens: next }), [drawingKey]);
 
   const countdown = (ms: number) => {
     const parts = countdownParts(ms);
@@ -278,21 +265,17 @@ export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
           ) : (
             <React.Suspense fallback={<div className="chart-placeholder" style={{ height: 260 }} aria-hidden="true" />}>
               <QuotaBurnChart
-                  drawingKey={drawingKey}
-                  points={points}
-                  cycleStart={window.cycle_start_ms}
-                  cycleReset={window.cycle_reset_ms}
-                  divider={quotaDivider(window)}
-                  nowMs={nowMs}
-                  projectedExhaustAtMs={projectedExhaustAt}
-                  projectedEndPercent={window.projected_end_percent}
-                  isPhysicalUnavailable={isPhysicalUnavailable}
-                  label={t('trends.quota.chart_label', { name: credentialName(credential), window: activeWindowLabel })}
-                  viewStart={lens!.start}
-                  viewEnd={lens!.end}
-                  minSpan={minSpan}
-                  onLensChange={setLens}
-                />
+                drawingKey={drawingKey}
+                points={points}
+                cycleStart={window.cycle_start_ms}
+                cycleReset={window.cycle_reset_ms}
+                divider={quotaDivider(window)}
+                nowMs={nowMs}
+                projectedExhaustAtMs={projectedExhaustAt}
+                projectedEndPercent={window.projected_end_percent}
+                isPhysicalUnavailable={isPhysicalUnavailable}
+                label={t('trends.quota.chart_label', { name: credentialName(credential), window: activeWindowLabel })}
+              />
             </React.Suspense>
           )
         ) : isPhysicalUnavailable ? (

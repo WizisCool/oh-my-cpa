@@ -73,7 +73,7 @@ export default {
   'trends.quota.exhaust_marker': 'Had {at}',
   'trends.quota.open_credentials': 'Buka pengurusan OAuth',
   'trends.quota.chart_role': 'Carta trend kuota',
-  'trends.quota.chart_label': 'Trend kuota {window} untuk {name}; langkah dengan kekunci anak panah, sapu untuk zum',
+  'trends.quota.chart_label': 'Trend kuota {window} untuk {name}; langkah dengan kekunci anak panah',
   'trends.quota.measured': 'Diukur',
   'trends.quota.forecast': 'Unjuran',
   'trends.quota.limit_line': 'Had',

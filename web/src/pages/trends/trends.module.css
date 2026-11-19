@@ -300,8 +300,6 @@
   .pair-provider { grid-column: 1; justify-content: flex-start; }
 }
 
-.burn-chart-host[data-sweeping] { cursor: ew-resize; }
-
 .footnote { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--meta); font-size: var(--text-sm); }
 
 /* ── Headline tiles ──────────────────────────────────────────────────────── */
