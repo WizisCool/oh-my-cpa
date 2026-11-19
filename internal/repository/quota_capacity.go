@@ -15,13 +15,23 @@ import (
 
 const (
 	capacityRetainedCycles           = 3
-	capacityLatencyLookbackMS        = 15 * 60 * 1000
+	CapacityLatencyLookbackMS        = 15 * 60 * 1000
+	capacityLatencyLookbackMS        = CapacityLatencyLookbackMS
 	capacityWatermarkCheckpointDelta = 256
+	// Above this ID gap, scanning the credential's time index avoids walking
+	// tens of thousands of unrelated rows inserted for other credentials.
+	lateCapacityPKScanThreshold = 4096
 )
 
 type capacityQuerier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// CycleNeedsLegacyReconcile reports whether a cycle contains pre-watermark or
+// usage-gap checkpoints that require full per-point reconciliation.
+func CycleNeedsLegacyReconcile(points []quota.CalibrationPoint) bool {
+	return cycleNeedsLegacyReconcile(points)
 }
 
 func cycleNeedsLegacyReconcile(points []quota.CalibrationPoint) bool {
@@ -264,54 +274,68 @@ func reconcileCycleLateUsage(ctx context.Context, q capacityQuerier, authIndex s
 	return changed, true, nil
 }
 
-// queryLateCapacityEntries uses the primary key range (minExclusiveID, maxInclusiveID]
-// via unary + predicates on secondary-index columns so SQLite inspects only newly
-// inserted rows rather than scanning an entire multi-day window.
+// queryLateCapacityEntries inspects rows inserted in (minExclusiveID, maxInclusiveID]
+// for authIndex that completed before beforeMS. When the watermark lag is small it
+// scans the primary-key tail directly; when unrelated traffic creates a large ID gap
+// it compares against the credential's time-index selectivity so it only switches to
+// idx_usage_events_auth_time when that scan is strictly smaller than the ID tail.
 func queryLateCapacityEntries(ctx context.Context, q capacityQuerier, authIndex string, window quota.QuotaWindow, cycleStartMS, beforeMS, minExclusiveID, maxInclusiveID int64) ([]lateUsageEntry, string, error) {
 	if window.Scope == "model" || window.Scope == "group" {
 		if _, reason := quota.SelectWindowUsage(window, nil); reason != "" {
 			return nil, reason, nil
 		}
 	}
-	rows, err := q.QueryContext(ctx, `
-		SELECT
-			timestamp_ms + MAX(latency_ms, 0) AS finish_ms,
-			COALESCE(NULLIF(response_model, ''), model) AS resolved_model,
-			CASE WHEN cost_nanos IS NOT NULL THEN 1 ELSE 0 END,
-			total_tokens,
-			CASE
-				WHEN token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') = 'complete'
-					THEN COALESCE(json_extract(token_accounting, '$.token_breakdown.input.total_tokens'), 0)
-				WHEN input_tokens > 0 THEN input_tokens
-				ELSE MAX(total_tokens - MAX(output_tokens, 0), 0)
-			END AS raw_prompt,
-			CASE
-				WHEN token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') = 'complete'
-					THEN COALESCE(json_extract(token_accounting, '$.token_breakdown.input.cache_read_tokens'), 0)
-				WHEN cache_read_tokens > 0 THEN cache_read_tokens
-				ELSE MAX(cached_tokens, 0)
-			END AS cached_read,
-			CASE
-				WHEN token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') = 'complete' THEN 1
-				ELSE 0
-			END AS is_canonical,
-			CASE
-				WHEN (token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') = 'complete')
-					OR input_tokens > 0 OR output_tokens > 0 OR cached_tokens > 0 OR cache_read_tokens > 0 OR cache_creation_tokens > 0
-					THEN 1
-				ELSE 0
-			END AS has_breakdown,
-			COALESCE(cost_nanos, 0)
-		FROM usage_events
+	startLowerMS := max(0, cycleStartMS-capacityLatencyLookbackMS)
+	useAuthTimeIndex := false
+	idGap := maxInclusiveID - minExclusiveID
+	if idGap > lateCapacityPKScanThreshold {
+		// Probe at most min(idGap, lateCapacityPKScanThreshold) index-only entries
+		// in idx_usage_events_auth_time: if the credential has fewer rows in its
+		// time span than the ID tail, scanning the time index is strictly cheaper
+		// (and handles arbitrarily large unrelated-traffic gaps); otherwise keep
+		// the bounded primary-key tail scan so dense monthly histories stay fast.
+		probeLimit := min(idGap, int64(lateCapacityPKScanThreshold))
+		var denseCheck int
+		err := q.QueryRowContext(ctx, `
+			SELECT 1
+			FROM usage_events INDEXED BY idx_usage_events_auth_time
+			WHERE auth_index = ? AND timestamp_ms >= ? AND timestamp_ms < ?
+			LIMIT 1 OFFSET ?`,
+			authIndex, startLowerMS, beforeMS, probeLimit,
+		).Scan(&denseCheck)
+		if errors.Is(err, sql.ErrNoRows) {
+			useAuthTimeIndex = true
+		} else if err != nil {
+			return nil, "", fmt.Errorf("probe late quota usage selectivity: %w", err)
+		}
+	}
+	whereClause := `
 		WHERE id > ? AND id <= ?
 		  AND +auth_index = ?
 		  AND +timestamp_ms >= ?
 		  AND timestamp_ms + MAX(latency_ms, 0) >= ?
 		  AND +timestamp_ms < ?
 		  AND timestamp_ms + MAX(latency_ms, 0) < ?
-		  AND +total_tokens > 0`,
+		  AND +total_tokens > 0`
+	if useAuthTimeIndex {
+		whereClause = `
+		WHERE +id > ? AND +id <= ?
+		  AND auth_index = ?
+		  AND timestamp_ms >= ?
+		  AND timestamp_ms + MAX(latency_ms, 0) >= ?
+		  AND timestamp_ms < ?
+		  AND timestamp_ms + MAX(latency_ms, 0) < ?
+		  AND +total_tokens > 0`
+	}
+	rows, err := q.QueryContext(ctx, `
+		SELECT
+			timestamp_ms + MAX(latency_ms, 0) AS finish_ms,
+			COALESCE(NULLIF(response_model, ''), model) AS resolved_model,
+			input_tokens, output_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens,
+			total_tokens, cost_nanos, token_accounting
+		FROM usage_events`+whereClause,
 		minExclusiveID, maxInclusiveID, authIndex,
-		max(0, cycleStartMS-capacityLatencyLookbackMS), cycleStartMS, beforeMS, beforeMS,
+		startLowerMS, cycleStartMS, beforeMS, beforeMS,
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("query late quota usage: %w", err)
@@ -320,29 +344,15 @@ func queryLateCapacityEntries(ctx context.Context, q capacityQuerier, authIndex 
 
 	var entries []lateUsageEntry
 	for rows.Next() {
-		var finishMS, priced, tokens, rawPrompt, cachedRead, isCanonical, hasBreakdown, costNanos int64
+		var finishMS, inputTokens, outputTokens, cachedTokens, cacheReadTokens, cacheCreationTokens, totalTokens int64
+		var costNanos sql.NullInt64
+		var tokenAccounting sql.NullString
 		var model string
-		if err := rows.Scan(&finishMS, &model, &priced, &tokens, &rawPrompt, &cachedRead, &isCanonical, &hasBreakdown, &costNanos); err != nil {
+		if err := rows.Scan(&finishMS, &model, &inputTokens, &outputTokens, &cachedTokens, &cacheReadTokens, &cacheCreationTokens, &totalTokens, &costNanos, &tokenAccounting); err != nil {
 			return nil, "", fmt.Errorf("scan late quota usage: %w", err)
 		}
-		prompt := int64(0)
-		cached := int64(0)
-		if hasBreakdown == 1 {
-			cached = cachedRead
-			if isCanonical == 1 || cachedRead <= rawPrompt {
-				prompt = rawPrompt
-			} else {
-				prompt = rawPrompt + cachedRead
-			}
-		}
-		single := quota.WindowUsage{
-			Requests:       1,
-			PricedRequests: priced,
-			Tokens:         tokens,
-			PromptTokens:   prompt,
-			CachedTokens:   cached,
-			CostNanos:      costNanos,
-		}
+		isCanonical, canonPrompt, canonCacheRead := parseCapacityTokenAccounting(tokenAccounting.String)
+		single := buildCapacityEventUsage(isCanonical, canonPrompt, canonCacheRead, inputTokens, outputTokens, cachedTokens, cacheReadTokens, cacheCreationTokens, totalTokens, costNanos)
 		if window.Scope == "model" || window.Scope == "group" {
 			selected, reason := quota.SelectWindowUsage(window, []quota.ModelWindowUsage{{Model: model, Usage: single}})
 			if reason != "" {
@@ -359,6 +369,457 @@ func queryLateCapacityEntries(ctx context.Context, q capacityQuerier, authIndex 
 		return nil, "", fmt.Errorf("query late quota usage: %w", err)
 	}
 	return entries, "", nil
+}
+
+func buildCapacityEventUsage(
+	isCanonical bool,
+	canonPrompt, canonCacheRead int64,
+	inputTokens, outputTokens, cachedTokens, cacheReadTokens, cacheCreationTokens, totalTokens int64,
+	costNanos sql.NullInt64,
+) quota.WindowUsage {
+	hasBreakdown := isCanonical ||
+		inputTokens > 0 || outputTokens > 0 || cachedTokens > 0 || cacheReadTokens > 0 || cacheCreationTokens > 0
+	var rawPrompt, cachedRead int64
+	if isCanonical {
+		rawPrompt = canonPrompt
+		cachedRead = canonCacheRead
+	} else {
+		if inputTokens > 0 {
+			rawPrompt = inputTokens
+		} else {
+			rawPrompt = max(totalTokens-max(outputTokens, 0), 0)
+		}
+		if cacheReadTokens > 0 {
+			cachedRead = cacheReadTokens
+		} else {
+			cachedRead = max(cachedTokens, 0)
+		}
+	}
+	var prompt, cached int64
+	if hasBreakdown {
+		cached = cachedRead
+		if isCanonical || cachedRead <= rawPrompt {
+			prompt = rawPrompt
+		} else {
+			prompt = rawPrompt + cachedRead
+		}
+	}
+	var priced, cost int64
+	if costNanos.Valid {
+		priced = 1
+		cost = costNanos.Int64
+	}
+	return quota.WindowUsage{
+		Requests:       1,
+		PricedRequests: priced,
+		Tokens:         totalTokens,
+		PromptTokens:   prompt,
+		CachedTokens:   cached,
+		CostNanos:      cost,
+	}
+}
+
+// parseCapacityTokenAccounting extracts canonical completion status and
+// canonical input prompt/cache totals from usage_events.token_accounting without
+// invoking SQLite json_extract repeatedly per row.
+func parseCapacityTokenAccounting(raw string) (isCanonical bool, promptTokens, cacheReadTokens int64) {
+	if raw == "" {
+		return false, 0, 0
+	}
+	if ok, canon, prompt, cache := parseCapacityTokenAccountingFast(raw); ok {
+		return canon, prompt, cache
+	}
+	var parsed struct {
+		Status         string `json:"status"`
+		TokenBreakdown *struct {
+			Input *struct {
+				TotalTokens     int64 `json:"total_tokens"`
+				CacheReadTokens int64 `json:"cache_read_tokens"`
+			} `json:"input"`
+		} `json:"token_breakdown"`
+	}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil || parsed.Status != "complete" {
+		return false, 0, 0
+	}
+	if parsed.TokenBreakdown != nil && parsed.TokenBreakdown.Input != nil {
+		return true, parsed.TokenBreakdown.Input.TotalTokens, parsed.TokenBreakdown.Input.CacheReadTokens
+	}
+	return true, 0, 0
+}
+
+func skipJSONSpace(s string, i int) int {
+	for i < len(s) {
+		switch s[i] {
+		case ' ', '\t', '\r', '\n':
+			i++
+		default:
+			return i
+		}
+	}
+	return i
+}
+
+// parseCapacityTokenAccountingFast scans unescaped JSON objects without heap
+// allocations, returning ok=false so encoding/json handles escapes, floats, or
+// unusual syntax.
+func parseCapacityTokenAccountingFast(raw string) (ok, isCanonical bool, promptTokens, cacheReadTokens int64) {
+	if strings.ContainsRune(raw, '\\') {
+		return false, false, 0, 0
+	}
+	if !strings.Contains(raw, `"complete"`) {
+		return true, false, 0, 0
+	}
+	i := skipJSONSpace(raw, 0)
+	if i >= len(raw) || raw[i] != '{' {
+		return false, false, 0, 0
+	}
+	i++
+
+	readString := func() (string, bool) {
+		if i >= len(raw) || raw[i] != '"' {
+			return "", false
+		}
+		start := i + 1
+		end := strings.IndexByte(raw[start:], '"')
+		if end < 0 {
+			return "", false
+		}
+		i = start + end + 1
+		return raw[start : start+end], true
+	}
+	readInt64 := func() (int64, bool) {
+		if i >= len(raw) {
+			return 0, false
+		}
+		neg := false
+		if raw[i] == '-' {
+			neg = true
+			i++
+		}
+		start := i
+		var v int64
+		for i < len(raw) && raw[i] >= '0' && raw[i] <= '9' {
+			d := int64(raw[i] - '0')
+			if v > (1<<62-1)/10 {
+				return 0, false
+			}
+			v = v*10 + d
+			i++
+		}
+		if i == start {
+			return 0, false
+		}
+		if i < len(raw) && (raw[i] == '.' || raw[i] == 'e' || raw[i] == 'E') {
+			return 0, false
+		}
+		if neg {
+			v = -v
+		}
+		return v, true
+	}
+	var skipValue func() bool
+	skipObject := func() bool {
+		i++ // consume '{'
+		i = skipJSONSpace(raw, i)
+		if i < len(raw) && raw[i] == '}' {
+			i++
+			return true
+		}
+		for {
+			i = skipJSONSpace(raw, i)
+			if i >= len(raw) || raw[i] != '"' {
+				return false
+			}
+			if _, valid := readString(); !valid {
+				return false
+			}
+			i = skipJSONSpace(raw, i)
+			if i >= len(raw) || raw[i] != ':' {
+				return false
+			}
+			i++
+			if !skipValue() {
+				return false
+			}
+			i = skipJSONSpace(raw, i)
+			if i >= len(raw) {
+				return false
+			}
+			if raw[i] == ',' {
+				i++
+				continue
+			}
+			if raw[i] == '}' {
+				i++
+				return true
+			}
+			return false
+		}
+	}
+	skipArray := func() bool {
+		i++ // consume '['
+		i = skipJSONSpace(raw, i)
+		if i < len(raw) && raw[i] == ']' {
+			i++
+			return true
+		}
+		for {
+			if !skipValue() {
+				return false
+			}
+			i = skipJSONSpace(raw, i)
+			if i >= len(raw) {
+				return false
+			}
+			if raw[i] == ',' {
+				i++
+				continue
+			}
+			if raw[i] == ']' {
+				i++
+				return true
+			}
+			return false
+		}
+	}
+	skipValue = func() bool {
+		i = skipJSONSpace(raw, i)
+		if i >= len(raw) {
+			return false
+		}
+		switch raw[i] {
+		case '"':
+			_, valid := readString()
+			return valid
+		case '{':
+			return skipObject()
+		case '[':
+			return skipArray()
+		default:
+			start := i
+			for i < len(raw) {
+				switch raw[i] {
+				case ',', '}', ']', ' ', '\t', '\r', '\n':
+					goto doneBare
+				default:
+					i++
+				}
+			}
+		doneBare:
+			return isValidJSONBareLiteral(raw[start:i])
+		}
+	}
+
+	parseInputObject := func() bool {
+		i++ // consume '{'
+		for {
+			i = skipJSONSpace(raw, i)
+			if i >= len(raw) {
+				return false
+			}
+			if raw[i] == '}' {
+				i++
+				return true
+			}
+			key, valid := readString()
+			if !valid {
+				return false
+			}
+			i = skipJSONSpace(raw, i)
+			if i >= len(raw) || raw[i] != ':' {
+				return false
+			}
+			i = skipJSONSpace(raw, i+1)
+			switch key {
+			case "total_tokens":
+				val, validInt := readInt64()
+				if !validInt {
+					return false
+				}
+				promptTokens = val
+			case "cache_read_tokens":
+				val, validInt := readInt64()
+				if !validInt {
+					return false
+				}
+				cacheReadTokens = val
+			default:
+				if !skipValue() {
+					return false
+				}
+			}
+			i = skipJSONSpace(raw, i)
+			if i >= len(raw) {
+				return false
+			}
+			if raw[i] == ',' {
+				i++
+				continue
+			}
+			if raw[i] == '}' {
+				i++
+				return true
+			}
+			return false
+		}
+	}
+
+	parseBreakdownObject := func() bool {
+		i++ // consume '{'
+		for {
+			i = skipJSONSpace(raw, i)
+			if i >= len(raw) {
+				return false
+			}
+			if raw[i] == '}' {
+				i++
+				return true
+			}
+			key, valid := readString()
+			if !valid {
+				return false
+			}
+			i = skipJSONSpace(raw, i)
+			if i >= len(raw) || raw[i] != ':' {
+				return false
+			}
+			i = skipJSONSpace(raw, i+1)
+			if key == "input" && i < len(raw) && raw[i] == '{' {
+				if !parseInputObject() {
+					return false
+				}
+			} else if !skipValue() {
+				return false
+			}
+			i = skipJSONSpace(raw, i)
+			if i >= len(raw) {
+				return false
+			}
+			if raw[i] == ',' {
+				i++
+				continue
+			}
+			if raw[i] == '}' {
+				i++
+				return true
+			}
+			return false
+		}
+	}
+
+	for {
+		i = skipJSONSpace(raw, i)
+		if i >= len(raw) {
+			return false, false, 0, 0
+		}
+		if raw[i] == '}' {
+			i = skipJSONSpace(raw, i+1)
+			if i != len(raw) {
+				return false, false, 0, 0
+			}
+			if !isCanonical {
+				return true, false, 0, 0
+			}
+			return true, true, promptTokens, cacheReadTokens
+		}
+		key, valid := readString()
+		if !valid {
+			return false, false, 0, 0
+		}
+		i = skipJSONSpace(raw, i)
+		if i >= len(raw) || raw[i] != ':' {
+			return false, false, 0, 0
+		}
+		i = skipJSONSpace(raw, i+1)
+		switch key {
+		case "status":
+			val, validStr := readString()
+			if !validStr {
+				return false, false, 0, 0
+			}
+			isCanonical = val == "complete"
+		case "token_breakdown":
+			if i < len(raw) && raw[i] == '{' {
+				if !parseBreakdownObject() {
+					return false, false, 0, 0
+				}
+			} else if !skipValue() {
+				return false, false, 0, 0
+			}
+		default:
+			if !skipValue() {
+				return false, false, 0, 0
+			}
+		}
+		i = skipJSONSpace(raw, i)
+		if i >= len(raw) {
+			return false, false, 0, 0
+		}
+		if raw[i] == ',' {
+			i++
+			continue
+		}
+		if raw[i] == '}' {
+			i = skipJSONSpace(raw, i+1)
+			if i != len(raw) {
+				return false, false, 0, 0
+			}
+			if !isCanonical {
+				return true, false, 0, 0
+			}
+			return true, true, promptTokens, cacheReadTokens
+		}
+		return false, false, 0, 0
+	}
+}
+
+func isValidJSONBareLiteral(tok string) bool {
+	if tok == "" {
+		return false
+	}
+	if tok == "true" || tok == "false" || tok == "null" {
+		return true
+	}
+	idx := 0
+	if tok[idx] == '-' {
+		idx++
+		if idx >= len(tok) {
+			return false
+		}
+	}
+	if tok[idx] == '0' {
+		idx++
+	} else if tok[idx] >= '1' && tok[idx] <= '9' {
+		for idx < len(tok) && tok[idx] >= '0' && tok[idx] <= '9' {
+			idx++
+		}
+	} else {
+		return false
+	}
+	if idx < len(tok) && tok[idx] == '.' {
+		idx++
+		fracStart := idx
+		for idx < len(tok) && tok[idx] >= '0' && tok[idx] <= '9' {
+			idx++
+		}
+		if idx == fracStart {
+			return false
+		}
+	}
+	if idx < len(tok) && (tok[idx] == 'e' || tok[idx] == 'E') {
+		idx++
+		if idx < len(tok) && (tok[idx] == '+' || tok[idx] == '-') {
+			idx++
+		}
+		expStart := idx
+		for idx < len(tok) && tok[idx] >= '0' && tok[idx] <= '9' {
+			idx++
+		}
+		if idx == expStart {
+			return false
+		}
+	}
+	return idx == len(tok)
 }
 
 // capacityPoint pairs a reading with the usage recorded from the cycle start.
@@ -423,6 +884,72 @@ func (r *Repository) LoadCapacityCycles(ctx context.Context, authIndex string) (
 		byKey[cycle.WindowKey] = append(byKey[cycle.WindowKey], cycle)
 	}
 	return byKey, nil
+}
+
+// LoadCapacityCyclesBatch returns retained cycle evidence for all specified
+// credentials grouped by auth_index -> window_key (newest cycle first) in one
+// batch query.
+func (r *Repository) LoadCapacityCyclesBatch(ctx context.Context, authIndexes []string) (map[string]map[string][]quota.CycleCalibration, error) {
+	result := make(map[string]map[string][]quota.CycleCalibration)
+	if r == nil || r.SQL() == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	seen := make(map[string]struct{}, len(authIndexes))
+	validIndexes := make([]string, 0, len(authIndexes))
+	for _, authIndex := range authIndexes {
+		trimmed := strings.TrimSpace(authIndex)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		validIndexes = append(validIndexes, trimmed)
+	}
+	if len(validIndexes) == 0 {
+		return result, nil
+	}
+	const chunkSize = 500
+	for start := 0; start < len(validIndexes); start += chunkSize {
+		chunk := validIndexes[start:min(start+chunkSize, len(validIndexes))]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(chunk)), ",")
+		args := make([]any, len(chunk))
+		for i, authIndex := range chunk {
+			args[i] = authIndex
+		}
+		rows, err := r.SQL().QueryContext(ctx, fmt.Sprintf(`
+			SELECT auth_index, window_key, cycle_reset_at_ms, period_hours, plan_type, plan_tier, points_json
+			FROM quota_capacity_cycles
+			WHERE auth_index IN (%s)
+			ORDER BY auth_index, window_key, cycle_reset_at_ms DESC`, placeholders), args...)
+		if err != nil {
+			return nil, fmt.Errorf("query batch capacity cycles: %w", err)
+		}
+		for rows.Next() {
+			var authIndex, pointsJSON string
+			var cycle quota.CycleCalibration
+			if err := rows.Scan(&authIndex, &cycle.WindowKey, &cycle.CycleResetAtMS, &cycle.PeriodHours, &cycle.PlanType, &cycle.PlanTier, &pointsJSON); err != nil {
+				_ = rows.Close()
+				return nil, fmt.Errorf("scan batch capacity cycle: %w", err)
+			}
+			if err := json.Unmarshal([]byte(pointsJSON), &cycle.Points); err != nil {
+				cycle.Points = nil
+			}
+			byKey := result[authIndex]
+			if byKey == nil {
+				byKey = make(map[string][]quota.CycleCalibration)
+				result[authIndex] = byKey
+			}
+			byKey[cycle.WindowKey] = append(byKey[cycle.WindowKey], cycle)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("iterate batch capacity cycles: %w", err)
+		}
+		_ = rows.Close()
+	}
+	return result, nil
 }
 
 func queryCapacityCycles(ctx context.Context, q capacityQuerier, authIndex, key string, limit int) ([]quota.CycleCalibration, error) {

@@ -243,6 +243,74 @@ func (r *Repository) GetQuotaSnapshotHistory(ctx context.Context, authIndex stri
 	return records, rows.Err()
 }
 
+// GetQuotaSnapshotHistoryBatch retrieves up to limit most recent snapshots per
+// auth index in a single batch query, ordered newest-first within each index.
+func (r *Repository) GetQuotaSnapshotHistoryBatch(ctx context.Context, authIndexes []string, limit int) (map[string][]QuotaSnapshotRecord, error) {
+	result := make(map[string][]QuotaSnapshotRecord)
+	if r == nil || r.SQL() == nil {
+		return result, errors.New("repository is not initialized")
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 30
+	}
+	seen := make(map[string]struct{}, len(authIndexes))
+	validIndexes := make([]string, 0, len(authIndexes))
+	for _, authIndex := range authIndexes {
+		trimmed := strings.TrimSpace(authIndex)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		validIndexes = append(validIndexes, trimmed)
+	}
+	if len(validIndexes) == 0 {
+		return result, nil
+	}
+
+	const chunkSize = 500
+	for start := 0; start < len(validIndexes); start += chunkSize {
+		chunk := validIndexes[start:min(start+chunkSize, len(validIndexes))]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(chunk)), ",")
+		args := make([]any, 0, len(chunk)+1)
+		for _, authIndex := range chunk {
+			args = append(args, authIndex)
+		}
+		args = append(args, limit)
+		query := fmt.Sprintf(`
+			SELECT id, auth_index, provider, status, plan_type, plan_tier,
+			       windows_json, reset_credits_json, reset_grants_json, plan_json, warmup_json, observed_at_ms, created_at_ms
+			FROM (
+				SELECT *, ROW_NUMBER() OVER(PARTITION BY auth_index ORDER BY observed_at_ms DESC, created_at_ms DESC, rowid DESC) AS rn
+				FROM quota_snapshots
+				WHERE auth_index IN (%s)
+			)
+			WHERE rn <= ?
+			ORDER BY auth_index, rn
+		`, placeholders)
+		rows, err := r.SQL().QueryContext(ctx, query, args...)
+		if err != nil {
+			return result, fmt.Errorf("query batch snapshot history: %w", err)
+		}
+		for rows.Next() {
+			record, scanErr := scanQuotaSnapshot(rows)
+			if scanErr != nil {
+				_ = rows.Close()
+				return result, scanErr
+			}
+			result[record.AuthIndex] = append(result[record.AuthIndex], record)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return result, err
+		}
+		_ = rows.Close()
+	}
+	return result, nil
+}
+
 // Quota refresh attempt outcomes. A stored outcome is what the console reads to decide
 // whether a credential's last try produced a reading; only these two exist, because a try
 // either answered the question or did not.

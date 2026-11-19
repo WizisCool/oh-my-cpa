@@ -42,7 +42,13 @@ import { isDiscreteWheel, keyScrollFor, pageDistance, type WheelSample } from '.
 import { isSameDrawing } from '../../src/charts/useChartMorph.ts';
 import { isSameReadout } from '../../src/components/dashboard/RollingNumber.tsx';
 import { PAGE_SKELETON_REGISTRY } from '../../src/components/common/PageLoading.tsx';
-import { ROUTE_DESCRIPTORS, consoleRouteRegistry } from '../../src/routePreload.ts';
+import {
+  ROUTE_DESCRIPTORS,
+  consoleRouteRegistry,
+  prefetchLandingRouteData,
+  trendsQuotaParamsFromSearch,
+} from '../../src/routePreload.ts';
+import { readTrendsView, trendsQuotaParams } from '../../src/pages/trends/trendsLogic.ts';
 import { buildNavGroupSpecs } from '../../src/types/sidebarNav.ts';
 
 test('frame scheduler separates priority tiers across slices, caps per-slice jobs, and yields across frames', () => {
@@ -1152,4 +1158,34 @@ test('lineSlotChildren recursively wraps fragment text children in spans while p
   assert.equal(inner[0]?.props.children, 'a-long-credential-name');
   assert.equal(inner[1]?.type, 'span');
   assert.equal(inner[1]?.props.children, 42);
+});
+
+test('trendsQuotaParamsFromSearch matches readTrendsView + trendsQuotaParams and landing prefetch targets /trends only', async () => {
+  const cases = [
+    '',
+    '?provider=codex&model=gpt-5',
+    '?auth_index=cred-2&provider=claude&provider=codex&provider=claude&auth_index=%20cred-2%20&auth_index=%20%20',
+    '?bucket=hour&group=provider&quota_view=cycles',
+  ];
+  for (const search of cases) {
+    const expected = trendsQuotaParams(readTrendsView(new URLSearchParams(search)).filters);
+    assert.equal(trendsQuotaParamsFromSearch(search), expected, `mismatch for search=${search}`);
+  }
+
+  const trendsDescriptor = consoleRouteRegistry.resolve('/trends');
+  assert.equal(trendsDescriptor?.prefetchData, undefined, 'hover intent on /trends must not invoke upstream CPA quota reads');
+
+  const queryClient = new QueryClient();
+  const seenKeys: Array<readonly unknown[]> = [];
+  const originalPrefetch = queryClient.prefetchQuery.bind(queryClient);
+  queryClient.prefetchQuery = (async (options: Parameters<typeof originalPrefetch>[0]) => {
+    seenKeys.push(options.queryKey);
+  }) as typeof queryClient.prefetchQuery;
+
+  prefetchLandingRouteData(queryClient, '/dashboard', '?provider=codex');
+  prefetchLandingRouteData(queryClient, '/insights', '?provider=codex');
+  assert.deepEqual(seenKeys, [], 'non-trends landing routes must not prefetch trends-quota');
+
+  prefetchLandingRouteData(queryClient, '/trends', '?model=gpt-5&provider=codex&auth_index=c1');
+  assert.deepEqual(seenKeys, [['trends-quota', 'provider=codex&auth_index=c1']]);
 });

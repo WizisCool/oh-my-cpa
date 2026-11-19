@@ -23,7 +23,7 @@ import type { SignInStageState } from './SignInStage';
 import { clearMirroredCPAMCCredential } from '../plugins/pluginHostCredential';
 import { readKeepSignedIn, writeKeepSignedIn } from './keepSignedIn';
 import { createNamedLoader, lazyRoute } from '../../utils/routeLoader';
-import { currentConsolePathname, preloadBootChunks, warmRouteIntent } from '../../routePreload';
+import { currentConsolePathname, prefetchLandingRouteData, preloadBootChunks, warmRouteIntent } from '../../routePreload';
 import { parseTimeZone, primeTimeZone } from '../../utils/time';
 import styles from './AuthGate.module.css';
 
@@ -74,7 +74,9 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   const warmAuthenticatedBootstrap = React.useCallback(() => {
     const pathname = currentConsolePathname();
+    const search = typeof window !== 'undefined' ? window.location.search : '';
     preloadBootChunks(pathname);
+    prefetchLandingRouteData(queryClient, pathname, search);
     void queryClient.fetchQuery({
       queryKey: ['preferences'],
       queryFn: api.getPreferences,
@@ -84,7 +86,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
       const selected = parseTimeZone(prefs?.omc_timezone) || '';
       const server = parseTimeZone(prefs?.omc_server_timezone) || 'UTC';
       const timeZone = primeTimeZone(selected, server);
-      warmRouteIntent(pathname, { queryClient, pathname, timeZone });
+      warmRouteIntent(pathname, { queryClient, pathname, search, timeZone });
     }).catch(() => undefined);
   }, [queryClient]);
 
