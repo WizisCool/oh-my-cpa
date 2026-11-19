@@ -90,7 +90,7 @@ export const MatrixTable: React.FC<MatrixTableProps> = ({ matrix, rowDimension, 
                         >
                           <button
                             type="button"
-                            aria-pressed={isCellSelected || undefined}
+                            aria-pressed={isDimmed ? !isCellDimmed : undefined}
                             className={clsx(styles['matrix-cell'], isDense && styles['matrix-cell-dense'])}
                             style={{ '--heatmap-quiet-share': shade.fromShare } as React.CSSProperties}
                             {...tipCard({

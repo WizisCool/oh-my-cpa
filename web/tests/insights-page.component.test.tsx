@@ -353,8 +353,9 @@ describe('insights page', () => {
       fireEvent.mouseDown(within(panel).getByRole('combobox', { name: 'Sort by' }));
       fireEvent.click(await screen.findByRole('option', { name: 'Avg TPS' }));
       await waitFor(() => expect(order()).toEqual(['gpt-5', 'sonnet']));
-      fireEvent.click(within(panel).getByTestId('insights-profile-sort-direction'));
+      fireEvent.click(within(panel).getByRole('button', { name: 'Sort ascending' }));
       await waitFor(() => expect(order()).toEqual(['sonnet', 'gpt-5']));
+      expect(within(panel).getByRole('button', { name: 'Sort descending' })).toBeTruthy();
 
       fireEvent.click(viewOption('Table')!);
       await waitFor(() => expect(within(panel).queryByRole('combobox', { name: 'Sort by' })).toBeNull());

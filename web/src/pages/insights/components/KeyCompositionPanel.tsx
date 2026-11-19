@@ -371,7 +371,6 @@ function ModelProfileTable({ profiles, dimension, labels, isPhone, selectedIds, 
               icon={isAscending ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
               label={t(isAscending ? 'insights.sort_desc' : 'insights.sort_asc')}
               onClick={() => sorted.sortBy(activeSortKey, isAscending ? 'descending' : 'ascending')}
-              data-testid="insights-profile-sort-direction"
             />
           </div>
         </div>

@@ -471,7 +471,8 @@
 }
 .matrix-cell-dense { color: var(--accent-on); }
 .matrix-cell:hover { outline: 1px solid var(--fg-2); outline-offset: -1px; }
-.matrix td[data-selected] .matrix-cell { box-shadow: inset 0 0 0 1px var(--fg); }
+.matrix td[data-selected] { position: relative; z-index: 1; }
+.matrix td[data-selected] .matrix-cell { box-shadow: var(--shadow-selected); }
 .matrix td[data-dimmed] { opacity: .3; }
 .matrix-empty { min-width: 72px; height: 28px; border-radius: var(--radius-xs); background: var(--heatmap-quiet); }
 .matrix-total { padding: 0 6px !important; color: var(--fg-2); text-align: right !important; white-space: nowrap; }
