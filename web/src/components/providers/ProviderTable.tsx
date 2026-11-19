@@ -89,12 +89,12 @@ interface ProviderTableProps {
  * of a hole wherever the surplus happened to land.
  */
 const COLUMN_BASE_WIDTHS = {
-  name: 264,
+  name: 248,
   protocol: 184,
-  base_url: 172,
+  base_url: 156,
   models_headers: 128,
   traffic: 132,
-  status: 100,
+  status: 132,
   switch: 58,
   actions: 88,
 } as const;
