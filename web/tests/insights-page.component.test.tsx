@@ -302,34 +302,75 @@ describe('insights page', () => {
     expect((screen.getByRole('button', { name: 'View requests ›' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('keeps the composition views and their order on a phone', async () => {
+  it('opens on the model load profile with Avg TPS on both desktop and phone, and switches views cleanly', async () => {
+    const fastGpt = row(0, 0, 0, 30, 3000);
+    fastGpt[9] = 1800; // 1800 output over 6000ms -> 300 t/s
+    const extraGpt = row(1, 1, 0, 5, 500);
+    extraGpt[9] = 300; // 300 output over 1000ms -> combined 2100 / 7s = 300 t/s
+    const slowSonnet = row(1, 0, 1, 10, 1000);
+    slowSonnet[9] = 450; // 450 output over 9000ms -> 50.0 t/s
+    slowSonnet[15] = 10 * 900;
+    api.on('GET', '/management/insights/cube', () => ({ ...CUBE, rows: [fastGpt, slowSonnet, extraGpt] }));
+
+    // Desktop defaults to Model load profile with Avg TPS and without net_input/output columns.
+    const desktop = mount('/insights');
+    const desktopPanel = await screen.findByTestId('insights-matrix');
+    expect(within(desktopPanel).getByText('Model load profile')).toBeTruthy();
+    expect(within(desktopPanel).getByRole('button', { name: 'Avg TPS' })).toBeTruthy();
+    expect(within(desktopPanel).getByText('300 t/s')).toBeTruthy();
+    expect(within(desktopPanel).getByText('50.0 t/s')).toBeTruthy();
+    expect(within(desktopPanel).queryByText('Net input per call')).toBeNull();
+    expect(within(desktopPanel).queryByText('Output per call')).toBeNull();
+    expect(desktopPanel.querySelector('[data-slot="segmented-item"][data-tip="Chart"]')).toBeTruthy();
+    desktop.unmount();
+
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: query === '(max-width: 640px)', media: query, onchange: null, addListener() {}, removeListener() {},
       addEventListener() {}, removeEventListener() {}, dispatchEvent() { return true; },
     }));
-    // Sonnet is the slower model, so ordering by latency puts it above the busier GPT-5.
-    const slow = row(1, 0, 1, 10, 1000);
-    slow[15] = 10 * 900;
-    api.on('GET', '/management/insights/cube', () => ({ ...CUBE, rows: [row(0, 0, 0, 30, 3000), slow, row(1, 1, 0, 5, 500)] }));
-    mount('/insights');
-    const panel = await screen.findByTestId('insights-matrix');
-    const order = () => {
-      const text = panel.textContent ?? '';
-      return text.indexOf('sonnet') < text.indexOf('gpt-5') ? ['sonnet', 'gpt-5'] : ['gpt-5', 'sonnet'];
-    };
-    await waitFor(() => expect(order()).toEqual(['gpt-5', 'sonnet']));
-    // The view switch's options are icons, named by their tip.
-    const viewOption = (name: string) => panel.querySelector<HTMLElement>(`[data-slot="segmented-item"][data-tip="${name}"]`);
-    expect(viewOption('Chart')).toBeNull();
+    try {
+      mount('/insights');
+      const panel = await screen.findByTestId('insights-matrix');
+      const order = () => {
+        const text = panel.textContent ?? '';
+        return text.indexOf('sonnet') < text.indexOf('gpt-5') ? ['sonnet', 'gpt-5'] : ['gpt-5', 'sonnet'];
+      };
+      await waitFor(() => expect(order()).toEqual(['gpt-5', 'sonnet']));
+      expect(within(panel).getByText('Model load profile')).toBeTruthy();
+      expect(within(panel).getByText('300 t/s')).toBeTruthy();
+      expect(within(panel).getByText('50.0 t/s')).toBeTruthy();
+      expect(within(panel).queryByText('Tokens')).toBeNull();
+      expect(within(panel).queryByText('Net in/call')).toBeNull();
+      expect(within(panel).queryByText('Out/call')).toBeNull();
+      const viewOption = (name: string) => panel.querySelector<HTMLElement>(`[data-slot="segmented-item"][data-tip="${name}"]`);
+      expect(viewOption('Chart')).toBeNull();
 
-    fireEvent.mouseDown(within(panel).getByRole('combobox', { name: 'Sort by' }));
-    fireEvent.click(await screen.findByRole('option', { name: 'Avg latency' }));
-    await waitFor(() => expect(order()).toEqual(['sonnet', 'gpt-5']));
+      fireEvent.mouseDown(within(panel).getByRole('combobox', { name: 'Sort by' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'Avg latency' }));
+      await waitFor(() => expect(order()).toEqual(['sonnet', 'gpt-5']));
 
-    fireEvent.click(viewOption('Table')!);
-    await waitFor(() => expect(within(panel).queryByRole('combobox', { name: 'Sort by' })).toBeNull());
-    fireEvent.click(viewOption('Model load profile')!);
-    await waitFor(() => expect(within(panel).getByRole('combobox', { name: 'Sort by' })).toBeTruthy());
+      // Sorting by Avg TPS puts the higher-throughput model first; reversing puts the slower one first.
+      fireEvent.mouseDown(within(panel).getByRole('combobox', { name: 'Sort by' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'Avg TPS' }));
+      await waitFor(() => expect(order()).toEqual(['gpt-5', 'sonnet']));
+      fireEvent.click(within(panel).getByTestId('insights-profile-sort-direction'));
+      await waitFor(() => expect(order()).toEqual(['sonnet', 'gpt-5']));
+
+      fireEvent.click(viewOption('Table')!);
+      await waitFor(() => expect(within(panel).queryByRole('combobox', { name: 'Sort by' })).toBeNull());
+      expect(within(panel).getByText('Key usage mix')).toBeTruthy();
+      expect(within(panel).getByText('Tokens')).toBeTruthy();
+      fireEvent.click(viewOption('Model load profile')!);
+      await waitFor(() => expect(within(panel).getByRole('combobox', { name: 'Sort by' })).toBeTruthy());
+      expect(within(panel).getByText('Model load profile')).toBeTruthy();
+
+      // Tapping a model card opens its detail drawer.
+      fireEvent.click(within(panel).getByRole('button', { name: 'sonnet' }));
+      const drawer = await screen.findByTestId('insights-entity-drawer');
+      expect(within(drawer).getByText('Design team')).toBeTruthy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('keeps the page frame and displays error details when the cube fails to load', async () => {

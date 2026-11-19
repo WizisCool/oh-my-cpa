@@ -51,7 +51,7 @@ export const MatrixTable: React.FC<MatrixTableProps> = ({ matrix, rowDimension, 
       {matrix.rowIds.length === 0 ? (
         <EmptyState size="compact" title={t('insights.no_usage')} />
       ) : (
-        <div className={styles['matrix-scroll']}>
+        <div className={styles['matrix-scroll']} tabIndex={0} role="region" aria-label={t('insights.composition_title')}>
           <table className={styles['matrix']}>
             <thead>
               <tr>
@@ -80,10 +80,17 @@ export const MatrixTable: React.FC<MatrixTableProps> = ({ matrix, rowDimension, 
                       // Past the ramp's midpoint the busy stop dominates, and the body ink no longer
                       // clears contrast on it in the light theme; the cell takes the on-accent ink.
                       const isDense = heatmapRampPosition(shadeValue, shadeMax) > 0.55;
+                      const isCellDimmed = isDimmed?.(rowId, columnId) ?? false;
+                      const isCellSelected = Boolean(isDimmed) && !isCellDimmed;
                       return (
-                        <td key={columnId} data-dimmed={isDimmed?.(rowId, columnId) || undefined}>
+                        <td
+                          key={columnId}
+                          data-dimmed={isCellDimmed || undefined}
+                          data-selected={isCellSelected || undefined}
+                        >
                           <button
                             type="button"
+                            aria-pressed={isCellSelected || undefined}
                             className={clsx(styles['matrix-cell'], isDense && styles['matrix-cell-dense'])}
                             style={{ '--heatmap-quiet-share': shade.fromShare } as React.CSSProperties}
                             {...tipCard({

@@ -24,6 +24,12 @@ export function formatLatency(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${Math.round(ms)}ms`;
 }
 
+/** Formats aggregate output throughput in tokens/sec; null prints as an em dash. */
+export function formatTps(tps: number | null): string {
+  if (tps === null || !Number.isFinite(tps) || tps <= 0) return '—';
+  return `${tps >= 100 ? COUNT.format(Math.round(tps)) : tps.toFixed(1)} t/s`;
+}
+
 /** A metric's readout; null is written as a dash, never as zero. */
 export function formatMetric(metric: CubeMetric, value: number | null, style: TokenNumberStyle, currency: DisplayCurrency = USD_CURRENCY): string {
   if (value === null || !Number.isFinite(value)) return '—';

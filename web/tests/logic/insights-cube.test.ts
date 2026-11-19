@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   FOLDED_ID,
+  anatomyAvgTps,
   attributeServingProviders,
   baselineMeasures,
   buildFlow,
@@ -34,7 +35,7 @@ import { canDrillUsageEvents, cleanValues, csvCell, insightsCsv, usageEventsHref
 import { MAX_USAGE_EVENT_FILTER_VALUES } from '../../src/types/usageEvents.ts';
 import { clientCoverageShare, clientIconId, clientMeasures, clientProductName } from '../../src/types/clientAgents.ts';
 import { readEventQuery } from '../../src/types/usageEventQuery.ts';
-import { formatCountBaseline, formatMetric, metricReadout } from '../../src/types/insightsFormat.ts';
+import { formatCountBaseline, formatMetric, formatTps, metricReadout } from '../../src/types/insightsFormat.ts';
 import { insightsRangeParams, parseInsightsRange } from '../../src/types/insights.ts';
 import { canShowWeekView, peakHourSet, summarizeRhythm } from '../../src/pages/insights/insightsRhythm.ts';
 import {
@@ -674,6 +675,14 @@ test('insights token anatomy, net scope, request drill-down and export', () => {
   assert.equal(measuresReasoningShare(emptyMeasures()), null);
   assert.equal(measuresAvgTtftMs(measures({ ttftSumMs: 900, ttftCount: 3 })), 300);
   assert.equal(measuresAvgTtftMs(emptyMeasures()), null);
+  assert.equal(anatomyAvgTps(tokenAnatomy(measures({ inputTokens: 100, outputTokens: 300, reasoningTokens: 100, totalTokens: 400 })), 4000), 75);
+  assert.equal(anatomyAvgTps(tokenAnatomy(measures({ inputTokens: 100, outputTokens: 20, reasoningTokens: 30, totalTokens: 150 })), 2000), 25);
+  assert.equal(anatomyAvgTps(tokenAnatomy(emptyMeasures()), 1000), null);
+  assert.equal(anatomyAvgTps(tokenAnatomy(measures({ outputTokens: 100 })), 0), null);
+  assert.equal(formatTps(null), '—');
+  assert.equal(formatTps(42.36), '42.4 t/s');
+  assert.equal(formatTps(103.6), '104 t/s');
+  assert.equal(formatTps(1240.4), '1,240 t/s');
 
   const COLUMNS = [
     'bucket', 'key', 'call_point', 'model', 'provider', 'credential', 'requests', 'failures', 'input_tokens',

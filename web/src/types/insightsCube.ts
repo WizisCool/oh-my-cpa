@@ -683,6 +683,17 @@ export function measuresAvgTtftMs(measures: Measures): number | null {
 }
 
 /**
+ * Aggregate output throughput in tokens per second: inclusive completion tokens (regular output
+ * plus reasoning) divided by total latency across the group. Returns null without completions or
+ * measured duration, avoiding per-request TTFT heuristics on rolled-up rows.
+ */
+export function anatomyAvgTps(anatomy: TokenAnatomy, latencySumMs: number): number | null {
+  if (anatomy.completionTotal <= 0 || latencySumMs <= 0) return null;
+  const tps = (anatomy.completionTotal * 1000) / latencySumMs;
+  return Number.isFinite(tps) ? tps : null;
+}
+
+/**
  * The cube with every row's token total replaced by its net tokens. The page does not use it - every
  * projection reads the `net_tokens` metric on the sums it already makes, without a second copy of the
  * rows - but it states what that metric means, and the tests hold the two equal.
