@@ -62,7 +62,7 @@ function formatCellHeading(cell: StabilityDisplayBucket, bucket: InsightsBucket)
  * what was asked for, what answered - each opening its requests.
  */
 export const StabilityPanel: React.FC<StabilityPanelProps> = ({ data, identity, pairHref, onNavigate, isUnavailable }) => {
-  useTimeZone();
+  const timeZone = useTimeZone();
   const t = useT();
   const [trackNode, setTrackNode] = React.useState<HTMLSpanElement | null>(null);
   const [trackWidth, setTrackWidth] = React.useState<number | null>(null);
@@ -100,6 +100,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({ data, identity, 
   const isDense = displayCells.length > DENSE_BUCKETS || (trackWidth !== null && trackWidth > 0 && displayCells.length * 4 > trackWidth);
 
   const scale = React.useMemo(() => {
+    void timeZone;
     if (displayCells.length === 0) return [];
     const first = displayCells[0]!;
     const last = displayCells[displayCells.length - 1]!;
@@ -115,7 +116,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({ data, identity, 
       ? [first.start_ms, endInstant]
       : [first.start_ms, midInstant, endInstant];
     return [...new Set(raw.map((ms) => dayjs(ms).format(AXIS_FORMATS[bucket])))];
-  }, [bucket, data?.window.to, displayCells, isAggregated]);
+  }, [bucket, data?.window.to, displayCells, isAggregated, timeZone]);
 
   const stepLaneCell = (currentIndex: number, key: string): number | null => {
     const count = displayCells.length;
