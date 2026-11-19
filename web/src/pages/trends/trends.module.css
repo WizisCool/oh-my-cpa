@@ -1,5 +1,6 @@
 /* Trends: where the deployment is heading. One column of panels; hue appears where it names a
-   series, a measured duration or a state, every other mark is ink. */
+   series, a measured duration or a state, every other mark is ink. A change in volume is a
+   quantity, so its direction is told by sign and placement, never by the failure and success hues. */
 
 .page {
   max-width: 1440px;
@@ -8,8 +9,6 @@
   flex-direction: column;
   gap: 16px;
 }
-.page [data-trend='up'] { color: var(--trend-up); }
-.page [data-trend='down'] { color: var(--trend-down); }
 
 .window-span { font-variant-numeric: tabular-nums; }
 .panel-meta { color: var(--muted); font-size: var(--text-sm); font-weight: 400; }
@@ -257,11 +256,16 @@
 }
 .mover-name:hover .value-name { text-decoration: underline; text-underline-offset: 2px; }
 .mover-name[aria-pressed='true'] { color: var(--accent); }
-/* Ink is what the group kept, hue is what moved; the track's full length is the panel's largest reading. */
+/* Ink is what the group kept; a gain is drawn in the accent, a loss as a faint ghost of the volume
+   that left. Token volume is a quantity, never a verdict, so neither side borrows the state hues:
+   the sign and the column say which way it moved. The track's full length is the panel's largest
+   reading. */
 .mover-bar { display: flex; height: 6px; overflow: hidden; border-radius: var(--radius-xs); background: var(--series-track); }
 .mover-kept { background: color-mix(in oklch, var(--muted) 60%, transparent); }
-.mover-moved { min-width: 2px; background: currentColor; }
-.mover-delta { font-size: var(--text-md); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.mover-moved { min-width: 2px; background: color-mix(in oklch, var(--muted) 24%, transparent); }
+.mover-moved[data-trend='up'] { background: color-mix(in oklch, var(--accent) 72%, var(--series-track)); }
+.mover-delta { color: var(--fg); font-size: var(--text-md); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.mover-delta[data-trend='down'] { color: var(--fg-2); font-weight: 500; }
 .mover-relative { color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .mover-requests { opacity: 0; transition: opacity var(--motion-fast) var(--ease-standard); }
 .mover-row:hover .mover-requests,
@@ -334,7 +338,7 @@
 .lane-cell[data-tone='danger'] { background: color-mix(in oklch, var(--danger) var(--lane-weight), var(--series-track)); }
 .lane-cell[data-tone='warn'] { background: color-mix(in oklch, var(--warn) var(--lane-weight), var(--series-track)); }
 .lane-cell[data-interactive] { cursor: pointer; }
-.lane-cell[data-interactive]:hover { filter: brightness(1.16); }
+.lane-cell[data-interactive]:hover { filter: brightness(1.2) saturate(1.1); }
 .lane[data-selected] .lane-cells:has(.lane-cell[data-selected]) .lane-cell:not([data-selected]) { opacity: 0.45; }
 .lane-cell[data-selected] {
   position: relative;

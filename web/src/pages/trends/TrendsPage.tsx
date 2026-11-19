@@ -463,7 +463,8 @@ export const TrendsPage: React.FC = () => {
       foot: summary ? (
         <MetaLine className={styles['tile-foot']}>
           {summary.failed_requests > 0
-            ? <span className={styles['tone-danger']}>{t('trends.tile.errors', { n: summary.failed_requests })}</span>
+            // The count takes the rate's verdict: a handful of errors behind a healthy rate is context.
+            ? <span className={rateTone === 'warn' || rateTone === 'danger' ? styles[`tone-${rateTone}`] : undefined}>{t('trends.tile.errors', { n: summary.failed_requests })}</span>
             : <span>{t('trends.tile.requests', { n: summary.total_requests })}</span>}
         </MetaLine>
       ) : null,

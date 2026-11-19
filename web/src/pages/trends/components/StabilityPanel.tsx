@@ -35,6 +35,7 @@ import {
   isStabilityFailureLane,
   stabilityDemoSliceEventsQueryString,
   stabilityDisplayBuckets,
+  stabilityCellWeight,
   stabilityEventsHref,
   stabilityLanes,
   stabilitySliceTelemetryParams,
@@ -61,8 +62,6 @@ const SIGNAL_TAG_LIMIT = 3;
 const DENSE_BUCKETS = 72;
 /** Minimum pixel width of one displayed stability cell before adjacent buckets aggregate. */
 const MIN_CELL_PX = 2;
-/** The faintest a bucket with any event is drawn, so a single failure is never invisible. */
-const MIN_WEIGHT = 22;
 
 export interface StabilityPanelProps {
   data: TrendsTelemetryResponse | undefined;
@@ -509,7 +508,6 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
             rows: row.peers.slice(0, 6).map((peer) => ({
               label: peer.label || t('trends.stability.unknown_model'),
               value: peer.count.toLocaleString('en'),
-              tone: 'danger' as const,
             })),
           })
         : undefined;
@@ -544,7 +542,6 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
         ? identity.label('provider', { id: peer.id, label: peer.label })
         : (peer.label || t('trends.stability.unknown_model')),
       value: peer.count.toLocaleString('en'),
-      tone: 'danger',
     }));
     const tipNotes = row.credentialCount > 0
       ? [t('trends.stability.affected_credentials', { n: row.credentialCount })]
@@ -666,7 +663,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                       >
                         {lane.counts.map((count, index) => {
                           const cell = displayCells[index]!;
-                          const weight = count === 0 || lane.max === 0 ? 0 : Math.round(MIN_WEIGHT + (100 - MIN_WEIGHT) * (count / lane.max));
+                          const weight = stabilityCellWeight(count, cell.total_requests);
                           const isCellSelected = Boolean(
                             isLaneSelected &&
                             activeCell &&
@@ -875,7 +872,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                             ? identity.manage(row.dimension, row.id)
                             : null;
                           const countTipRows: TipRow[] = [
-                            { label: t('trends.stability.drawer.failures'), value: row.failures.toLocaleString('en'), tone: 'danger' },
+                            { label: t('trends.stability.drawer.failures'), value: row.failures.toLocaleString('en') },
                           ];
                           if (row.totalRequests > 0) {
                             countTipRows.push({ label: t('trends.metric.requests'), value: row.totalRequests.toLocaleString('en') });
@@ -922,7 +919,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
 
                               <div role="cell" className={styles['attribution-signals']}>
                                 {shownSignals.map((sig) => (
-                                  <Tag key={sig.key} size="small" tone="danger">
+                                  <Tag key={sig.key} size="small">
                                     {`${sig.label} × ${sig.count}`}
                                   </Tag>
                                 ))}
@@ -931,7 +928,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                                     className={styles['attribution-peer-more']}
                                     {...tipCard({
                                       heading: t('trends.stability.drawer.status_codes'),
-                                      rows: signals.map((sig) => ({ label: sig.label, value: sig.count.toLocaleString('en'), tone: 'danger' as const })),
+                                      rows: signals.map((sig) => ({ label: sig.label, value: sig.count.toLocaleString('en') })),
                                     })}
                                   >
                                     {`+${overflowSignals.length}`}
