@@ -50,12 +50,7 @@ export default {
   'trends.tile.movers': 'Token bersih',
   'trends.tile.requests': '{n} permintaan',
   'trends.tile.delivery': 'Kadar berjaya',
-  'trends.tile.rate_limited': '{n} dihadkan (429)',
-  'trends.tile.truncated': '{n} terpotong',
-  'trends.tile.force_cooldown': '{n} penyejukan paksa',
-  'trends.tile.upstream_5xx': '{n} 5xx huluan',
-  'trends.tile.other_failures': '{n} gagal lain',
-  'trends.tile.substituted': '{n} model diganti',
+  'trends.tile.errors': '{n} ralat',
 
   'trends.quota.title': 'Trend kuota langganan',
   'trends.quota.fact.exhaust': 'Capai had',

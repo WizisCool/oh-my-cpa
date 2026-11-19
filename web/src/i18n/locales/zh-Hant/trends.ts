@@ -50,12 +50,7 @@ export default {
   'trends.tile.movers': '淨 Token',
   'trends.tile.requests': '{n} 次請求',
   'trends.tile.delivery': '成功率',
-  'trends.tile.rate_limited': '429 限流 {n}',
-  'trends.tile.truncated': '串流截斷 {n}',
-  'trends.tile.force_cooldown': '強制冷卻 {n}',
-  'trends.tile.upstream_5xx': '上游 5xx {n}',
-  'trends.tile.other_failures': '其他失敗 {n}',
-  'trends.tile.substituted': '換模 {n}',
+  'trends.tile.errors': '錯誤 {n}',
 
   'trends.quota.title': '定額配額趨勢',
   'trends.quota.fact.exhaust': '預計達到限額',

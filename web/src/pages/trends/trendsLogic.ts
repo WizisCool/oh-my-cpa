@@ -8,6 +8,7 @@ import { INSIGHTS_BUCKETS, insightsRangeParams, type InsightsBucketChoice, type 
 import type { TFunc } from '../../i18n';
 import dayjs from '../../utils/time';
 import type { QuotaWindow } from '../../types/quota';
+import type { RollingReadout } from '../../types/rollingNumber';
 import { MAX_USAGE_EVENT_FILTER_VALUES } from '../../types/usageEvents';
 import { quotaReadingLabels, roundQuotaPeriodHours } from '../quota/quotaWindowNaming';
 import type {
@@ -503,6 +504,18 @@ export function formatPercent(value: number | null | undefined, digits = 1): str
   return `${rounded.toFixed(Math.abs(rounded) >= 100 ? 0 : digits)}%`;
 }
 
+/** `formatPercent` as an animated readout so percentage tiles align and roll beside sibling figures. */
+export function percentReadout(value: number | null | undefined, digits = 1): RollingReadout | undefined {
+  if (value === null || value === undefined || !Number.isFinite(value)) return undefined;
+  const rounded = Number(value.toFixed(digits));
+  const fractionDigits = Math.abs(rounded) >= 100 ? 0 : digits;
+  return {
+    number: rounded,
+    suffix: '%',
+    format: { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits },
+  };
+}
+
 export interface QuotaCycleBar {
   start: number;
   reset: number;
@@ -660,27 +673,6 @@ export function perfModeHasSamples(
     return data.buckets.some((bucket) => bucket.tps_samples > 0 && bucket.tps_p50 !== null) || modeSeries.length > 0;
   }
   return data.scatter.some((point) => point.ttft_ms !== null && point.latency_ms !== null);
-}
-
-export interface DeliveryCause {
-  key: 'rate_limited' | 'truncated' | 'force_cooldown' | 'upstream_5xx' | 'other_failures' | 'substituted';
-  count: number;
-  tone: 'tone-danger' | 'tone-warn';
-}
-
-/** Top two causes for the delivery tile, prioritizing failures before served model substitutions. */
-export function deliveryFailureCauses(summary: TrendsTelemetrySummary | undefined): DeliveryCause[] {
-  if (!summary) return [];
-  return [
-    ...([
-      { key: 'rate_limited', count: summary.rate_limited_429, tone: 'tone-danger' },
-      { key: 'truncated', count: summary.stream_truncated, tone: 'tone-danger' },
-      { key: 'force_cooldown', count: summary.force_cooldown, tone: 'tone-danger' },
-      { key: 'upstream_5xx', count: summary.upstream_5xx, tone: 'tone-danger' },
-      { key: 'other_failures', count: summary.other_failures, tone: 'tone-danger' },
-    ] as const).filter((cause) => cause.count > 0).sort((left, right) => right.count - left.count),
-    ...(summary.model_substituted > 0 ? [{ key: 'substituted', count: summary.model_substituted, tone: 'tone-warn' } as const] : []),
-  ].slice(0, 2);
 }
 
 export const STABILITY_LANES = ['rate_limited_429', 'stream_truncated', 'force_cooldown', 'upstream_5xx', 'other_failures', 'model_substituted'] as const;
