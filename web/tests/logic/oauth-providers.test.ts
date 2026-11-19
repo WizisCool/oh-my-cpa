@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   BUILTIN_OAUTH_PROVIDERS,
+  CLAUDE_OAUTH_DEFAULT_SCOPES,
+  CLAUDE_OAUTH_USER_SCOPES,
   XAI_CALLBACK_URL,
   builtinOAuthProviderChoices,
   lookupOAuthProvider,
@@ -10,6 +12,7 @@ import {
   pluginOAuthProviderChoices,
   normalizeOAuthFlow,
   normalizeOAuthStatus,
+  resolveClaudeOAuthScope,
   resolveStartedOAuthFlow,
   resolveXaiCallback,
   validateDevinCallback,
@@ -487,5 +490,69 @@ test('provider choices are grouped by who publishes them, from the store the plu
     oauthProviderGroups(choices.filter((choice) => choice.group === 'plugin')).map((section) => section.group),
     ['plugin'],
     'a group with nothing to offer is not drawn',
+  );
+});
+
+test('resolveClaudeOAuthScope reads configured pointer-bool semantics and prefers a live URL scope', () => {
+  assert.equal(resolveClaudeOAuthScope(undefined), undefined);
+  assert.equal(resolveClaudeOAuthScope(':\n  [invalid'), undefined);
+
+  assert.deepEqual(resolveClaudeOAuthScope('server:\n  port: 8317\n'), {
+    includesCreateApiKey: true,
+    scopeText: CLAUDE_OAUTH_DEFAULT_SCOPES,
+  });
+  assert.deepEqual(
+    resolveClaudeOAuthScope('oauth:\n  providers:\n    claude:\n      oauth-include-create-api-key: false\n'),
+    {
+      includesCreateApiKey: false,
+      scopeText: CLAUDE_OAUTH_USER_SCOPES,
+    },
+  );
+  assert.deepEqual(
+    resolveClaudeOAuthScope('oauth:\n  providers:\n    claude:\n      oauth-include-create-api-key: true\n'),
+    {
+      includesCreateApiKey: true,
+      scopeText: CLAUDE_OAUTH_DEFAULT_SCOPES,
+    },
+  );
+  assert.deepEqual(
+    resolveClaudeOAuthScope('oauth:\n  providers:\n    claude:\n      oauth-include-create-api-key: null\n'),
+    {
+      includesCreateApiKey: true,
+      scopeText: CLAUDE_OAUTH_DEFAULT_SCOPES,
+    },
+  );
+
+  // Live authorization URL scope wins over configuration YAML when CPA returns it.
+  assert.deepEqual(
+    resolveClaudeOAuthScope(
+      'oauth:\n  providers:\n    claude:\n      oauth-include-create-api-key: false\n',
+      'https://claude.ai/oauth/authorize?scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference',
+    ),
+    {
+      includesCreateApiKey: true,
+      scopeText: 'org:create_api_key user:profile user:inference',
+    },
+  );
+  assert.deepEqual(
+    resolveClaudeOAuthScope(
+      'server:\n  port: 8317\n',
+      'https://claude.ai/oauth/authorize?scope=user%3Aprofile+user%3Ainference',
+    ),
+    {
+      includesCreateApiKey: false,
+      scopeText: 'user:profile user:inference',
+    },
+  );
+  // An authorization URL without a scope query param falls back to configuration YAML.
+  assert.deepEqual(
+    resolveClaudeOAuthScope(
+      'oauth:\n  providers:\n    claude:\n      oauth-include-create-api-key: false\n',
+      'https://demo-sandbox.local/oauth/authorize?provider=anthropic&state=s1',
+    ),
+    {
+      includesCreateApiKey: false,
+      scopeText: CLAUDE_OAUTH_USER_SCOPES,
+    },
   );
 });

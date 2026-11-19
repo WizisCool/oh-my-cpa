@@ -208,3 +208,48 @@ it('keeps a refused cancellation waiting and says so', async () => {
     expect(screen.getByTestId('oauth-session-pill')).toBeTruthy();
   } finally { surface.unmount(); }
 });
+
+it('shows the active Claude OAuth scope in the connect drawer without adding a toggle there', async () => {
+  const t = makeT('en');
+  const server = installOmcApi();
+  server.on('GET', '/management/config', () => ({
+    scalars: {},
+    supported_keys: [],
+    revision: 'rev-default',
+    safe_yaml: 'server:\n  port: 8317\n',
+    stored_layout: 'v8',
+  }));
+  const surface = renderWithOmc(<ConnectWorkspace choices={[CHOICES[1], CHOICES[0]]} />, {
+    route: '/omc/oauth-management',
+    isStrict: true,
+  });
+  try {
+    const scopeBox = await screen.findByTestId('claude-oauth-scope');
+    expect(scopeBox.textContent).toContain(t('oauth.anthropic_scope_with_create_key'));
+    expect(scopeBox.textContent).toContain('org:create_api_key');
+    expect(within(scopeBox).queryByRole('switch')).toBeNull();
+
+    // Switching to another provider hides the Claude scope summary.
+    fireEvent.click(screen.getByTestId('other-provider'));
+    await waitFor(() => expect(screen.queryByTestId('claude-oauth-scope')).toBeNull());
+  } finally { surface.unmount(); }
+
+  // Explicit opt-out in configuration YAML displays only the five user:* scopes.
+  server.on('GET', '/management/config', () => ({
+    scalars: {},
+    supported_keys: [],
+    revision: 'rev-opt-out',
+    safe_yaml: 'oauth:\n  providers:\n    claude:\n      oauth-include-create-api-key: false\n',
+    stored_layout: 'v8',
+  }));
+  const optOutSurface = renderWithOmc(<ConnectWorkspace choices={[CHOICES[1]]} />, {
+    route: '/omc/oauth-management',
+    isStrict: true,
+  });
+  try {
+    const scopeBox = await screen.findByTestId('claude-oauth-scope');
+    expect(scopeBox.textContent).toContain(t('oauth.anthropic_scope_user_only'));
+    expect(scopeBox.textContent).not.toContain('org:create_api_key');
+    expect(scopeBox.textContent).toContain('user:profile');
+  } finally { optOutSurface.unmount(); }
+});

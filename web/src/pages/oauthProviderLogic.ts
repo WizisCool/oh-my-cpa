@@ -1,6 +1,9 @@
+import { parseDocument } from 'yaml';
+import { getFieldSemanticValue } from '../components/config/configDirty';
 import { collectPluginPages } from '../components/plugins/pluginPages';
 import { installedPluginOrigin } from '../components/plugins/pluginStoreLogic';
 import { resolveCredentialMark, type BrandMark } from '../types/brandMark';
+import { ALL_CONFIG_FIELDS } from '../types/configSchema';
 import type { MessageKey, TFunc } from '../i18n';
 import type { PluginItem, StorePluginItem } from '../types/plugin';
 import { BUILTIN_OAUTH_IDS, pluginOAuthProviderIds, pluginOAuthProviderLogos, pluginPortalTitles } from '../types/pluginOAuthProviders';
@@ -456,4 +459,55 @@ export function oauthProviderChoices(
   catalog?: ReadonlyMap<string, StorePluginItem>,
 ): OAuthProviderChoice[] {
   return [...builtinOAuthProviderChoices(t), ...pluginOAuthProviderChoices(plugins, t, catalog)];
+}
+
+export const CLAUDE_OAUTH_USER_SCOPES =
+  'user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload';
+export const CLAUDE_OAUTH_DEFAULT_SCOPES = `org:create_api_key ${CLAUDE_OAUTH_USER_SCOPES}`;
+
+export interface ClaudeOAuthScopeSummary {
+  includesCreateApiKey: boolean;
+  scopeText: string;
+}
+
+const CLAUDE_OAUTH_CREATE_API_KEY_FIELD = ALL_CONFIG_FIELDS.find(
+  (field) => field.id === 'claudeOAuthIncludeCreateAPIKey',
+);
+
+/**
+ * Resolves the authorization scope CPA requests for a Claude OAuth login.
+ * When CPA has already generated an authorization URL with a `scope` parameter,
+ * that live parameter is authoritative; otherwise the current configuration YAML
+ * determines whether `org:create_api_key` is included alongside the five `user:*` scopes.
+ */
+export function resolveClaudeOAuthScope(
+  safeYaml: string | undefined,
+  authorizationUrl?: string,
+): ClaudeOAuthScopeSummary | undefined {
+  if (authorizationUrl) {
+    try {
+      const rawScope = new URL(authorizationUrl).searchParams.get('scope')?.trim();
+      if (rawScope) {
+        const scopes = rawScope.split(/\s+/).filter(Boolean);
+        return {
+          includesCreateApiKey: scopes.includes('org:create_api_key'),
+          scopeText: scopes.join(' '),
+        };
+      }
+    } catch {
+      // Fall back to configured scope when the URL cannot be parsed.
+    }
+  }
+  if (safeYaml === undefined || !CLAUDE_OAUTH_CREATE_API_KEY_FIELD) return undefined;
+  try {
+    const doc = parseDocument(safeYaml);
+    if (doc.errors.length > 0) return undefined;
+    const includesCreateApiKey = Boolean(getFieldSemanticValue(doc, CLAUDE_OAUTH_CREATE_API_KEY_FIELD));
+    return {
+      includesCreateApiKey,
+      scopeText: includesCreateApiKey ? CLAUDE_OAUTH_DEFAULT_SCOPES : CLAUDE_OAUTH_USER_SCOPES,
+    };
+  } catch {
+    return undefined;
+  }
 }

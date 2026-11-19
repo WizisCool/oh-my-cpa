@@ -2828,6 +2828,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   color: var(--muted);
   margin-top: 4px;
   line-height: 1.5;
+  overflow-wrap: break-word;
 }
 
 .settings-toggle-control {
