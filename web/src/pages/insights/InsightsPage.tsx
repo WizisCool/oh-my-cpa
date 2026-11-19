@@ -789,8 +789,8 @@ export const InsightsPage: React.FC = () => {
         <KeyTable groups={rankings.key} sparklines={sparklines} lastActive={lastActive} metric={metric} labels={labels} compare={baseline?.window} isLoading={cubeQuery.isLoading} onOpen={(id) => openDetail('key', id)} />
       </Panel>
       )}
-      {/* A bar per key needs the width to name the key and still show its parts, so a phone gets only
-          the model load profile from this panel. */}
+      {/* Opens on the per-model load profile on both desktop and phone; desktop also switches to
+          the key-by-model composition chart and matrix, phone switches between profile and matrix. */}
       {(
         <DeferredPanel
           priority="p1"
@@ -816,6 +816,8 @@ export const InsightsPage: React.FC = () => {
               setView({ filters: isSame ? next : { ...next, key: [keyId], ...(columnId === null ? {} : { [modelDimension]: [columnId] }) } });
             }}
             onSelectColumn={(columnId) => selectFilter(modelDimension, columnId)}
+            onOpenColumn={(columnId) => openDetail(modelDimension, columnId)}
+            onClearColumns={() => clearFilter(modelDimension)}
             onClear={() => {
               const next = { ...requestedView.filters };
               delete next.key;
