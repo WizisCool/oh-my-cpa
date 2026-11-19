@@ -18,6 +18,7 @@ import { CpaManagementDisabled } from './CpaManagementDisabled';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { BrandArtwork } from './BrandArtwork';
+import { FlaggedMark } from './AttentionDot';
 import { OverlayScrollArea } from './OverlayScrollArea';
 import { useT } from '../../i18n';
 import { PricingEditorProvider } from '../pricing/PricingEditorContext';
@@ -72,12 +73,7 @@ function routeViewKey(pathname: string): string {
  * all three renderings keep: the expanded rail, the collapsed rail and the phone sheet.
  */
 function flagIcon(icon: React.ReactNode): React.ReactNode {
-  return (
-    <span className="app-menu-flagged-icon" data-testid="nav-update-dot">
-      {icon}
-      <span className="app-menu-update-dot" aria-hidden="true" />
-    </span>
-  );
+  return <FlaggedMark testId="nav-update-dot">{icon}</FlaggedMark>;
 }
 
 /**
@@ -475,6 +471,8 @@ export const AppLayout: React.FC = () => {
         isActiveHotRoute
           ? { key: activeRouteKey, outlet, locationContext: { locationContext, routeContext } }
           : null,
+        // Every hot route keeps its slot, so moving between the observability pages never rebuilds one.
+        { maxSlots: HOT_ACTIVITY_ROUTES.size },
       );
 
   React.useLayoutEffect(() => {

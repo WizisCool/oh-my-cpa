@@ -220,15 +220,17 @@ test('usage event view', () => {
   // Every filter dimension the panel owns must survive a URL round trip, or a
   // reload would silently drop part of the operator's filter.
   const everyFilter = [
-    'model=gpt-5&provider=openai&auth_index=auth-a&source=src&api_key=key&executor=codex',
+    'model=gpt-5&response_model=gpt-5-mini&provider=openai&auth_index=auth-a&source=src&api_key=key&executor=codex',
     'auth_type=oauth&reasoning=high&service_tier=flex&resolved_service_tier=priority&model_alias=fast',
     'q=codex&ua=codex-cli&endpoint=%2Fv1%2Fresponses&request_id=req-1',
     'latency_min=100&latency_max=60000&tokens_min=0&tokens_max=500000',
     'cost_min=0.000001&cost_max=12.5&cost=unpriced&served=substituted&transport=websocket',
   ].join('&');
   const everyQuery = read(everyFilter);
+  assert.deepEqual(everyQuery.filters?.response_model, ['gpt-5-mini']);
   assert.deepEqual(everyQuery.filters?.resolved_service_tier, ['priority']);
   const everyParams = new URLSearchParams(usageEventParams(everyQuery));
+  assert.deepEqual(everyParams.getAll('response_model'), ['gpt-5-mini']);
   assert.deepEqual(everyParams.getAll('resolved_service_tier'), ['priority']);
   const everyAgain = read(everyParams.toString());
   assert.deepEqual(everyAgain, everyQuery);

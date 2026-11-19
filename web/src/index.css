@@ -1787,10 +1787,12 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    same element to the rail and to the sidebar-visibility dialog, so the glyph box belongs to the
    logo itself rather than to the rail that first drew it. */
 .app-menu-plugin-logo { width: 16px; height: 16px; flex: none; }
-/* An available update marks the entry with a `--warn` dot just outside the icon's corner,
-   where it touches neither the glyph nor the row's hover fill. */
-.app-menu .app-menu-flagged-icon { position: relative; display: inline-flex; align-items: center; flex: none; }
-.app-menu .app-menu-update-dot { position: absolute; top: -3px; inset-inline-end: -4px; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
+/* AttentionDot: a dot that asks for a look, inline beside a label or pinned to a mark's corner by
+   FlaggedMark, just outside the glyph and the row's hover fill. */
+.attention-dot { display: inline-block; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
+.attention-dot[data-tone='danger'] { background: var(--danger); }
+.flagged-mark { position: relative; display: inline-flex; align-items: center; flex: none; }
+.flagged-mark > .attention-dot { position: absolute; top: -3px; inset-inline-end: -4px; }
 /* Stands in for every page while the gateway is older than CPA v8. The steps read
    left-aligned under the centred result, like instructions rather than a slogan. */
 .cpa-blocked { max-width: 680px; margin: 48px auto; padding: 0 16px; }

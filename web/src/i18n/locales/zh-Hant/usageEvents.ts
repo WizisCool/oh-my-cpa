@@ -376,6 +376,7 @@ export default {
   "events.active_filters": "目前篩選",
   "events.clear_all": "清空全部",
   "events.filter_chip_model": "請求模型: {val}",
+  "events.filter_chip_response_model": "實際回應模型: {val}",
   "events.filter_chip_provider": "供應商: {val}",
   "events.filter_chip_source": "來源: {val}",
   "events.filter_chip_credential": "憑證: {val}",

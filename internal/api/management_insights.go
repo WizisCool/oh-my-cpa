@@ -481,8 +481,11 @@ func (h *Handler) insightsRhythmFilters(request *http.Request) map[repository.Us
 			continue
 		}
 		filters[repository.UsageDimensionKey] = append(filters[repository.UsageDimensionKey], trimmed)
-		// A value that is not a fingerprint is either a raw key or the label CPA gives
-		// keyless traffic. Matching both is exact: a raw key is never stored as a group.
+		// A value that is not already an hmac: fingerprint is either a caller key
+		// (including one literally starting with redacted:), a keyless label, or
+		// an opaque redacted: endpoint token resolved later by ResolveTrendsDimensionFilters.
+		// Fingerprinting every non-hmac value lets literal redacted: keys match while
+		// leaving opaque endpoint tokens unaffected.
 		if !strings.HasPrefix(trimmed, "hmac:") {
 			if fingerprint, err := h.repo.UsageClientKeyFingerprint(trimmed); err == nil {
 				filters[repository.UsageDimensionKey] = append(filters[repository.UsageDimensionKey], fingerprint)

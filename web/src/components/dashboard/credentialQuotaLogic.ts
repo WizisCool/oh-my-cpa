@@ -1,3 +1,4 @@
+import type { TFunc } from '../../i18n';
 import { credentialBrandIdentity, credentialProviderFamily, type CredentialBrandIdentity } from '../../types/credentialIdentity';
 import { quotaWindowParts } from '../../pages/quota/quotaWindowSelection';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
@@ -140,6 +141,9 @@ export interface CredentialQuotaRow {
   recoverAtMS?: number;
   /** The gateway's own words for a problem, for the reader who wants the cause. */
   detail?: string;
+  recommendationStatus?: string;
+  recommendationReason?: string;
+  itemStatus?: string;
 }
 
 export interface CredentialQuotaBoard {
@@ -152,6 +156,35 @@ export interface CredentialQuotaBoard {
 
 export function isCredentialQuotaBlocked(state: CredentialQuotaState): boolean {
   return BLOCKED_STATES.has(state);
+}
+
+export function resolveCredentialQuotaStatusDetail(row: CredentialQuotaRow, t: TFunc): string | undefined {
+  if (row.detail) return row.detail;
+  if (row.recommendationReason && !/[^\x00-\x7f]/.test(row.recommendationReason)) {
+    return row.recommendationReason;
+  }
+  switch (row.recommendationStatus) {
+    case 'cooldown':
+      return t('quota.cooldown_active_desc');
+    case 'needs_reauth':
+      return t('recovery.sign_in_hint');
+    case 'exhausted':
+      return t('quota.status_exceeded');
+    case 'credits_available':
+      return row.remainingPercent === 0 || row.itemStatus === 'exhausted'
+        ? t('quota.status_exceeded')
+        : t('quota.low_quota_hint');
+    case 'idle':
+      return t('quota.not_observed_yet');
+    case 'unpublished':
+      return t('quota.usage_not_published');
+    case 'warning':
+      if (row.itemStatus === 'stale') return t('quota.reading_outlived_reset');
+      if (row.itemStatus === 'error' || row.state === 'problem') return t('quota.reading_failed');
+      return t('quota.low_quota_hint');
+    default:
+      return row.state === 'problem' ? t('quota.reading_failed') : undefined;
+  }
 }
 
 function resolveState(file: ManagementAuthFile, item: QuotaItem | undefined, remainingPercent: number | undefined): CredentialQuotaState {
@@ -227,7 +260,10 @@ export function buildCredentialQuotaBoard(
       bindingWindow,
       remainingPercent,
       recoverAtMS: resolveRecovery(state, item, windows),
-      detail: (file.status_message || item?.error || item?.recommendation?.reason || '').trim() || undefined,
+      detail: (file.status_message || item?.error || '').trim() || undefined,
+      recommendationStatus: item?.recommendation?.status,
+      recommendationReason: item?.recommendation?.reason?.trim() || undefined,
+      itemStatus: item?.status,
     });
   }
 

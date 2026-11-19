@@ -308,6 +308,7 @@ export function isUsageTransport(value: unknown): value is UsageTransport {
  *  the operator adds a filter and widen as they remove one. */
 export const USAGE_MULTI_FILTER_KEYS = [
   'model',
+  'response_model',
   'model_alias',
   'provider',
   'auth_index',
@@ -548,6 +549,8 @@ export interface UsageEventQuery {
    * row id, as `arrived_count`. It does not change which rows come back.
    */
   since?: number;
+  /** Demo worker clock alignment hint when drilling from calendar-rebased views. */
+  replay?: 'calendar';
 }
 
 /**
@@ -597,6 +600,7 @@ export function usageEventParams(query: UsageEventQuery): string {
   if (isUsageTransport(query.transport)) assign('transport', query.transport);
   assign('cursor', query.cursor);
   assign('limit', query.limit);
+  if (query.replay === 'calendar') search.set('replay', 'calendar');
   assign('since', query.since);
   return search.toString();
 }

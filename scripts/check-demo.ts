@@ -35,6 +35,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const CONSOLE_ROUTES = [
   '/dashboard',
   '/insights',
+  '/trends',
   '/model-square',
   '/playground',
   '/agent',
@@ -61,6 +62,7 @@ export const CONSOLE_ROUTES = [
 export const ROUTE_READS: Record<string, string[]> = {
   '/dashboard': ['overview', 'pricing-attention', 'dashboard-24h', 'dashboard-tail-24h', 'dashboard-models-call-24h', 'dashboard-models-model-24h', 'dashboard-token-heatmap-utc', 'usage-routing', 'usage-live'],
   '/insights': ['insights-cube-7d', 'insights-rhythm-7d', 'auth-files', 'providers'],
+  '/trends': ['trends-quota', 'trends-usage-7d', 'trends-telemetry-7d'],
   '/model-square': ['model-square', 'pricing', 'usage-facets'],
   '/playground': ['api-keys', 'playground-models', 'playground-run-active'],
   '/agent': ['api-keys', 'capabilities', 'agent-session'],

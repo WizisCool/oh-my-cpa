@@ -22,6 +22,7 @@ import {
   replaceFilters,
   viewPreferenceFromUrl,
 } from '../../src/types/usageEventViewActions.ts';
+import { parseUsageEventsView } from '../../src/types/usageEventViewPreference.ts';
 import {
   createSearchDebounce,
   type SearchDebounceController,
@@ -682,4 +683,26 @@ test('assignBandTones keeps every record its band as records arrive above it', (
   assert.deepEqual([...between.values()], ['even', 'odd', 'even', 'odd', 'even']);
 
   assert.deepEqual([...assignBandTones([8, 7], arrived).values()], ['odd', 'even'], 'another page starts afresh');
+});
+
+test('calendar replay survives absolute-range edits and saved preference round-trips, and clears on relative presets', () => {
+  const calendarParams = new URLSearchParams('from=1000&to=5000&replay=calendar&model=gpt-5');
+  const editedRange = applyTimeWindow(calendarParams, { from: 1000, to: 8000 });
+  assert.equal(editedRange.get('replay'), 'calendar');
+  assert.equal(editedRange.get('to'), '8000');
+
+  const presetParams = applyTimeWindow(editedRange, { preset: '24h' });
+  assert.equal(presetParams.get('replay'), null);
+  assert.equal(presetParams.get('preset'), '24h');
+
+  const ordinaryEdited = applyTimeWindow(new URLSearchParams('from=1000&to=5000'), { from: 1000, to: 8000 });
+  assert.equal(ordinaryEdited.get('replay'), null);
+
+  const savedPref = viewPreferenceFromUrl(editedRange, { grouping: 'time' });
+  assert.equal(savedPref.replay, 'calendar');
+  assert.deepEqual(parseUsageEventsView(savedPref)?.replay, 'calendar');
+
+  const ordinaryPref = viewPreferenceFromUrl(ordinaryEdited, { grouping: 'time' });
+  assert.equal(ordinaryPref.replay, undefined);
+  assert.equal(parseUsageEventsView({ from: 1000, to: 5000, replay: 'other' })?.replay, undefined);
 });

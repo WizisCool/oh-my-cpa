@@ -1,5 +1,5 @@
 import { renewalDetail, renewalKind, renewalLabel, renewalTone } from '../../src/components/authFiles/credentialRecovery.ts';
-import { buildCredentialQuotaBoard } from '../../src/components/dashboard/credentialQuotaLogic.ts';
+import { buildCredentialQuotaBoard, resolveCredentialQuotaStatusDetail } from '../../src/components/dashboard/credentialQuotaLogic.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { ManagementAuthFile } from '../../src/types/managementAuthFile.ts';
@@ -24,9 +24,9 @@ import { pluginMultiPortalKeys, pluginOAuthProviderTitles } from '../../src/type
 import { providerDisplayName } from '../../src/types/providerMetadata.ts';
 import { orderQuotaWindows, quotaWindowFullName, quotaWindowGroupKey, quotaWindowKindOf, quotaWindowParts } from '../../src/pages/quota/quotaWindowSelection.ts';
 import { applyKeyOrder, moveKey, parseGroupedOrder, parseRankOrder, rankedKeys, ranksOf } from '../../src/types/displayOrder.ts';
-import { credentialStatusOf, compareSections, quotaCellsOf, quotaLinesOf, quotaReadingName, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection, providersInSectionOrder } from '../../src/pages/oauthManagement/credentialSections.ts';
+import { credentialStatusOf, compareSections, quotaCellsOf, quotaDetailWindowFullName, quotaDetailWindowName, quotaLinesOf, quotaReadingLabels, quotaReadingName, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection, providersInSectionOrder } from '../../src/pages/oauthManagement/credentialSections.ts';
 import type { QuotaWindow } from '../../src/types/quota.ts';
-import { formatShortDateTime, isUnusedFullCodexFiveHourWindow, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../../src/pages/quota/quotaFormat.ts';
+import { formatShortDateTime, isUnusedFullCodexFiveHourWindow, quotaPlanLabel, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../../src/pages/quota/quotaFormat.ts';
 import { matchesStatusFilter } from '../../src/components/authFiles/authFileLogic.ts';
 import { healthBucketOf, healthCounts, matchesHealthLens, parseHealthLens, providerSummaries } from '../../src/pages/oauthManagement/fleetPresentation.ts';
 import { siwcBadgeState } from '../../src/components/authFiles/siwcBadge.ts';
@@ -1040,4 +1040,98 @@ test('isUnusedFullCodexFiveHourWindow distinguishes unstarted windows from start
   assert.equal(isUnusedFullCodexFiveHourWindow('claude', base, observedAt, observedAt), false);
   assert.equal(isUnusedFullCodexFiveHourWindow('codex', { ...base, id: 'weekly', kind: 'weekly' }, observedAt, observedAt), false);
   assert.equal(isUnusedFullCodexFiveHourWindow('codex', { ...base, scope: 'model', model: 'gpt-5' }, observedAt, observedAt), false);
+});
+
+test('detail window helpers and unknown-plan sentinel localize consistently in English and Chinese', () => {
+  const en = makeT('en');
+  const zh = makeT('zh');
+  const ag: QuotaWindow = { id: 'ag_Gemini Models_5h', label: 'Gemini Models \u00b7 5小时限制 (5-Hour)', scope: 'group', period_hours: 5 };
+  const sonnet: QuotaWindow = { id: 'seven_day_sonnet', label: 'Sonnet 每周用量', scope: 'model', model: 'claude-3-5-sonnet', period_hours: 168 };
+  const oauthApps: QuotaWindow = { id: 'seven_day_oauth_apps', label: '第三方应用 每周用量', scope: 'standard', period_hours: 168 };
+  const xai: QuotaWindow = { id: 'xai_credit_usage', label: '额度总使用率 (Credit Usage)', scope: 'standard', period_hours: 168 };
+
+  assert.equal(quotaDetailWindowName(ag, en), '5-hour limit');
+  assert.equal(quotaDetailWindowFullName(ag, en), 'Gemini Models 5-hour limit');
+  assert.equal(quotaDetailWindowName(sonnet, en), 'Weekly Sonnet');
+  assert.equal(quotaDetailWindowName(oauthApps, en), 'Weekly OAuth apps');
+  assert.equal(quotaDetailWindowName(xai, en), 'Credit usage');
+  assert.equal(quotaDetailWindowName(xai, zh), '额度用量');
+  assert.equal(quotaReadingLabels([xai], en).get('xai_credit_usage'), 'Credit usage');
+
+  assert.equal(quotaPlanLabel({ plan_label: '未知套餐' }, en), 'Unknown plan');
+  assert.equal(quotaPlanLabel({ plan_label: '未知套餐' }, zh), '未知套餐');
+  assert.equal(quotaPlanLabel({ plan_label: 'Pro' }, en), 'Pro');
+
+  // Custom non-standard duration like an 8-hour Codex window renders "8h" / "8小时" rather than stale "5小时用量上限 (5-Hour)".
+  const codex8h: QuotaWindow = { id: 'standard_primary', label: '5小时用量上限 (5-Hour)', kind: 'model_scoped', scope: 'standard', period_hours: 8 };
+  assert.equal(quotaDetailWindowName(codex8h, en), '8h');
+  assert.equal(quotaDetailWindowName(codex8h, zh), '8小时');
+  const spark5h: QuotaWindow = { id: 'spark_5h', label: 'Spark 5小时', kind: 'model_scoped', scope: 'model', model: 'spark', period_hours: 5 };
+  const spark7d: QuotaWindow = { id: 'spark_7d', label: 'Spark 每周', kind: 'model_scoped', scope: 'model', model: 'spark', period_hours: 168 };
+  const sparkLabels = quotaReadingLabels([spark5h, spark7d], en);
+  assert.equal(sparkLabels.get('spark_5h'), '5 hours Spark');
+  assert.equal(sparkLabels.get('spark_7d'), 'Weekly Spark');
+
+  // Warmup/compact model windows with unknown custom durations retain their duration-bearing label.
+  const spark8h: QuotaWindow = { id: 'addl_spark_8h', label: 'Spark 8小时配额', scope: 'model' };
+  const spark48h: QuotaWindow = { id: 'addl_spark_48h', label: 'Spark 48小时配额', scope: 'model' };
+  assert.equal(quotaDetailWindowName(spark8h, en), 'Spark 8小时配额');
+  assert.equal(quotaDetailWindowName(spark48h, en), 'Spark 48小时配额');
+  assert.notEqual(quotaDetailWindowName(spark8h, en), quotaDetailWindowName(spark48h, en));
+
+  // Explicitly custom noncanonical durations (like 4.5h) are not rounded into 5-hour limits.
+  const custom45h: QuotaWindow = { id: 'custom_4.5h', label: '4.5小时用量上限 (4.5h)', kind: 'custom', scope: 'standard', period_hours: 4.5 };
+  assert.equal(quotaWindowKindOf(custom45h), 'custom');
+  assert.equal(quotaDetailWindowName(custom45h, en), '4.5h');
+
+  // Same-group, same-period sibling allowances retain their discriminator in detail and full names.
+  const agReq: QuotaWindow = { id: 'ag_req', label: 'Gemini Models · Requests', scope: 'group', period_hours: 5 };
+  const agTok: QuotaWindow = { id: 'ag_tok', label: 'Gemini Models · Tokens', scope: 'group', period_hours: 5 };
+  assert.equal(quotaDetailWindowName(agReq, en, [agReq, agTok]), '5-hour limit (Requests)');
+  assert.equal(quotaDetailWindowFullName(agTok, en, [agReq, agTok]), 'Gemini Models 5-hour limit (Tokens)');
+  assert.equal(quotaDetailWindowFullName(ag, en, [ag]), 'Gemini Models 5-hour limit');
+
+  // Dashboard status detail distinguishes low-quota cooldowns and credits_available from stale or failed readings.
+  const lowCooldown = buildCredentialQuotaBoard(
+    [file({ auth_index: 'low-cooldown', name: 'low-cooldown.json' })],
+    [quota({
+      auth_index: 'low-cooldown',
+      status: 'warning',
+      windows: [{ id: 'five_hour', label: '5-Hour', kind: 'five_hour', scope: 'standard', remaining_percent: 10 }],
+      model_cooldowns: [{ is_active: true, model: 'gpt-5', backoff_level: 1 }],
+      recommendation: { status: 'warning', priority: 'low', action: 'none', reason: '配额余量偏低（不足 20%）' },
+    })],
+  ).rows[0];
+  const lowCredits = buildCredentialQuotaBoard(
+    [file({ auth_index: 'low-credits', name: 'low-credits.json' })],
+    [quota({
+      auth_index: 'low-credits',
+      status: 'warning',
+      windows: [{ id: 'five_hour', label: '5-Hour', kind: 'five_hour', scope: 'standard', remaining_percent: 10 }],
+      model_cooldowns: [{ is_active: true, model: 'gpt-5', backoff_level: 1 }],
+      recommendation: { status: 'credits_available', priority: 'medium', action: 'redeem_credit', reason: '配额余量低于 20%' },
+    })],
+  ).rows[0];
+  const staleWarning = buildCredentialQuotaBoard(
+    [file({ auth_index: 'stale-warn', name: 'stale-warn.json' })],
+    [quota({
+      auth_index: 'stale-warn',
+      status: 'stale',
+      windows: [{ id: 'five_hour', label: '5-Hour', kind: 'five_hour', scope: 'standard', remaining_percent: 10 }],
+      recommendation: { status: 'warning', priority: 'low', action: 'refresh', reason: '已过期' },
+    })],
+  ).rows[0];
+  const errorReading = buildCredentialQuotaBoard(
+    [file({ auth_index: 'error-warn', name: 'error-warn.json' })],
+    [quota({
+      auth_index: 'error-warn',
+      status: 'error',
+      windows: [],
+      recommendation: { status: 'warning', priority: 'high', action: 'refresh', reason: '读取失败' },
+    })],
+  ).rows[0];
+  assert.equal(resolveCredentialQuotaStatusDetail(lowCooldown, en), 'Quota is running low');
+  assert.equal(resolveCredentialQuotaStatusDetail(lowCredits, en), 'Quota is running low');
+  assert.equal(resolveCredentialQuotaStatusDetail(staleWarning, en), 'This reading is past its own window reset; refresh for the current quota');
+  assert.equal(resolveCredentialQuotaStatusDetail(errorReading, en), 'The reading could not be fetched');
 });

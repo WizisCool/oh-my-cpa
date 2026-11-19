@@ -1,6 +1,7 @@
 package quota
 
 import (
+	"math"
 	"slices"
 	"strings"
 )
@@ -57,7 +58,7 @@ type CycleCalibration struct {
 
 // CycleStartMS is where the cycle's recorded usage starts.
 func (cycle CycleCalibration) CycleStartMS() int64 {
-	return cycle.CycleResetAtMS - int64(cycle.PeriodHours*3600*1000)
+	return cycle.CycleResetAtMS - int64(math.Round(cycle.PeriodHours*3600*1000))
 }
 
 // CapacityWindowKey identifies the metered limit a calibration belongs to: two

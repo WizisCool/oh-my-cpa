@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -57,8 +58,54 @@ func seedQuotaObservations(ctx context.Context, repo *repository.Repository, now
 				windows[0].UsedPercent, windows[0].RemainingPercent = &currentUsed, &currentRemaining
 			}
 		}
+		if credential.authIndex != "auth-codex-02" {
+			if err := seedDemoQuotaSteps(ctx, repo, credential.authIndex, credential.provider, plan, windows, now.UnixMilli()); err != nil {
+				return fmt.Errorf("seed quota history for %s: %w", credential.authIndex, err)
+			}
+		}
 		if err := saveDemoQuotaSnapshot(ctx, repo, credential.authIndex, credential.provider, plan, windows, now.UnixMilli()); err != nil {
 			return fmt.Errorf("seed current-cycle quota for %s: %w", credential.authIndex, err)
+		}
+	}
+	return nil
+}
+
+// seedDemoQuotaSteps records provider readings at several places in the current
+// cycle and two completed cycles. Group points sharing a timestamp into one read.
+func seedDemoQuotaSteps(ctx context.Context, repo *repository.Repository, index, provider string, plan *quota.QuotaPlan, windows []quota.QuotaWindow, nowMS int64) error {
+	steps := map[int64][]quota.QuotaWindow{}
+	for _, window := range windows {
+		start, _, reason := quota.WindowCycleRange(window, nowMS, nowMS)
+		used, ok := quota.WindowUsedPercent(window)
+		if reason != "" || !ok {
+			continue
+		}
+		span := *window.ResetAtMS - start
+		add := func(at, reset int64, used float64) {
+			point := window
+			remaining := 100 - used
+			point.ResetAtMS, point.UsedPercent, point.RemainingPercent = &reset, &used, &remaining
+			steps[at] = append(steps[at], point)
+		}
+		for cycle := int64(2); cycle > 0; cycle-- {
+			reset := *window.ResetAtMS - cycle*span
+			for i, fraction := range []float64{0.28, 0.64, 0.98} {
+				pastUsed := min(100, (used+float64(cycle)*8)*[]float64{0.22, 0.62, 1.04}[i])
+				add(reset-span+int64(float64(span)*fraction), reset, pastUsed)
+			}
+		}
+		for i, fraction := range []float64{0.10, 0.34, 0.58, 0.81} {
+			add(start+int64(float64(nowMS-start)*fraction), *window.ResetAtMS, used*[]float64{0.08, 0.24, 0.45, 0.72}[i])
+		}
+	}
+	times := make([]int64, 0, len(steps))
+	for at := range steps {
+		times = append(times, at)
+	}
+	slices.Sort(times)
+	for _, at := range times {
+		if err := saveDemoQuotaSnapshot(ctx, repo, index, provider, plan, steps[at], at); err != nil {
+			return err
 		}
 	}
 	return nil

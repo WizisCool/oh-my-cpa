@@ -61,6 +61,7 @@ export interface UsageEventsViewPreference {
   preset?: string;
   from?: number;
   to?: number;
+  replay?: 'calendar';
   result?: UsageResultFilter;
   cost?: UsageCostFilter;
   limit?: number;
@@ -112,6 +113,9 @@ export function parseUsageEventsView(raw: unknown): UsageEventsViewPreference | 
     pref.from = from;
     if (val.to !== undefined && Number.isSafeInteger(to) && to > from) {
       pref.to = to;
+    }
+    if (val.replay === 'calendar') {
+      pref.replay = 'calendar';
     }
   } else {
     const presetStr = String(val.preset ?? '1h');

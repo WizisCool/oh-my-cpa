@@ -193,6 +193,7 @@ export const UsageEventsPage: React.FC = () => {
     () => ({
       ...query,
       ...eventWindowQuery(query),
+      ...(query.replay ? { replay: query.replay } : {}),
       cursor,
     }),
     [cursor, query],
@@ -395,6 +396,7 @@ export const UsageEventsPage: React.FC = () => {
    */
   const chipLabels: Record<EventFilterKey, MessageKey> = {
     model: 'events.filter_chip_model',
+    response_model: 'events.filter_chip_response_model',
     model_alias: 'events.filter_chip_model_alias',
     provider: 'events.filter_chip_provider',
     auth_index: 'events.filter_chip_credential',
@@ -755,7 +757,7 @@ export const UsageEventsPage: React.FC = () => {
               onToggleAll={handleToggleAll}
             />
             <div ref={listHostRef} className="request-list-host">
-              <RequestTooltipLayer hostRef={listHostRef} />
+              <RequestTooltipLayer hostRef={listHostRef} replay={query.replay} />
               {!isQueryEnabled || result.isLoading ? (
                 <TablePlaceholder rows={8} className="request-loading" />
               ) : events.length ? (
@@ -821,6 +823,7 @@ export const UsageEventsPage: React.FC = () => {
         pluginTitles={pluginTitles}
         isProviderCatalogUnknown={isProviderCatalogUnproven}
         archive={archive}
+        replay={query.replay}
       />
       <RequestExportDialog
         open={isExportOpen}

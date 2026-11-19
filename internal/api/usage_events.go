@@ -347,6 +347,7 @@ func usageEventFilterFromRequest(request *http.Request, window dashboardWindow) 
 		target *[]string
 	}{
 		{"model", &filter.Models},
+		{"response_model", &filter.ResponseModels},
 		{"model_alias", &filter.ModelAliases},
 		{"provider", &filter.Providers},
 		{"api_key", &filter.APIGroupKeys},
@@ -508,6 +509,7 @@ type UsageFacetsResponseDTO struct {
 // @Param limit query integer false "Page size"
 // @Param q query string false "Search text"
 // @Param model query []string false "Upstream model filters" collectionFormat(multi)
+// @Param response_model query []string false "Upstream served model filters" collectionFormat(multi)
 // @Param model_alias query []string false "Call point filters" collectionFormat(multi)
 // @Param provider query []string false "Provider filters" collectionFormat(multi)
 // @Param api_key query []string false "Client API key fingerprint filters" collectionFormat(multi)
@@ -566,6 +568,28 @@ func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Requ
 			return
 		}
 		filter.SinceID = since
+	}
+	if h.repo != nil {
+		dimFilters := map[repository.UsageDimension][]string{
+			repository.UsageDimensionKey:           filter.APIGroupKeys,
+			repository.UsageDimensionModel:         filter.Models,
+			repository.UsageDimensionResponseModel: filter.ResponseModels,
+			repository.UsageDimensionCallPoint:     filter.ModelAliases,
+			repository.UsageDimensionProvider:      filter.Providers,
+			repository.UsageDimensionCredential:    filter.AuthIndexes,
+		}
+		resolvedAgents, err := h.repo.ResolveTrendsDimensionFilters(request.Context(), filter.InstanceID, filter.FromMS, filter.ToMS, dimFilters, filter.ClientAgents)
+		if err != nil {
+			h.writeUsageQueryError(writer, err)
+			return
+		}
+		filter.APIGroupKeys = dimFilters[repository.UsageDimensionKey]
+		filter.Models = dimFilters[repository.UsageDimensionModel]
+		filter.ResponseModels = dimFilters[repository.UsageDimensionResponseModel]
+		filter.ModelAliases = dimFilters[repository.UsageDimensionCallPoint]
+		filter.Providers = dimFilters[repository.UsageDimensionProvider]
+		filter.AuthIndexes = dimFilters[repository.UsageDimensionCredential]
+		filter.ClientAgents = resolvedAgents
 	}
 	page, err := h.repo.ListUsageEvents(request.Context(), filter)
 	if err != nil {

@@ -1,4 +1,5 @@
 import type { MessageKey } from '../../i18n/catalog';
+import { formatQuotaDuration, quotaDetailWindowName } from '../../pages/oauthManagement/credentialSections';
 import { quotaWindowParts } from '../../pages/quota/quotaWindowSelection';
 import React from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -41,6 +42,7 @@ import {
   QUOTA_LOW_PERCENT,
   quotaWindowPeriod,
   quotaWindowRemaining,
+  resolveCredentialQuotaStatusDetail,
   type CredentialQuotaRow,
   type CredentialQuotaState,
   type QuotaWindowPeriod,
@@ -77,8 +79,10 @@ const STATUS_ROW_STATES: Partial<Record<CredentialQuotaState, { labelKey: Messag
 };
 
 function windowShortLabel(window: QuotaWindow, t: TFunc): string {
+  if (window.id === 'xai_credit_usage' || window.kind === 'credit_usage') return t('quota.window_credit_usage');
   const period = quotaWindowPeriod(window);
-  return period ? t(WINDOW_LABEL_KEYS[period]) : window.label;
+  if (period) return t(WINDOW_LABEL_KEYS[period]);
+  return formatQuotaDuration(window.period_hours, t) ?? window.label;
 }
 
 function remainingTone(remaining: number | undefined): string {
@@ -105,7 +109,7 @@ const QuotaWindowMeter: React.FC<{ window: QuotaWindow }> = ({ window }) => {
       {/* The panel keeps one compact line per credential; a plugin's own words for what is left
           (its only amounts) ride in the shared hint, which touch and keyboard focus reach too,
           rather than widening the row. */}
-      <Tooltip card={{ heading: quotaWindowParts(window).name, notes: [quotaWindowParts(window).group, window.description] }}>
+      <Tooltip card={{ heading: quotaDetailWindowName(window, t), notes: [quotaWindowParts(window).group, window.description] }}>
         <span className="quota-window-label" tabIndex={0}>{label}</span>
       </Tooltip>
       <span
@@ -137,6 +141,7 @@ interface QuotaRowProps {
 const CredentialQuotaRowView: React.FC<QuotaRowProps> = ({ row, nowMS, pluginLogos, reorder, isPhone = false }) => {
   const t = useT();
   const status = STATUS_ROW_STATES[row.state];
+  const statusDetail = status ? resolveCredentialQuotaStatusDetail(row, t) : undefined;
   // A blocked row counts down to when it serves again; a serving one to when its tightest window
   // refills. An instant the provider did not state exactly keeps its `~`.
   const reset = row.bindingWindow?.reset_at_ms;
@@ -159,7 +164,7 @@ const CredentialQuotaRowView: React.FC<QuotaRowProps> = ({ row, nowMS, pluginLog
       />
       <span className="quota-row-name" data-tip={row.primary} data-tip-overflow="">{row.primary}</span>
       {status ? (
-        <span className="quota-row-status" data-tip={row.detail}>
+        <span className="quota-row-status" data-tip={statusDetail}>
           <status.Icon className="quota-row-status-icon" aria-hidden="true" />
           {t(status.labelKey)}
         </span>

@@ -653,3 +653,22 @@ func (r *Repository) BatchExpiredCooldowns(ctx context.Context, authIndexes []st
 	}
 	return result, rows.Err()
 }
+
+// ListQuotaSnapshotAuthIndexes returns the credentials that can be displayed
+// when the live gateway credential list is unavailable.
+func (r *Repository) ListQuotaSnapshotAuthIndexes(ctx context.Context) ([]string, error) {
+	rows, err := r.SQL().QueryContext(ctx, `SELECT DISTINCT auth_index FROM quota_snapshots ORDER BY auth_index`)
+	if err != nil {
+		return nil, fmt.Errorf("list quota snapshot credentials: %w", err)
+	}
+	defer rows.Close()
+	var indexes []string
+	for rows.Next() {
+		var index string
+		if err := rows.Scan(&index); err != nil {
+			return nil, err
+		}
+		indexes = append(indexes, index)
+	}
+	return indexes, rows.Err()
+}

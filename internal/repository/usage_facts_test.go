@@ -552,4 +552,16 @@ func TestCalendarBucketsFollowTheWallClock(t *testing.T) {
 	if utcDays.DetailRequests != 0 {
 		t.Fatalf("a folded UTC calendar read took %d requests from records, want none", utcDays.DetailRequests)
 	}
+
+	// Midnight DST spring-forward (America/Havana 2026-03-08 00:00 -> 01:00):
+	// localMidnight must resolve forward to 2026-03-08 01:00 rather than backwards to 2026-03-07 23:00.
+	havana, err := time.LoadLocation("America/Havana")
+	if err != nil {
+		t.Fatal(err)
+	}
+	havanaStartMS, _ := localMidnight(time.Date(2026, 3, 8, 12, 0, 0, 0, havana), havana, 0)
+	havanaStart := time.UnixMilli(havanaStartMS).In(havana)
+	if havanaStart.Year() != 2026 || havanaStart.Month() != time.March || havanaStart.Day() != 8 || havanaStart.Hour() != 1 {
+		t.Fatalf("localMidnight on Havana spring-forward = %v, want 2026-03-08 01:00", havanaStart)
+	}
 }

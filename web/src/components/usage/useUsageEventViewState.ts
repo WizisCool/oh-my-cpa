@@ -121,6 +121,7 @@ export function useUsageEventViewState() {
       if (viewPref.from !== undefined) {
         nextParams.set('from', String(viewPref.from));
         if (viewPref.to !== undefined) nextParams.set('to', String(viewPref.to));
+        if (viewPref.replay === 'calendar') nextParams.set('replay', 'calendar');
       } else if (viewPref.preset && viewPref.preset !== '1h') {
         nextParams.set('preset', viewPref.preset);
       }

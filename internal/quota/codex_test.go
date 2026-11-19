@@ -1,8 +1,10 @@
 package quota
 
 import (
+	"fmt"
 	"math"
 	"testing"
+	"time"
 )
 
 // float64(math.MaxInt64) rounds up to 2^63, one past the largest int64, so the
@@ -119,6 +121,17 @@ func TestParseCodexUsageReadsAccountCredits(t *testing.T) {
 	}
 }
 
+func TestStandardWindowIdentityNamesCustomDurations(t *testing.T) {
+	id, label, kind := standardWindowIdentity(8*3600, "five_hour", "5小时用量上限 (5-Hour)")
+	if id != "custom_8h" || label != "8小时用量上限 (8h)" || kind != "custom" {
+		t.Fatalf("standardWindowIdentity(8h) = (%q, %q, %q), want (custom_8h, 8小时用量上限 (8h), custom)", id, label, kind)
+	}
+	id0, label0, kind0 := standardWindowIdentity(0, "five_hour", "5小时用量上限 (5-Hour)")
+	if id0 != "five_hour" || label0 != "5小时用量上限 (5-Hour)" || kind0 != "custom" {
+		t.Fatalf("standardWindowIdentity(0) = (%q, %q, %q), want fallback", id0, label0, kind0)
+	}
+}
+
 func TestParseCodexUsagePreservesProMaxIdentity(t *testing.T) {
 	for _, rawType := range []string{"promax", "pro-max", "pro_max", "  ProMax  "} {
 		t.Run(rawType, func(t *testing.T) {
@@ -133,5 +146,42 @@ func TestParseCodexUsagePreservesProMaxIdentity(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParseCodexUsagePreservesExactCustomDurationAndCycleRange(t *testing.T) {
+	resetAt := time.Date(2026, 10, 21, 20, 0, 0, 0, time.UTC)
+	resetSec := resetAt.Unix()
+	nowMS := resetAt.Add(-time.Hour).UnixMilli()
+	raw := []byte(`{
+		"plan_type": "plus",
+		"rate_limit": {
+			"primary_window": {"used_percent": 15, "limit_window_seconds": 28860, "reset_at": ` + fmt.Sprintf("%d", resetSec) + `},
+			"secondary_window": {"used_percent": 10, "limit_window_seconds": 28800, "reset_at": ` + fmt.Sprintf("%d", resetSec) + `}
+		}
+	}`)
+	_, windows, _, err := ParseCodexUsage(raw, nowMS)
+	if err != nil {
+		t.Fatalf("ParseCodexUsage failed: %v", err)
+	}
+	if len(windows) != 2 {
+		t.Fatalf("expected 2 windows, got %+v", windows)
+	}
+	win8h1m, win8h := windows[0], windows[1]
+	if win8h1m.ID != "custom_8h" || win8h1m.PeriodHours == nil || math.Abs(*win8h1m.PeriodHours-28860.0/3600.0) > 1e-9 {
+		t.Fatalf("28860s window = %+v, want exact PeriodHours=28860/3600", win8h1m)
+	}
+	if !SupportsWindowCapacity("codex", win8h1m) || !SupportsWindowCapacity("codex", win8h) {
+		t.Fatalf("expected custom positive codex windows to support capacity")
+	}
+	fromMS, toMS, reason := WindowCycleRange(win8h1m, nowMS, nowMS)
+	wantFrom := resetAt.Add(-28860 * time.Second).UnixMilli()
+	if reason != "" || fromMS != wantFrom || toMS != nowMS {
+		t.Fatalf("WindowCycleRange(28860s) = [%d, %d) reason=%q, want [%d, %d)", fromMS, toMS, reason, wantFrom, nowMS)
+	}
+	from8h, _, reason8h := WindowCycleRange(win8h, nowMS, nowMS)
+	want8h := resetAt.Add(-8 * time.Hour).UnixMilli()
+	if reason8h != "" || from8h != want8h {
+		t.Fatalf("WindowCycleRange(28800s) = %d reason=%q, want %d", from8h, reason8h, want8h)
 	}
 }

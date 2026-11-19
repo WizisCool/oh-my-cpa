@@ -24,7 +24,7 @@
  */
 import { applyQueryFilters } from './filters.mjs';
 import { routingAt, signalInstantsBetween } from './liveRouting.mjs';
-import { DATASET, INSIGHTS_PATH_PREFIX, REFERENCE_MS, dashboardPresetOf, responseNameFor } from './routes.mjs';
+import { DATASET, INSIGHTS_PATH_PREFIX, REFERENCE_MS, TRENDS_PATH_PREFIX, dashboardPresetOf, insightsPresetOf, responseNameFor } from './routes.mjs';
 import { rebase } from './time.mjs';
 /** Marker the console reads to render its own demonstration notices. */
 const DEMO_HEADER = 'X-OMCPA-Demo';
@@ -215,13 +215,35 @@ function matchEventIdentity(decoded, pathname, dataset) {
   return decoded;
 }
 
+function filterTrendsQuota(payload, url) {
+  const values = (name) => url.searchParams.getAll(name).map((value) => value.trim()).filter(Boolean);
+  const providers = values('provider');
+  const indexes = values('auth_index');
+  if (!providers.length && !indexes.length) return payload;
+  const items = payload.items.filter((item) => (!providers.length || providers.includes(item.provider))
+    && (!indexes.length || indexes.includes(item.auth_index)));
+  const windows = items.flatMap((item) => item.windows);
+  const count = (status) => windows.filter((window) => window.status === status).length;
+  return { ...payload, items, summary: {
+    active_credentials: items.length,
+    observable_windows: windows.length,
+    healthy_windows: count('normal'),
+    limit_reached_windows: count('limit_reached'),
+    projected_exhaust_windows: count('projected_exhaust'),
+    underutilized_windows: count('underutilized'),
+  } };
+}
+
 function serve(entry, nowMs, url) {
   const isInsights = url.pathname.startsWith(INSIGHTS_PATH_PREFIX);
-  if (isInsights && (url.searchParams.has('from') || url.searchParams.has('to')
+  const isTrendsQuota = url.pathname === `${TRENDS_PATH_PREFIX}quota`;
+  const isTrendsWindow = !isTrendsQuota && url.pathname.startsWith(TRENDS_PATH_PREFIX);
+  const isCalendarReplay = isInsights || isTrendsWindow;
+  if (isCalendarReplay && (url.searchParams.has('from') || url.searchParams.has('to')
     || !INSIGHTS_REPLAY_PRESETS.has((url.searchParams.get('preset') || '7d').trim().toLowerCase())
     || !['', 'auto'].includes((url.searchParams.get('bucket') || '').trim().toLowerCase()))) {
     return new Response(
-      JSON.stringify({ error: 'this Insights window or granularity is not captured in the demonstration', code: UNCAPTURED_CODE }),
+      JSON.stringify({ error: `this ${isInsights ? 'Insights' : 'Trends'} window or granularity is not captured in the demonstration`, code: UNCAPTURED_CODE }),
       { status: 404, headers: JSON_HEADERS },
     );
   }
@@ -232,9 +254,22 @@ function serve(entry, nowMs, url) {
       { status: 404, headers: JSON_HEADERS },
     );
   }
+  if (isTrendsWindow && (RHYTHM_FILTERS.some((name) => url.searchParams.has(name))
+    || (url.searchParams.has('top') && Number(url.searchParams.get('top')) !== 5))) {
+    return new Response(
+      JSON.stringify({ error: 'this trends filter is not captured in the demonstration', code: UNCAPTURED_CODE }),
+      { status: 404, headers: JSON_HEADERS },
+    );
+  }
   // Whole weeks preserve local hours, Monday buckets and the rhythm grid
   // together. Calendar presets need a fresh aggregation, so they are refused above.
-  const deltaMs = isInsights
+  // Usage drill-downs and detail reads from Trends/Insights pass replay=calendar so
+  // their rebased timestamps and [from, to] window align with the same whole-week offset.
+  const isUsageReplay = url.pathname === '/api/v1/usage/events'
+    || url.pathname === '/api/v1/usage/facets'
+    || EVENT_DETAIL_PATH.test(url.pathname);
+  const useCalendarDelta = isCalendarReplay || (isUsageReplay && url.searchParams.get('replay') === 'calendar');
+  const deltaMs = useCalendarDelta
     ? Math.trunc((nowMs - REFERENCE_MS) / WEEK_MS) * WEEK_MS
     : nowMs - REFERENCE_MS;
   let body = entry.body;
@@ -259,11 +294,12 @@ function serve(entry, nowMs, url) {
         { status: 404, headers: JSON_HEADERS },
       );
     }
-    const decoded = rebase(filtered, deltaMs);
+    const decoded = rebase(isTrendsQuota ? filterTrendsQuota(filtered, url) : filtered, deltaMs);
     // Replays are closed snapshots: their final bucket does not extend to the visitor's now.
-    if (isInsights) decoded.window.open_end = false;
+    if (isCalendarReplay) decoded.window.open_end = false;
     // Insights captures are taken by preset name and already carry it.
-    const preset = url.searchParams.has('preset') && !isInsights ? dashboardPresetOf(url) : '';
+    const preset = isTrendsWindow ? insightsPresetOf(url)
+      : url.searchParams.has('preset') && !isInsights ? dashboardPresetOf(url) : '';
     body = JSON.stringify(labelPreset(decoded, preset));
   } catch {
     // A body that is not JSON is served as captured. There are none today; this keeps

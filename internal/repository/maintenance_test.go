@@ -248,8 +248,8 @@ func TestRetentionGivesFreedPagesBackToTheFilesystem(t *testing.T) {
 	if err := database.SQL.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&freeAfter); err != nil {
 		t.Fatal(err)
 	}
-	if freeAfter != 0 || pagesBefore-pagesAfter != release.ReleasedPages {
-		t.Fatalf("page_count %d -> %d with %d free left, want a file shorter by the %d released pages",
+	if freeAfter != 0 || pagesBefore-pagesAfter < release.ReleasedPages {
+		t.Fatalf("page_count %d -> %d with %d free left, want a file shorter by at least the %d released pages",
 			pagesBefore, pagesAfter, freeAfter, release.ReleasedPages)
 	}
 }

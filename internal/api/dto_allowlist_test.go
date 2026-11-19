@@ -49,6 +49,16 @@ func TestBrowserDTOAllowlistAndSecretExclusion(t *testing.T) {
 					"path": "/etc/secrets/openai-1.json",
 					"metadata": {"token": "secret-bearer-token-12345678"},
 					"status": "ready"
+				}, {
+                    "id": "af-trends",
+                    "auth_index": "oauth-trends",
+                    "name": "private-trends-auth.json",
+                    "type": "codex",
+                    "provider": "codex",
+                    "email": "trends-user@example.test",
+                    "account_type": "oauth",
+                    "id_token": {"secret":"secret-bearer-token-12345678"},
+                    "status": "ready"
 				}]
 			}`))
 		case path == "/v8/management/config":
@@ -168,6 +178,9 @@ func TestBrowserDTOAllowlistAndSecretExclusion(t *testing.T) {
 		// must clear the same secret-leakage assertions.
 		"/api/v1/management/dashboard/models?preset=1h",
 		"/api/v1/management/insights/clients?preset=24h",
+		"/api/v1/management/trends/quota",
+		"/api/v1/management/trends/usage?preset=24h",
+		"/api/v1/management/trends/telemetry?preset=24h",
 	}
 
 	for _, endpoint := range endpoints {
@@ -187,6 +200,25 @@ func TestBrowserDTOAllowlistAndSecretExclusion(t *testing.T) {
 		for _, secret := range fixtureSecrets {
 			if strings.Contains(bodyText, secret) {
 				t.Fatalf("endpoint %s exposed fixture secret %q in body: %s", endpoint, secret, bodyText)
+			}
+		}
+
+		if endpoint == "/api/v1/management/trends/quota" {
+			var payload struct {
+				Items []map[string]json.RawMessage `json:"items"`
+			}
+			if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if len(payload.Items) != 1 || strings.Contains(bodyText, "trends-user@example.test") || strings.Contains(bodyText, "private-trends-auth.json") {
+				t.Fatalf("expected one safe OAuth credential DTO: %s", bodyText)
+			}
+			for field := range payload.Items[0] {
+				switch field {
+				case "auth_index", "provider", "oauth_provider", "display_name", "account_label", "status", "plan_type", "plan_tier", "observed_at_ms", "windows":
+				default:
+					t.Fatalf("unexpected quota trend credential field %q", field)
+				}
 			}
 		}
 

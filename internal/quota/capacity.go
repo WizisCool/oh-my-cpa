@@ -142,6 +142,10 @@ func SupportsWindowCapacity(provider string, window QuotaWindow) bool {
 	switch window.Kind {
 	case "five_hour", "daily", "weekly", "monthly":
 		return true
+	case "custom":
+		if window.PeriodHours != nil && *window.PeriodHours > 0 && !math.IsNaN(*window.PeriodHours) && !math.IsInf(*window.PeriodHours, 0) {
+			return true
+		}
 	}
 	return window.ID == "five_hour" || window.ID == "seven_day"
 }
@@ -160,7 +164,7 @@ func WindowCycleRange(window QuotaWindow, observedAtMS, nowMS int64) (fromMS, to
 	if resetAtMS <= nowMS {
 		return 0, 0, CapacityReasonExpired
 	}
-	fromMS = resetAtMS - int64(*window.PeriodHours*3600*1000)
+	fromMS = resetAtMS - int64(math.Round(*window.PeriodHours*3600*1000))
 	toMS = min(observedAtMS, resetAtMS)
 	if toMS <= fromMS {
 		return 0, 0, CapacityReasonBoundaryUnknown

@@ -476,7 +476,11 @@ describe('credential list row', () => {
     const onOpen = vi.fn();
     const onRename = vi.fn<CredentialActions['onRename']>(async () => true);
     const { container } = renderCredentialRow(
-      quota('codex-stale', [quotaWindow('five_hour', 40, 2)], {
+      quota('codex-stale', [
+        quotaWindow('five_hour', 40, 2),
+        { id: 'ag_req', label: 'Gemini Models · Requests', kind: 'five_hour', scope: 'group', period_hours: 5, remaining_percent: 80 },
+        { id: 'ag_tok', label: 'Gemini Models · Tokens', kind: 'five_hour', scope: 'group', period_hours: 5, remaining_percent: 60 },
+      ], {
         status: 'stale',
         observed_at_ms: NOW_MS - 8 * HOUR_MS,
         last_refresh: { attempted_at_ms: NOW_MS - 5 * 60_000, outcome: 'failed', error: 'HTTP 401: unauthorized' },
@@ -493,6 +497,11 @@ describe('credential list row', () => {
         },
       },
     );
+
+    expect(screen.getByRole('group', { name: 'Gemini Models 5-hour limit (Requests)' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Gemini Models 5-hour limit (Tokens)' })).toBeTruthy();
+    expect(screen.getByRole('meter', { name: 'Gemini Models 5-hour limit (Requests)' })).toBeTruthy();
+    expect(screen.getByRole('meter', { name: 'Gemini Models 5-hour limit (Tokens)' })).toBeTruthy();
 
     const refreshBtn = screen.getByTestId('oauth-credential-refresh');
     expect(refreshBtn.getAttribute('data-needs-refresh')).toBe('true');

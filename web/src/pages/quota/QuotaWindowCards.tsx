@@ -5,9 +5,9 @@ import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { compactQuotaCapacity } from './quotaCapacity';
 import { QuotaCapacityButton, type QuotaCapacityOwner } from './QuotaCapacityButton';
 import { isUnusedFullCodexFiveHourWindow, quotaRemainingPercent, quotaResetCountdown, quotaResetText } from './quotaFormat';
-import { quotaWindowFullName } from './quotaWindowSelection';
 import { quotaRemainingStroke } from './quotaThresholds';
-import { quotaWindowGroupName, quotaWindowName } from './quotaWindowSelection';
+import { quotaWindowGroupName } from './quotaWindowSelection';
+import { quotaDetailWindowFullName, quotaDetailWindowName } from '../oauthManagement/credentialSections';
 import styles from './QuotaWindowCards.module.css';
 
 export interface QuotaWindowCardsProps {
@@ -40,7 +40,7 @@ export function QuotaWindowCards({ windows, nowMS, owner, provider, observedAtMS
           {group.name && <div className={styles['group-name']}>{group.name}</div>}
           <div className={styles.grid}>
             {group.windows.map((window) => (
-              <QuotaWindowCard key={window.id} window={window} siblings={group.windows} name={quotaWindowName(window, t)} nowMS={nowMS} owner={owner} provider={provider} observedAtMS={observedAtMS} />
+              <QuotaWindowCard key={window.id} window={window} siblings={group.windows} name={quotaDetailWindowName(window, t, group.windows)} nowMS={nowMS} owner={owner} provider={provider} observedAtMS={observedAtMS} />
             ))}
           </div>
         </section>
@@ -71,7 +71,7 @@ function QuotaWindowCard({ window, siblings, name, nowMS, owner, provider, obser
   const content = (
     <>
       <span className={styles.head}>
-        <span className={styles.name} data-tip={quotaWindowFullName(window)} data-tip-overflow="">{name}</span>
+        <span className={styles.name} data-tip={quotaDetailWindowFullName(window, t, siblings)} data-tip-overflow="">{name}</span>
         <span className={styles.value}>
           <span className={styles['value-prefix']}>{t('omc.quota_remaining_prefix')}</span>
           <b style={remaining != null && remaining < 70 ? { color: stroke } : undefined}>{remaining == null ? '--' : `${remaining}%`}</b>

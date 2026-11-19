@@ -22,7 +22,8 @@ import {
   formatCycleCardFigures,
 } from './quotaCapacity';
 import type { QuotaCapacityOwner } from './QuotaCapacityButton';
-import { quotaWindowGroupName, quotaWindowName, siblingCapacityWindows } from './quotaWindowSelection';
+import { quotaWindowGroupName, siblingCapacityWindows } from './quotaWindowSelection';
+import { quotaDetailWindowName } from '../oauthManagement/credentialSections';
 import styles from './QuotaCapacityDialog.module.css';
 
 export interface QuotaCapacityDialogProps {
@@ -94,7 +95,7 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
         <span className={styles['dialog-title']}>
           {owner.mark && <span className={styles['mark-tile']} aria-hidden="true">{owner.mark}</span>}
           <span className={styles['title-text']}>
-            {t('quota.capacity_dialog_title', { window: quotaWindowName(activeWindow, t) })}
+            {t('quota.capacity_dialog_title', { window: quotaDetailWindowName(activeWindow, t, siblingWindows) })}
           </span>
         </span>
       )}
@@ -110,7 +111,7 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
             onChange={setSelectedWindowId}
             options={siblingWindows.map((candidate) => ({
               value: candidate.id,
-              label: quotaWindowName(candidate, t),
+              label: quotaDetailWindowName(candidate, t, siblingWindows),
             }))}
           />
         </div>

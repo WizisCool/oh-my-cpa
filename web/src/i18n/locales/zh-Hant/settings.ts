@@ -199,6 +199,7 @@ export default {
   "omc.refresh_needed": "需要重新整理",
   "omc.quota_family_plan": "方案額度",
   "omc.quota_family_code_review": "程式碼審查",
+  "omc.quota_family_oauth_apps": "第三方應用",
   "omc.quota_remaining_prefix": "剩餘",
   "omc.quota_reading_name": "{period} {family}",
   "omc.quota_allowance_name": "{name}（{allowance}）",

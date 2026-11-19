@@ -270,6 +270,9 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/management/insights/cube", h.insightsCube)
 				v1.Get("/management/insights/rhythm", h.insightsRhythm)
 				v1.Get("/management/insights/clients", h.insightsClients)
+				v1.Get("/management/trends/quota", h.trendsQuota)
+				v1.Get("/management/trends/usage", h.trendsUsage)
+				v1.Get("/management/trends/telemetry", h.trendsTelemetry)
 				v1.Get("/management/logs", h.managementLogs)
 				v1.Delete("/management/logs", h.clearManagementLogs)
 				v1.Get("/management/logs/status", h.managementLogsStatus)
@@ -1272,6 +1275,10 @@ func writeJSON(writer http.ResponseWriter, status int, value any) {
 
 func writeError(writer http.ResponseWriter, status int, message string) {
 	writeJSON(writer, status, map[string]string{"error": message})
+}
+
+func writeErrorCode(writer http.ResponseWriter, status int, code, message string) {
+	writeJSON(writer, status, map[string]string{"code": code, "error": message})
 }
 
 const auditWriteFailedCode = "audit_write_failed"

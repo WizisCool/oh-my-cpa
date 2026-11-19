@@ -122,6 +122,30 @@ it('keeps legacy structured usage unknown instead of fabricating zero-valued cou
   expect(within(screen.getByRole('region', { name: 'Upstream usage details' })).getByText('Not captured')).toBeTruthy();
 });
 
+it('propagates replay=calendar to usage-event detail reads with a separate query cache key', async () => {
+  const api = installOmcApi();
+  const client = createTestQueryClient();
+  client.setDefaultOptions({ queries: { retry: false, gcTime: Infinity, staleTime: Infinity } });
+  const baseEvent: UsageEvent = {
+    id: 274, event_key: 'codex-fast', timestamp_ms: 1_800_000_000_000,
+    provider: 'codex', model: 'fixture-model', failed: false, generate: true,
+    latency_ms: 1000, has_request_log: false,
+    tokens: { input: 10, output: 10, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, total: 20 },
+  };
+  client.setQueryData(['usage-event', 274], { event: baseEvent, related_errors: [] });
+  api.on('GET', '/usage/events/274', (req) => ({
+    event: { ...baseEvent, request_id: req.query.get('replay') === 'calendar' ? 'req-cal' : 'req-ord' },
+    related_errors: [],
+  }));
+  renderWithOmc(
+    <TokenDisplayProvider>
+      <UsageEventDrawer eventId={274} credentials={new Map()} onClose={() => undefined} replay="calendar" />
+    </TokenDisplayProvider>,
+    { client },
+  );
+  await waitFor(() => expect(api.requests.some((r) => r.path === '/usage/events/274' && r.query.get('replay') === 'calendar')).toBe(true));
+});
+
 describe('request stream virtualization and desktop/mobile header fold', () => {
   const originalMatchMedia = window.matchMedia;
   const originalAnimate = Element.prototype.animate;
