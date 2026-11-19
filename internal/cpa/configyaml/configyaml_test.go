@@ -503,3 +503,29 @@ func TestSanitizeSafeYAMLRedactsICEServerSecrets(t *testing.T) {
 		t.Fatal("RestoreSentinels accepted a reordered server list with kept secrets")
 	}
 }
+
+func TestSanitizeSafeYAMLPreservesModelCatalogSources(t *testing.T) {
+	original := `models:
+  catalog: "https://mirror.example.test/models.json?ref=main"
+  codex-catalog: "/srv/cpa@v8/codex_client_models.json"
+  devin-catalog: "C:\\cpa\\devin_models.json"
+management:
+  secret-key: "top-secret"
+`
+	safe, err := SanitizeSafeYAML(original)
+	if err != nil {
+		t.Fatalf("SanitizeSafeYAML failed: %v", err)
+	}
+	if strings.Contains(safe, "top-secret") {
+		t.Fatalf("safe YAML leaked management secret: %s", safe)
+	}
+	for _, want := range []string{
+		"https://mirror.example.test/models.json?ref=main",
+		"/srv/cpa@v8/codex_client_models.json",
+		`C:\\cpa\\devin_models.json`,
+	} {
+		if !strings.Contains(safe, want) {
+			t.Fatalf("safe YAML altered model catalog source %q:\n%s", want, safe)
+		}
+	}
+}

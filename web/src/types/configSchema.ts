@@ -183,6 +183,14 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
 
   // ── 5. Shared provider behaviour ──────────────────────────────────────────
   {
+    id: 'grp_model_catalogs',
+    sectionId: 'providers',
+    labelKey: 'cfg.grp_model_catalogs',
+    descKey: 'cfg.grp_model_catalogs_desc',
+    variant: 'form-grid',
+    fieldIds: ['modelsCatalog', 'modelsCodexCatalog', 'modelsDevinCatalog'],
+  },
+  {
     id: 'grp_codex_behavior',
     sectionId: 'providers',
     labelKey: 'cfg.grp_codex_behavior',
@@ -910,6 +918,36 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
   },
 
   // ── 5. OAuth provider behaviour ──────────────────────────────────────────
+  // CPA v8 accepts http(s) URLs or absolute local paths under the canonical
+  // top-level `models` root; these fields have no pre-relocation spelling.
+  {
+    id: 'modelsCatalog',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_models_catalog',
+    descKey: 'cfg.f_models_catalog_desc',
+    yamlPath: ['models', 'catalog'],
+    type: 'string',
+    placeholder: 'https://models.router-for.me/models.json',
+    keywords: ['models', 'catalog', 'models.json', 'definitions', 'claude', 'gemini', 'antigravity', 'oauth', 'url', 'path'],
+  },
+  {
+    id: 'modelsCodexCatalog',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_models_codex_catalog',
+    yamlPath: ['models', 'codex-catalog'],
+    type: 'string',
+    placeholder: 'https://models.router-for.me/codex_client_models.json',
+    keywords: ['models', 'codex', 'codex-catalog', 'codex_client_models.json', 'catalog', 'definitions', 'url', 'path'],
+  },
+  {
+    id: 'modelsDevinCatalog',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_models_devin_catalog',
+    yamlPath: ['models', 'devin-catalog'],
+    type: 'string',
+    placeholder: 'https://models.router-for.me/devin_models.json',
+    keywords: ['models', 'devin', 'devin-catalog', 'devin_models.json', 'catalog', 'definitions', 'url', 'path'],
+  },
   {
     id: 'antigravityCredits',
     sectionId: 'providers',

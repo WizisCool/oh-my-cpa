@@ -289,7 +289,10 @@ export function renderGridField(view: ConfigSectionContext, field: ConfigFieldDe
     field.id === 'logDir' ||
     field.id === 'rmSecretKey' ||
     field.id === 'githubToken' ||
-    field.id === 'corsOrigins';
+    field.id === 'corsOrigins' ||
+    field.id === 'modelsCatalog' ||
+    field.id === 'modelsCodexCatalog' ||
+    field.id === 'modelsDevinCatalog';
 
   if (field.type === 'switch') {
     return (

@@ -320,6 +320,7 @@ func (h *Handler) afterConfigWriteSideEffects() {
 	if h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}
+	h.requestModelSquareProvenanceRefresh()
 	// The saved document may have re-keyed a provider, so the masks resolved from
 	// the credential lists it contains are no longer known to be current.
 	h.providerKeyMasks.invalidate()
