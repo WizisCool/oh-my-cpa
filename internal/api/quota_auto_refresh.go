@@ -270,6 +270,9 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 	wg.Wait()
 	h.quotaAutoRefresh.forgetExcept(filesByIndex)
 	h.quotaReadGates.forgetExcept(filesByIndex)
+	if round.Refreshed > 0 || round.CooldownsCleared > 0 || round.Failed > 0 {
+		h.publishStateSync("management-quota")
+	}
 	return round, nil
 }
 

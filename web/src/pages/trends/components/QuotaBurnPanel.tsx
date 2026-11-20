@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Segmented } from '@/components/ui/segmented';
 import { Panel } from '../../../components/common/Panel';
@@ -10,7 +11,7 @@ import { AttentionDot } from '../../../components/common/AttentionDot';
 import { ChartLinesPlaceholder } from '../../../components/common/PageLoading';
 import { LoadFailure } from '../../../components/feedback';
 import { CredentialMark } from '../../../components/LobeIcon';
-import { HistoryOutlined, LoginOutlined } from '../../../components/icons';
+import { HistoryOutlined, LoginOutlined, ReloadOutlined, SyncOutlined } from '../../../components/icons';
 import { usePluginMultiPortalKeys, usePluginOAuthLogos } from '../../../hooks/usePluginOAuthLogos';
 import { credentialBrandIdentity } from '../../../types/credentialIdentity';
 import { useT } from '../../../i18n';
@@ -18,7 +19,7 @@ import dayjs from '../../../utils/time';
 import { useTimeZone } from '../../../utils/TimeZoneProvider';
 import { useTokenDisplayStyle } from '../../../types/tokenDisplayContext';
 import { formatTokens } from '../../../types/tokenDisplay';
-import type { TrendsQuotaResponse } from '../../../types/trends';
+import type { TrendsQuotaCredential, TrendsQuotaResponse } from '../../../types/trends';
 import { LazyQuotaBurnChart as QuotaBurnChart, LazyQuotaCyclesChart as QuotaCyclesChart } from '../../../charts/lazyCharts';
 import {
   QUOTA_VIEWS,
@@ -30,6 +31,7 @@ import {
   quotaCycleBars,
   quotaDivider,
   quotaEventsHref,
+  quotaNoticeState,
   quotaCredentialName as credentialName,
   quotaWindowName,
   quotaWindowNames,
@@ -46,6 +48,8 @@ export interface QuotaBurnPanelProps {
   isLoading: boolean;
   error: unknown;
   onRetry: () => void;
+  onRefreshQuota?: (credential: TrendsQuotaCredential) => void;
+  refreshingQuotaIndexes?: ReadonlySet<string>;
   credentialId?: string;
   windowId?: string;
   view: QuotaView;
@@ -61,7 +65,7 @@ export interface QuotaBurnPanelProps {
  * reads the window now - how much is used, when it resets, how fast it burns and where it lands.
  */
 export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
-  data, isLoading, error, onRetry, credentialId, windowId, view, onChange, onNavigate, nowMs, resolveNowMs,
+  data, isLoading, error, onRetry, onRefreshQuota, refreshingQuotaIndexes, credentialId, windowId, view, onChange, onNavigate, nowMs, resolveNowMs,
 }) => {
   useTimeZone();
   const t = useT();
@@ -123,14 +127,36 @@ export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
       if (error) return <LoadFailure title={t('trends.quota.error_title')} error={error} onRetry={onRetry} />;
       return <div className="chart-placeholder" style={{ height: 300 }} aria-hidden="true"><ChartLinesPlaceholder height={300} kind="trend" /></div>;
     }
+    const isMembershipUnknown = Boolean(data.summary.is_membership_unknown);
     if (!picked) {
+      if (isMembershipUnknown) {
+        return (
+          <Notice
+            tone="warning"
+            data-testid="trends-quota-stale-notice"
+            description={t('trends.quota.cpa_unreachable_empty_notice')}
+            action={(
+              <Button
+                size="sm"
+                icon={<ReloadOutlined />}
+                loading={isLoading}
+                onClick={onRetry}
+                data-testid="trends-quota-notice-retry"
+              >
+                {t('common.retry')}
+              </Button>
+            )}
+          />
+        );
+      }
       return <EmptyState size="compact" title={t('trends.quota.empty')} description={t('trends.quota.empty_hint')} />;
     }
     const { credential, window } = picked;
     const windows = chartableWindows(credential);
     const isPhysicalUnavailable = Boolean(window.is_physical_unavailable);
     const eventsHref = isPhysicalUnavailable ? null : quotaEventsHref(credential.auth_index, window, nowMs);
-    const isStaleOrExpired = ['stale', 'error', 'unavailable', 'disabled', 'unknown'].includes(credential.status) || window.cycle_reset_ms <= nowMs;
+    const notice = quotaNoticeState(credential, window, isMembershipUnknown, nowMs);
+    const isRefreshingCredential = Boolean(refreshingQuotaIndexes?.has(credential.auth_index));
     const isExhausted = window.exhausted_at_ms !== undefined;
     // A projection past the reset is no exhaustion this cycle.
     const projectedExhaustAt = !isExhausted && window.projected_exhaust_at_ms !== undefined && window.projected_exhaust_at_ms < window.cycle_reset_ms
@@ -140,11 +166,37 @@ export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
     const showCycleMeasure = view === 'cycles' && !isPhysicalUnavailable && cycles.length > 0;
     return (
       <div className={`${styles['panel-body']} ${styles['quota-body']}`}>
-        {isStaleOrExpired && (
+        {notice && (
           <Notice
             tone="warning"
             data-testid="trends-quota-stale-notice"
-            description={t('trends.quota.stale_notice', { at: dayjs(credential.observed_at_ms).format('MM-DD HH:mm') })}
+            description={t(
+              notice.kind === 'cpa_unreachable'
+                ? 'trends.quota.cpa_unreachable_notice'
+                : 'trends.quota.stale_notice',
+              { at: dayjs(credential.observed_at_ms).format('MM-DD HH:mm') },
+            )}
+            action={notice.kind === 'cpa_unreachable' ? (
+              <Button
+                size="sm"
+                icon={<ReloadOutlined />}
+                loading={isLoading}
+                onClick={onRetry}
+                data-testid="trends-quota-notice-retry"
+              >
+                {t('common.retry')}
+              </Button>
+            ) : notice.canRefreshQuota && onRefreshQuota ? (
+              <Button
+                size="sm"
+                icon={<SyncOutlined />}
+                loading={isRefreshingCredential}
+                onClick={() => onRefreshQuota(credential)}
+                data-testid="trends-quota-notice-refresh"
+              >
+                {t('quota.btn_refresh_quota')}
+              </Button>
+            ) : undefined}
           />
         )}
         <div className={styles['quota-toolbar']}>

@@ -91,6 +91,8 @@ export default {
   'trends.quota.no_cycles': '还没有完整的历史周期',
   'trends.quota.error_title': '订阅配额读取失败',
   'trends.quota.stale_notice': '当前显示 {at} 的观测读数，刷新恢复后将继续推演。',
+  'trends.quota.cpa_unreachable_notice': '无法连接 CPA，当前显示 {at} 的观测读数，恢复连接后将继续推演。',
+  'trends.quota.cpa_unreachable_empty_notice': '无法连接 CPA，暂无法读取订阅配额，恢复连接后将继续推演。',
   'trends.quota.approximate_hint': '基于分桶汇总推算的近似口径',
   'trends.quota.physical_unavailable': '该功能配额暂无请求用量明细',
 

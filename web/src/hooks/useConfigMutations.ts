@@ -150,7 +150,7 @@ export function useOptimisticAuthFileStatusMutation(options?: {
         },
       ),
     ],
-    invalidateKeys: [QUERY_KEYS.quota, QUERY_KEYS.overview, QUERY_KEYS.identityDirectory],
+    invalidateKeys: [QUERY_KEYS.quota, QUERY_KEYS.trendsQuota, QUERY_KEYS.overview, QUERY_KEYS.identityDirectory],
     formatError: options?.formatError,
   });
 }

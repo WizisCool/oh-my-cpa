@@ -94,6 +94,8 @@ export default {
   'trends.quota.no_cycles': 'No complete earlier cycle yet',
   'trends.quota.error_title': 'Subscription quota could not be loaded',
   'trends.quota.stale_notice': 'Showing the reading observed at {at}; forecasts resume once a quota refresh succeeds.',
+  'trends.quota.cpa_unreachable_notice': 'Cannot reach CPA. Showing the reading observed at {at}; forecasts resume once the connection recovers.',
+  'trends.quota.cpa_unreachable_empty_notice': 'Cannot reach CPA. Subscription quota cannot be read until the connection recovers.',
   'trends.quota.approximate_hint': 'Approximated from rolled-up 15-minute usage facts',
   'trends.quota.physical_unavailable': 'Feature quota usage is not tracked per request',
 

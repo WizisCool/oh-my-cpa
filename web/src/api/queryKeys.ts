@@ -33,6 +33,7 @@ export const QUERY_KEYS = {
   pluginStore: ['management-plugin-store'] as const,
   pluginSettings: ['management-plugin-settings'] as const,
   quota: ['management-quota'] as const,
+  trendsQuota: ['trends-quota'] as const,
   overview: ['management-overview'] as const,
   preferences: ['preferences'] as const,
 } as const;
@@ -67,7 +68,7 @@ const SCOPE_TO_QUERY_KEYS = new Map<string, ReadonlyArray<QueryKey>>([
   ['management-oauth-model-aliases', [QUERY_KEYS.oauthModelAliases, QUERY_KEYS.projectedState]],
   ['management-oauth-excluded-models', [QUERY_KEYS.oauthExcludedModels, QUERY_KEYS.projectedState]],
   ['management-auth-files', [QUERY_KEYS.authFiles, QUERY_KEYS.projectedState, QUERY_KEYS.identityDirectory]],
-  ['management-quota', [QUERY_KEYS.quota, QUERY_KEYS.overview]],
+  ['management-quota', [QUERY_KEYS.quota, QUERY_KEYS.trendsQuota, QUERY_KEYS.overview]],
   ['management-plugins', [QUERY_KEYS.plugins, QUERY_KEYS.identityDirectory]],
 ]);
 

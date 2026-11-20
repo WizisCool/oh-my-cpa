@@ -1,8 +1,9 @@
 import React from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Select } from '@/components/ui/select';
 import { api, apiErrorCode } from '../../api/client';
+import { QUERY_KEYS } from '../../api/queryKeys';
 import { retryTrendsQuery } from '../../routePreload';
 import { useT } from '../../i18n';
 import { usePreference } from '../../hooks/usePreference';
@@ -25,7 +26,7 @@ import {
   type InsightsBucketChoice,
   type InsightsRange,
 } from '../../types/insights';
-import type { TrendsSubstitutionPair, TrendsUsageGroupOption } from '../../types/trends';
+import type { TrendsQuotaCredential, TrendsSubstitutionPair, TrendsUsageGroupOption } from '../../types/trends';
 import { PageHeader } from '../../components/common/PageHeader';
 import { ToolButton } from '../../components/common/ToolButton';
 import { StatTiles } from '../../components/common/StatTiles';
@@ -34,7 +35,9 @@ import { DeferredPanel } from '../../components/common/DeferredPanel';
 import { Panel } from '../../components/common/Panel';
 import { TrendsSkeleton } from '../../components/common/PageLoading';
 import { HistoryOutlined } from '../../components/icons';
-import { LoadFailure, Notice } from '../../components/feedback';
+import { LoadFailure, Notice, useToast } from '../../components/feedback';
+import { quotaRefreshFailureReason, refreshCredentialQuotas } from '../../utils/quotaRefresh';
+import { QUOTA_REFRESH_TOAST_KEY, quotaRefreshOutcomeKind } from '../../utils/quotaRefreshOutcome';
 import { RollingNumber, RollingNumberGroup } from '../../components/dashboard/RollingNumber';
 import { useIsRouteActive, useIsRoutePollingActive } from '../../performance/routeContract';
 import { isDemoMode } from '../../types/demoMode';
@@ -53,6 +56,7 @@ import {
   isRangeWithinHourLimit,
   percentReadout,
   pickForecastableQuotaWindow,
+  quotaCredentialName,
   quotaRisk,
   readTrendsView,
   relativeChange,
@@ -100,12 +104,62 @@ function groupName(item: { id: string; label: string; alias?: string; mask?: str
 export const TrendsPage: React.FC = () => {
   useTimeZone();
   const t = useT();
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const isPhone = useIsPhoneViewport();
   const isRouteActive = useIsRouteActive();
   const isPollingActive = useIsRoutePollingActive();
   const isDemo = isDemoMode();
   const { modelView, style } = useTokenDisplayStyle();
+  const [refreshingQuotaIndexes, setRefreshingQuotaIndexes] = React.useState<ReadonlySet<string>>(() => new Set());
+  const refreshingQuotaRef = React.useRef(new Set<string>());
+
+  const refreshQuotaCredential = React.useCallback(async (credential: TrendsQuotaCredential) => {
+    const authIndex = credential.auth_index.trim();
+    if (!authIndex || refreshingQuotaRef.current.has(authIndex)) return;
+    refreshingQuotaRef.current.add(authIndex);
+    setRefreshingQuotaIndexes(new Set(refreshingQuotaRef.current));
+    const displayName = quotaCredentialName(credential);
+    try {
+      const outcome = await refreshCredentialQuotas([authIndex]);
+      const failed = outcome.failures.length;
+      const unknown = outcome.unknownIndexes.length;
+      if (quotaRefreshOutcomeKind({ failed, unknown }) === 'report') {
+        toast.warning(
+          t('omc.quota_refresh_report', { succeeded: outcome.succeeded, failed: failed + unknown, skipped: 0 }),
+          {
+            key: QUOTA_REFRESH_TOAST_KEY,
+            testId: 'quota-operation-report',
+            items: [
+              ...outcome.failures.map((failure) => ({
+                name: displayName,
+                reason: quotaRefreshFailureReason(failure, t),
+                group: t('toast.group_failed'),
+              })),
+              ...outcome.unknownIndexes.map(() => ({
+                name: displayName,
+                reason: t('omc.quota_refresh_unknown'),
+                group: t('toast.group_unknown'),
+              })),
+            ],
+          },
+        );
+      } else {
+        toast.success(
+          t('omc.quota_refresh_report_clean', { succeeded: outcome.succeeded, skipped: 0 }),
+          { key: QUOTA_REFRESH_TOAST_KEY },
+        );
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trendsQuota }),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.quota }),
+      ]);
+    } finally {
+      refreshingQuotaRef.current.delete(authIndex);
+      setRefreshingQuotaIndexes(new Set(refreshingQuotaRef.current));
+    }
+  }, [queryClient, t, toast]);
 
   const visibleNow = useVisibleNow();
   const [search, setSearch] = useViewSearchParams();
@@ -151,7 +205,7 @@ export const TrendsPage: React.FC = () => {
     meta: { silent: true },
   });
   const quotaQuery = useQuery({
-    queryKey: ['trends-quota', quotaQueryString],
+    queryKey: [...QUERY_KEYS.trendsQuota, quotaQueryString],
     queryFn: ({ signal }) => api.getTrendsQuota(quotaQueryString, signal),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
@@ -527,6 +581,8 @@ export const TrendsPage: React.FC = () => {
         isLoading={quotaQuery.isFetching}
         error={isQuotaUncaptured ? null : quotaQuery.error}
         onRetry={() => void quotaQuery.refetch()}
+        onRefreshQuota={(credential) => void refreshQuotaCredential(credential)}
+        refreshingQuotaIndexes={refreshingQuotaIndexes}
         credentialId={view.quotaCredential}
         windowId={view.quotaWindow}
         view={view.quotaView}

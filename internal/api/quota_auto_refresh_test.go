@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/statecoord"
 )
 
 // quotaAutoRefreshFixture is a gateway listing one credential per scheduling case and
@@ -49,6 +51,13 @@ func newQuotaAutoRefreshHandler(t *testing.T, fixture *quotaAutoRefreshFixture) 
 		}
 		writer.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
+		case "/v8/management/config/config-version":
+			_, _ = writer.Write([]byte(`8`))
+		case "/v8/management/config.yaml":
+			writer.Header().Set("Content-Type", "application/yaml")
+			_, _ = writer.Write([]byte("observability:\n  logs:\n    debug: false\n"))
+		case "/v8/management/config":
+			_, _ = writer.Write([]byte(`{"observability":{"logs":{"debug":false}}}`))
 		case "/v8/management/credentials":
 			_, _ = writer.Write([]byte(`{"files": [
 				{"id": "f-reset", "name": "codex-reset.json", "auth_index": "codex-reset", "type": "codex", "provider": "codex"},
@@ -628,4 +637,90 @@ func automaticCooldownClears(t *testing.T, handler *Handler) map[string]string {
 		}
 	}
 	return clears
+}
+
+func TestQuotaRefreshPublishesManagementQuotaStateSync(t *testing.T) {
+	ctx := context.Background()
+	fixture := &quotaAutoRefreshFixture{reads: map[string]int{}}
+	handler := newQuotaAutoRefreshHandler(t, fixture)
+	if err := handler.EnableStateCoordinator(ctx, StateCoordinatorOptions{RefreshInterval: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { handler.CloseStateCoordinator(context.Background()) })
+
+	sseEvents, unsubscribe, err := handler.stateCoord.Broker().Subscribe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(unsubscribe)
+
+	awaitQuotaSync := func() {
+		t.Helper()
+		deadline := time.After(2 * time.Second)
+		for {
+			select {
+			case ev := <-sseEvents:
+				if ev.Type != statecoord.EventStateSync {
+					continue
+				}
+				for _, scope := range ev.Scopes {
+					if scope == "management-quota" {
+						return
+					}
+				}
+			case <-deadline:
+				t.Fatal("timed out waiting for management-quota state_sync event")
+			}
+		}
+	}
+
+	// Background auto-refresh notifies subscribed tabs when a reading lands.
+	setAutoRefreshPolicy(t, handler, `{"interval_minutes":60,"refresh_on_reset":false}`)
+	if round, err := handler.runQuotaAutoRefreshRound(ctx); err != nil || round.Refreshed == 0 {
+		t.Fatalf("round = %+v err=%v, want refreshed readings", round, err)
+	}
+	awaitQuotaSync()
+
+	// Manual single and SSE batch refresh publish management-quota state_sync too.
+	server := httptest.NewServer(handler.Router())
+	t.Cleanup(server.Close)
+	client := signedInClient(t, server.URL+"/api/auth/login", "management-secret")
+
+	singleResp, err := client.Post(server.URL+"/api/v1/management/quota/refresh", "application/json", strings.NewReader(`{"auth_index":"codex-fresh"}`))
+	if err != nil {
+		t.Fatalf("single refresh failed: %v", err)
+	}
+	singleResp.Body.Close()
+	if singleResp.StatusCode != http.StatusOK {
+		t.Fatalf("single refresh status = %d, want 200", singleResp.StatusCode)
+	}
+	awaitQuotaSync()
+
+	batchReq, err := http.NewRequest(http.MethodPost, server.URL+"/api/v1/management/quota/refresh", strings.NewReader(`{"auth_indexes":["codex-fresh"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	batchReq.Header.Set("Content-Type", "application/json")
+	batchReq.Header.Set("Accept", "text/event-stream")
+	batchResp, err := client.Do(batchReq)
+	if err != nil {
+		t.Fatalf("batch refresh failed: %v", err)
+	}
+	defer batchResp.Body.Close()
+	if batchResp.StatusCode != http.StatusOK {
+		t.Fatalf("batch refresh status = %d, want 200", batchResp.StatusCode)
+	}
+	stream, err := io.ReadAll(batchResp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(stream), "event: quota\n") ||
+		strings.Contains(string(stream), `"status":"error"`) ||
+		strings.Contains(string(stream), `"status":"stale"`) {
+		t.Fatalf("batch stream lacks a successful quota frame: %s", stream)
+	}
+	if !strings.Contains(string(stream), "event: done\ndata: {\"status\":\"ok\",\"total\":1}\n\n") {
+		t.Fatalf("batch stream lacks done total 1: %s", stream)
+	}
+	awaitQuotaSync()
 }

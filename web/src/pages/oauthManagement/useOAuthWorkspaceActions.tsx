@@ -22,7 +22,7 @@ import {
   quotaRefreshOutcomeKind,
 } from '../../utils/quotaRefreshOutcome';
 import { useOptimisticAuthFileStatusMutation } from '../../hooks/useConfigMutations';
-import { MUTATION_KEYS } from '../../api/queryKeys';
+import { MUTATION_KEYS, QUERY_KEYS } from '../../api/queryKeys';
 import { invalidateQueriesSilently } from '../../utils/progressSources';
 import type { ManagementAuthFilesResponse } from '../../types/managementAuthFile';
 
@@ -149,7 +149,8 @@ export function useOAuthWorkspaceActions(
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['management-auth-files'] }),
       queryClient.invalidateQueries({ queryKey: ['management-identity-directory'] }),
-      queryClient.invalidateQueries({ queryKey: ['management-quota'] }),
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.quota }),
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trendsQuota }),
       queryClient.invalidateQueries({ queryKey: ['management-overview'] }),
     ]);
   }, [queryClient]);
@@ -438,7 +439,8 @@ export function useOAuthWorkspaceActions(
       }
       await Promise.all([
         invalidateQueriesSilently(queryClient, { queryKey: ['management-auth-files'] }),
-        invalidateQueriesSilently(queryClient, { queryKey: ['management-quota'] }),
+        invalidateQueriesSilently(queryClient, { queryKey: QUERY_KEYS.quota }),
+        invalidateQueriesSilently(queryClient, { queryKey: QUERY_KEYS.trendsQuota }),
         invalidateQueriesSilently(queryClient, { queryKey: ['management-overview'] }),
       ]);
     } catch (error) {
@@ -656,7 +658,10 @@ export function useOAuthWorkspaceActions(
           { key: QUOTA_REFRESH_TOAST_KEY },
         );
       }
-      await queryClient.invalidateQueries({ queryKey: ['management-quota'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.quota }),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trendsQuota }),
+      ]);
     } finally {
       settle([...pendingIndexes]);
     }
@@ -696,7 +701,8 @@ export function useOAuthWorkspaceActions(
       await api.clearCredentialCooldown(record.authIndex);
       toast.success(t('quota.clear_cooldown_success'));
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['management-quota'] }),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.quota }),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trendsQuota }),
         queryClient.invalidateQueries({ queryKey: ['management-auth-files'] }),
       ]);
     } catch (error) {
@@ -729,7 +735,10 @@ export function useOAuthWorkspaceActions(
       } else {
         toast.success(t('quota.redeem_credit_success'));
       }
-      await queryClient.invalidateQueries({ queryKey: ['management-quota'] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.quota }),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trendsQuota }),
+      ]);
     } catch (error) {
       toast.error(t('quota.redeem_credit_failed', { msg: errorMessage(error, t) }));
     } finally {
