@@ -616,3 +616,27 @@ test('no retired input-wrapper slot selectors remain and alignment invariants ho
   );
 });
 
+test('chip primitives keep unified breathing room, centered icons, and unclipped status labels', () => {
+  const indexCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'index.css'), 'utf8'));
+  const glyphCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/common/GlyphBadge.module.css'), 'utf8'));
+  const prefixCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/providers/ProviderTable.module.css'), 'utf8'));
+  const requestListCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/usage/RequestList.css'), 'utf8'));
+
+  // Small chips share a 20px box with 7px inline padding so 12px UI/CJK text and icons have room.
+  assert.match(indexCss, /\.tag\.is-small\s*\{[^}]*height:\s*20px;[^}]*padding:\s*0 7px;/);
+  assert.match(indexCss, /\.status-label\.is-small\s*\{[^}]*height:\s*20px;[^}]*padding:\s*0 7px;/);
+  assert.match(indexCss, /\.omc-notice-label\s*\{[^}]*height:\s*20px;[^}]*padding:\s*0 7px;/);
+  assert.match(indexCss, /\.demo-chip\s*\{[^}]*height:\s*20px;[^}]*padding:\s*0 7px;/);
+  assert.match(glyphCss, /\.badge\s*\{[^}]*height:\s*20px;[^}]*padding:\s*0 7px;/);
+  assert.match(prefixCss, /\.prefix-chip\s*\{[^}]*display:\s*inline-flex;[^}]*align-items:\s*center;[^}]*height:\s*20px;/);
+  assert.match(requestListCss, /\.req-result-pill\s*\{[^}]*height:\s*20px;[^}]*padding:\s*0 7px;/);
+
+  // Chip icons center inside the flex container and stay capped inside the chip's inner height.
+  assert.match(indexCss, /\.tag-icon\s*\{[^}]*align-items:\s*center;[^}]*justify-content:\s*center;/);
+  assert.match(indexCss, /\.tag-icon\s*>\s*:is\(img,\s*svg,\s*\[data-remote-image\]\)\s*\{[^}]*max-height:\s*14px;/);
+  assert.match(indexCss, /\.tag\.is-small\s+\.tag-icon\s*>\s*:is\(img,\s*svg,\s*\[data-remote-image\]\)\s*\{[^}]*max-height:\s*12px;/);
+
+  // StatusLabel's ellipsizing text span keeps descender headroom inside overflow: hidden.
+  assert.match(indexCss, /\.status-label-text\s*\{[^}]*overflow:\s*hidden;[^}]*line-height:\s*1\.25;/);
+});
+

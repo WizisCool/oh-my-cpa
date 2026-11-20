@@ -43,10 +43,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 18px;
-  height: 18px;
+  min-width: 20px;
+  height: 20px;
   margin-left: 6px;
-  padding: 0 6px;
+  padding: 0 7px;
   border-radius: var(--radius-sm);
   background: var(--primary);
   color: var(--primary-on);

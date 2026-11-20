@@ -514,7 +514,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
       return (
         <div role="cell" className={styles['attribution-context']}>
           {row.providerId && (
-            <Tag size="small" icon={identity.mark('provider', row.providerId)}>
+            <Tag size="small" icon={identity.mark('provider', row.providerId, 12)}>
               {identity.label('provider', { id: row.providerId, label: row.providerLabel })}
             </Tag>
           )}
@@ -557,7 +557,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
     return (
       <div role="cell" className={styles['attribution-context']} {...peersTip}>
         {peerDim === 'provider' ? (
-          <Tag size="small" icon={identity.mark('provider', topPeer.id)}>{topName}</Tag>
+          <Tag size="small" icon={identity.mark('provider', topPeer.id, 12)}>{topName}</Tag>
         ) : (
           <span className={styles['attribution-peer']}>
             <ModelMark model={topPeer.label} size={14} />
@@ -1037,7 +1037,7 @@ export const StabilityPanel: React.FC<StabilityPanelProps> = ({
                                 <ModelMark model={pair.served_model} size={15} />
                                 <span className={`${styles['pair-model']} ${styles['pair-served']}`} data-tip={pair.served_model} data-tip-overflow="">{pair.served_model}</span>
                               </span>
-                              <span className={styles['pair-provider']}>{pair.provider && <Tag size="small" icon={identity.mark('provider', pair.provider)}>{identity.label('provider', pair.provider)}</Tag>}</span>
+                              <span className={styles['pair-provider']}>{pair.provider && <Tag size="small" icon={identity.mark('provider', pair.provider, 12)}>{identity.label('provider', pair.provider)}</Tag>}</span>
                               <span className={styles['pair-count']}>{t('trends.stability.pair_count', { n: pair.count })}</span>
                               <ToolButton
                                 size="sm"

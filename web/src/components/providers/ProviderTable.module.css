@@ -107,16 +107,20 @@
 }
 
 .prefix-chip {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
-  padding: 0 6px;
+  box-sizing: border-box;
+  height: 20px;
+  padding: 0 7px;
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--fg) 6%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg-2) 10%, transparent);
   color: var(--fg-2);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  line-height: 18px;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .muted {

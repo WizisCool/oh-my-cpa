@@ -120,7 +120,7 @@ export interface RequestSheet {
  */
 export const SHEET_MIN_WIDTH = 1480;
 
-export const SHEET_LINE_HEIGHT = 18;
+export const SHEET_LINE_HEIGHT = 20;
 const ROW_MIN_HEIGHT = 72;
 const ROW_PAD_BLOCK = 28;
 

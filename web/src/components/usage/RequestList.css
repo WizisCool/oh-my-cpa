@@ -897,11 +897,11 @@
     display: none;
   }
 
-  /* Compact records keep the shared StatusLabel chip at its small (18px) geometry so the quiet
+  /* Compact records keep the shared StatusLabel chip at its small (20px) geometry so the quiet
      metadata line stays tight while every verdict keeps one consistent look. */
   .req-result-pill {
-    height: 18px;
-    padding: 0 6px;
+    height: 20px;
+    padding: 0 7px;
     gap: 5px;
     font-size: var(--text-xs);
   }
