@@ -636,7 +636,9 @@ test('chip primitives keep unified breathing room, centered icons, and unclipped
   assert.match(indexCss, /\.tag-icon\s*>\s*:is\(img,\s*svg,\s*\[data-remote-image\]\)\s*\{[^}]*max-height:\s*14px;/);
   assert.match(indexCss, /\.tag\.is-small\s+\.tag-icon\s*>\s*:is\(img,\s*svg,\s*\[data-remote-image\]\)\s*\{[^}]*max-height:\s*12px;/);
 
-  // StatusLabel's ellipsizing text span keeps descender headroom inside overflow: hidden.
+  // StatusLabel's ellipsizing text span and Combobox's chip LineSlot keep descender headroom inside overflow: hidden.
   assert.match(indexCss, /\.status-label-text\s*\{[^}]*overflow:\s*hidden;[^}]*line-height:\s*1\.25;/);
+  const comboboxTsx = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/ui/combobox.tsx'), 'utf8'));
+  assert.equal((comboboxTsx.match(/<LineSlot className="leading-\[1\.25\]">\{renderChipLabel\(val\)\}<\/LineSlot>/g) ?? []).length, 2);
 });
 
