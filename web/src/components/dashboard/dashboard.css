@@ -284,32 +284,9 @@
 .model-series-client-mark { display: inline-flex; }
 .model-series-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The head is one line like every card's beside it - the subject, and opposite it the naming
-   toggle or the sum - so the two cards in a row share their head's height and rule. */
+   toggle or client attribution start - so the two cards in a row share their head's height and rule. */
 /* The toggle is taller than a title line, so the head trims its padding to keep the shared 48px. */
 .model-trend-card:has(.model-view-toggle) [data-slot="panel-head"] { padding-block: 8px; }
-.model-usage-card [data-slot="panel-head"] { container: modelhead / inline-size; }
-.model-usage-total {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.model-usage-total b { color: var(--fg); font-weight: 600; }
-/* Space, not a glyph, sets the spend apart from the volume. */
-.model-usage-total .model-usage-total-cost { margin-inline-start: 8px; }
-/* A phone-width head keeps the figures and drops the words around them; where the toggle's labels
-   are long the spend wraps under the volume rather than being cut. */
-@container modelhead (max-width: 440px) {
-  .model-usage-total { flex-wrap: wrap; column-gap: 8px; font-size: var(--text-xs); }
-  .model-usage-total .model-usage-total-cost { margin-inline-start: 0; }
-  .model-usage-total-label, .model-usage-total-unit { display: none; }
-}
 /* The card's one drawing: a bar the groups divide between them. It opens at the top of the body,
    level with the trend's legend beside it, and the rows stack under it. */
 .model-usage-bar {
@@ -399,7 +376,7 @@
    stands for no figure, takes the quiet ink. */
 .model-usage-tokens, .model-usage-share, .model-usage-cost { color: var(--fg-2); font-size: var(--text-sm); white-space: nowrap; text-align: right; }
 .model-usage-cost.is-unpriced { color: var(--meta); }
-.model-usage-cost.is-partial, .model-usage-total .is-partial { text-decoration: underline dotted var(--warn); text-underline-offset: 3px; }
+.model-usage-cost.is-partial { text-decoration: underline dotted var(--warn); text-underline-offset: 3px; }
 .model-usage-cost-action { padding: 0; font-family: inherit; line-height: inherit; cursor: pointer; background: transparent; border: 0; text-decoration: underline dotted var(--warn); text-underline-offset: 3px; transition: color var(--motion-fast) ease; }
 .model-usage-cost-action:hover, .model-usage-cost-action:focus-visible { color: var(--fg); }
 /* A phone keeps every column and tightens the gaps between them; a long name ellipsizes and its
@@ -443,8 +420,7 @@
 }
 .model-lens-tab.model-lens-tab:hover { background: transparent; color: var(--fg-2); }
 .model-lens-tab.model-lens-tab[data-active] { font-weight: 500; color: var(--fg); }
-/* The window's sum and, under the client lens, where attribution starts, opposite the subject. */
-.model-usage-head-figures { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+/* Under the client lens, where attribution starts, opposite the subject. */
 .model-usage-since { color: var(--muted); font-size: var(--text-sm); font-weight: 400; white-space: nowrap; }
 
 /* A new grouping is a new ranking: its rows rise into place one after another while the bar above

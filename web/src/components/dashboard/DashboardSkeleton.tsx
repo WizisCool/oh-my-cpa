@@ -231,7 +231,6 @@ export function ModelUsagePlaceholder({ index = 0, hasHeader = true }: { index?:
     <Panel
       className="dashboard-tile model-usage-card"
       title={<Placeholder width={84} row={index} className="placeholder-line" />}
-      extra={<Placeholder width={116} height={26} row={index} className="is-control" />}
     >
       {body}
     </Panel>

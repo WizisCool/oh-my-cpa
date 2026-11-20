@@ -461,17 +461,11 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelProps> = React.memo(functi
       className="dashboard-tile model-usage-card has-lens"
       data-pending={isPending || undefined}
       title={<ModelLensTabs {...props} />}
-      // The window's sum reads opposite the subject it sums. Client attribution is kept only as long
-      // as the request records, so a client window that reaches past them says where it starts.
-      // While the trend card, the naming toggle's usual place, is off the board, the toggle takes
-      // the figures' place: a half-width head holds the tabs and one more thing.
-      extra={hasNamingToggle ? <ModelViewToggle /> : groups.length > 0 || coveredFrom !== undefined ? (
-        <span className="model-usage-head-figures">
-          {coveredFrom !== undefined ? (
-            <span className="model-usage-since">{t('dash.clients.since', { time: dayjs(coveredFrom).format('MM-DD HH:mm') })}</span>
-          ) : null}
-          {groups.length > 0 ? <ModelUsageTotal groups={groups} totalTokens={total} /> : null}
-        </span>
+      // Client attribution is kept only as long as the request records, so a client window that
+      // reaches past them says where it starts. While the trend card, the naming toggle's usual
+      // place, is off the board, the toggle takes the right slot instead.
+      extra={hasNamingToggle ? <ModelViewToggle /> : coveredFrom !== undefined ? (
+        <span className="model-usage-since">{t('dash.clients.since', { time: dayjs(coveredFrom).format('MM-DD HH:mm') })}</span>
       ) : undefined}
     >
       <ModelPanelBody models={models} lens={shownLens} fallback={<ModelUsagePlaceholder hasHeader={false} />}>
@@ -548,48 +542,6 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelProps> = React.memo(functi
     </Panel>
   );
 });
-
-/** Whether a group carries a priced spend - which may be an explicit zero, a free model. */
-function isPriced(group: DashboardModelUsage): group is DashboardModelUsage & { cost_usd: number } {
-  return group.priced_requests > 0 && group.cost_usd != null;
-}
-
-/**
- * The window's sum in the card's head: every group's volume and, where any of it was priced, the
- * spend. The spend is summed over the priced requests only, so a window with unpriced traffic shows
- * it in the quieter ink and names the priced share - the same reading the row's own cost cell gives.
- */
-const ModelUsageTotal: React.FC<{ groups: readonly DashboardModelUsage[]; totalTokens: number }> = ({ groups, totalTokens }) => {
-  const t = useT();
-  const { style: tokenStyle } = useTokenDisplayStyle();
-  const { currency } = useDisplayCurrency();
-  let cost = 0;
-  let priced = 0;
-  let requests = 0;
-  for (const group of groups) {
-    requests += group.requests;
-    if (!isPriced(group)) continue;
-    cost += group.cost_usd;
-    priced += group.priced_requests;
-  }
-  const isPartial = priced > 0 && priced < requests;
-  return (
-    <span className="model-usage-total" data-tip={`${formatTokensFull(totalTokens)} ${t('dash.unit_tokens')}`}>
-      <span className="model-usage-total-label">{t('dash.models.total')}</span>
-      <b>{formatModelTokens(totalTokens, tokenStyle)}</b>
-      <span className="model-usage-total-unit">{t('dash.unit_tokens')}</span>
-      {priced > 0 ? (
-        <b
-          className={clsx('model-usage-total-cost', isPartial && 'is-partial')}
-          data-tip={isPartial ? t('dash.models.cost_partial', { priced, total: requests }) : undefined}
-        >
-          {formatCurrency(cost, currency)}
-          {isPartial ? <span className="sr-only">{` (${t('dash.models.cost_partial', { priced, total: requests })})`}</span> : null}
-        </b>
-      ) : null}
-    </span>
-  );
-};
 
 /**
  * ModelCost is the ranked list's cost cell.

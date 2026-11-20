@@ -801,6 +801,7 @@ describe('dashboard model panels and heatmap alignment states', () => {
       const legend = await screen.findByTestId('model-trend-legend');
       fireEvent.click(within(legend).getByRole('button', { name: /gpt-5/ }));
       expect(screen.getByRole('radiogroup', { name: t('dash.models.view_toggle_label') })).toBeTruthy();
+      expect(view.container.querySelector('.model-usage-card [data-slot="panel-head-extra"]')).toBeNull();
 
       fireEvent.click(screen.getByRole('tab', { name: t('dash.models.lens_clients') }));
       // The model ranking stays on screen, and clickable, until the client one lands. A choice made
