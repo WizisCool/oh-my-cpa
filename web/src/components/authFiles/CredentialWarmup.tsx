@@ -15,8 +15,13 @@ import { formatEventDuration } from '../../types/usageEventMetrics';
 import { credentialBrandIdentity } from '../../types/credentialIdentity';
 import { usePluginMultiPortalKeys, usePluginOAuthLogos, usePluginOAuthTitles } from '../../hooks/usePluginOAuthLogos';
 import {
+  WARMUP_BATCH_MAX_TASKS,
   WARMUP_TASK_ORDER_PREFERENCE,
+  buildWarmupBatchPayloads,
+  canSaveWarmupBatch,
   canSaveWarmupTask,
+  commonWarmupModels,
+  commonWarmupWindows,
   defaultWarmupTaskInput,
   groupWarmupAccounts,
   groupWarmupTasks,
@@ -133,12 +138,23 @@ function windowLabel(id: string | undefined, account: WarmupCatalogAccount | und
 }
 
 /** A window option: its own name, with the model group it belongs to as a quiet line beneath. */
-function WindowOption({ id, account, t }: { id: string; account: WarmupCatalogAccount | undefined; t: TFunc }) {
-  const label = account?.windows.find((w) => w.id === id)?.label;
+function WindowOption({
+  id,
+  account,
+  accounts,
+  t,
+}: {
+  id: string;
+  account?: WarmupCatalogAccount;
+  accounts?: readonly WarmupCatalogAccount[];
+  t: TFunc;
+}) {
+  const matchedAccount = account ?? accounts?.find((acc) => acc.windows.some((w) => w.id === id));
+  const label = matchedAccount?.windows.find((w) => w.id === id)?.label;
   const group = label ? quotaWindowParts(toWarmupQuotaWindow(id, label)).group : null;
   return (
     <span className={styles['window-option']}>
-      <span>{windowLabel(id, account, t)}</span>
+      <span>{windowLabel(id, matchedAccount, t)}</span>
       {group && <span className={styles['window-option-group']}>{group}</span>}
     </span>
   );
@@ -192,6 +208,10 @@ function toPayload(input: WarmupTaskInput, fallbackZone: string): WarmupTaskInpu
   return { ...input, name: input.name.trim(), model: input.model.trim(), trigger: cleaned };
 }
 
+type TaskEditorState =
+  | { id: string; draft: WarmupTaskInput; authIndexes?: undefined }
+  | { id: null; draft: WarmupTaskInput; authIndexes: string[] };
+
 function TaskEditorModal({
   editing,
   catalog,
@@ -200,10 +220,10 @@ function TaskEditorModal({
   onSave,
   onCancel,
 }: {
-  editing: { id: string | null; draft: WarmupTaskInput } | null;
+  editing: TaskEditorState | null;
   catalog?: WarmupCatalog;
   isSaving: boolean;
-  onChange: (next: WarmupTaskInput) => void;
+  onChange: (next: TaskEditorState) => void;
   onSave: () => void;
   onCancel: () => void;
 }) {
@@ -214,24 +234,75 @@ function TaskEditorModal({
   const pluginTitles = usePluginOAuthTitles();
   const multiPortalKeys = usePluginMultiPortalKeys();
   const draft = editing?.draft;
-  const account = draft ? findAccount(catalog, draft) : undefined;
+  const isCreate = editing !== null && editing.id === null;
   const isDisabled = isSaving;
 
-  if (!draft) return <AppModal open={false} title="" onCancel={onCancel} />;
+  if (!editing || !draft) return <AppModal open={false} title="" onCancel={onCancel} />;
 
-  const set = (patch: Partial<WarmupTaskInput>) => onChange({ ...draft, ...patch });
-  const setTrigger = (patch: Partial<WarmupTrigger>) => onChange({ ...draft, trigger: { ...draft.trigger, ...patch } });
+  const accountByIndex = new Map(accounts.map((acc) => [acc.auth_index, acc]));
+  const selectableAccounts = accounts.filter((acc) => !acc.disabled);
+  const selectedAccounts: WarmupCatalogAccount[] = isCreate
+    ? editing.authIndexes
+      .map((index) => accountByIndex.get(index))
+      .filter((acc): acc is WarmupCatalogAccount => Boolean(acc))
+    : (() => {
+      const single = findAccount(catalog, draft);
+      return single ? [single] : [];
+    })();
+  const isMultiCreate = isCreate && selectedAccounts.length > 1;
+  const primaryAccount = selectedAccounts[0];
 
-  const models = account?.models ?? [];
-  const autoModel = resolveTaskModel({ model: '' }, account);
+  const updateDraft = (nextDraft: WarmupTaskInput) => onChange({ ...editing, draft: nextDraft });
+  const set = (patch: Partial<WarmupTaskInput>) => updateDraft({ ...draft, ...patch });
+  const setTrigger = (patch: Partial<WarmupTrigger>) => updateDraft({ ...draft, trigger: { ...draft.trigger, ...patch } });
+
+  const updateCreateSelection = (nextIndexes: string[]) => {
+    if (!isCreate) return;
+    const deduped = Array.from(new Set(nextIndexes)).slice(0, WARMUP_BATCH_MAX_TASKS);
+    const nextAccounts = deduped
+      .map((index) => accountByIndex.get(index))
+      .filter((acc): acc is WarmupCatalogAccount => Boolean(acc));
+    const first = nextAccounts[0];
+    const nextWindows = commonWarmupWindows(nextAccounts, first?.provider ?? draft.provider);
+    const nextModels = commonWarmupModels(nextAccounts);
+    const currentWindow = draft.trigger.window ?? '';
+    const nextWindow = nextWindows.includes(currentWindow) ? currentWindow : nextWindows[0];
+    const nextModel = draft.model && nextModels.includes(draft.model) ? draft.model : '';
+    onChange({
+      id: null,
+      authIndexes: deduped,
+      draft: {
+        ...draft,
+        provider: first?.provider ?? draft.provider,
+        auth_index: first?.auth_index ?? '',
+        account: first?.name ?? '',
+        model: nextModel,
+        trigger: { ...draft.trigger, window: nextWindow },
+      },
+    });
+  };
+
+  const models = isCreate ? commonWarmupModels(selectedAccounts) : (primaryAccount?.models ?? []);
+  const autoModel = isMultiCreate ? '' : resolveTaskModel({ model: '' }, primaryAccount);
+  const autoOptionLabel = isMultiCreate
+    ? t('warmup.model_auto_per_credential')
+    : autoModel
+      ? t('warmup.model_auto', { model: autoModel })
+      : t('warmup.model_auto_fallback');
   const modelOptions = [
-    { value: '', label: autoModel ? t('warmup.model_auto', { model: autoModel }) : t('warmup.model_auto_fallback') },
+    { value: '', label: autoOptionLabel },
     ...models.map((m) => ({ value: m, label: m })),
     ...(draft.model && !models.includes(draft.model) ? [{ value: draft.model, label: draft.model }] : []),
   ];
-  const windows = account?.windows.length
-    ? account.windows.map((w) => w.id)
-    : ['five_hour', draft.provider === 'codex' ? 'weekly' : 'seven_day'];
+  const windows = commonWarmupWindows(selectedAccounts, draft.provider);
+  const canSave = isCreate
+    ? canSaveWarmupBatch(draft, selectedAccounts)
+    : canSaveWarmupTask(draft);
+  const saveLabel = isMultiCreate
+    ? t('warmup.create_n_tasks', { n: selectedAccounts.length })
+    : t('common.save');
+  const canSelectAll = isCreate && selectableAccounts.length > 1 && selectedAccounts.length < Math.min(selectableAccounts.length, WARMUP_BATCH_MAX_TASKS);
+  const canClearSelection = isCreate && editing.authIndexes.length > 0;
   // The picker groups credentials by provider, with the connector that issued each one drawn on
   // its row: a plugin that declares several portals shows which one a credential belongs to.
   const credentialOptions = groupWarmupAccounts(catalog, pluginTitles).map((group) => ({
@@ -257,40 +328,85 @@ function TaskEditorModal({
     <AppModal
       open
       size="medium"
-      title={t(editing?.id ? 'warmup.edit_task_title' : 'warmup.add_task_title')}
+      title={t(editing.id ? 'warmup.edit_task_title' : 'warmup.add_task_title')}
       onCancel={onCancel}
       isDismissible={!isSaving}
       destroyOnHidden
       footer={[
         <Button key="cancel" onClick={onCancel} disabled={isSaving}>{t('common.cancel')}</Button>,
-        <Button key="save" variant="primary" onClick={onSave} loading={isSaving} disabled={!canSaveWarmupTask(draft)}>
-          {t('common.save')}
+        <Button key="save" variant="primary" onClick={onSave} loading={isSaving} disabled={!canSave}>
+          {saveLabel}
         </Button>,
       ]}
     >
       <div className={styles['form']} data-testid="warmup-task-editor">
-        <label className={styles['field']}>
-          <span className={styles['field-label']}>{t('warmup.credential')}</span>
-          <SearchSelect
-            label={t('warmup.credential')}
-            value={draft.auth_index || undefined}
-            disabled={isDisabled}
-            showSearch={{ optionFilterProp: 'search' }}
-            classNames={{ popup: { root: styles['credential-picker'] } }}
-            options={credentialOptions}
-            onChange={(authIndex: string) => {
-              const next = accounts.find((acc) => acc.auth_index === authIndex);
-              onChange({
-                ...draft,
-                provider: next?.provider ?? draft.provider,
-                auth_index: authIndex,
-                account: next?.name ?? authIndex,
-                model: '',
-                trigger: { ...draft.trigger, window: next?.windows[0]?.id ?? draft.trigger.window ?? 'five_hour' },
-              });
-            }}
-          />
-        </label>
+        <div className={styles['field']}>
+          <div className={styles['field-head']}>
+            <span className={styles['field-label']}>{t('warmup.credential')}</span>
+            {isCreate && (canSelectAll || canClearSelection) && (
+              <div className={styles['field-shortcuts']}>
+                {canSelectAll && (
+                  <Button
+                    size="sm"
+                    variant="link"
+                    disabled={isDisabled}
+                    onClick={() => updateCreateSelection(selectableAccounts.map((acc) => acc.auth_index))}
+                    data-testid="warmup-select-all-credentials"
+                  >
+                    {t('warmup.select_all_credentials')}
+                  </Button>
+                )}
+                {canClearSelection && (
+                  <Button
+                    size="sm"
+                    variant="link"
+                    disabled={isDisabled}
+                    onClick={() => updateCreateSelection([])}
+                    data-testid="warmup-clear-credentials"
+                  >
+                    {t('warmup.clear_credentials')}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          {isCreate ? (
+            <SearchSelect
+              mode="multiple"
+              allowClear
+              maxCount={WARMUP_BATCH_MAX_TASKS}
+              maxTagCount="responsive"
+              label={t('warmup.credential')}
+              placeholder={t('warmup.credential_placeholder')}
+              value={editing.authIndexes}
+              disabled={isDisabled}
+              showSearch={{ optionFilterProp: 'search' }}
+              classNames={{ popup: { root: styles['credential-picker'] } }}
+              options={credentialOptions}
+              onChange={(values: string[]) => updateCreateSelection(values)}
+            />
+          ) : (
+            <SearchSelect
+              label={t('warmup.credential')}
+              value={draft.auth_index || undefined}
+              disabled={isDisabled}
+              showSearch={{ optionFilterProp: 'search' }}
+              classNames={{ popup: { root: styles['credential-picker'] } }}
+              options={credentialOptions}
+              onChange={(authIndex: string) => {
+                const next = accounts.find((acc) => acc.auth_index === authIndex);
+                updateDraft({
+                  ...draft,
+                  provider: next?.provider ?? draft.provider,
+                  auth_index: authIndex,
+                  account: next?.name ?? authIndex,
+                  model: '',
+                  trigger: { ...draft.trigger, window: next?.windows[0]?.id ?? draft.trigger.window ?? 'five_hour' },
+                });
+              }}
+            />
+          )}
+        </div>
 
         <div className={styles['field']}>
           <span className={styles['field-label']}>{t('warmup.trigger')}</span>
@@ -324,7 +440,10 @@ function TaskEditorModal({
               aria-label={t('warmup.window_select')}
               value={draft.trigger.window || windows[0]}
               disabled={isDisabled}
-              options={windows.map((id) => ({ value: id, label: <WindowOption id={id} account={account} t={t} /> }))}
+              options={windows.map((id) => ({
+                value: id,
+                label: <WindowOption id={id} account={isMultiCreate ? undefined : primaryAccount} accounts={selectedAccounts} t={t} />,
+              }))}
               onChange={(win) => setTrigger({ window: String(win) })}
             />
           </div>
@@ -389,7 +508,9 @@ function TaskEditorModal({
             aria-label={t('warmup.task_name')}
             value={draft.name}
             maxLength={120}
-            placeholder={t('warmup.task_name_placeholder', { account: accountLabel(account, draft), trigger: describeTrigger(draft.trigger, account, timezone, t) })}
+            placeholder={isMultiCreate
+              ? t('warmup.task_name_batch_placeholder')
+              : t('warmup.task_name_placeholder', { account: accountLabel(primaryAccount, draft), trigger: describeTrigger(draft.trigger, primaryAccount, timezone, t) })}
             disabled={isDisabled}
             onChange={(e) => set({ name: e.target.value })}
           />
@@ -619,7 +740,7 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
     return sectionOrder.ordered.map((provider) => byProvider.get(provider)).filter((g): g is WarmupTaskGroup => Boolean(g));
   }, [sectionOrder.ordered, taskGroups]);
 
-  const [editing, setEditing] = React.useState<{ id: string | null; draft: WarmupTaskInput } | null>(null);
+  const [editing, setEditing] = React.useState<TaskEditorState | null>(null);
   const [isShowingAllRuns, setIsShowingAllRuns] = React.useState(false);
 
   const applyState = (next: WarmupStateView) => queryClient.setQueryData<WarmupStateView>(WARMUP_QUERY_KEY, next);
@@ -632,14 +753,25 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
   }, [editing, tasks]);
 
   const saveMutation = useMutation({
-    mutationFn: ({ id, input }: { id: string | null; input: WarmupTaskInput }) => {
-      const payload = toPayload(input, timezone);
-      return id ? api.updateWarmupTask(id, payload) : api.createWarmupTask(payload);
+    mutationFn: async (current: TaskEditorState): Promise<{ state: WarmupStateView; createdCount: number }> => {
+      const payload = toPayload(current.draft, timezone);
+      if (current.id !== null) {
+        return { state: await api.updateWarmupTask(current.id, payload), createdCount: 1 };
+      }
+      const accountsByIndex = new Map(catalogAccounts(catalog).map((acc) => [acc.auth_index, acc]));
+      const selected = current.authIndexes
+        .map((index) => accountsByIndex.get(index))
+        .filter((acc): acc is WarmupCatalogAccount => Boolean(acc));
+      const batchPayloads = buildWarmupBatchPayloads(payload, selected);
+      if (batchPayloads.length > 1) {
+        return { state: await api.createWarmupTasksBatch(batchPayloads), createdCount: batchPayloads.length };
+      }
+      return { state: await api.createWarmupTask(batchPayloads[0] ?? payload), createdCount: 1 };
     },
-    onSuccess: (next) => {
+    onSuccess: ({ state: next, createdCount }) => {
       applyState(next);
       setEditing(null);
-      toast.success(t('warmup.saved'));
+      toast.success(createdCount > 1 ? t('warmup.batch_saved', { n: createdCount }) : t('warmup.saved'));
     },
     onError: reportFailure('warmup.save_failed'),
   });
@@ -709,7 +841,8 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
   });
 
   const startCreate = () => {
-    setEditing({ id: null, draft: defaultWarmupTaskInput(catalog) });
+    const draft = defaultWarmupTaskInput(catalog);
+    setEditing({ id: null, draft, authIndexes: draft.auth_index ? [draft.auth_index] : [] });
   };
 
   const nextLabel = (task: WarmupTask): string => {
@@ -826,8 +959,8 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
         editing={editing}
         catalog={catalog}
         isSaving={saveMutation.isPending}
-        onChange={(draft) => setEditing((current) => (current ? { ...current, draft } : current))}
-        onSave={() => editing && saveMutation.mutate({ id: editing.id, input: editing.draft })}
+        onChange={setEditing}
+        onSave={() => editing && saveMutation.mutate(editing)}
         onCancel={() => setEditing(null)}
       />
     </div>

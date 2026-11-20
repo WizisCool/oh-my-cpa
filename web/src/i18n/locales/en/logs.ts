@@ -219,6 +219,7 @@ export default {
   'audit.action.system.update.apply': 'Requested an update',
   'audit.action.system.update.completed': 'Finished an update',
   'audit.action.warmup.task.create': 'Created a window warmup task',
+  'audit.action.warmup.task.batch_create': 'Batch created window warmup tasks',
   'audit.action.warmup.task.update': 'Updated a window warmup task',
   'audit.action.warmup.task.delete': 'Deleted a window warmup task',
   'audit.action.warmup.task.run': 'Ran a window warmup',

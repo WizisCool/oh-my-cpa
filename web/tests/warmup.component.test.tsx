@@ -3,6 +3,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { expect, it, vi } from 'vitest';
 import { installOmcApi, json } from './support/omcApi';
 import { renderWithOmc } from './support/render';
+import { QUOTA_GROUP_LABEL_SEPARATOR } from '../src/pages/quota/quotaWindowSelection';
 import { WarmupSettingsDrawer } from '../src/components/authFiles/CredentialWarmup';
 import { createWarmupFixture } from '../../scripts/acceptance/warmup-fixture.mjs';
 import { canSaveWarmupTask, defaultWarmupTaskInput, hasCustomTaskName, WARMUP_TASK_ORDER_PREFERENCE } from '../src/types/warmup';
@@ -166,4 +167,152 @@ it('groups warmup tasks by provider, supports drag-handle reordering per group, 
     expect(prefWrites[0].body).toEqual({ claude: ['t_claude_second', 't_claude_first'] });
   });
   surface.unmount();
+});
+
+it('batch-creates warmup tasks across multiple credentials from the New task modal', async () => {
+  const omc = installOmcApi();
+  omc.serve(/\/warmup(\/|$)/, createWarmupFixture({
+    initialTasks: [],
+    catalog: {
+      timezone: 'UTC',
+      providers: [
+        {
+          provider: 'claude',
+          accounts: [{
+            auth_index: 'exact-claude',
+            name: 'claude.json',
+            email: 'claude@team.test',
+            provider: 'claude',
+            models: ['claude-haiku-4-5', 'claude-sonnet-4-6'],
+            auto_model: 'claude-haiku-4-5',
+            windows: [
+              { id: 'five_hour', label: '5h', used_percent: 0 },
+              { id: 'seven_day', label: '7d', used_percent: 0 },
+            ],
+          }],
+        },
+        {
+          provider: 'codex',
+          accounts: [
+            {
+              auth_index: 'exact-codex',
+              name: 'codex.json',
+              email: 'codex@team.test',
+              provider: 'codex',
+              models: ['gpt-5.4-mini'],
+              auto_model: 'gpt-5.4-mini',
+              windows: [
+                { id: 'five_hour', label: '5h', used_percent: 0 },
+                { id: 'weekly', label: '7d', used_percent: 0 },
+              ],
+            },
+            {
+              auth_index: 'disabled-codex',
+              name: 'disabled.json',
+              provider: 'codex',
+              disabled: true,
+              models: ['gpt-5.4-mini'],
+              auto_model: 'gpt-5.4-mini',
+              windows: [],
+            },
+          ],
+        },
+      ],
+    },
+  }));
+  const surface = renderWithOmc(<WarmupSettingsDrawer open onClose={vi.fn()} />, { isStrict: true });
+  try {
+    fireEvent.click(await screen.findByTestId('warmup-add-task'));
+    const dialog = await screen.findByTestId('warmup-task-editor');
+
+    // Select all available credentials (excludes disabled credential).
+    fireEvent.click(within(dialog).getByTestId('warmup-select-all-credentials'));
+    expect(within(dialog).getByRole('combobox', { name: 'Warmup model' }).textContent).toContain('Auto (lightest model per credential)');
+
+    // Choose the normalized 7-day window and provide a name prefix.
+    fireEvent.click(within(dialog).getByRole('radio', { name: '7-day window' }));
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Weekly' } });
+
+    const submit = screen.getByRole('button', { name: 'Create 2 tasks' });
+    fireEvent.click(submit);
+
+    await screen.findByText('Weekly (claude@team.test)');
+    await screen.findByText('Weekly (codex@team.test)');
+
+    const batchCalls = omc.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/tasks/batch'));
+    expect(batchCalls).toHaveLength(1);
+    expect(batchCalls[0].body).toEqual({
+      tasks: [
+        {
+          name: 'Weekly (claude@team.test)',
+          enabled: true,
+          provider: 'claude',
+          auth_index: 'exact-claude',
+          account: 'claude.json',
+          model: '',
+          trigger: { kind: 'window', window: 'seven_day' },
+        },
+        {
+          name: 'Weekly (codex@team.test)',
+          enabled: true,
+          provider: 'codex',
+          auth_index: 'exact-codex',
+          account: 'codex.json',
+          model: '',
+          trigger: { kind: 'window', window: 'weekly' },
+        },
+      ],
+    });
+  } finally {
+    surface.unmount();
+  }
+});
+
+it('keeps grouped window names readable when selecting multiple credentials of a grouped-window provider', async () => {
+  const omc = installOmcApi();
+  omc.serve(/\/warmup(\/|$)/, createWarmupFixture({
+    initialTasks: [],
+    catalog: {
+      timezone: 'UTC',
+      providers: [
+        {
+          provider: 'antigravity',
+          accounts: [
+            {
+              auth_index: 'ag-1',
+              name: 'ag-1.json',
+              provider: 'antigravity',
+              models: ['gemini-3-flash'],
+              auto_model: 'gemini-3-flash',
+              windows: [
+                { id: 'ag_gemini_5h', label: `Gemini Models${QUOTA_GROUP_LABEL_SEPARATOR}5h`, used_percent: 0 },
+              ],
+            },
+            {
+              auth_index: 'ag-2',
+              name: 'ag-2.json',
+              provider: 'antigravity',
+              models: ['gemini-3-flash'],
+              auto_model: 'gemini-3-flash',
+              windows: [
+                { id: 'ag_gemini_5h', label: `Gemini Models${QUOTA_GROUP_LABEL_SEPARATOR}5h`, used_percent: 10 },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  }));
+  const surface = renderWithOmc(<WarmupSettingsDrawer open onClose={vi.fn()} />, { isStrict: true });
+  try {
+    fireEvent.click(await screen.findByTestId('warmup-add-task'));
+    const dialog = await screen.findByTestId('warmup-task-editor');
+    fireEvent.click(within(dialog).getByTestId('warmup-select-all-credentials'));
+
+    const windowGroup = within(dialog).getByRole('radiogroup', { name: 'Target window' });
+    expect(windowGroup.textContent).toContain('Gemini Models');
+    expect(windowGroup.textContent).not.toContain('ag_gemini_5h');
+  } finally {
+    surface.unmount();
+  }
 });

@@ -419,6 +419,9 @@ export const api = {
   createWarmupTask(input: WarmupTaskInput): Promise<WarmupStateView> {
     return request('/management/quota/warmup/tasks', { method: 'POST', body: JSON.stringify(input) });
   },
+  createWarmupTasksBatch(tasks: WarmupTaskInput[]): Promise<WarmupStateView> {
+    return request('/management/quota/warmup/tasks/batch', { method: 'POST', body: JSON.stringify({ tasks }) });
+  },
   updateWarmupTask(id: string, input: WarmupTaskInput): Promise<WarmupStateView> {
     return request(`/management/quota/warmup/tasks/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
   },

@@ -67,12 +67,12 @@ func (repository *Repository) ReadWarmupTask(ctx context.Context, instance, task
 }
 
 func (repository *Repository) WriteWarmupTask(ctx context.Context, instance string, task warmup.Task, nowMS int64) error {
-	return repository.WriteWarmupTaskWithMarks(ctx, instance, task, false, nowMS, nil)
+	return repository.WriteWarmupTaskWithMarks(ctx, instance, task, false, nowMS, nil, nil)
 }
 
-// WriteWarmupTaskWithMarks persists a warmup task and, when reconcile is provided, reads the
-// currently persisted task and scheduling marks inside the same SQLite transaction so concurrent
-// saves and scheduler mark writes always reconcile against authoritative state.
+// WriteWarmupTaskWithMarks persists a warmup task and, when reconcile or audit is provided,
+// executes the task write, marks reconciliation, and audit insertion inside one SQLite
+// transaction so concurrent saves and audit failures stay atomic.
 func (repository *Repository) WriteWarmupTaskWithMarks(
 	ctx context.Context,
 	instance string,
@@ -80,9 +80,10 @@ func (repository *Repository) WriteWarmupTaskWithMarks(
 	requireExisting bool,
 	nowMS int64,
 	reconcile func(persisted *warmup.Task, current warmup.TaskMarks) (*warmup.TaskMarks, error),
+	audit *AuditEvent,
 ) error {
 	target := warmupTaskTarget(task.ID)
-	if !requireExisting && reconcile == nil {
+	if !requireExisting && reconcile == nil && audit == nil {
 		rawTask, err := json.Marshal(task)
 		if err != nil {
 			return fmt.Errorf("marshal warmup task: %w", err)
@@ -135,8 +136,76 @@ func (repository *Repository) WriteWarmupTaskWithMarks(
 			}
 		}
 	}
+	if audit != nil {
+		if _, err := recordAuditEventExec(ctx, tx, *audit); err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit warmup task transaction: %w", err)
+	}
+	return nil
+}
+
+// WarmupTaskBatchWrite bundles a new warmup task with its optional initial marks reconciler.
+type WarmupTaskBatchWrite struct {
+	Task      warmup.Task
+	Reconcile func(persisted *warmup.Task, current warmup.TaskMarks) (*warmup.TaskMarks, error)
+}
+
+// WriteWarmupTasksBatch persists multiple newly created warmup tasks, their initial marks,
+// and an optional audit event atomically inside a single SQLite transaction so a write or
+// audit failure never leaves partial tasks or a false-success audit record behind.
+func (repository *Repository) WriteWarmupTasksBatch(
+	ctx context.Context,
+	instance string,
+	writes []WarmupTaskBatchWrite,
+	nowMS int64,
+	audit *AuditEvent,
+) error {
+	if len(writes) == 0 {
+		return nil
+	}
+	tx, err := repository.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin warmup batch transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, entry := range writes {
+		target := warmupTaskTarget(entry.Task.ID)
+		rawTask, err := json.Marshal(entry.Task)
+		if err != nil {
+			return fmt.Errorf("marshal warmup task: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO credential_warmup_policies(instance_id,scope,target,document_json,updated_at_ms) VALUES(?,?,?,?,?) ON CONFLICT(instance_id,scope,target) DO UPDATE SET document_json=excluded.document_json,updated_at_ms=excluded.updated_at_ms`,
+			instance, "credential", target, string(rawTask), nowMS,
+		); err != nil {
+			return fmt.Errorf("write warmup task: %w", err)
+		}
+		if entry.Reconcile != nil {
+			current, err := readWarmupMarksTx(ctx, tx, instance, entry.Task.ID)
+			if err != nil {
+				return err
+			}
+			nextMarks, err := entry.Reconcile(nil, current)
+			if err != nil {
+				return fmt.Errorf("reconcile warmup marks: %w", err)
+			}
+			if nextMarks != nil {
+				if err := writeWarmupMarksTx(ctx, tx, instance, entry.Task.ID, *nextMarks, nowMS); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if audit != nil {
+		if _, err := recordAuditEventExec(ctx, tx, *audit); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit warmup batch transaction: %w", err)
 	}
 	return nil
 }

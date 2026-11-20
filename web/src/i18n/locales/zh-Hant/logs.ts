@@ -219,6 +219,7 @@ export default {
   "audit.action.system.update.apply": "要求更新版本",
   "audit.action.system.update.completed": "版本更新完成",
   "audit.action.warmup.task.create": "建立視窗預熱任務",
+  "audit.action.warmup.task.batch_create": "批次建立視窗預熱任務",
   "audit.action.warmup.task.update": "修改視窗預熱任務",
   "audit.action.warmup.task.delete": "刪除視窗預熱任務",
   "audit.action.warmup.task.run": "立即執行視窗預熱",

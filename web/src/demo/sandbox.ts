@@ -70,7 +70,13 @@ import type {
 } from '../types/databaseBackup';
 import type { DataRetentionResponse, SystemInfoResponse, SystemMaintenanceResponse } from '../types/system';
 import type { UsageRoutingResponse } from '../types/usageRouting';
-import type { WarmupRun, WarmupStateView, WarmupTask, WarmupTaskInput } from '../types/warmup';
+import {
+  generatedTaskName,
+  type WarmupRun,
+  type WarmupStateView,
+  type WarmupTask,
+  type WarmupTaskInput,
+} from '../types/warmup';
 import type { SafeProjectedStateSnapshot, StateEnvelope } from '../api/stateLive';
 import type { AuditBucket, AuditEvent } from '../types/audit';
 import { maskAccount, maskAccountIn, maskEmailAddresses } from '../utils/maskAccount';
@@ -3619,6 +3625,32 @@ export async function interceptDemoRequest(
     return jsonResponse({ status: 'ok', quota, cooldown_cleared: true });
   }
 
+  if (pathname === '/management/quota/warmup/tasks/batch' && method === 'POST') {
+    const body = parseJsonBody<{ tasks?: WarmupTaskInput[] }>(options);
+    const items = Array.isArray(body?.tasks) ? body.tasks : [];
+    if (items.length === 0 || items.length > 100) {
+      return errorResponse('Invalid warmup task batch', 'invalid_parameters', 400);
+    }
+    const base = await ensureBaseline<WarmupStateView>('warmup-settings', '/management/quota/warmup/settings', fetchBaseline);
+    const tasks = state.quota.warmupTasks ?? [...(base?.tasks ?? [])];
+    const nowMs = Date.now();
+    const stamp = nowMs.toString(36);
+    const created: WarmupTask[] = items.map((input, idx) => {
+      const entryIso = new Date(nowMs + idx).toISOString();
+      return {
+        ...input,
+        name: input.name.trim() || generatedTaskName(input),
+        id: `warmup-sbx-${stamp}-${idx}`,
+        created_at: entryIso,
+        updated_at: entryIso,
+      };
+    });
+    state.quota.warmupTasks = [...tasks, ...created];
+    recordSandboxAudit(state, 'warmup.task.batch_create', 'warmup', created.map((t) => t.id).join(','), { count: created.length });
+    saveState(state);
+    return jsonResponse({ ...(base ?? { runs: [], next: {}, timeline: [] }), tasks: state.quota.warmupTasks });
+  }
+
   if (pathname === '/management/quota/warmup/tasks' && method === 'POST') {
     const input = parseJsonBody<WarmupTaskInput>(options);
     if (!input) return errorResponse('Invalid warmup task', 'invalid_request', 400);
@@ -3627,12 +3659,13 @@ export async function interceptDemoRequest(
     const nowIso = new Date().toISOString();
     const task: WarmupTask = {
       ...input,
+      name: input.name.trim() || generatedTaskName(input),
       id: `warmup-sbx-${Date.now().toString(36)}`,
       created_at: nowIso,
       updated_at: nowIso,
     };
     state.quota.warmupTasks = [...tasks, task];
-    recordSandboxAudit(state, 'warmup.task_create', 'warmup_task', task.id, { name: task.name });
+    recordSandboxAudit(state, 'warmup.task.create', 'warmup', task.id, { name: task.name });
     saveState(state);
     return jsonResponse({ ...(base ?? { runs: [], next: {}, timeline: [] }), tasks: state.quota.warmupTasks });
   }

@@ -1,5 +1,17 @@
 import { expect, test } from 'vitest';
-import { defaultWarmupTaskInput, groupWarmupAccounts, groupWarmupTasks, type WarmupCatalog, type WarmupCatalogAccount, type WarmupTask } from '../../src/types/warmup';
+import {
+  buildWarmupBatchPayloads,
+  canSaveWarmupBatch,
+  commonWarmupModels,
+  commonWarmupWindows,
+  defaultWarmupTaskInput,
+  groupWarmupAccounts,
+  groupWarmupTasks,
+  resolveAccountWindow,
+  type WarmupCatalog,
+  type WarmupCatalogAccount,
+  type WarmupTask,
+} from '../../src/types/warmup';
 
 function account(authIndex: string, provider: string, patch: Partial<WarmupCatalogAccount> = {}): WarmupCatalogAccount {
   return {
@@ -87,4 +99,71 @@ test('groupWarmupTasks groups tasks by provider in catalogue order', () => {
     { provider: 'codex', label: 'Codex', ids: ['t_codex_1', 't_codex_2'] },
     { provider: 'harbor', label: 'Harbor Labs', ids: ['t_custom_1'] },
   ]);
+});
+
+test('batch warmup helpers intersect windows/models across providers and map 7-day synonyms', () => {
+  const claude = account('claude-1', 'claude', {
+    email: 'a@claude.test',
+    models: ['claude-haiku-4-5', 'claude-sonnet-4-6'],
+    auto_model: 'claude-haiku-4-5',
+    windows: [
+      { id: 'five_hour', label: '5h', used_percent: 0 },
+      { id: 'seven_day', label: '7d', used_percent: 10 },
+      { id: 'seven_day_sonnet', label: 'Sonnet 7d', used_percent: 5 },
+    ],
+  });
+  const codex = account('codex-1', 'codex', {
+    email: 'b@codex.test',
+    models: ['gpt-5.4-mini', 'gpt-5.4'],
+    auto_model: 'gpt-5.4-mini',
+    windows: [
+      { id: 'five_hour', label: '5h', used_percent: 0 },
+      { id: 'weekly', label: '7d', used_percent: 20 },
+    ],
+  });
+
+  // Cross-provider selection keeps common 5h + normalized 7-day windows and clears incompatible models.
+  expect(commonWarmupWindows([claude, codex])).toEqual(['five_hour', 'seven_day']);
+  expect(commonWarmupModels([claude, codex])).toEqual([]);
+  expect(resolveAccountWindow('seven_day', codex)).toBe('weekly');
+  expect(resolveAccountWindow('seven_day', claude)).toBe('seven_day');
+
+  // Same-provider selection keeps shared models.
+  const claude2 = account('claude-2', 'claude', { models: ['claude-haiku-4-5'] });
+  expect(commonWarmupModels([claude, claude2])).toEqual(['claude-haiku-4-5']);
+
+  const base = {
+    name: 'Morning',
+    enabled: true,
+    provider: 'claude',
+    auth_index: 'claude-1',
+    account: 'claude-1.json',
+    model: '',
+    trigger: { kind: 'window' as const, window: 'seven_day' },
+  };
+  expect(canSaveWarmupBatch(base, [claude, codex])).toBe(true);
+  expect(canSaveWarmupBatch(base, [])).toBe(false);
+
+  // Custom name prefixes each credential in multi-select, while blank stays blank for server default.
+  expect(buildWarmupBatchPayloads(base, [claude, codex])).toEqual([
+    {
+      name: 'Morning (a@claude.test)',
+      enabled: true,
+      provider: 'claude',
+      auth_index: 'claude-1',
+      account: 'claude-1.json',
+      model: '',
+      trigger: { kind: 'window', window: 'seven_day' },
+    },
+    {
+      name: 'Morning (b@codex.test)',
+      enabled: true,
+      provider: 'codex',
+      auth_index: 'codex-1',
+      account: 'codex-1.json',
+      model: '',
+      trigger: { kind: 'window', window: 'weekly' },
+    },
+  ]);
+  expect(buildWarmupBatchPayloads({ ...base, name: '' }, [claude, codex]).map((item) => item.name)).toEqual(['', '']);
 });

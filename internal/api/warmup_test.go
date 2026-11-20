@@ -457,6 +457,188 @@ func TestWarmupHandlerCertifiesWireCorpus(t *testing.T) {
 	}
 }
 
+func TestWarmupTasksBatchCreateAtomicityAndValidation(t *testing.T) {
+	fixture := &warmupFixture{provider: "claude", isActive: true}
+	handler := newWarmupHandler(t, fixture)
+	caller, baseURL := warmupHTTPClient(t, handler)
+	batchURL := baseURL + "/api/v1/management/quota/warmup/tasks/batch"
+
+	// Empty batch and partially invalid batch must both fail with 400 and persist zero tasks.
+	for _, body := range []string{
+		`{"tasks":[]}`,
+		`{"tasks":[{"name":"","enabled":true,"provider":"claude","auth_index":"exact-claude","account":"claude.json","model":"","trigger":{"kind":"window","window":"five_hour"}},{"name":"","enabled":true,"provider":"codex","auth_index":"exact-codex","account":"codex.json","model":"","trigger":{"kind":"daily","time":"25:99","time_zone":"UTC"}}]}`,
+	} {
+		resp, err := caller.Post(batchURL, "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("batch body=%s status=%d, want 400", body, resp.StatusCode)
+		}
+	}
+	tasksAfterInvalid, err := handler.repo.ListWarmupTasks(context.Background(), warmupInstanceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasksAfterInvalid) != 0 {
+		t.Fatalf("invalid batch must persist zero tasks, got %d", len(tasksAfterInvalid))
+	}
+
+	// Valid mixed-provider batch creates all tasks atomically and records a batch audit event.
+	batchBody := `{"tasks":[` +
+		`{"name":"","enabled":true,"provider":"claude","auth_index":"exact-claude","account":"claude.json","model":"","trigger":{"kind":"window","window":"seven_day"}},` +
+		`{"name":"Morning (codex.json)","enabled":true,"provider":"codex","auth_index":"exact-codex","account":"codex.json","model":"","trigger":{"kind":"window","window":"weekly"}}` +
+		`]}`
+	resp, err := caller.Post(batchURL, "application/json", strings.NewReader(batchBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state warmup.StateView
+	_ = json.NewDecoder(resp.Body).Decode(&state)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("batch create status = %d, want 201", resp.StatusCode)
+	}
+	if len(state.Tasks) != 2 {
+		t.Fatalf("batch create returned %d tasks, want 2: %+v", len(state.Tasks), state.Tasks)
+	}
+	if state.Tasks[0].ID == state.Tasks[1].ID {
+		t.Fatalf("batch tasks must receive distinct IDs: %+v", state.Tasks)
+	}
+	// Monotonic 1ms-stepped timestamps preserve the submitted batch order.
+	if state.Tasks[0].AuthIndex != "exact-claude" || state.Tasks[1].AuthIndex != "exact-codex" {
+		t.Fatalf("batch tasks did not preserve submitted order: %+v", state.Tasks)
+	}
+	if state.Tasks[0].Name != "claude.json (seven_day)" || state.Tasks[1].Name != "Morning (codex.json)" {
+		t.Fatalf("unexpected task names: %+v", state.Tasks)
+	}
+	audits, err := handler.repo.ListAuditEvents(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundAudit := false
+	for _, ev := range audits {
+		if ev.Action == "warmup.task.batch_create" {
+			foundAudit = true
+			break
+		}
+	}
+	if !foundAudit {
+		t.Fatalf("expected warmup.task.batch_create audit event, got %+v", audits)
+	}
+
+	// Atomicity with audit: if audit insertion fails, the entire SQLite tx rolls back so zero new tasks persist.
+	if _, err := handler.repo.SQL().Exec(`DROP TABLE audit_events`); err != nil {
+		t.Fatal(err)
+	}
+	failResp, err := caller.Post(batchURL, "application/json", strings.NewReader(batchBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = failResp.Body.Close()
+	if failResp.StatusCode == http.StatusCreated {
+		t.Fatalf("expected non-201 when audit table is unavailable")
+	}
+	tasksAfterRollback, err := handler.repo.ListWarmupTasks(context.Background(), warmupInstanceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasksAfterRollback) != 2 {
+		t.Fatalf("rolled-back batch must not add tasks, got %d", len(tasksAfterRollback))
+	}
+}
+
+func TestWarmupTasksBatchCreateLimits(t *testing.T) {
+	newHandler := func(t *testing.T) (*Handler, *http.Client, string) {
+		t.Helper()
+		handler := newWarmupHandler(t, &warmupFixture{provider: "claude", isActive: true})
+		caller, baseURL := warmupHTTPClient(t, handler)
+		return handler, caller, baseURL + "/api/v1/management/quota/warmup/tasks/batch"
+	}
+	validTask := warmup.TaskInput{
+		Enabled:   true,
+		Provider:  "claude",
+		AuthIndex: "exact-claude",
+		Account:   "claude.json",
+		Trigger:   warmup.Trigger{Kind: "window", Window: "five_hour"},
+	}
+
+	t.Run("rejects more than one hundred tasks without writing", func(t *testing.T) {
+		handler, caller, batchURL := newHandler(t)
+		body, err := json.Marshal(warmup.TaskBatchCreateInput{Tasks: slices.Repeat([]warmup.TaskInput{validTask}, 101)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := caller.Post(batchURL, "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("101-task batch status=%d, want 400", resp.StatusCode)
+		}
+		tasks, err := handler.repo.ListWarmupTasks(context.Background(), warmupInstanceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(tasks) != 0 {
+			t.Fatalf("rejected 101-task batch persisted %d tasks", len(tasks))
+		}
+	})
+
+	t.Run("accepts one hundred tasks", func(t *testing.T) {
+		handler, caller, batchURL := newHandler(t)
+		body, err := json.Marshal(warmup.TaskBatchCreateInput{Tasks: slices.Repeat([]warmup.TaskInput{validTask}, 100)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := caller.Post(batchURL, "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("100-task batch status=%d, want 201", resp.StatusCode)
+		}
+		tasks, err := handler.repo.ListWarmupTasks(context.Background(), warmupInstanceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(tasks) != 100 {
+			t.Fatalf("100-task batch persisted %d tasks", len(tasks))
+		}
+	})
+
+	t.Run("rejects an oversized request body without writing", func(t *testing.T) {
+		handler, caller, batchURL := newHandler(t)
+		oversizedTask := validTask
+		oversizedTask.Name = strings.Repeat("x", warmupBatchBodyLimit)
+		body, err := json.Marshal(warmup.TaskBatchCreateInput{Tasks: []warmup.TaskInput{oversizedTask}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(body) <= warmupBatchBodyLimit {
+			t.Fatalf("test body length=%d, want more than %d", len(body), warmupBatchBodyLimit)
+		}
+		resp, err := caller.Post(batchURL, "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("oversized batch status=%d, want 400", resp.StatusCode)
+		}
+		tasks, err := handler.repo.ListWarmupTasks(context.Background(), warmupInstanceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(tasks) != 0 {
+			t.Fatalf("rejected oversized batch persisted %d tasks", len(tasks))
+		}
+	})
+}
+
 func TestWarmupTaskLifecycleAndManualExecution(t *testing.T) {
 	fixture := &warmupFixture{provider: "claude", isActive: true}
 	handler := newWarmupHandler(t, fixture)
@@ -1499,7 +1681,7 @@ func TestWarmupAntigravityGroupedWindowRolloverFiresAndHonorsRefreshBackoff(t *t
 			<-releaseTargetTx
 			weeklyMarks := warmup.TaskMarks{LastReset: warmup.FormatISO(weekReset1)}
 			return &weeklyMarks, nil
-		})
+		}, nil)
 		interveningDone <- txErr
 	}()
 	<-enteredTargetTx

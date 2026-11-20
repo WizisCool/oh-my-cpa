@@ -216,6 +216,7 @@ export default {
   'audit.action.system.update.apply': '请求更新版本',
   'audit.action.system.update.completed': '版本更新完成',
   'audit.action.warmup.task.create': '创建窗口预热任务',
+  'audit.action.warmup.task.batch_create': '批量创建窗口预热任务',
   'audit.action.warmup.task.update': '修改窗口预热任务',
   'audit.action.warmup.task.delete': '删除窗口预热任务',
   'audit.action.warmup.task.run': '立即运行窗口预热',

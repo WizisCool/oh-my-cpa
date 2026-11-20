@@ -47,8 +47,11 @@ function validateTaskPayload(input) {
 }
 
 /** A bounded projection fixture; Go certifies the wire shape and refusal cases. */
-export function createWarmupFixture({ initialTasks } = {}) {
+export function createWarmupFixture({ initialTasks, catalog } = {}) {
   const state = structuredClone(contract.state);
+  if (catalog) {
+    state.catalog = structuredClone(catalog);
+  }
   if (Array.isArray(initialTasks)) {
     state.tasks = structuredClone(initialTasks);
     state.next = Object.fromEntries(state.tasks.map((t) => [t.id, null]));
@@ -67,6 +70,35 @@ export function createWarmupFixture({ initialTasks } = {}) {
 
     if (url.pathname.endsWith('/warmup/settings') && method === 'GET') {
       return { status: 200, json: structuredClone(state) };
+    }
+
+    if (url.pathname.endsWith('/warmup/tasks/batch') && method === 'POST') {
+      if (!input || typeof input !== 'object' || Array.isArray(input) || !Array.isArray(input.tasks) || input.tasks.length === 0 || input.tasks.length > 100) {
+        return { status: 400, json: { code: 'invalid_parameters', error: 'invalid_parameters' } };
+      }
+      for (const item of input.tasks) {
+        const err = validateTaskPayload(item);
+        if (err) return err;
+      }
+      for (const item of input.tasks) {
+        const id = `t_fixture_${seq++}`;
+        const account = item.account || item.auth_index || 'claude.json';
+        const task = {
+          id,
+          name: item.name?.trim() || `${account} (${item.trigger.window || item.trigger.time || `${item.trigger.hours}h`})`,
+          enabled: Boolean(item.enabled),
+          provider: item.provider,
+          auth_index: item.auth_index || 'exact-claude',
+          account,
+          model: item.model ?? '',
+          trigger: structuredClone(item.trigger),
+          created_at: '2026-10-13T06:00:00Z',
+          updated_at: '2026-10-13T06:00:00Z',
+        };
+        state.tasks.push(task);
+        state.next[id] = task.enabled && task.trigger.kind === 'daily' ? `2026-10-13T${task.trigger.time}:00Z` : null;
+      }
+      return { status: 201, json: structuredClone(state) };
     }
 
     if (url.pathname.endsWith('/warmup/tasks') && method === 'POST') {

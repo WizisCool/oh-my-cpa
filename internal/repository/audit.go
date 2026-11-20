@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +34,14 @@ func (r *Repository) RecordAuditEvent(ctx context.Context, event AuditEvent) (in
 	if r == nil || r.SQL() == nil {
 		return 0, errors.New("repository is not initialized")
 	}
+	return recordAuditEventExec(ctx, r.SQL(), event)
+}
+
+type auditExecer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func recordAuditEventExec(ctx context.Context, execer auditExecer, event AuditEvent) (int64, error) {
 	if event.OccurredAtMS <= 0 {
 		event.OccurredAtMS = time.Now().UnixMilli()
 	}
@@ -63,7 +72,7 @@ func (r *Repository) RecordAuditEvent(ctx context.Context, event AuditEvent) (in
 		}
 	}
 
-	res, err := r.SQL().ExecContext(ctx, `
+	res, err := execer.ExecContext(ctx, `
 		INSERT INTO audit_events (
 			occurred_at_ms, action, target_type, target_id, result,
 			request_id, source_summary, details_json

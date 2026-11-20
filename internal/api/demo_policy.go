@@ -383,6 +383,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPost, "/api/v1/management/quota/clear-cooldown", demoRefuse, "changing a credential's cooldown is disabled"},
 	{http.MethodGet, "/api/v1/management/quota/warmup/settings", demoAllow, "read warmup settings"},
 	{http.MethodPost, "/api/v1/management/quota/warmup/tasks", demoRefuse, "automatic consuming requests require a real operator"},
+	{http.MethodPost, "/api/v1/management/quota/warmup/tasks/batch", demoRefuse, "automatic consuming requests require a real operator"},
 	{http.MethodPut, "/api/v1/management/quota/warmup/tasks/{id}", demoRefuse, "automatic consuming requests require a real operator"},
 	{http.MethodDelete, "/api/v1/management/quota/warmup/tasks/{id}", demoRefuse, "automatic consuming requests require a real operator"},
 	{http.MethodPost, "/api/v1/management/quota/warmup/tasks/{id}/run", demoRefuse, "warmup consumes real subscription entitlement"},

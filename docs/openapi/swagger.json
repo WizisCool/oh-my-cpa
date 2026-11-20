@@ -7877,6 +7877,63 @@
         }
       }
     },
+    "/v1/management/quota/warmup/tasks/batch": {
+      "post": {
+        "security": [
+          {
+            "CookieAuth": []
+          }
+        ],
+        "description": "Persist one to one hundred scheduled warmup tasks atomically and return the updated warmup state.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "Quota"
+        ],
+        "summary": "Batch create quota warmup tasks",
+        "parameters": [
+          {
+            "description": "Batch warmup task configurations",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/warmup.TaskBatchCreateInput"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/warmup.StateView"
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          }
+        }
+      }
+    },
     "/v1/management/quota/warmup/tasks/{id}": {
       "put": {
         "security": [
@@ -24402,6 +24459,17 @@
         },
         "updated_at": {
           "type": "string"
+        }
+      }
+    },
+    "warmup.TaskBatchCreateInput": {
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/warmup.TaskInput"
+          }
         }
       }
     },

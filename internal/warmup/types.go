@@ -55,6 +55,10 @@ type TaskInput struct {
 	Trigger   Trigger `json:"trigger"`
 }
 
+type TaskBatchCreateInput struct {
+	Tasks []TaskInput `json:"tasks"`
+}
+
 type TaskSaveInput struct {
 	ID string `json:"id,omitempty"`
 	TaskInput

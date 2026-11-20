@@ -1,6 +1,7 @@
 import { providerDisplayName } from './providerMetadata';
 
 export const WARMUP_TASK_ORDER_PREFERENCE = 'omc_warmup_task_order';
+export const WARMUP_BATCH_MAX_TASKS = 100;
 
 export interface WarmupTrigger {
   kind: 'window' | 'daily' | 'every';
@@ -258,4 +259,126 @@ export function defaultWarmupTaskInput(catalog?: WarmupCatalog): WarmupTaskInput
       anchor: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
     },
   };
+}
+
+function defaultWindowsForProvider(provider: string): string[] {
+  return ['five_hour', provider === 'codex' ? 'weekly' : 'seven_day'];
+}
+
+function accountWindowIds(account: WarmupCatalogAccount): string[] {
+  return account.windows.length > 0
+    ? account.windows.map((w) => w.id)
+    : defaultWindowsForProvider(account.provider);
+}
+
+/**
+ * Normalizes synonymous 7-day window IDs (`weekly` on Codex, `seven_day` on Claude and others)
+ * so cross-provider batch selections can intersect them without losing the standard 7-day option.
+ */
+function canonicalWindowKey(id: string): string {
+  return id === 'weekly' || id === 'seven_day' ? 'seven_day' : id;
+}
+
+/**
+ * Returns selectable window IDs for one or more credentials. A single credential shows every
+ * window it reports; multiple credentials intersect their windows with `weekly`/`seven_day`
+ * unified as one 7-day choice (falling back to standard windows when snapshots are absent).
+ */
+export function commonWarmupWindows(
+  accounts: readonly WarmupCatalogAccount[],
+  fallbackProvider = 'codex',
+): string[] {
+  if (accounts.length === 0) return defaultWindowsForProvider(fallbackProvider);
+  if (accounts.length === 1) return accountWindowIds(accounts[0]);
+
+  const first = accountWindowIds(accounts[0]);
+  const commonKeys = new Set(first.map(canonicalWindowKey));
+  for (let i = 1; i < accounts.length; i += 1) {
+    const nextKeys = new Set(accountWindowIds(accounts[i]).map(canonicalWindowKey));
+    for (const key of Array.from(commonKeys)) {
+      if (!nextKeys.has(key)) commonKeys.delete(key);
+    }
+  }
+
+  const singleProvider = accounts.every((acc) => acc.provider === accounts[0].provider);
+  const ordered: string[] = [];
+  const emitted = new Set<string>();
+  for (const id of first) {
+    const key = canonicalWindowKey(id);
+    if (!commonKeys.has(key) || emitted.has(key)) continue;
+    emitted.add(key);
+    if (key === 'seven_day') {
+      ordered.push(singleProvider && accounts[0].provider === 'codex' ? 'weekly' : 'seven_day');
+    } else {
+      ordered.push(id);
+    }
+  }
+  return ordered.length > 0 ? ordered : ['five_hour', 'seven_day'];
+}
+
+/**
+ * Resolves a shared window selection onto a specific credential, mapping `weekly`/`seven_day`
+ * back to whichever spelling that credential's snapshot or provider expects.
+ */
+export function resolveAccountWindow(windowId: string, account: WarmupCatalogAccount): string {
+  const key = canonicalWindowKey(windowId);
+  const matched = account.windows.find((w) => w.id === windowId || canonicalWindowKey(w.id) === key);
+  if (matched) return matched.id;
+  if (key === 'seven_day') return account.provider === 'codex' ? 'weekly' : 'seven_day';
+  return windowId;
+}
+
+/**
+ * Models supported by every selected credential. Cross-provider selections usually yield an
+ * empty list so the caller stays on Auto and lets each credential pick its own lightest model.
+ */
+export function commonWarmupModels(accounts: readonly WarmupCatalogAccount[]): string[] {
+  if (accounts.length === 0) return [];
+  if (accounts.length === 1) return accounts[0].models;
+  const sets = accounts.slice(1).map((acc) => new Set(acc.models));
+  return accounts[0].models.filter((model) => sets.every((set) => set.has(model)));
+}
+
+export function canSaveWarmupBatch(
+  draft: WarmupTaskInput,
+  selectedAccounts: readonly WarmupCatalogAccount[],
+): boolean {
+  if (selectedAccounts.length === 0 || selectedAccounts.length > WARMUP_BATCH_MAX_TASKS) return false;
+  return selectedAccounts.every((account) => canSaveWarmupTask({
+    ...draft,
+    provider: account.provider,
+    auth_index: account.auth_index,
+    account: account.name,
+    trigger: draft.trigger.kind === 'window'
+      ? { ...draft.trigger, window: resolveAccountWindow(draft.trigger.window ?? '', account) }
+      : draft.trigger,
+  }));
+}
+
+/**
+ * Expands a batch draft across selected credentials. When a custom name is provided for multiple
+ * credentials, it prefixes each credential's label (`{name} ({account})`) so tasks stay distinct.
+ */
+export function buildWarmupBatchPayloads(
+  basePayload: WarmupTaskInput,
+  selectedAccounts: readonly WarmupCatalogAccount[],
+): WarmupTaskInput[] {
+  const trimmedName = basePayload.name.trim();
+  const isMulti = selectedAccounts.length > 1;
+  return selectedAccounts.map((account) => {
+    const label = account.email || account.name || account.auth_index;
+    const name = !trimmedName ? '' : isMulti ? `${trimmedName} (${label})` : trimmedName;
+    const trigger: WarmupTrigger = basePayload.trigger.kind === 'window'
+      ? { kind: 'window', window: resolveAccountWindow(basePayload.trigger.window ?? 'five_hour', account) }
+      : basePayload.trigger;
+    return {
+      name,
+      enabled: basePayload.enabled,
+      provider: account.provider,
+      auth_index: account.auth_index,
+      account: account.name,
+      model: basePayload.model,
+      trigger,
+    };
+  });
 }

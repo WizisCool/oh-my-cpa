@@ -24,6 +24,8 @@ import (
 
 const (
 	warmupBodyLimit      = 16 << 10
+	warmupBatchBodyLimit = 256 << 10
+	warmupBatchMaxTasks  = 100
 	warmupInstanceID     = "default"
 	warmupLoopInterval   = time.Minute
 	warmupModelCacheTTL  = 5 * time.Minute
@@ -119,6 +121,32 @@ func (h *Handler) createWarmupTask(writer http.ResponseWriter, request *http.Req
 		return
 	}
 	state, err := h.saveWarmupTask(request.Context(), "", input)
+	if err != nil {
+		h.writeWarmupError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusCreated, state)
+}
+
+// @Summary Batch create quota warmup tasks
+// @Description Persist one to one hundred scheduled warmup tasks atomically and return the updated warmup state.
+// @Tags Quota
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Param body body warmup.TaskBatchCreateInput true "Batch warmup task configurations"
+// @Success 201 {object} warmup.StateView
+// @Failure 400 {object} ErrorResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/management/quota/warmup/tasks/batch [post]
+func (h *Handler) createWarmupTasksBatch(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	var payload warmup.TaskBatchCreateInput
+	if err := decodeManagementJSON(writer, request, warmupBatchBodyLimit, &payload); err != nil {
+		return
+	}
+	state, err := h.saveWarmupTasksBatch(request.Context(), payload.Tasks)
 	if err != nil {
 		h.writeWarmupError(writer, err)
 		return
@@ -377,6 +405,21 @@ func (h *Handler) normalizeWarmupTask(input warmup.TaskInput) warmup.TaskInput {
 	return input
 }
 
+func resolveWarmupTaskInputWithCatalog(catalog *warmup.Catalog, input warmup.TaskInput) warmup.TaskInput {
+	if account := findCatalogAccount(catalog, warmup.Task{Provider: input.Provider, AuthIndex: input.AuthIndex, Account: input.Account}); account != nil {
+		if input.AuthIndex == "" {
+			input.AuthIndex = account.AuthIndex
+		}
+		if input.Account == "" {
+			input.Account = account.Name
+		}
+	}
+	if input.Account == "" {
+		input.Account = input.AuthIndex
+	}
+	return input
+}
+
 func (h *Handler) saveWarmupTask(ctx context.Context, id string, input warmup.TaskInput) (warmup.StateView, error) {
 	if h.cfg.IsDemoMode {
 		return warmup.StateView{}, errors.New("demo_operation_refused")
@@ -394,17 +437,7 @@ func (h *Handler) saveWarmupTask(ctx context.Context, id string, input warmup.Ta
 		client = c
 	}
 	catalog, _ := h.warmupCatalogWithFiles(ctx, client)
-	if account := findCatalogAccount(&catalog, warmup.Task{Provider: input.Provider, AuthIndex: input.AuthIndex, Account: input.Account}); account != nil {
-		if input.AuthIndex == "" {
-			input.AuthIndex = account.AuthIndex
-		}
-		if input.Account == "" {
-			input.Account = account.Name
-		}
-	}
-	if input.Account == "" {
-		input.Account = input.AuthIndex
-	}
+	input = resolveWarmupTaskInputWithCatalog(&catalog, input)
 
 	now := h.now().UTC()
 	nowISO := warmup.FormatISO(now)
@@ -447,20 +480,102 @@ func (h *Handler) saveWarmupTask(ctx context.Context, id string, input warmup.Ta
 			UpdatedAt: nowISO,
 		}
 	}
-	if err := h.writeWarmupAudit(ctx, action, task.ID, map[string]any{
-		"enabled":    task.Enabled,
-		"provider":   task.Provider,
-		"auth_index": task.AuthIndex,
-		"model":      task.Model,
-		"trigger":    task.Trigger,
-	}); err != nil {
-		return warmup.StateView{}, err
+	auditEvent := &repository.AuditEvent{
+		OccurredAtMS: now.UnixMilli(),
+		Action:       action,
+		TargetType:   "warmup",
+		TargetID:     task.ID,
+		Result:       "success",
+		Details: map[string]any{
+			"enabled":    task.Enabled,
+			"provider":   task.Provider,
+			"auth_index": task.AuthIndex,
+			"model":      task.Model,
+			"trigger":    task.Trigger,
+		},
 	}
 	reconcileMarks := h.warmupTaskMarksReconciler(&catalog, task, now)
-	if err := h.repo.WriteWarmupTaskWithMarks(ctx, warmupInstanceID, task, existing != nil, now.UnixMilli(), reconcileMarks); err != nil {
+	if err := h.repo.WriteWarmupTaskWithMarks(ctx, warmupInstanceID, task, existing != nil, now.UnixMilli(), reconcileMarks, auditEvent); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return warmup.StateView{}, errWarmupTaskNotFound
 		}
+		return warmup.StateView{}, err
+	}
+	return h.buildWarmupStateView(ctx, &catalog)
+}
+
+func (h *Handler) saveWarmupTasksBatch(ctx context.Context, inputs []warmup.TaskInput) (warmup.StateView, error) {
+	if h.cfg.IsDemoMode {
+		return warmup.StateView{}, errors.New("demo_operation_refused")
+	}
+	if h.repo == nil {
+		return warmup.StateView{}, errors.New("repository unavailable")
+	}
+	if len(inputs) == 0 || len(inputs) > warmupBatchMaxTasks {
+		return warmup.StateView{}, errors.New("invalid_batch_size")
+	}
+
+	normalized := make([]warmup.TaskInput, len(inputs))
+	for i, raw := range inputs {
+		item := h.normalizeWarmupTask(raw)
+		if err := warmup.ValidateTask(item); err != nil {
+			return warmup.StateView{}, err
+		}
+		normalized[i] = item
+	}
+
+	var client *management.Client
+	if c, err := h.capabilityClient(ctx); err == nil {
+		client = c
+	}
+	catalog, _ := h.warmupCatalogWithFiles(ctx, client)
+
+	now := h.now().UTC()
+	writes := make([]repository.WarmupTaskBatchWrite, 0, len(normalized))
+	taskIDs := make([]string, 0, len(normalized))
+	providers := make([]string, 0, len(normalized))
+	seenProviders := make(map[string]struct{}, len(normalized))
+	for i, item := range normalized {
+		resolved := resolveWarmupTaskInputWithCatalog(&catalog, item)
+		// Step CreatedAt/UpdatedAt by 1ms per entry so ListWarmupTasks preserves the submitted batch order.
+		entryTime := now.Add(time.Duration(i) * time.Millisecond)
+		entryISO := warmup.FormatISO(entryTime)
+		task := warmup.Task{
+			ID:        newWarmupID("t", entryTime),
+			Name:      warmup.DefaultTaskName(resolved),
+			Enabled:   resolved.Enabled,
+			Provider:  resolved.Provider,
+			AuthIndex: resolved.AuthIndex,
+			Account:   resolved.Account,
+			Model:     resolved.Model,
+			Trigger:   resolved.Trigger,
+			CreatedAt: entryISO,
+			UpdatedAt: entryISO,
+		}
+		taskIDs = append(taskIDs, task.ID)
+		if _, exists := seenProviders[task.Provider]; !exists {
+			seenProviders[task.Provider] = struct{}{}
+			providers = append(providers, task.Provider)
+		}
+		writes = append(writes, repository.WarmupTaskBatchWrite{
+			Task:      task,
+			Reconcile: h.warmupTaskMarksReconciler(&catalog, task, now),
+		})
+	}
+
+	auditEvent := &repository.AuditEvent{
+		OccurredAtMS: now.UnixMilli(),
+		Action:       "warmup.task.batch_create",
+		TargetType:   "warmup",
+		TargetID:     strings.Join(taskIDs, ","),
+		Result:       "success",
+		Details: map[string]any{
+			"count":     len(writes),
+			"providers": providers,
+			"task_ids":  taskIDs,
+		},
+	}
+	if err := h.repo.WriteWarmupTasksBatch(ctx, warmupInstanceID, writes, now.UnixMilli(), auditEvent); err != nil {
 		return warmup.StateView{}, err
 	}
 	return h.buildWarmupStateView(ctx, &catalog)
