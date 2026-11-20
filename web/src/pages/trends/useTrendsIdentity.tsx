@@ -92,7 +92,7 @@ export type TrendsNamed = string | { id: string; label?: string; alias?: string;
 
 export interface TrendsIdentity {
   /** The value's mark: a model's maker, a provider's or credential's brand, a client's logo, the key glyph. */
-  mark: (dimension: string, id: string) => React.ReactNode;
+  mark: (dimension: string, id: string, size?: number) => React.ReactNode;
   /** The name a reader knows the value by, the same one the request list and Insights print. */
   label: (dimension: string, value: TrendsNamed) => string;
   /** Live management shortcut for a provider or credential, when the target is currently configured. */
@@ -145,18 +145,18 @@ export function useTrendsIdentity(): TrendsIdentity {
 
   return React.useMemo<TrendsIdentity>(() => {
     return {
-      mark: (dimension, id) => {
+      mark: (dimension, id, size) => {
         if (!id) return null;
         switch (dimension) {
           case 'model':
           case 'call_point':
           case 'model_alias':
-            return renderMark('model', id);
+            return renderMark('model', id, size);
           case 'provider':
-            return renderMark('provider', id);
+            return renderMark('provider', id, size);
           case 'credential':
           case 'auth_index':
-            return renderMark('auth_index', id);
+            return renderMark('auth_index', id, size);
           case 'key':
           case 'api_key':
             return <KeyOutlined aria-hidden="true" />;

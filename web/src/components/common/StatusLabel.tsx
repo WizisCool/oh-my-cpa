@@ -6,7 +6,7 @@ export type StatusTone = 'success' | 'warn' | 'danger' | 'accent' | 'neutral';
 
 export interface StatusLabelProps extends React.HTMLAttributes<HTMLSpanElement> {
   tone: StatusTone;
-  /** `small` matches `Tag size="small"` (18px) for compact inline rows and annotations. */
+  /** `small` matches `Tag size="small"` (20px) for compact inline rows and annotations. */
   size?: 'default' | 'small';
   /** Optional trailing cue inside the chip (for example a chevron on an interactive status trigger). */
   trailing?: React.ReactNode;
@@ -16,7 +16,7 @@ export interface StatusLabelProps extends React.HTMLAttributes<HTMLSpanElement> 
 
 /**
  * A state as a tinted chip led by a 6px pip: soft semantic wash, tone ink and matching pip, on the
- * console's shared chip geometry (22px high, 18px small, `--radius-sm`, weight 500).
+ * console's shared chip geometry (22px high, 20px small, `--radius-sm`, weight 500).
  *
  * Every status in the console - request verdicts, credential health, quota states, config sync,
  * system topology, audit results and agent/playground turn states - renders through this component

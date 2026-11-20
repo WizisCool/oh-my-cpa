@@ -215,12 +215,12 @@ The language picker is a globe and the language's own name (its endonym), never 
 names a country, and the console's languages are not countries. Flags are kept for currencies,
 where the issuer is the fact.
 
-A [`Tag`](../../web/src/components/common/Tag.tsx) has one geometry everywhere: 22px high (18px
+A [`Tag`](../../web/src/components/common/Tag.tsx) has one geometry everywhere: 22px high (20px
 small), `--radius-sm`, weight 500, a tint of its tone with a rim of the same tone drawn inside.
 Anything else shaped like a chip - a count, a prefix, a badge on a row - takes the small tag's
 height, radius and rim rather than its own. A live or recorded state uses
 [`StatusLabel`](../../web/src/components/common/StatusLabel.tsx) on that same chip geometry (22px
-high, 18px small, `--radius-sm`, weight 500): a soft semantic tint without an inset rim, a circular
+high, 20px small, `--radius-sm`, weight 500): a soft semantic tint without an inset rim, a circular
 dot in the semantic tone and label ink mixed toward `--fg` (`STATUS_INK_SHARE`) so text clears WCAG
 AA on the wash in both modes (neutral uses `--fg-2` over a soft foreground wash with a `--muted`
 dot). A dialog

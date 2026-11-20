@@ -26,7 +26,7 @@ export interface FacetMarkSources {
   archive?: ProviderResolutionArchive;
 }
 
-export type FacetMarkRenderer = (key: EventFilterKey, value: string) => React.ReactNode;
+export type FacetMarkRenderer = (key: EventFilterKey, value: string, size?: number) => React.ReactNode;
 
 /**
  * The mark beside a filter option, for the three dimensions that have one.
@@ -39,7 +39,7 @@ export type FacetMarkRenderer = (key: EventFilterKey, value: string) => React.Re
  * vocabulary of words and gets no mark.
  */
 export function createFacetMarkRenderer(sources: FacetMarkSources): FacetMarkRenderer {
-  const providerMark = (record: Partial<UsageEvent>) => {
+  const providerMark = (record: Partial<UsageEvent>, size: number) => {
     const provider = resolveProviderInfo(
       record as UsageEvent,
       sources.credentials,
@@ -51,17 +51,17 @@ export function createFacetMarkRenderer(sources: FacetMarkSources): FacetMarkRen
       sources.multiPortalKeys,
       sources.archive,
     );
-    return <ProviderBrandIcon mark={provider} size={MARK_SIZE} />;
+    return <ProviderBrandIcon mark={provider} size={size} />;
   };
 
-  return (key, value) => {
+  return (key, value, size = MARK_SIZE) => {
     if (key === 'model') {
-      return <ModelMark model={value} size={MARK_SIZE} className="req-facet-model-mark" />;
+      return <ModelMark model={value} size={size} className="req-facet-model-mark" />;
     }
-    if (key === 'provider') return providerMark({ provider: value });
+    if (key === 'provider') return providerMark({ provider: value }, size);
     if (key === 'auth_index') {
       const file = sources.credentials.get(value);
-      return providerMark({ auth_index: value, provider: file?.provider || file?.type || '' });
+      return providerMark({ auth_index: value, provider: file?.provider || file?.type || '' }, size);
     }
     return null;
   };

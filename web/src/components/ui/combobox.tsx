@@ -472,9 +472,9 @@ export function Combobox<
         {selected.map((val) => (
           <span
             key={String(val)}
-            className="inline-flex max-w-full items-center gap-1 rounded-sm bg-selected px-1.5 py-0.5 text-xs text-foreground"
+            className="inline-flex h-5 max-w-full items-center gap-1 rounded-sm bg-selected px-[7px] text-xs font-medium leading-none text-foreground"
           >
-            <LineSlot>{renderChipLabel(val)}</LineSlot>
+            <LineSlot className="leading-[1.25]">{renderChipLabel(val)}</LineSlot>
             {!disabled ? (
               <button
                 type="button"
@@ -697,9 +697,9 @@ export function Combobox<
                     {visibleTags.map((val) => (
                       <span
                         key={String(val)}
-                        className="inline-flex max-w-[180px] items-center gap-1 rounded-sm bg-selected px-1.5 py-0.5 text-xs text-foreground"
+                        className="inline-flex h-5 max-w-[180px] items-center gap-1 rounded-sm bg-selected px-[7px] text-xs font-medium leading-none text-foreground"
                       >
-                        <LineSlot>{renderChipLabel(val)}</LineSlot>
+                        <LineSlot className="leading-[1.25]">{renderChipLabel(val)}</LineSlot>
                         {!disabled ? (
                           <span
                             role="button"
@@ -722,7 +722,7 @@ export function Combobox<
                       </span>
                     ))}
                     {overflowCount > 0 ? (
-                      <span className="inline-flex items-center rounded-sm bg-selected px-1.5 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
+                      <span className="inline-flex h-5 items-center rounded-sm bg-selected px-[7px] text-xs font-medium leading-none text-muted-foreground tabular-nums">
                         +{overflowCount}
                       </span>
                     ) : null}

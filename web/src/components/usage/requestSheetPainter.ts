@@ -34,7 +34,7 @@ const GLYPH_GAP = 3;
 const GLYPH_SIZE = 12;
 /** The reasoning count's bulb is the list's `text-2xs` glyph. */
 const SMALL_GLYPH_SIZE = 10;
-const GLYPH_BOX = 18;
+const GLYPH_BOX = 20;
 /** The list's washes: a neutral mark is a wash of the ink, a hued one a tint of its hue. */
 const INK_WASH = 0.06;
 const HUE_TINT = 0.12;
@@ -282,7 +282,7 @@ export async function paintRequestSheet(
     if (segment.kind === 'mark') return INLINE_MARK_SIZE;
     context.font = segmentFont(segment);
     const textWidth = context.measureText(segment.text).width;
-    if (segment.kind === 'tag') return textWidth + (segment.effortStep !== undefined ? 14 : 12);
+    if (segment.kind === 'tag') return textWidth + 14;
     if (segment.kind === 'dot') return textWidth + 12 + (segment.isWashed ? 16 : 0);
     return textWidth;
   };
@@ -372,10 +372,10 @@ export async function paintRequestSheet(
     // An effort step below 1 is `none`, which the list also leaves at the tag's own neutral tone.
     const hue = (segment.effortStep && palette.effort[segment.effortStep - 1]) || null;
     const ink = hue ?? toneColor(palette, segment.tone);
-    const boxHeight = segment.effortStep !== undefined ? 18 : 16;
+    const boxHeight = 20;
     wash(hue ?? palette.fg, hue ? HUE_TINT : INK_WASH, x, centreY - boxHeight / 2, width, boxHeight, RADIUS.sm);
     context.fillStyle = ink;
-    context.fillText(segment.text, x + (segment.effortStep !== undefined ? 7 : 6), centreY + 0.5);
+    context.fillText(segment.text, x + 7, centreY + 0.5);
   };
 
   const drawCell = (cell: SheetCell, column: SheetColumn, top: number, rowHeight: number) => {
