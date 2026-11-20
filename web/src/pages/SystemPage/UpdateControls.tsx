@@ -1,10 +1,10 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import clsx from 'clsx';
 import { CloudDownloadOutlined, InfoCircleOutlined, LinkOutlined } from '../../components/icons';
 import { ConfirmAction } from '../../components/common/ConfirmAction';
 import { CopyButton } from '../../components/common/CopyButton';
 import { SectionHeading } from '../../components/common/SectionHeading';
+import { StageProgress } from '../../components/common/StageProgress';
 import { Notice } from '../../components/feedback';
 import { useT } from '../../i18n';
 import type { SystemProductVersion, SystemUpdaterResponse } from '../../types/system';
@@ -62,27 +62,21 @@ export const UpdateAction: React.FC<UpdateActionProps> = ({ version, productTitl
 /**
  * Where a running replacement has got to, or why this product is not updated from the page.
  *
- * The step bar carries the updater's own four stages, not a measured percentage: the stages are
- * known and ordered, their durations are not. The sentence beside it is that stage in words, so
- * the reading never rests on the bar alone.
+ * The updater's own four stages, read as the stage in words over a bar of the same width as the
+ * version comparison above it, so the progress belongs to the versions it is moving between.
  */
 export const UpdateStatusLine: React.FC<{ offer: UpdateOffer }> = ({ offer }) => {
   const t = useT();
   if (offer.kind === 'running') {
-    const reached = UPDATE_STAGE_ORDER.indexOf(offer.stage);
     return (
-      <div className={styles['update-progress']}>
-        <span className={styles['update-steps']} data-testid="sys-update-steps" aria-hidden="true">
-          {UPDATE_STAGE_ORDER.map((stage, index) => (
-            <span
-              key={stage}
-              className={clsx(styles['update-step'], index <= reached && styles['update-step-reached'])}
-              data-reached={index <= reached}
-            />
-          ))}
-        </span>
-        <div className={styles['version-detail']} role="status" data-testid="sys-update-stage">{t(offer.stageKey)}</div>
-      </div>
+      <StageProgress
+        className={styles['update-progress']}
+        role="status"
+        data-testid="sys-update-stage"
+        total={UPDATE_STAGE_ORDER.length}
+        current={UPDATE_STAGE_ORDER.indexOf(offer.stage)}
+        label={t(offer.stageKey)}
+      />
     );
   }
   if (offer.kind === 'blocked') {

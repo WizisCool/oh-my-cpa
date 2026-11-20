@@ -169,8 +169,20 @@
 .status[data-tone='warn'] { --tone: var(--warn); box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 45%, transparent), var(--edge-drop); }
 .status[data-tone='run'] { --tone: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), var(--edge-drop); }
 
+/* The verdict and what to do about it share one line: the actions sit at its right edge, centred
+   on the verdict, and wrap beneath it only when the drawer is too narrow to hold both. */
+.status-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 16px;
+  min-width: 0;
+}
+
 .status-head {
   display: flex;
+  flex: 1 1 240px;
   align-items: center;
   gap: 14px;
   min-width: 0;
@@ -233,47 +245,17 @@
 
 .status-actions {
   display: flex;
+  flex: none;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding-inline-start: 54px;
 }
 
-/* A run's stages as segments: done ones filled, the current one breathing, the rest empty. */
-.stages {
-  display: grid;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.stage {
-  position: relative;
-  height: 4px;
-  border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--fg) 10%, transparent);
-  overflow: hidden;
-}
-
-.stage::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--accent);
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform var(--motion-slow) var(--ease-out);
-}
-
-.stage[data-state]::after { transform: scaleX(1); }
-.stage[data-state='active']::after { animation: stage-breathe 1.4s var(--ease-standard) infinite; }
-
-@keyframes stage-breathe {
-  50% { opacity: 0.4; }
+/* A run's progress closes the card under a hairline, across its full width, so the stage reads
+   as part of the verdict rather than as a bar floating between the verdict and its actions. */
+.run-progress {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
 }
 
 /* ── the first visit: the passphrase is the whole task, so it is the one card with the accent ── */
@@ -869,7 +851,7 @@
   .setup-card,
   .form-card,
   .preview { padding: 16px; }
-  .status-actions { padding-inline-start: 0; }
+  .status-actions { flex: 1 1 100%; }
   .status-actions > :global([data-slot='button'][data-variant='primary']) { flex: 1 1 auto; }
   .row-fold { padding-inline: 16px; }
   .location { padding-inline-start: 10px; }

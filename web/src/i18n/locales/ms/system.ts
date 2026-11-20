@@ -61,6 +61,7 @@ export default {
   "sys.title": "Maklumat Sistem",
   "sys.version_card": "Versi & Kemas Kini",
   "sys.update_ready": "Kemas kini tersedia",
+  "sys.update_running": "Sedang mengemas kini",
   "sys.check_failed": "Semakan gagal",
   "sys.check_failed_cached": "Semakan gagal; hasil sebelumnya dikekalkan",
   "sys.check_updates_failed": "Semakan gagal untuk {products}; lihat butiran produk",

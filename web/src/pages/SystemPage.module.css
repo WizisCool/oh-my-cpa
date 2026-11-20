@@ -53,11 +53,14 @@
   padding-bottom: 0;
 }
 
+/* Identity on the left, the row's actions on the right edge of the same line, so the update
+   button sits beside the product it replaces and its verdict instead of at the far end of the
+   version readings. */
 .product-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px 16px;
   flex-wrap: wrap;
 }
 
@@ -74,12 +77,15 @@
   color: var(--fg);
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   white-space: nowrap;
 }
 
 .product-badge {
+  display: inline-flex;
   max-width: 100%;
+  font-weight: 400;
 }
 
 .repo-link {
@@ -97,20 +103,12 @@
   color: var(--accent);
 }
 
-.version-row {
-  display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: 8px 24px;
-}
-
-/* Bound the comparison independently of the card width so the two readings stay close.
-   The log is a separate row action; it must not change either version's alignment. */
+/* Bound the comparison independently of the card width so the two readings stay close; the
+   progress of an update in flight takes the same width beneath it. */
 .version-comparison {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
-  flex: 1 1 260px;
   max-width: 320px;
   min-width: 0;
 }
@@ -149,13 +147,14 @@
   overflow-wrap: anywhere;
 }
 
-/* The row's trailing actions share one group, so the comparison keeps its alignment whether
-   a release offers one action, both or neither. The primary action is drawn last so it sits at
-   the row's right edge, the same edge the page's own primary action takes. */
+/* The row's actions share one group, so the identity keeps its place whether a release offers
+   one action, several or none. The primary action is drawn last so it sits at the row's right
+   edge, the same edge the page's own primary action takes. */
 .version-actions {
   display: flex;
   flex: 0 0 auto;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 4px 8px;
   margin-inline-start: auto;
@@ -195,31 +194,9 @@
   max-width: 280px;
 }
 
-/* A replacement in flight: the updater's four steps, then the sentence naming the one it is on.
-   The bar carries the step count, not a measured percentage - the stages are known and ordered,
-   their durations are not. A step that has been reached stays filled, so the bar reads as
-   progress through a known sequence rather than as a moving indicator. */
+/* A replacement in flight, as wide as the comparison it is moving between. */
 .update-progress {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.update-steps {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
   max-width: 320px;
-}
-
-.update-step {
-  height: 3px;
-  border-radius: var(--radius-xs);
-  background: var(--border);
-}
-
-.update-step-reached {
-  background: var(--accent);
 }
 
 /* Why a product is not updated from the page. A quiet mark beside a sentence: a pinned image or
@@ -282,18 +259,15 @@
 /* Label/value rows preserve long build tags on phones. The action keeps a whole line of
    its own instead of shrinking either readout or splitting its label to fit beside it. */
 @media (max-width: 640px) {
-  .version-row {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 8px;
-  }
-
   .version-comparison {
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
-    flex: none;
     max-width: none;
     width: 100%;
+  }
+
+  .update-progress {
+    max-width: none;
   }
 
   .version-pair {
@@ -312,8 +286,10 @@
     flex-shrink: 0;
   }
 
+  /* The actions take a line of their own under the identity on a phone, the primary one at the
+     right edge where the thumb reaches. */
   .version-actions {
-    align-self: flex-end;
+    width: 100%;
   }
 
 }
