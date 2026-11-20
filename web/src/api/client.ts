@@ -481,23 +481,36 @@ export const api = {
   },
 
   async getSession(): Promise<AuthSession> {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 8000) : null;
     let response: Response;
     try {
       response = await fetch(authUrl('/session'), {
         method: 'GET',
         credentials: 'same-origin',
         headers: { Accept: 'application/json' },
+        ...(controller ? { signal: controller.signal } : {}),
       });
     } catch (err: unknown) {
+      if (timeoutId !== null) clearTimeout(timeoutId);
       const errorMsg = err instanceof Error ? err.message : String(err);
       throw new ApiError(`Network request failed (${errorMsg}); check that the backend is running`, 0);
     }
-    if (!response.ok) {
-      const error = await readError(response);
-      if (response.status === 401) unauthorizedHandler?.();
-      throw new ApiError(error.message, response.status, error.data);
+    try {
+      if (!response.ok) {
+        const error = await readError(response);
+        // Session probes let AuthGate decide how to handle 401 under its own request generation
+        // guard so a stale/abandoned probe can never sign out a newer login.
+        throw new ApiError(error.message, response.status, error.data);
+      }
+      return await (response.json() as Promise<AuthSession>);
+    } catch (err: unknown) {
+      if (err instanceof ApiError) throw err;
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      throw new ApiError(`Network request failed (${errorMsg}); check that the backend is running`, 0);
+    } finally {
+      if (timeoutId !== null) clearTimeout(timeoutId);
     }
-    return response.json() as Promise<AuthSession>;
   },
 
   async logout(): Promise<void> {

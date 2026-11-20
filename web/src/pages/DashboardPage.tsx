@@ -180,6 +180,8 @@ const KpiDelta: React.FC<{
   );
 };
 
+let rememberedDashboardApiKey: string | undefined;
+
 export const DashboardPage: React.FC = () => {
   useTimeZone();
   const t = useT();
@@ -228,7 +230,11 @@ export const DashboardPage: React.FC = () => {
     if (ok) toast.success(t('dash.layout.saved'));
   }, [layoutDraft, layoutPreference, toast, t]);
 
-  const [selectedApiKey, setSelectedApiKey] = React.useState<string | undefined>(undefined);
+  const [selectedApiKeyCandidate, setSelectedApiKeyState] = React.useState<string | undefined>(() => rememberedDashboardApiKey);
+  const setSelectedApiKey = React.useCallback((next: string | undefined) => {
+    rememberedDashboardApiKey = next;
+    setSelectedApiKeyState(next);
+  }, []);
   const [isReceiptOpen, setIsReceiptOpen] = React.useState(false);
   const openReceipt = React.useCallback(() => setIsReceiptOpen(true), []);
 
@@ -257,6 +263,21 @@ export const DashboardPage: React.FC = () => {
         short: k.alias || `••${maskKeyText(k.key).slice(-4)}`,
       }));
   }, [keysQuery.data]);
+
+  // Apply a remembered key filter only while the selector options can actually display and clear it.
+  const selectedApiKey = React.useMemo(() => {
+    if (!selectedApiKeyCandidate) return undefined;
+    return clientKeyOptions.some((option) => option.value === selectedApiKeyCandidate)
+      ? selectedApiKeyCandidate
+      : undefined;
+  }, [selectedApiKeyCandidate, clientKeyOptions]);
+
+  React.useEffect(() => {
+    if (!keysQuery.isSuccess || !selectedApiKeyCandidate) return;
+    if (!clientKeyOptions.some((option) => option.value === selectedApiKeyCandidate)) {
+      setSelectedApiKey(undefined);
+    }
+  }, [keysQuery.isSuccess, selectedApiKeyCandidate, clientKeyOptions, setSelectedApiKey]);
 
   const rangeParams = dashboardRangeParams(range);
   const query = React.useMemo(() => {

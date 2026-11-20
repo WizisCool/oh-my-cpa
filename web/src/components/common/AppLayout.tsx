@@ -42,6 +42,12 @@ import { useNavLayout } from '../../hooks/useNavLayout';
 import { usePendingUpdates } from '../../hooks/useUpdateNotice';
 import { Tooltip } from './Tooltip';
 import { NavSelectionHighlight } from './NavSelectionHighlight';
+import {
+  clearReloadRecoveryState,
+  consumeScrollSnapshot,
+  saveScrollSnapshot,
+  saveStandaloneRoute,
+} from '../../utils/reloadRecovery';
 
 /**
  * Routes that own their scroll columns rather than scrolling the content area.
@@ -51,6 +57,7 @@ import { NavSelectionHighlight } from './NavSelectionHighlight';
  * content area's height instead of growing it.
  */
 const WORKSPACE_ROUTES = new Set(['/playground', '/agent']);
+const MOBILE_HOT_ROUTE_PINNED: ReadonlySet<string> = new Set();
 
 /** A plugin page is a frame that fills the content area and scrolls inside itself. */
 function isWorkspaceRoute(pathname: string): boolean {
@@ -281,16 +288,224 @@ export const AppLayout: React.FC = () => {
 
   // The content column owns the scroll position, so reset it on navigation.
   // Without this a short page inherits the previous page's scroll offset and
-  // appears blank below the fold.
+  // appears blank below the fold. On initial boot after a mobile tab discard,
+  // restore the saved scroll offset for the same route instead.
   const contentRef = React.useRef<HTMLElement | null>(null);
   const hasContentScroll = React.useRef(false);
+  const pathnameRef = React.useRef(location.pathname);
+  const scrollSaveTimerRef = React.useRef<number | null>(null);
+  const isLoggingOutRef = React.useRef(false);
+  const hasBootRestoredScrollRef = React.useRef(false);
+  const pendingBootScrollRef = React.useRef<{ path: string; scrollTop: number } | null>(null);
+
+  React.useLayoutEffect(() => {
+    pathnameRef.current = location.pathname;
+  }, [location.pathname]);
+
   React.useEffect(() => {
     const node = contentRef.current;
+    if (scrollSaveTimerRef.current !== null) {
+      window.clearTimeout(scrollSaveTimerRef.current);
+      scrollSaveTimerRef.current = null;
+    }
+    saveStandaloneRoute(location.pathname);
+
+    if (!hasBootRestoredScrollRef.current && pendingBootScrollRef.current === null) {
+      // Wait for the index redirect (`ConsoleIndexRedirect`) to land on a real console route
+      // before consuming the saved scroll offset so standalone PWA relaunches still restore it.
+      if (location.pathname === '/' || location.pathname === '') {
+        return undefined;
+      }
+      const savedScrollTop = consumeScrollSnapshot(location.pathname);
+      if (savedScrollTop && savedScrollTop > 0) {
+        pendingBootScrollRef.current = { path: location.pathname, scrollTop: savedScrollTop };
+      } else {
+        hasBootRestoredScrollRef.current = true;
+      }
+    }
+
+    const pendingRestore = pendingBootScrollRef.current;
+    if (pendingRestore) {
+      if (pendingRestore.path !== location.pathname) {
+        pendingBootScrollRef.current = null;
+        hasBootRestoredScrollRef.current = true;
+      } else {
+        if (!node) return undefined;
+        const targetScrollTop = pendingRestore.scrollTop;
+        let isStopped = false;
+        let frameId = 0;
+        let settleDeadline: number | null = null;
+        let maxWaitDeadline: number | null = null;
+        let lastMaxScroll = -1;
+        const observedNodes = new Set<Element>();
+        const clearSettleDeadline = () => {
+          if (settleDeadline !== null) {
+            window.clearTimeout(settleDeadline);
+            settleDeadline = null;
+          }
+        };
+        const clearMaxWaitDeadline = () => {
+          if (maxWaitDeadline !== null) {
+            window.clearTimeout(maxWaitDeadline);
+            maxWaitDeadline = null;
+          }
+        };
+        const scheduleMaxWaitDeadline = () => {
+          if (isStopped || document.visibilityState !== 'visible') return;
+          if (maxWaitDeadline === null) {
+            maxWaitDeadline = window.setTimeout(finish, 10_000);
+          }
+        };
+        const onRestoreVisibilityChange = () => {
+          if (isStopped) return;
+          if (document.visibilityState === 'hidden') {
+            clearSettleDeadline();
+            clearMaxWaitDeadline();
+          } else {
+            scheduleMaxWaitDeadline();
+            apply();
+          }
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+          if (event.metaKey || event.ctrlKey || event.altKey) return;
+          const target = event.target as HTMLElement | null;
+          if (target && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) {
+            return;
+          }
+          if (
+            event.key === 'ArrowDown' ||
+            event.key === 'ArrowUp' ||
+            event.key === 'PageDown' ||
+            event.key === 'PageUp' ||
+            event.key === 'Home' ||
+            event.key === 'End' ||
+            event.key === ' '
+          ) {
+            finish();
+          }
+        };
+        const detach = () => {
+          if (isStopped) return;
+          isStopped = true;
+          if (frameId) cancelAnimationFrame(frameId);
+          clearSettleDeadline();
+          clearMaxWaitDeadline();
+          resizeObserver?.disconnect();
+          mutationObserver?.disconnect();
+          observedNodes.clear();
+          node.removeEventListener('wheel', finish);
+          node.removeEventListener('touchstart', finish);
+          node.removeEventListener('pointerdown', finish);
+          window.removeEventListener('keydown', onKeyDown);
+          document.removeEventListener('visibilitychange', onRestoreVisibilityChange);
+        };
+        const finish = () => {
+          pendingBootScrollRef.current = null;
+          hasBootRestoredScrollRef.current = true;
+          detach();
+        };
+        const apply = () => {
+          if (isStopped) return;
+          if (document.visibilityState === 'hidden') {
+            clearSettleDeadline();
+            clearMaxWaitDeadline();
+            return;
+          }
+          scheduleMaxWaitDeadline();
+          const maxScroll = Math.max(0, node.scrollHeight - node.clientHeight);
+          const didGrow = maxScroll > lastMaxScroll;
+          lastMaxScroll = maxScroll;
+          if (maxScroll > 0) {
+            node.scrollTop = Math.min(targetScrollTop, maxScroll);
+            hasContentScroll.current = node.scrollTop !== 0;
+          }
+          if (maxScroll >= targetScrollTop && node.scrollTop >= targetScrollTop - 2) {
+            finish();
+            return;
+          }
+          // Keep observers active until the 10s visible deadline, user input, navigation, or
+          // reaching the target offset; if a cold route finishes loading data later inside that
+          // window, ResizeObserver / MutationObserver still restores the saved position.
+          if (didGrow && maxScroll >= targetScrollTop) {
+            clearSettleDeadline();
+            settleDeadline = window.setTimeout(finish, 1500);
+          }
+        };
+        const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(apply) : null;
+        const observeChildren = () => {
+          if (!resizeObserver) return;
+          const currentChildren = new Set<Element>([node]);
+          for (const child of Array.from(node.children)) {
+            if (!child.classList.contains('data-progress')) {
+              currentChildren.add(child);
+            }
+          }
+          for (const existing of observedNodes) {
+            if (!currentChildren.has(existing)) {
+              resizeObserver.unobserve(existing);
+              observedNodes.delete(existing);
+            }
+          }
+          for (const next of currentChildren) {
+            if (!observedNodes.has(next)) {
+              resizeObserver.observe(next);
+              observedNodes.add(next);
+            }
+          }
+        };
+        observeChildren();
+        const mutationObserver = typeof MutationObserver === 'function'
+          ? new MutationObserver(() => {
+              observeChildren();
+              apply();
+            })
+          : null;
+        mutationObserver?.observe(node, { childList: true, subtree: true });
+        node.addEventListener('wheel', finish, { passive: true });
+        node.addEventListener('touchstart', finish, { passive: true });
+        node.addEventListener('pointerdown', finish, { passive: true });
+        window.addEventListener('keydown', onKeyDown, { passive: true });
+        document.addEventListener('visibilitychange', onRestoreVisibilityChange);
+        scheduleMaxWaitDeadline();
+        frameId = requestAnimationFrame(apply);
+        // Cleanup detaches listeners/observers without marking restoration finished so
+        // React StrictMode's extra setup-cleanup-setup cycle resumes with `pendingBootScrollRef`.
+        return detach;
+      }
+    }
+
     // Even a no-op scrollTo flushes pending layout on navigation. Scroll events already
     // tell us whether a reset is needed, without measuring the newly mounted page.
     if (node && hasContentScroll.current) node.scrollTo({ top: 0, behavior: 'auto' });
     hasContentScroll.current = false;
+    return undefined;
   }, [location.pathname]);
+
+  React.useEffect(() => {
+    const persistSnapshot = () => {
+      if (isLoggingOutRef.current) return;
+      const currentPath = pathnameRef.current;
+      const pending = pendingBootScrollRef.current;
+      const scrollTop = pending && pending.path === currentPath
+        ? pending.scrollTop
+        : (contentRef.current?.scrollTop ?? 0);
+      saveScrollSnapshot(currentPath, scrollTop);
+      saveStandaloneRoute(currentPath);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') persistSnapshot();
+    };
+    window.addEventListener('pagehide', persistSnapshot);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', persistSnapshot);
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (scrollSaveTimerRef.current !== null) {
+        window.clearTimeout(scrollSaveTimerRef.current);
+        scrollSaveTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const { data: health } = useQuery({
     queryKey: ['health'],
@@ -301,7 +516,14 @@ export const AppLayout: React.FC = () => {
   const logoutMutation = useMutation({
     mutationFn: api.logout,
     onSuccess: () => {
+      isLoggingOutRef.current = true;
+      if (scrollSaveTimerRef.current !== null) {
+        window.clearTimeout(scrollSaveTimerRef.current);
+        scrollSaveTimerRef.current = null;
+      }
+      pendingBootScrollRef.current = null;
       clearMirroredCPAMCCredential();
+      clearReloadRecoveryState();
       window.location.reload();
     },
     onError: (err: Error) => toast.error(t('shell.logout_failed', { msg: err.message })),
@@ -363,8 +585,9 @@ export const AppLayout: React.FC = () => {
   const goToDashboard = () => navigateToKey('/dashboard');
 
   React.useEffect(() => {
+    if (isMobile) return undefined;
     return consoleRouteRegistry.scheduleIdlePrewarm(location.pathname);
-  }, [location.pathname]);
+  }, [isMobile, location.pathname]);
 
   const preloadMenuTarget = (event: React.SyntheticEvent) => {
     const target = event.target;
@@ -471,8 +694,12 @@ export const AppLayout: React.FC = () => {
         isActiveHotRoute
           ? { key: activeRouteKey, outlet, locationContext: { locationContext, routeContext } }
           : null,
-        // Every hot route keeps its slot, so moving between the observability pages never rebuilds one.
-        { maxSlots: HOT_ACTIVITY_ROUTES.size },
+        // Desktop keeps every hot observability route mounted so tab switches stay instant.
+        // Mobile keeps only the single active hot route and drops it when leaving so hidden
+        // Recharts/SVG subtrees do not inflate memory and trigger OS background tab eviction.
+        isMobile
+          ? { maxSlots: 1, pinnedKeys: MOBILE_HOT_ROUTE_PINNED, dropWhenInactive: true }
+          : { maxSlots: HOT_ACTIVITY_ROUTES.size },
       );
 
   React.useLayoutEffect(() => {
@@ -540,7 +767,22 @@ export const AppLayout: React.FC = () => {
           ref={contentRef}
           data-scroll-root
           onScroll={(event) => {
-            if (event.target === event.currentTarget) hasContentScroll.current = event.currentTarget.scrollTop !== 0;
+            if (event.target === event.currentTarget) {
+              const scrollTop = event.currentTarget.scrollTop;
+              const pathAtScroll = location.pathname;
+              hasContentScroll.current = scrollTop !== 0;
+              if (isLoggingOutRef.current) return;
+              const pending = pendingBootScrollRef.current;
+              if (pending && pending.path === pathAtScroll) return;
+              if (scrollSaveTimerRef.current !== null) window.clearTimeout(scrollSaveTimerRef.current);
+              scrollSaveTimerRef.current = window.setTimeout(() => {
+                scrollSaveTimerRef.current = null;
+                if (isLoggingOutRef.current) return;
+                const activePending = pendingBootScrollRef.current;
+                if (activePending && activePending.path === pathAtScroll) return;
+                saveScrollSnapshot(pathAtScroll, scrollTop);
+              }, 250);
+            }
           }}
         >
           {/* App-wide in-flight indicator, so no page needs its own spinner swap. */}

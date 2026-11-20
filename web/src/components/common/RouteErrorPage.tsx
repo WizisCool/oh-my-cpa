@@ -14,6 +14,7 @@ import { getAppConfig } from '../../types/config';
 import {
   attemptChunkReload,
   clearChunkReloadPending,
+  getChunkReloadGraceRemainingMs,
   isChunkReloadPending,
   isModuleLoadFailure,
 } from '../../utils/chunkRecovery';
@@ -39,7 +40,16 @@ export const RouteErrorPage: React.FC = () => {
     if (!isModuleFailure) return;
     if (isChunkReloadPending() || attemptChunkReload()) {
       setIsReloading(true);
+      return;
     }
+    const graceRemainingMs = getChunkReloadGraceRemainingMs();
+    if (graceRemainingMs <= 0) return;
+    const timer = window.setTimeout(() => {
+      if (isChunkReloadPending() || attemptChunkReload()) {
+        setIsReloading(true);
+      }
+    }, graceRemainingMs + 50);
+    return () => window.clearTimeout(timer);
   }, [isModuleFailure]);
 
   React.useEffect(() => {

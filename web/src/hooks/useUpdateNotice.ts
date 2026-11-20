@@ -27,6 +27,13 @@ export const UPDATE_STATUS_QUERY_KEY = ['system-updates'] as const;
 export const UPDATE_STATUS_REFRESH_MS = 60 * 60 * 1000;
 
 /**
+ * Shortest interval between two `ready`-triggered re-reads on stream reconnect.
+ * Real `updates` events always invalidate immediately; throttling `ready` keeps brief mobile
+ * background/foreground switches from issuing redundant update-status fetches.
+ */
+const UPDATE_READY_REVALIDATE_MIN_AGE_MS = 60_000;
+
+/**
  * The stored dismissals and the two writes the System Information page offers.
  *
  * Both products share one document and each write replaces it whole, so a write is only
@@ -78,9 +85,44 @@ export function usePendingUpdates(): { products: ReleaseProduct[]; hasPluginUpda
   const isDemo = isDemoMode();
   React.useEffect(() => {
     if (isDemo) return undefined;
-    return systemLiveChannel().subscribe({
-      onSignal: () => { void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY }); },
+    let deferredTimer: number | null = null;
+    const clearDeferred = () => {
+      if (deferredTimer !== null) {
+        window.clearTimeout(deferredTimer);
+        deferredTimer = null;
+      }
+    };
+    const scheduleDeferred = (delayMs: number) => {
+      clearDeferred();
+      deferredTimer = window.setTimeout(() => {
+        deferredTimer = null;
+        const latestUpdatedAt = queryClient.getQueryState(UPDATE_STATUS_QUERY_KEY)?.dataUpdatedAt ?? 0;
+        const latestAgeMs = latestUpdatedAt > 0 ? Date.now() - latestUpdatedAt : Infinity;
+        if (latestAgeMs < UPDATE_READY_REVALIDATE_MIN_AGE_MS) {
+          scheduleDeferred(Math.max(0, UPDATE_READY_REVALIDATE_MIN_AGE_MS - latestAgeMs));
+          return;
+        }
+        void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
+      }, delayMs);
+    };
+    const unsubscribe = systemLiveChannel().subscribe({
+      onSignal: (signal) => {
+        if (signal === 'ready') {
+          const updatedAt = queryClient.getQueryState(UPDATE_STATUS_QUERY_KEY)?.dataUpdatedAt ?? 0;
+          const ageMs = updatedAt > 0 ? Date.now() - updatedAt : Infinity;
+          if (ageMs < UPDATE_READY_REVALIDATE_MIN_AGE_MS) {
+            scheduleDeferred(Math.max(0, UPDATE_READY_REVALIDATE_MIN_AGE_MS - ageMs));
+            return;
+          }
+        }
+        clearDeferred();
+        void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
+      },
     });
+    return () => {
+      clearDeferred();
+      unsubscribe();
+    };
   }, [isDemo, queryClient]);
   const { dismissals, isLoaded } = useUpdateDismissals();
   return React.useMemo(

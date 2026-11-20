@@ -482,6 +482,34 @@ test('route registry resolves exact and prefix routes, respects intent cooldown,
   while (idleCallbacks.length > 0) idleCallbacks.shift()!();
   assert.deepEqual(loaded, ['/insights'], 'idle prewarm skips active route and normal-priority plugin routes');
   cancelIdle();
+
+  // Mobile/constrained devices skip speculative idle prewarming completely.
+  loaded.length = 0;
+  const mobileRegistry = createRouteRegistry(
+    [
+      {
+        path: '/dashboard',
+        priority: 'critical',
+        preloadChunk: async () => { loaded.push('/dashboard'); },
+      },
+      {
+        path: '/insights',
+        priority: 'high',
+        preloadChunk: async () => { loaded.push('/insights'); },
+      },
+    ],
+    {
+      canIdlePrewarm: () => false,
+      scheduleIdle: (cb) => {
+        idleCallbacks.push(cb);
+        return () => undefined;
+      },
+    },
+  );
+  const cancelMobileIdle = mobileRegistry.scheduleIdlePrewarm('/dashboard');
+  while (idleCallbacks.length > 0) idleCallbacks.shift()!();
+  assert.deepEqual(loaded, [], 'constrained/mobile devices skip background idle prewarm');
+  cancelMobileIdle();
   queryClient.clear();
 });
 
@@ -975,6 +1003,33 @@ test('reconcileHotRouteSlots preserves slot order, keeps outlet identity on warm
   const trendsLoc = { locationContext: { location: { pathname: '/trends', search: '', hash: '', state: null } } };
   const allHot = reconcileHotRouteSlots(slotsInsightsNewest, { key: '/trends', outlet: { id: 'trends-1' }, locationContext: trendsLoc }, { maxSlots: HOT_ACTIVITY_ROUTES.size });
   assert.deepEqual(allHot.map((s) => s.key), ['/dashboard', '/insights', '/trends']);
+
+  // Shrinking when all remaining non-active slots are pinned evicts the least-recently-used slot, not index 0.
+  const allPinnedShrunk = reconcileHotRouteSlots(
+    [
+      { key: '/dashboard', outlet: dashOutlet1, locationContext: dashLoc1, lastActiveStep: 4 },
+      { key: '/insights', outlet: insightsOutlet, locationContext: insightsLoc, lastActiveStep: 2 },
+      { key: '/trends', outlet: { id: 'trends-1' }, locationContext: trendsLoc, lastActiveStep: 3 },
+    ],
+    { key: '/trends', outlet: { id: 'trends-2' }, locationContext: trendsLoc },
+    { maxSlots: 2, pinnedKeys: new Set(['/dashboard', '/insights', '/trends']) },
+  );
+  assert.deepEqual(allPinnedShrunk.map((s) => s.key), ['/dashboard', '/trends'], 'evicts oldest pinned /insights rather than newer /dashboard');
+
+  // Mobile mode caps to 1 active hot slot (releasing hidden chart trees) and drops slots on non-hot routes.
+  const mobileSingle = reconcileHotRouteSlots(
+    allHot,
+    { key: '/insights', outlet: { id: 'insights-2' }, locationContext: insightsLoc },
+    { maxSlots: 1, pinnedKeys: new Set(), dropWhenInactive: true },
+  );
+  assert.deepEqual(mobileSingle.map((s) => s.key), ['/insights']);
+  assert.equal(mobileSingle[0]?.outlet, insightsOutlet, 'preserves outlet identity when shrinking pool to active route');
+  const mobileCleared = reconcileHotRouteSlots(
+    mobileSingle,
+    null,
+    { maxSlots: 1, pinnedKeys: new Set(), dropWhenInactive: true },
+  );
+  assert.deepEqual(mobileCleared, [], 'mobile releases off-screen hot route when navigating to a non-hot route');
 });
 
 test('buildMonotoneSparkline produces overshoot-free monotone paths and maps pointer x to nearest bucket', () => {

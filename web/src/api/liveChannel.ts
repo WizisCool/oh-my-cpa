@@ -42,6 +42,73 @@ export interface LiveChannelDeps {
   clearTimer: (timer: unknown) => void;
 }
 
+export interface PageActivityTargets {
+  readonly doc?: Pick<Document, 'visibilityState' | 'addEventListener' | 'removeEventListener'> | null;
+  readonly win?: Pick<Window, 'addEventListener' | 'removeEventListener'> | null;
+}
+
+export interface PageActivityMonitor {
+  readonly isActive: () => boolean;
+  readonly subscribe: (handler: () => void) => () => void;
+}
+
+/**
+ * Tracks whether the document is actively foregrounded and eligible to hold live SSE sockets.
+ *
+ * Beyond `visibilitychange`, this also listens to `pagehide`/`pageshow` and Page Lifecycle
+ * `freeze`/`resume` events so iOS Safari and mobile Chromium release `EventSource` connections
+ * before suspension or bfcache entry, and cleanly reopen them on return.
+ */
+export function createPageActivityMonitor(targets: PageActivityTargets = {}): PageActivityMonitor {
+  const doc = targets.doc !== undefined ? targets.doc : (typeof document !== 'undefined' ? document : null);
+  const win = targets.win !== undefined ? targets.win : (typeof window !== 'undefined' ? window : null);
+  let isSuspended = false;
+  let activeSubscriptions = 0;
+
+  const isActive = () => !isSuspended && (!doc || doc.visibilityState === 'visible');
+
+  const subscribe = (handler: () => void): (() => void) => {
+    // Starting a new monitoring lifetime after all listeners detached cannot rely on a
+    // previous `isSuspended` flag because `pageshow`/`resume` may have fired while unsubscribed.
+    if (activeSubscriptions === 0) {
+      isSuspended = false;
+    }
+    activeSubscriptions += 1;
+    let isDetached = false;
+    const onVisibility = () => {
+      if (!doc || doc.visibilityState === 'visible') {
+        isSuspended = false;
+      }
+      handler();
+    };
+    const onSuspend = () => {
+      isSuspended = true;
+      handler();
+    };
+    const onResume = () => {
+      isSuspended = false;
+      handler();
+    };
+    doc?.addEventListener('visibilitychange', onVisibility);
+    doc?.addEventListener('freeze', onSuspend);
+    doc?.addEventListener('resume', onResume);
+    win?.addEventListener('pagehide', onSuspend);
+    win?.addEventListener('pageshow', onResume);
+    return () => {
+      if (isDetached) return;
+      isDetached = true;
+      activeSubscriptions = Math.max(0, activeSubscriptions - 1);
+      doc?.removeEventListener('visibilitychange', onVisibility);
+      doc?.removeEventListener('freeze', onSuspend);
+      doc?.removeEventListener('resume', onResume);
+      win?.removeEventListener('pagehide', onSuspend);
+      win?.removeEventListener('pageshow', onResume);
+    };
+  };
+
+  return { isActive, subscribe };
+}
+
 /**
  * The browser primitives a channel is built over. Each consumer supplies its own event name, so
  * the per-surface modules declare only this shape and the shared implementation owns the
