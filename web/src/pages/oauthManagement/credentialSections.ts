@@ -1,7 +1,6 @@
 import { applyKeyOrder } from '../../types/displayOrder';
 import type { MessageKey } from '../../i18n/catalog';
 import { PRIMARY_CREDENTIAL_PROVIDERS } from '../../types/credentialProviders';
-import type { QuotaWindow } from '../../types/quota';
 import {
   formatQuotaDuration,
   inferQuotaWindowKind,
@@ -9,7 +8,6 @@ import {
   quotaCellsOf,
   quotaDetailWindowFullName,
   quotaDetailWindowName,
-  quotaFamilyLabel,
   quotaLinesFromCells,
   quotaReadingLabels,
   quotaReadingName,
@@ -41,11 +39,11 @@ export {
  * Whatever a provider calls its limits, nearly every one refills either within a day (the
  * five-hour window) or over a week, and those two are what an operator scans a fleet by. So every
  * section has the same two columns - the short limit and the long one - and each credential is one
- * row. A credential with more limits than that - Antigravity's Gemini 4 Argon beside its Gemini
- * group, Claude's per-model weekly limits beside its plan - gives each further family a line of its
- * own inside the row, in the same two columns, and every reading carries its own name. A line with a single
- * limit draws it across both columns, so a weekly-only plan reads as one long bar rather than an
- * empty five-hour cell beside a short one.
+ * row. A credential with more limits than that - Antigravity's model groups (Gemini, Claude and
+ * GPT, Gemini 4 Argon), Claude's per-model weekly limits beside its plan - gives each further
+ * family a line of its own inside the row, in the same two columns, and every reading carries its
+ * own name. A line with a single limit draws it across both columns, so a weekly-only plan reads
+ * as one long bar rather than an empty five-hour cell beside a short one.
  *
  * Lines are derived from what each credential reports rather than declared per provider, which is
  * what keeps a new model group, an upstream provider the console has never named, or a plugin's
@@ -64,31 +62,13 @@ export interface QuotaColumnSort {
 }
 
 /**
- * Whether a quota family belongs in the credential list table.
- * Antigravity's "Claude and GPT" group quota is excluded from the list view so that
- * Gemini and Gemini 4 Argon can comfortably tile the available space without column squeeze;
- * the full breakdown remains viewable in the credential drawer's Quota tab.
- */
-export function isListQuotaFamilyExcluded(provider: string | undefined, label: string | undefined): boolean {
-  if (provider === 'antigravity' && label && /^claude and gpt(?:\s+models)?$/i.test(label.trim())) {
-    return true;
-  }
-  return false;
-}
-
-/** The readings of one credential that the list table draws. */
-function listedCellsOf(record: OAuthWorkspaceRecord, provider = record.displayProvider): [string, QuotaWindow][] {
-  return [...quotaCellsOf(record.quota?.windows)].filter(([, window]) => !isListQuotaFamilyExcluded(provider, quotaFamilyLabel(window)));
-}
-
-/**
  * A credential's limits as lines, the plan first and then each family in the order the provider
  * reports them. A family's first short and first long limit share its line; a further limit in a
  * column its family already filled - Claude's third-party-apps weekly limit beside the plan's
  * weekly one - and a limit with no known period each get a line of their own, named by the limit.
  */
-export function quotaLinesOf(record: OAuthWorkspaceRecord, provider = record.displayProvider): QuotaLine[] {
-  return quotaLinesFromCells(listedCellsOf(record, provider));
+export function quotaLinesOf(record: OAuthWorkspaceRecord): QuotaLine[] {
+  return quotaLinesFromCells(quotaCellsOf(record.quota?.windows));
 }
 
 /**

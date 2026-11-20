@@ -24,7 +24,7 @@ import { pluginMultiPortalKeys, pluginOAuthProviderTitles } from '../../src/type
 import { providerDisplayName } from '../../src/types/providerMetadata.ts';
 import { orderQuotaWindows, quotaWindowFullName, quotaWindowGroupKey, quotaWindowKindOf, quotaWindowParts } from '../../src/pages/quota/quotaWindowSelection.ts';
 import { applyKeyOrder, moveKey, parseGroupedOrder, parseRankOrder, rankedKeys, ranksOf } from '../../src/types/displayOrder.ts';
-import { credentialStatusOf, compareSections, quotaCellsOf, quotaDetailWindowFullName, quotaDetailWindowName, quotaLinesOf, quotaReadingLabels, quotaReadingName, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection, providersInSectionOrder } from '../../src/pages/oauthManagement/credentialSections.ts';
+import { credentialStatusOf, compareSections, quotaCellsOf, quotaDetailWindowFullName, quotaDetailWindowName, quotaLinesOf, quotaReadingLabels, quotaReadingName, packQuotaLines, sortByQuotaColumn, buildCredentialSections, orderBySection, providersInSectionOrder } from '../../src/pages/oauthManagement/credentialSections.ts';
 import type { QuotaWindow } from '../../src/types/quota.ts';
 import { formatShortDateTime, isUnusedFullCodexFiveHourWindow, quotaPlanLabel, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../../src/pages/quota/quotaFormat.ts';
 import { matchesStatusFilter } from '../../src/components/authFiles/authFileLogic.ts';
@@ -654,11 +654,11 @@ test('quota lines: a family per line, five-hour then weekly, a lone limit across
   const group = (name: string, bucket: string, hours: number): QuotaWindow => ({ id: `ag_${name}_${bucket}`, label: `${name} · ${hours === 5 ? '5小时限制 (5-Hour)' : '每周限制 (Weekly)'}`, scope: 'group', period_hours: hours });
   // Each line reads as "label: slot slot", where a lone limit reads "span".
   const cases: Array<[string, QuotaWindow[], string[], string?]> = [
-    ['antigravity Pro: Gemini on one line, Argon weekly across both columns, Claude and GPT not listed', [
+    ['antigravity Pro: Gemini and Claude and GPT each on a line, Argon weekly across both columns', [
       group('Gemini models', 'week', 168), group('Gemini models', '5h', 5),
       group('Claude and GPT models', 'week', 168), group('Claude and GPT models', '5h', 5),
       group('Gemini 4 Argon', 'week', 168),
-    ], ['Gemini: short long', 'Gemini 4 Argon: span']],
+    ], ['Gemini: short long', 'Claude and GPT: short long', 'Gemini 4 Argon: span']],
     ['a weekly-only plan is one long bar', [
       { id: 'weekly', label: 'Weekly', kind: 'weekly', scope: 'standard' },
     ], ['plan: span'], 'codex'],
@@ -884,19 +884,18 @@ test('an unresolved refresh has specific guidance without changing independent e
 
 test('a section keeps one plan shape together, richest first, unread last', () => {
   const group = (name: string, hours: number): QuotaWindow => ({ id: `ag_${name}_${hours}`, label: `${name} · ${hours}h`, scope: 'group', period_hours: hours, remaining_percent: 90 });
-  const pro = (name: string) => quotaRecord(name, [group('Gemini Models', 5), group('Gemini Models', 168), group('Claude and GPT models', 5), group('Claude and GPT models', 168), group('Gemini 4 Argon', 168)]);
-  // Claude and GPT has no column, so it does not split these Pro accounts into a shape of their own.
-  const proWithoutArgon = (name: string) => quotaRecord(name, [group('Gemini Models', 5), group('Gemini Models', 168), group('Claude and GPT models', 168)]);
+  const ultra = (name: string) => quotaRecord(name, [group('Gemini Models', 5), group('Gemini Models', 168), group('Claude and GPT models', 5), group('Claude and GPT models', 168), group('Gemini 4 Argon', 168)]);
+  const pro = (name: string) => quotaRecord(name, [group('Gemini Models', 5), group('Gemini Models', 168), group('Claude and GPT models', 168)]);
   const plus = (name: string) => quotaRecord(name, [group('Gemini Models', 5)]);
-  const records = [plus('a-plus'), pro('b-pro'), quotaRecord('c-unread', []), proWithoutArgon('d-pro'), pro('e-pro')];
+  const records = [plus('a-plus'), ultra('b-ultra'), quotaRecord('c-unread', []), pro('d-pro'), ultra('e-ultra')];
   // The chosen order holds inside each shape; a quota sort still orders the whole provider.
-  assert.deepEqual(orderBySection(records).map((record) => record.fileName), ['b-pro', 'e-pro', 'a-plus', 'd-pro', 'c-unread']);
+  assert.deepEqual(orderBySection(records).map((record) => record.fileName), ['b-ultra', 'e-ultra', 'd-pro', 'a-plus', 'c-unread']);
   // An arranged order leads; a credential it does not name keeps the shape order after it, a name
   // it no longer matches is ignored, and a quota sort still orders the whole provider.
   const provider = records[0].displayProvider;
   assert.deepEqual(
     orderBySection(records, {}, { [provider]: ['d-pro', 'gone', 'c-unread'] }).map((record) => record.fileName),
-    ['d-pro', 'c-unread', 'b-pro', 'e-pro', 'a-plus'],
+    ['d-pro', 'c-unread', 'b-ultra', 'e-ultra', 'a-plus'],
   );
   assert.deepEqual(
     orderBySection(records, { [provider]: { key: 'quota', direction: 'asc' } }, { [provider]: ['d-pro'] }).map((record) => record.fileName),
@@ -944,28 +943,25 @@ test('a dragged row lands beside its target, and an arrangement keeps what it do
   assert.deepEqual(parseGroupedOrder({ codex: ['a.json', 'a.json', 3, 'b.json'], empty: [] }), { codex: ['a.json', 'b.json'] });
 });
 
-test('antigravity list excludes Claude and GPT while drawer preserves all windows', () => {
-  assert.equal(isListQuotaFamilyExcluded('antigravity', 'Claude and GPT'), true);
-  assert.equal(isListQuotaFamilyExcluded('antigravity', 'Claude and GPT models'), true);
-  assert.equal(isListQuotaFamilyExcluded('antigravity', 'Claude and GPT-Next'), false);
-  assert.equal(isListQuotaFamilyExcluded('antigravity', 'Gemini'), false);
-  assert.equal(isListQuotaFamilyExcluded('antigravity', 'Gemini 4 Argon'), false);
-  assert.equal(isListQuotaFamilyExcluded('claude', 'Claude and GPT'), false);
-
+test('antigravity list and drawer both show Claude and GPT models quota and sort by its tightest limit', () => {
   const windows: QuotaWindow[] = [
-    { id: 'ag_gemini_5h', label: 'Gemini models · 5小时限制 (5-Hour)', scope: 'group', period_hours: 5 },
-    { id: 'ag_gemini_week', label: 'Gemini models · 每周限制 (Weekly)', scope: 'group', period_hours: 168 },
-    { id: 'ag_claude_5h', label: 'Claude and GPT models · 5小时限制 (5-Hour)', scope: 'group', period_hours: 5 },
-    { id: 'ag_claude_week', label: 'Claude and GPT models · 每周限制 (Weekly)', scope: 'group', period_hours: 168 },
-    { id: 'ag_argon_week', label: 'Gemini 4 Argon · 每周限制 (Weekly)', scope: 'group', period_hours: 168 },
+    { id: 'ag_gemini_5h', label: 'Gemini models · 5小时限制 (5-Hour)', scope: 'group', period_hours: 5, remaining_percent: 93 },
+    { id: 'ag_gemini_week', label: 'Gemini models · 每周限制 (Weekly)', scope: 'group', period_hours: 168, remaining_percent: 74 },
+    { id: 'ag_claude_5h', label: 'Claude and GPT models · 5小时限制 (5-Hour)', scope: 'group', period_hours: 5, remaining_percent: 100 },
+    { id: 'ag_claude_week', label: 'Claude and GPT models · 每周限制 (Weekly)', scope: 'group', period_hours: 168, remaining_percent: 0 },
+    { id: 'ag_argon_week', label: 'Gemini 4 Argon · 每周限制 (Weekly)', scope: 'group', period_hours: 168, remaining_percent: 100 },
   ];
-  const rec = quotaRecord('ag-1', windows, 'antigravity');
-  const sections = buildCredentialSections([rec], [rec]);
+  const exhausted = quotaRecord('ag-ultra-exhausted', windows, 'antigravity');
+  const healthy = quotaRecord('ag-ultra-healthy', [
+    { id: 'ag_gemini_5h', label: 'Gemini models · 5小时限制 (5-Hour)', scope: 'group', period_hours: 5, remaining_percent: 50 },
+    { id: 'ag_claude_week', label: 'Claude and GPT models · 每周限制 (Weekly)', scope: 'group', period_hours: 168, remaining_percent: 50 },
+  ], 'antigravity');
+  const sections = buildCredentialSections([exhausted], [exhausted]);
   assert.equal(sections.length, 1);
-  // In the list view: only Gemini and Gemini 4 Argon are present, Claude and GPT is excluded
-  assert.deepEqual(quotaLinesOf(rec).map((line) => line.label), ['Gemini', 'Gemini 4 Argon']);
+  assert.deepEqual(quotaLinesOf(exhausted).map((line) => line.label), ['Gemini', 'Claude and GPT', 'Gemini 4 Argon']);
+  // Quota column sort sees the 0% Claude and GPT weekly limit rather than treating this account as 74% remaining.
+  assert.deepEqual(sortByQuotaColumn([healthy, exhausted], 'asc').map((r) => r.fileName), ['ag-ultra-exhausted', 'ag-ultra-healthy']);
 
-  // In the drawer: orderQuotaWindows preserves all windows including Claude and GPT
   const drawerWindows = orderQuotaWindows(windows);
   assert.equal(drawerWindows.length, 5);
   const drawerLabels = drawerWindows.map((w) => w.label);

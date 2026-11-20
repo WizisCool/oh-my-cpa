@@ -166,7 +166,7 @@ export function quotaCellsOf(windows: QuotaWindow[] | undefined): Map<string, Qu
 }
 
 /**
- * Groups pre-filtered quota cells into display lines, placing the credential's own plan first and
+ * Groups quota cells into display lines, placing the credential's own plan first and
  * pairing short/long windows per family while keeping extra/untyped windows on their own lines.
  */
 export function quotaLinesFromCells(entries: Iterable<[string, QuotaWindow]>): QuotaLine[] {
