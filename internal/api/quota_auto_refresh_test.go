@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -705,9 +706,21 @@ func TestQuotaRefreshPublishesManagementQuotaStateSync(t *testing.T) {
 	if err != nil {
 		t.Fatalf("batch refresh failed: %v", err)
 	}
-	batchResp.Body.Close()
+	defer batchResp.Body.Close()
 	if batchResp.StatusCode != http.StatusOK {
 		t.Fatalf("batch refresh status = %d, want 200", batchResp.StatusCode)
+	}
+	stream, err := io.ReadAll(batchResp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(stream), "event: quota\n") ||
+		strings.Contains(string(stream), `"status":"error"`) ||
+		strings.Contains(string(stream), `"status":"stale"`) {
+		t.Fatalf("batch stream lacks a successful quota frame: %s", stream)
+	}
+	if !strings.Contains(string(stream), "event: done\ndata: {\"status\":\"ok\",\"total\":1}\n\n") {
+		t.Fatalf("batch stream lacks done total 1: %s", stream)
 	}
 	awaitQuotaSync()
 }

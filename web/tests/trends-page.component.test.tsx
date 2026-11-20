@@ -1202,29 +1202,44 @@ describe('trends page', () => {
     }
   });
 
-  it('distinguishes CPA unreachability with an inline Retry action that recovers once CPA responds', async () => {
-    let isCpaOffline = true;
-    api.on('GET', '/management/trends/quota', () => (
-      isCpaOffline
-        ? {
-            ...QUOTA,
-            summary: { ...QUOTA.summary, active_credentials: 0, is_membership_unknown: true },
-            items: [{
-              ...QUOTA.items[0]!,
-              status: 'unknown',
-              windows: [{ ...QUOTA.items[0]!.windows[0]!, status: 'normal', projected_exhaust_at_ms: undefined, projected_end_percent: undefined, burn_rate_per_hour: undefined }],
-            }],
-          }
-        : QUOTA
-    ));
+  it('distinguishes CPA unreachability with an inline Retry action both with and without stored snapshots', async () => {
+    let phase: 'offline_empty' | 'offline_cached' | 'online' = 'offline_empty';
+    api.on('GET', '/management/trends/quota', () => {
+      if (phase === 'offline_empty') {
+        return {
+          ...QUOTA,
+          summary: { ...QUOTA.summary, active_credentials: 0, observable_windows: 0, is_membership_unknown: true },
+          items: [],
+        };
+      }
+      if (phase === 'offline_cached') {
+        return {
+          ...QUOTA,
+          summary: { ...QUOTA.summary, active_credentials: 0, is_membership_unknown: true },
+          items: [{
+            ...QUOTA.items[0]!,
+            status: 'unknown',
+            windows: [{ ...QUOTA.items[0]!.windows[0]!, status: 'normal', projected_exhaust_at_ms: undefined, projected_end_percent: undefined, burn_rate_per_hour: undefined }],
+          }],
+        };
+      }
+      return QUOTA;
+    });
 
     mount();
-    const notice = await screen.findByTestId('trends-quota-stale-notice', {}, { timeout: 5000 });
-    expect(notice.textContent).toContain('Cannot reach CPA');
+    const emptyNotice = await screen.findByTestId('trends-quota-stale-notice', {}, { timeout: 5000 });
+    expect(emptyNotice.textContent).toContain('Cannot reach CPA');
+    expect(emptyNotice.textContent).toContain('Subscription quota cannot be read');
     expect(screen.getByTestId('trends-tile-quota').textContent).toContain('—');
     expect(screen.queryByTestId('trends-quota-notice-refresh')).toBeNull();
 
-    isCpaOffline = false;
+    phase = 'offline_cached';
+    fireEvent.click(screen.getByTestId('trends-quota-notice-retry'));
+    await waitFor(() => expect(screen.getByTestId('trends-quota-stale-notice').textContent).toContain('Showing the reading observed at'));
+    expect(screen.getByTestId('trends-tile-quota').textContent).toContain('—');
+    expect(screen.queryByTestId('trends-quota-notice-refresh')).toBeNull();
+
+    phase = 'online';
     fireEvent.click(screen.getByTestId('trends-quota-notice-retry'));
     await waitFor(() => expect(screen.queryByTestId('trends-quota-stale-notice')).toBeNull());
     expect(screen.getByTestId('trends-tile-quota').textContent).toContain('1');

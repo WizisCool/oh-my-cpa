@@ -127,14 +127,35 @@ export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
       if (error) return <LoadFailure title={t('trends.quota.error_title')} error={error} onRetry={onRetry} />;
       return <div className="chart-placeholder" style={{ height: 300 }} aria-hidden="true"><ChartLinesPlaceholder height={300} kind="trend" /></div>;
     }
+    const isMembershipUnknown = Boolean(data.summary.is_membership_unknown);
     if (!picked) {
+      if (isMembershipUnknown) {
+        return (
+          <Notice
+            tone="warning"
+            data-testid="trends-quota-stale-notice"
+            description={t('trends.quota.cpa_unreachable_empty_notice')}
+            action={(
+              <Button
+                size="sm"
+                icon={<ReloadOutlined />}
+                loading={isLoading}
+                onClick={onRetry}
+                data-testid="trends-quota-notice-retry"
+              >
+                {t('common.retry')}
+              </Button>
+            )}
+          />
+        );
+      }
       return <EmptyState size="compact" title={t('trends.quota.empty')} description={t('trends.quota.empty_hint')} />;
     }
     const { credential, window } = picked;
     const windows = chartableWindows(credential);
     const isPhysicalUnavailable = Boolean(window.is_physical_unavailable);
     const eventsHref = isPhysicalUnavailable ? null : quotaEventsHref(credential.auth_index, window, nowMs);
-    const notice = quotaNoticeState(credential, window, Boolean(data.summary.is_membership_unknown), nowMs);
+    const notice = quotaNoticeState(credential, window, isMembershipUnknown, nowMs);
     const isRefreshingCredential = Boolean(refreshingQuotaIndexes?.has(credential.auth_index));
     const isExhausted = window.exhausted_at_ms !== undefined;
     // A projection past the reset is no exhaustion this cycle.
