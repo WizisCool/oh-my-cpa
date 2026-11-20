@@ -21,6 +21,7 @@ import { Fold } from '../../components/common/Fold';
 import { ListLoading } from '../../components/common/PageLoading';
 import { SectionHeading } from '../../components/common/SectionHeading';
 import { SettingRow } from '../../components/common/SettingRow';
+import { StageProgress } from '../../components/common/StageProgress';
 import { Switch } from '../../components/common/Switch';
 import { ToolButton } from '../../components/common/ToolButton';
 import { LoadFailure, Notice, useToast } from '../../components/feedback';
@@ -115,7 +116,8 @@ export function BackupPlan(props: Props) {
 
 /**
  * The verdict the panel opens on: when it last worked, when it runs next, and the two things to do
- * about it. A run in progress shows which stage it is at, so a long upload does not read as a hang.
+ * about it, on the verdict's own line. A run in progress names the stage it is at and its place in
+ * the sequence under that line, so a long upload does not read as a hang.
  */
 function Status({
   value,
@@ -136,8 +138,9 @@ function Status({
   const isRunning = !!runningJob && runningJob.kind === 'automatic';
   const hasLocation = value.keep_local > 0 || value.destinations.length > 0;
   const tone = isRunning ? 'run' : value.last_error ? 'warn' : value.last_success_at_ms ? 'ok' : 'idle';
+  // While a run is in flight its stage is read by the progress below, not repeated up here.
   const label = isRunning
-    ? t(STATE_KEYS[runningJob.state])
+    ? null
     : value.last_error
       ? t('sys.backup_auto_last_failed')
       : value.last_success_at_ms
@@ -145,35 +148,62 @@ function Status({
         : null;
   return (
     <section className={styles['status']} data-tone={tone} aria-live="polite">
-      <div className={styles['status-head']}>
-        {/* Keyed by tone so a change of verdict lands with its own small arrival. */}
-        <span key={tone} className={styles['status-icon']} aria-hidden>
-          {tone === 'ok' ? (
-            <CheckCircleOutlined />
-          ) : tone === 'warn' ? (
-            <WarningOutlined />
-          ) : tone === 'run' ? (
-            <SyncOutlined spin />
-          ) : (
-            <CloudUploadOutlined />
-          )}
-        </span>
-        <div className={styles['status-text']}>
-          {label && <span className={styles['status-label']}>{label}</span>}
-          <strong className={styles['status-value']}>
-            {isRunning
-              ? t('sys.backup_running')
-              : value.last_success_at_ms
-                ? formatTimeAgo(value.last_success_at_ms, now || Date.now(), t)
-                : t('sys.backup_none_yet')}
-          </strong>
-          <span className={styles['status-next']}>
-            {!value.has_passphrase
-              ? t('sys.backup_needs_passphrase')
-              : value.enabled && value.next_run_at_ms
-                ? t('sys.backup_next_run', { time: dayjs(value.next_run_at_ms).format('YYYY-MM-DD HH:mm') })
-                : t('sys.backup_schedule_off_hint')}
+      <div className={styles['status-main']}>
+        <div className={styles['status-head']}>
+          {/* Keyed by tone so a change of verdict lands with its own small arrival. */}
+          <span key={tone} className={styles['status-icon']} aria-hidden>
+            {tone === 'ok' ? (
+              <CheckCircleOutlined />
+            ) : tone === 'warn' ? (
+              <WarningOutlined />
+            ) : tone === 'run' ? (
+              <SyncOutlined spin />
+            ) : (
+              <CloudUploadOutlined />
+            )}
           </span>
+          <div className={styles['status-text']}>
+            {label && <span className={styles['status-label']}>{label}</span>}
+            <strong className={styles['status-value']}>
+              {isRunning
+                ? t('sys.backup_running')
+                : value.last_success_at_ms
+                  ? formatTimeAgo(value.last_success_at_ms, now || Date.now(), t)
+                  : t('sys.backup_none_yet')}
+            </strong>
+            <span className={styles['status-next']}>
+              {!value.has_passphrase
+                ? t('sys.backup_needs_passphrase')
+                : value.enabled && value.next_run_at_ms
+                  ? t('sys.backup_next_run', { time: dayjs(value.next_run_at_ms).format('YYYY-MM-DD HH:mm') })
+                  : t('sys.backup_schedule_off_hint')}
+            </span>
+          </div>
+        </div>
+        <div className={styles['status-actions']}>
+          {value.has_passphrase && (
+            <Button
+              variant="primary"
+              icon={<CloudUploadOutlined />}
+              // A run in progress shows as this button working, not as a dead one: a loading button
+              // already refuses clicks, and keeps its colour and spinner instead of greying out.
+              loading={isStarting || isRunning}
+              disabled={(isBusy && !isRunning) || !hasLocation}
+              onClick={async () => {
+                setIsStarting(true);
+                try {
+                  await onRun();
+                } finally {
+                  setIsStarting(false);
+                }
+              }}
+            >
+              {t('sys.backup_auto_run')}
+            </Button>
+          )}
+          <Button variant="ghost" icon={<RollbackOutlined />} onClick={onRestore}>
+            {t('sys.backup_restore_from_backup')}
+          </Button>
         </div>
       </div>
       {isRunning && <RunStages state={runningJob.state} hasUpload={value.destinations.length > 0} />}
@@ -182,49 +212,21 @@ function Status({
           {t(value.keep_local > 0 ? 'sys.backup_auto_local_hint' : 'sys.backup_auto_fallback_hint')}
         </p>
       )}
-      <div className={styles['status-actions']}>
-        {value.has_passphrase && (
-          <Button
-            variant="primary"
-            icon={<CloudUploadOutlined />}
-            // A run in progress shows as this button working, not as a dead one: a loading button
-            // already refuses clicks, so it keeps its colour and spinner instead of greying out.
-            loading={isStarting || isRunning}
-            disabled={(isBusy && !isRunning) || !hasLocation}
-            onClick={async () => {
-              setIsStarting(true);
-              try {
-                await onRun();
-              } finally {
-                setIsStarting(false);
-              }
-            }}
-          >
-            {t('sys.backup_auto_run')}
-          </Button>
-        )}
-        <Button variant="ghost" icon={<RollbackOutlined />} onClick={onRestore}>
-          {t('sys.backup_restore_from_backup')}
-        </Button>
-      </div>
     </section>
   );
 }
 
-/** One segment per stage: the done ones filled, the current one breathing. */
+/** The stage in words and its place in the run; a run with no cloud location has nothing to upload. */
 function RunStages({ state, hasUpload }: { state: DatabaseBackupJob['state']; hasUpload: boolean }) {
+  const t = useT();
   const stages = hasUpload ? RUN_STAGES : RUN_STAGES.slice(0, -1);
-  const current = stages.indexOf(state);
   return (
-    <ol className={styles['stages']} aria-hidden>
-      {stages.map((stage, index) => (
-        <li
-          key={stage}
-          className={styles['stage']}
-          data-state={index < current ? 'done' : index === current ? 'active' : undefined}
-        />
-      ))}
-    </ol>
+    <StageProgress
+      className={styles['run-progress']}
+      total={stages.length}
+      current={stages.indexOf(state)}
+      label={t(STATE_KEYS[state])}
+    />
   );
 }
 

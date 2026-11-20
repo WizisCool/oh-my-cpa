@@ -113,15 +113,28 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
   const t = useT();
 
   const presentation = deriveVersionPresentation(version, isChecking);
+  const isUpdating = updateOffer.kind === 'running';
   // Offered for a known newer release only: there is nothing to dismiss about a build that
-  // is current, ahead, or not comparable.
-  const canDismiss = version.state === 'update_available' && version.latest_version !== '';
+  // is current, ahead, or not comparable, nor about the one being installed right now.
+  const canDismiss = version.state === 'update_available' && version.latest_version !== '' && !isUpdating;
+  const hasActions = canDismiss || presentation.hasChangelog || updateOffer.kind === 'available' || isUpdating;
 
   return (
     <section className={styles['product-block']} aria-label={productTitle} data-testid={`sys-product-${version.product}`}>
+      {/* Name, verdict and what to do about it read as one line: the update action sits beside the
+          product it replaces rather than at the far end of the version readings. */}
       <div className={styles['product-header']} data-testid="sys-product-header">
         <div className={styles['product-identity']}>
-          <div className={styles['product-title']}>{productTitle}</div>
+          <div className={styles['product-title']}>
+            <span>{productTitle}</span>
+            <span className={styles['product-badge']} role="status">
+              {isUpdating ? (
+                <StatusLabel tone="accent" size="small">{t('sys.update_running')}</StatusLabel>
+              ) : (
+                <StatusLabel tone={presentation.tone} size="small">{t(presentation.statusKey)}</StatusLabel>
+              )}
+            </span>
+          </div>
           <a
             href={version.repository_url}
             target="_blank"
@@ -131,25 +144,7 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
             {version.repository} <LinkOutlined />
           </a>
         </div>
-        <div className={styles['product-badge']} role="status">
-          <StatusLabel tone={presentation.tone}>{t(presentation.statusKey)}</StatusLabel>
-        </div>
-      </div>
-
-      <div className={styles['version-row']} data-testid="sys-version-row">
-        <div className={styles['version-comparison']} data-testid="sys-version-comparison">
-          <div className={styles['version-pair']}>
-            <span className={styles['version-label']}>{t('sys.current_version')}</span>
-            <span className={styles['version-value']}>{version.running_version || t('sys.version_unknown')}</span>
-          </div>
-          <div className={styles['version-pair']} data-testid="sys-latest-release">
-            <span className={styles['version-label']}>{t('sys.latest_version')}</span>
-            <span className={`${styles['version-value']} ${version.state === 'update_available' ? styles['version-target'] : ''}`}>
-              {version.latest_version || '—'}
-            </span>
-          </div>
-        </div>
-        {(canDismiss || presentation.hasChangelog || updateOffer.kind === 'available' || updateOffer.kind === 'running') && (
+        {hasActions && (
           <div className={styles['version-actions']}>
             {canDismiss && (
               <Button
@@ -187,6 +182,19 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
             <UpdateAction version={version} productTitle={productTitle} offer={updateOffer} isSubmitting={isSubmittingUpdate} onUpdate={onUpdate} />
           </div>
         )}
+      </div>
+
+      <div className={styles['version-comparison']} data-testid="sys-version-comparison">
+        <div className={styles['version-pair']}>
+          <span className={styles['version-label']}>{t('sys.current_version')}</span>
+          <span className={styles['version-value']}>{version.running_version || t('sys.version_unknown')}</span>
+        </div>
+        <div className={styles['version-pair']} data-testid="sys-latest-release">
+          <span className={styles['version-label']}>{t('sys.latest_version')}</span>
+          <span className={`${styles['version-value']} ${version.state === 'update_available' ? styles['version-target'] : ''}`}>
+            {version.latest_version || '—'}
+          </span>
+        </div>
       </div>
 
       <UpdateStatusLine offer={updateOffer} />

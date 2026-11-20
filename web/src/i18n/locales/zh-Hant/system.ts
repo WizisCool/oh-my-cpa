@@ -61,6 +61,7 @@ export default {
   "sys.title": "系統資訊",
   "sys.version_card": "版本與更新",
   "sys.update_ready": "有可用更新",
+  "sys.update_running": "正在更新",
   "sys.check_failed": "檢查失敗",
   "sys.check_failed_cached": "檢查失敗，保留上次結果",
   "sys.check_updates_failed": "{products} 檢查失敗，請查看對應產品的提示",

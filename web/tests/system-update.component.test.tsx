@@ -64,7 +64,7 @@ it('asks before updating, tracks steps across restart, and reports the finished 
   await screen.findByText('Pulling the new image…');
   expect(surface.requests.filter((entry) => entry.method === 'POST').map((entry) => entry.path)).toEqual(['/api/v1/management/system/updater/apply']);
 
-  const reached = () => Array.from(screen.getByTestId('sys-update-steps').children).map((step) => step.getAttribute('data-reached'));
+  const reached = () => Array.from(screen.getByTestId('sys-update-stage').querySelectorAll('li')).map((step) => step.getAttribute('data-reached'));
   expect(reached()).toEqual(['true', 'false', 'false', 'false']);
 
   surface.overrides.push(() => Promise.reject(new TypeError('Failed to fetch')));

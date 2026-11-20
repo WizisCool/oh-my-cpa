@@ -61,6 +61,7 @@ export default {
   'sys.title': 'System Information',
   'sys.version_card': 'Versions & Updates',
   'sys.update_ready': 'Update available',
+  'sys.update_running': 'Updating',
   'sys.check_failed': 'Check failed',
   'sys.check_failed_cached': 'Check failed; previous result retained',
   'sys.check_updates_failed': 'Check failed for {products}; see the product details',

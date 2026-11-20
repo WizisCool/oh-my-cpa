@@ -1,0 +1,64 @@
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.label {
+  min-width: 0;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.count {
+  flex: none;
+  font-family: var(--font-mono);
+}
+
+.track {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: var(--border);
+}
+
+/* The fill grows from the left as a stage is reached, so the bar advances rather than blinks. */
+.step::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--motion-slow) var(--ease-out);
+}
+
+.step[data-state]::after { transform: scaleX(1); }
+.step[data-state='active']::after { animation: stage-breathe 1.4s var(--ease-standard) infinite; }
+
+@keyframes stage-breathe {
+  50% { opacity: 0.4; }
+}

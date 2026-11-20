@@ -58,6 +58,7 @@ export default {
   'sys.title': '系统信息',
   'sys.version_card': '版本与更新',
   'sys.update_ready': '有可用更新',
+  'sys.update_running': '正在更新',
   'sys.check_failed': '检查失败',
   'sys.check_failed_cached': '检查失败，保留上次结果',
   'sys.check_updates_failed': '{products} 检查失败，请查看对应产品的提示',

@@ -11,7 +11,9 @@ const buttonVariants = cva(
     // neighbours for a frame, and the console's controls do not give way under a hand.
     'rounded-md transition-[background-color,color,box-shadow,opacity] cursor-pointer',
     'focus-visible:outline-none focus-visible:shadow-focus',
-    'disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none',
+    // A refused button fades; a working one (`loading`, which also refuses clicks) keeps its weight
+    // and colour and shows its spinner, so work in progress never reads as a dead control.
+    'disabled:not-aria-busy:cursor-not-allowed disabled:not-aria-busy:opacity-50 disabled:not-aria-busy:shadow-none aria-busy:cursor-progress',
     '[&_svg]:pointer-events-none [&_svg]:shrink-0',
   ].join(' '),
   {
