@@ -1,6 +1,10 @@
+import React from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { AuthFileDetailDrawer } from '../src/components/authFiles/AuthFileDetailDrawer';
+import { BatchActionBar } from '../src/components/authFiles/BatchActionBar';
+import { buildOAuthWorkspaceProjection } from '../src/pages/oauthManagement/oauthWorkspaceLogic';
+import { useOAuthWorkspaceActions } from '../src/pages/oauthManagement/useOAuthWorkspaceActions';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
 import { installOmcApi, json, type OmcApi } from './support/omcApi';
 
@@ -174,5 +178,84 @@ it('disables credential model alias reordering when read-only or while saving', 
     await waitFor(() => expect(list.querySelectorAll('[data-reorder-handle]')).toHaveLength(2));
   } finally {
     savingView.unmount();
+  }
+});
+
+it('exports a single selected credential via download and multiple selected credentials as a ZIP archive', async () => {
+  const secondFile: ManagementAuthFile = {
+    ...FILE,
+    name: 'codex.json',
+    auth_index: 'exact-codex',
+    type: 'codex',
+    provider: 'codex',
+  };
+  const api = installOmcApi({ authFiles: [{ file: FILE, fields: FIELDS }, { file: secondFile, fields: FIELDS }] });
+  api.on('GET', '/management/auth-files/download', () => new Response('{"type":"claude"}', {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  }));
+  api.on('POST', '/management/auth-files/export', () => new Response(new Uint8Array([80, 75, 5, 6]), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/zip',
+      'Content-Disposition': 'attachment; filename="oauth-credentials-20261120-010203.zip"',
+    },
+  }));
+
+  const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test-export');
+  const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  const downloads: string[] = [];
+  const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    downloads.push(this.download);
+  });
+
+  const { records } = buildOAuthWorkspaceProjection([FILE, secondFile], [], []);
+  function Harness({ selected }: { selected: typeof records }) {
+    const [, setSelectedKeys] = React.useState<string[]>(() => selected.map((record) => record.key));
+    const actions = useOAuthWorkspaceActions(records, selected.map((record) => record.key), setSelectedKeys, vi.fn());
+    return (
+      <BatchActionBar
+        selectedCount={selected.length}
+        selectablePageCount={records.length}
+        selectableFilteredCount={records.length}
+        canSelectFiltered={false}
+        isSelectionReady
+        onSelectFiltered={vi.fn()}
+        isMutating={actions.isOperating}
+        onSelectPage={vi.fn()}
+        onClearSelection={vi.fn()}
+        onEnable={vi.fn()}
+        onDisable={vi.fn()}
+        onRefresh={vi.fn()}
+        canRefresh
+        onExport={() => void actions.batchExport(selected)}
+        canExport={selected.some((record) => record.canDownloadFile && !record.file.runtime_only)}
+        onDelete={vi.fn()}
+      />
+    );
+  }
+
+  const singleView = renderWithOmc(<Harness selected={[records[0]]} />);
+  try {
+    fireEvent.click(screen.getByTestId('auth-batch-export'));
+    await waitFor(() => expect(downloads).toEqual(['claude.json']));
+    expect(api.requests.filter((request) => request.method === 'GET' && request.path === '/management/auth-files/download')).toHaveLength(1);
+    expect(api.requests.filter((request) => request.method === 'POST' && request.path === '/management/auth-files/export')).toHaveLength(0);
+  } finally {
+    singleView.unmount();
+  }
+
+  const multiView = renderWithOmc(<Harness selected={records} />);
+  try {
+    fireEvent.click(screen.getByTestId('auth-batch-export'));
+    await waitFor(() => expect(downloads).toEqual(['claude.json', 'oauth-credentials-20261120-010203.zip']));
+    const exports = api.requests.filter((request) => request.method === 'POST' && request.path === '/management/auth-files/export');
+    expect(exports).toHaveLength(1);
+    expect(exports[0].body).toEqual({ names: ['claude.json', 'codex.json'] });
+  } finally {
+    multiView.unmount();
+    createObjectURL.mockRestore();
+    revokeObjectURL.mockRestore();
+    clickSpy.mockRestore();
   }
 });

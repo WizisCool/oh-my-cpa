@@ -337,6 +337,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Patch("/management/auth-files/excluded-models", h.patchManagementOAuthExcludedModels)
 				v1.Delete("/management/auth-files", h.deleteManagementAuthFiles)
 				v1.Get("/management/auth-files/download", h.downloadManagementAuthFile)
+				v1.Post("/management/auth-files/export", h.exportManagementAuthFiles)
 				v1.Get("/management/routing", h.getRouting)
 				v1.Patch("/management/routing", h.patchRouting)
 				v1.Get("/management/routing/models", h.getRoutingModels)

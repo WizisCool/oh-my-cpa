@@ -138,6 +138,7 @@ export default {
   "audit.action.provider.probe": "測試供應商連通性",
   "audit.action.auth_file.delete": "刪除憑證檔案",
   "audit.action.auth_file.download": "下載憑證檔案",
+  "audit.action.auth_file.export": "批次匯出憑證檔案",
   "audit.action.auth_file.fields_read": "檢視憑證欄位",
   "audit.action.auth_file.fields_update": "修改憑證欄位",
   "audit.action.auth_file.refresh": "手動重新整理憑證",

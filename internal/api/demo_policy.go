@@ -316,6 +316,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPost, "/api/v1/management/auth-files", demoRefuse, "uploading a credential is disabled"},
 	{http.MethodDelete, "/api/v1/management/auth-files", demoRefuse, "deleting a credential is disabled"},
 	{http.MethodGet, "/api/v1/management/auth-files/download", demoRefuse, "downloading credential material is disabled"},
+	{http.MethodPost, "/api/v1/management/auth-files/export", demoRefuse, "downloading credential material is disabled"},
 	{http.MethodPost, "/api/v1/management/auth-files/refresh", demoRefuse, "refreshing a credential is disabled"},
 	{http.MethodPost, "/api/v1/management/auth-files/verify", demoRefuse, "inference verification consumes tokens and is disabled"},
 	{http.MethodPost, "/api/v1/management/auth-files/vertex-import", demoRefuse, "importing a credential is disabled"},

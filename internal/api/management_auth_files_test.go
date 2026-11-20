@@ -1,6 +1,7 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -764,6 +765,135 @@ func TestManagementAuthFilesEmptyOrContradictoryResponse(t *testing.T) {
 	}
 	if res.Failed[0].Error != "deletion unconfirmed by upstream" {
 		t.Fatalf("expected 'deletion unconfirmed by upstream', got %q", res.Failed[0].Error)
+	}
+}
+
+func TestManagementAuthFilesBatchExportZipAndStrictFailure(t *testing.T) {
+	files := map[string]string{
+		"claude.json": `{"type":"claude","refresh_token":"secret-claude"}`,
+		"codex.json":  `{"type":"codex","refresh_token":"secret-codex"}`,
+	}
+	handler := func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/v8/management/credentials/download" {
+			name := request.URL.Query().Get("name")
+			payload, ok := files[name]
+			if !ok {
+				writer.Header().Set("Content-Type", "application/json")
+				writer.WriteHeader(http.StatusNotFound)
+				_, _ = writer.Write([]byte(`{"error":"file not found"}`))
+				return
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(payload))
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"status":"ok"}`))
+	}
+	client, baseURL, recorder := startAuthFilesTestServer(t, "management-secret-value", handler)
+	base := baseURL + "/omc/api/v1/management/auth-files/export"
+
+	// Validation guardrails
+	overLimit := make([]string, managementAuthFileExportMaxFiles+1)
+	for i := range overLimit {
+		overLimit[i] = fmt.Sprintf("f-%d.json", i)
+	}
+	overLimitBody, err := json.Marshal(map[string]any{"names": overLimit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, body := range []string{
+		``,
+		`{"names":[]}`,
+		string(overLimitBody),
+		`{"names":["notes.txt"]}`,
+		`{"names":["../escape.json"]}`,
+		`{"names":["claude.json"],"extra":true}`,
+	} {
+		resp, raw := doJSON(t, client, http.MethodPost, base, body)
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("export body=%q status=%d want 400 body=%s", body, resp.StatusCode, raw)
+		}
+	}
+
+	// Duplicate names are deduplicated into one zip entry per credential.
+	resp, raw := doJSON(t, client, http.MethodPost, base, `{"names":["claude.json","codex.json","claude.json"]}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("export status = %d body = %s", resp.StatusCode, raw)
+	}
+	if resp.Header.Get("Content-Type") != "application/zip" {
+		t.Fatalf("content-type = %q", resp.Header.Get("Content-Type"))
+	}
+	if resp.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("cache-control = %q", resp.Header.Get("Cache-Control"))
+	}
+	if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("nosniff = %q", resp.Header.Get("X-Content-Type-Options"))
+	}
+	disposition := resp.Header.Get("Content-Disposition")
+	if !strings.HasPrefix(disposition, `attachment; filename="oauth-credentials-`) || !strings.HasSuffix(disposition, `.zip"`) {
+		t.Fatalf("unexpected content-disposition: %q", disposition)
+	}
+
+	reader, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil {
+		t.Fatalf("invalid zip response: %v", err)
+	}
+	if len(reader.File) != 2 {
+		t.Fatalf("zip entry count = %d, want 2", len(reader.File))
+	}
+	extracted := make(map[string]string, len(reader.File))
+	for _, entry := range reader.File {
+		rc, err := entry.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		content, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		extracted[entry.Name] = string(content)
+	}
+	for name, want := range files {
+		if extracted[name] != want {
+			t.Fatalf("entry %q = %q, want %q", name, extracted[name], want)
+		}
+	}
+	downloadCalls := 0
+	for _, req := range recorder.all() {
+		if req.Path == "/v8/management/credentials/download" {
+			downloadCalls++
+		}
+	}
+	if downloadCalls != 2 {
+		t.Fatalf("expected 2 deduplicated download calls, got %d", downloadCalls)
+	}
+
+	// Strict failure: if any file fails to download, abort without returning a partial archive.
+	failResp, failRaw := doJSON(t, client, http.MethodPost, base, `{"names":["claude.json","missing.json"]}`)
+	if failResp.StatusCode == http.StatusOK {
+		t.Fatalf("expected non-200 when a requested file fails, got 200")
+	}
+	if strings.Contains(string(failRaw), "secret-claude") {
+		t.Fatalf("failed export must not leak already-fetched credential content: %s", failRaw)
+	}
+
+	// Size limit: abort with 413 if raw exported bytes exceed managementAuthFileExportMaxBytes.
+	largePayload := strings.Repeat("a", 7*1024*1024)
+	largeNames := make([]string, 0, 10)
+	for i := 0; i < 10; i++ {
+		name := fmt.Sprintf("large-%d.json", i)
+		files[name] = largePayload
+		largeNames = append(largeNames, name)
+	}
+	largeBody, err := json.Marshal(map[string]any{"names": largeNames})
+	if err != nil {
+		t.Fatal(err)
+	}
+	limitResp, limitRaw := doJSON(t, client, http.MethodPost, base, string(largeBody))
+	if limitResp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413 when export exceeds byte limit, got %d body=%s", limitResp.StatusCode, limitRaw)
 	}
 }
 

@@ -24,6 +24,7 @@ import {
 import { useOptimisticAuthFileStatusMutation } from '../../hooks/useConfigMutations';
 import { MUTATION_KEYS } from '../../api/queryKeys';
 import { invalidateQueriesSilently } from '../../utils/progressSources';
+import { saveBlob } from '../../utils/download';
 import type { ManagementAuthFilesResponse } from '../../types/managementAuthFile';
 
 export interface OAuthWorkspaceActions {
@@ -39,6 +40,7 @@ export interface OAuthWorkspaceActions {
   isTogglingStatus: (record: OAuthWorkspaceRecord) => boolean;
   batchStatus: (disabled: boolean, records: OAuthWorkspaceRecord[]) => Promise<void>;
   batchRefresh: (records: OAuthWorkspaceRecord[]) => Promise<void>;
+  batchExport: (records: OAuthWorkspaceRecord[]) => Promise<void>;
   batchDelete: (records: OAuthWorkspaceRecord[]) => Promise<void>;
   refreshQuotaForRecord: (record: OAuthWorkspaceRecord) => Promise<void>;
   refreshQuota: (
@@ -59,15 +61,6 @@ const BATCH_REFRESH_CONCURRENCY = 3;
 function errorMessage(error: unknown, t: TFunc): string {
   if (error instanceof ApiError && error.status === 501) return t('af.unsupported');
   return error instanceof Error ? error.message : t('af.request_failed');
-}
-
-function downloadBlob(blob: Blob, name: string): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  URL.revokeObjectURL(url);
 }
 
 /**
@@ -248,7 +241,7 @@ export function useOAuthWorkspaceActions(
       }
       return { record: latest, blob: await api.downloadManagementAuthFile(latest.fileName) };
     },
-    onSuccess: ({ record, blob }) => downloadBlob(blob, record.fileName),
+    onSuccess: ({ record, blob }) => saveBlob(blob, record.fileName),
     onError: (error) => toast.error(errorMessage(error, t)),
   });
 
@@ -512,6 +505,45 @@ export function useOAuthWorkspaceActions(
     }
   }, [acquireFileLock, invalidateWorkspace, markFileBusy, toast, releaseFileLock, releaseTargets, reserveRecordSet, t]);
 
+  const batchExport = React.useCallback(async (selectedRecords: OAuthWorkspaceRecord[]) => {
+    const eligible = selectedRecords.filter((record) => record.canDownloadFile && !record.file.runtime_only);
+    if (eligible.length === 0) return;
+    if (eligible.length > 100) {
+      toast.warning(t('af.batch_export_limit', { max: 100 }));
+      return;
+    }
+    if (!acquireFileLock()) return;
+    const reservation = reserveRecordSet(eligible);
+    if (reservation.conflicts.length > 0 || reservation.reservedRecords.length !== eligible.length) {
+      releaseTargets(reservation.reservedKeys);
+      toast.warning(t('omc.operation_conflict'));
+      releaseFileLock();
+      return;
+    }
+    const targetRecords = reservation.reservedRecords;
+    const targets = reservation.reservedKeys;
+    markFileBusy(targetRecords.map((record) => record.key), true);
+    try {
+      if (targetRecords.length === 1) {
+        const single = targetRecords[0];
+        const blob = await api.downloadManagementAuthFile(single.fileName);
+        saveBlob(blob, single.fileName);
+      } else {
+        const { blob, fileName } = await api.exportManagementAuthFiles(
+          targetRecords.map((record) => record.fileName),
+        );
+        saveBlob(blob, fileName);
+      }
+      toast.success(t('af.batch_export_success', { n: targetRecords.length }));
+    } catch (error) {
+      toast.error(errorMessage(error, t));
+    } finally {
+      markFileBusy(targetRecords.map((record) => record.key), false);
+      releaseTargets(targets);
+      releaseFileLock();
+    }
+  }, [acquireFileLock, markFileBusy, releaseFileLock, releaseTargets, reserveRecordSet, t, toast]);
+
   const batchDelete = React.useCallback(async (selectedRecords: OAuthWorkspaceRecord[]) => {
     const eligible = selectedRecords.filter((record) => record.canDeleteFile);
     if (eligible.length === 0 || !acquireFileLock()) return;
@@ -759,6 +791,7 @@ export function useOAuthWorkspaceActions(
     toggleOne,
     batchStatus,
     batchRefresh,
+    batchExport,
     batchDelete,
     refreshQuotaForRecord,
     refreshQuota,

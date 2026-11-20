@@ -135,6 +135,7 @@ export default {
   'audit.action.provider.probe': '测试提供商连通性',
   'audit.action.auth_file.delete': '删除凭证文件',
   'audit.action.auth_file.download': '下载凭证文件',
+  'audit.action.auth_file.export': '批量导出凭证文件',
   'audit.action.auth_file.fields_read': '查看凭证字段',
   'audit.action.auth_file.fields_update': '修改凭证字段',
   'audit.action.auth_file.refresh': '手动刷新凭证',

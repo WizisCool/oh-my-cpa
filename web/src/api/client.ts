@@ -1172,6 +1172,18 @@ export const api = {
     return downloadBlob(`${apiBaseUrl}/management/auth-files/download?name=${encodeURIComponent(name)}`);
   },
 
+  async exportManagementAuthFiles(names: string[]): Promise<{ blob: Blob; fileName: string }> {
+    const response = await requestResponse('/management/auth-files/export', {
+      method: 'POST',
+      headers: { Accept: 'application/zip, application/json' },
+      body: JSON.stringify({ names }),
+    });
+    const disposition = response.headers.get('Content-Disposition') ?? '';
+    const match = disposition.match(/filename="?([^";\s]+)"?/i);
+    const fileName = match?.[1] || 'oauth-credentials.zip';
+    return { blob: await response.blob(), fileName };
+  },
+
   async getManagementAuthFileModels(name: string): Promise<{ models: ManagementAuthFileModel[] }> {
     return request<{ models: ManagementAuthFileModel[] }>(`/management/auth-files/models?name=${encodeURIComponent(name)}`, { method: 'GET' });
   },

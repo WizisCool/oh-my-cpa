@@ -138,6 +138,7 @@ export default {
   "audit.action.provider.probe": "Menguji kesambungan penyedia",
   "audit.action.auth_file.delete": "Memadam fail kelayakan",
   "audit.action.auth_file.download": "Memuat turun fail kelayakan",
+  "audit.action.auth_file.export": "Mengeksport fail kelayakan",
   "audit.action.auth_file.fields_read": "Membaca medan kelayakan",
   "audit.action.auth_file.fields_update": "Mengemas kini medan kelayakan",
   "audit.action.auth_file.refresh": "Menyegar semula kelayakan",

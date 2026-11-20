@@ -2988,6 +2988,87 @@
         }
       }
     },
+    "/v1/management/auth-files/export": {
+      "post": {
+        "security": [
+          {
+            "CookieAuth": []
+          }
+        ],
+        "description": "Download selected credential auth files as a single ZIP attachment after recording fail-closed audit events. Aborts if any requested file fails to download.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/zip"
+        ],
+        "tags": [
+          "AuthFiles"
+        ],
+        "summary": "Export multiple raw auth files as a ZIP archive",
+        "parameters": [
+          {
+            "description": "Batch export payload",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/api.AuthFileExportRequestDTO"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "file"
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "413": {
+            "description": "Request Entity Too Large",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "501": {
+            "description": "Not Implemented",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          }
+        }
+      }
+    },
     "/v1/management/auth-files/fields": {
       "patch": {
         "security": [
@@ -13625,6 +13706,17 @@
         },
         "status": {
           "type": "string"
+        }
+      }
+    },
+    "api.AuthFileExportRequestDTO": {
+      "type": "object",
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },

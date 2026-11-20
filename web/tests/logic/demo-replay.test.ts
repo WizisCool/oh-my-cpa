@@ -451,10 +451,23 @@ test('demo sandbox isolates provider, api key, routing, and reset state', async 
   const square = (await squareRes!.json()) as { models: Array<{ call_point: string }> };
   assert.ok(square.models.some((m) => m.call_point === 'g4-hydrogen-edge'));
 
+  const authExportRes = await interceptDemoRequest(
+    '/management/auth-files/export',
+    { method: 'POST', body: JSON.stringify({ names: ['antigravity-studio.json'] }) },
+    fetchBaseline,
+  );
+  assert.ok(authExportRes && authExportRes.status === 200);
+  assert.equal(authExportRes!.headers.get('Content-Type'), 'application/zip');
+  const authZipBytes = new Uint8Array(await authExportRes!.arrayBuffer());
+  assert.equal(authZipBytes[0], 0x50);
+  assert.equal(authZipBytes[1], 0x4b);
+  assert.ok(new TextDecoder().decode(authZipBytes).includes('antigravity-studio.json'));
+
   // Audit trail captures sandbox actions
   const auditRes = await interceptDemoRequest('/management/audit/events', { method: 'GET' }, fetchBaseline);
   const audit = (await auditRes!.json()) as { events: Array<{ action: string }> };
   assert.ok(audit.events.some((e) => e.action === 'provider.create'));
+  assert.ok(audit.events.some((e) => e.action === 'auth_file.export'));
   assert.ok(countDemoSandboxChanges() >= 2);
 
     // Reset restores baseline cleanly

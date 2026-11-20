@@ -138,6 +138,7 @@ export default {
   'audit.action.provider.probe': 'Probed provider connectivity',
   'audit.action.auth_file.delete': 'Deleted a credential file',
   'audit.action.auth_file.download': 'Downloaded a credential file',
+  'audit.action.auth_file.export': 'Exported credential files',
   'audit.action.auth_file.fields_read': 'Read credential fields',
   'audit.action.auth_file.fields_update': 'Updated credential fields',
   'audit.action.auth_file.refresh': 'Refreshed a credential',

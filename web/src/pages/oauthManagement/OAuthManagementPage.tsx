@@ -898,6 +898,8 @@ export const OAuthManagementPage: React.FC = () => {
             onDisable={() => void actions.batchStatus(true, selectedRecords)}
             onRefresh={() => void actions.batchRefresh(selectedRecords)}
             canRefresh
+            onExport={() => void actions.batchExport(selectedRecords)}
+            canExport={selectedRecords.some((record) => record.canDownloadFile && !record.file.runtime_only)}
             onDelete={() => void actions.batchDelete(selectedRecords)}
           />
         </div>

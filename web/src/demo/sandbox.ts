@@ -887,6 +887,109 @@ function mergeAuthFiles(baseline: ManagementAuthFilesResponse, state: DemoSandbo
   return { files, total: files.length };
 }
 
+function buildSandboxRedactedAuthDoc(file: ManagementAuthFile): string {
+  const doc = {
+    sandbox_export: true,
+    note: 'Redacted demo sandbox credential document; real tokens are never included in the public demo.',
+    name: file.name,
+    provider: file.provider ?? file.type ?? 'oauth',
+    auth_index: file.auth_index,
+    email: file.email ?? 'sandbox@acme-labs.example',
+    status: file.status,
+    disabled: file.disabled,
+    priority: file.priority,
+    weight: file.weight,
+    models: file.models ?? [],
+  };
+  return JSON.stringify(doc, null, 2);
+}
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let crc = i;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc & 1) ? (0xedb88320 ^ (crc >>> 1)) : (crc >>> 1);
+    }
+    table[i] = crc >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) {
+    crc = CRC32_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function buildStoredZipArchive(entries: Array<{ name: string; data: Uint8Array }>): Uint8Array {
+  const encoder = new TextEncoder();
+  const localChunks: Uint8Array[] = [];
+  const centralChunks: Uint8Array[] = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const nameBytes = encoder.encode(entry.name);
+    const data = entry.data;
+    const checksum = crc32(data);
+
+    const local = new Uint8Array(30 + nameBytes.length + data.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0x0800, true);
+    lv.setUint16(8, 0, true);
+    lv.setUint32(14, checksum, true);
+    lv.setUint32(18, data.length, true);
+    lv.setUint32(22, data.length, true);
+    lv.setUint16(26, nameBytes.length, true);
+    local.set(nameBytes, 30);
+    local.set(data, 30 + nameBytes.length);
+    localChunks.push(local);
+
+    const central = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(central.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint32(16, checksum, true);
+    cv.setUint32(20, data.length, true);
+    cv.setUint32(24, data.length, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint32(42, offset, true);
+    central.set(nameBytes, 46);
+    centralChunks.push(central);
+
+    offset += local.length;
+  }
+
+  const centralSize = centralChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, entries.length, true);
+  ev.setUint16(10, entries.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, offset, true);
+
+  const out = new Uint8Array(offset + centralSize + eocd.length);
+  let cursor = 0;
+  for (const chunk of localChunks) {
+    out.set(chunk, cursor);
+    cursor += chunk.length;
+  }
+  for (const chunk of centralChunks) {
+    out.set(chunk, cursor);
+    cursor += chunk.length;
+  }
+  out.set(eocd, cursor);
+  return out;
+}
+
 function defaultSafeFieldsFor(file: ManagementAuthFile): ManagementAuthFileSafeFields {
   return {
     name: file.name,
@@ -2095,21 +2198,8 @@ export async function interceptDemoRequest(
       const authRes = await ensureBaseline<ManagementAuthFilesResponse>('auth-files', '/management/auth-files', fetchBaseline);
       const merged = authRes ? mergeAuthFiles(authRes, state) : null;
       const file = merged?.files.find((f) => f.name === name);
-      if (!file) return errorResponse('Credential not found', 'not_found', 404);
-      const doc = {
-        sandbox_export: true,
-        note: 'Redacted demo sandbox credential document; real tokens are never included in the public demo.',
-        name: file.name,
-        provider: file.provider ?? file.type ?? 'oauth',
-        auth_index: file.auth_index,
-        email: file.email ?? 'sandbox@acme-labs.example',
-        status: file.status,
-        disabled: file.disabled,
-        priority: file.priority,
-        weight: file.weight,
-        models: file.models ?? [],
-      };
-      return new Response(JSON.stringify(doc, null, 2), {
+      if (!file || file.runtime_only) return errorResponse('Credential not found', 'not_found', 404);
+      return new Response(buildSandboxRedactedAuthDoc(file), {
         status: 200,
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
@@ -3011,6 +3101,44 @@ export async function interceptDemoRequest(
     recordSandboxAudit(state, 'auth_file.delete', 'auth_file', names.join(','), { count: names.length });
     saveState(state);
     return jsonResponse({ status: 'ok', deleted: names.length, files: names });
+  }
+
+  if (pathname === '/management/auth-files/export' && method === 'POST') {
+    const body = parseJsonBody<{ names?: unknown }>(options);
+    const rawNames = Array.isArray(body?.names)
+      ? body.names.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
+      : [];
+    const uniqueNames = Array.from(new Set(rawNames));
+    if (uniqueNames.length === 0 || uniqueNames.length > 100) {
+      return errorResponse('One to one hundred names are required', 'invalid_request', 400);
+    }
+    const authRes = await ensureBaseline<ManagementAuthFilesResponse>('auth-files', '/management/auth-files', fetchBaseline);
+    const merged = authRes ? mergeAuthFiles(authRes, state) : null;
+    const byName = new Map((merged?.files ?? []).map((file) => [file.name, file]));
+    const encoder = new TextEncoder();
+    const entries: Array<{ name: string; data: Uint8Array }> = [];
+    for (const name of uniqueNames) {
+      const file = byName.get(name);
+      if (!file || file.runtime_only) {
+        return errorResponse(`Credential not found: ${name}`, 'not_found', 404);
+      }
+      entries.push({ name, data: encoder.encode(buildSandboxRedactedAuthDoc(file)) });
+    }
+    const archive = buildStoredZipArchive(entries);
+    const archiveBytes = new ArrayBuffer(archive.byteLength);
+    new Uint8Array(archiveBytes).set(archive);
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+    recordSandboxAudit(state, 'auth_file.export', 'auth_file', uniqueNames.join(','), { count: uniqueNames.length });
+    saveState(state);
+    return new Response(archiveBytes, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="oauth-credentials-${stamp}.zip"`,
+        'X-OMCPA-Demo': 'active',
+        'X-OMCPA-Demo-Sandbox': 'browser',
+      },
+    });
   }
 
   if (pathname === '/management/auth-files' && method === 'POST') {

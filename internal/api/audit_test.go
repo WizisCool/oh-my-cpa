@@ -127,6 +127,19 @@ func TestAuditOperationsAreRecorded(t *testing.T) {
 		t.Fatalf("download auth file status = %d", resp.StatusCode)
 	}
 
+	// 1b. Auth File batch export
+	expReq, _ := http.NewRequest(http.MethodPost, serverURL+"/api/v1/management/auth-files/export", bytes.NewBufferString(`{"names":["openai.json"]}`))
+	expReq.Header.Set("Origin", serverURL)
+	expReq.Header.Set("Content-Type", "application/json")
+	resp, err = client.Do(expReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("export auth files status = %d", resp.StatusCode)
+	}
+
 	// 2. Auth File delete
 	delReq, _ := http.NewRequest(http.MethodDelete, serverURL+"/api/v1/management/auth-files?name=openai.json", nil)
 	delReq.Header.Set("Origin", serverURL)
@@ -238,6 +251,7 @@ func TestAuditOperationsAreRecorded(t *testing.T) {
 
 	expectedActions := []string{
 		"auth_file.download",
+		"auth_file.export",
 		"auth_file.delete",
 		"logs.clear",
 		"config.save_scalar",
@@ -278,6 +292,24 @@ func TestAuditFailureFailsClosedWithoutExposingSecrets(t *testing.T) {
 	_ = json.NewDecoder(resp.Body).Decode(&payload)
 	if errMsg, ok := payload["error"].(string); !ok || !strings.Contains(errMsg, "audit") {
 		t.Fatalf("expected audit error message, got %#v", payload)
+	}
+
+	// 1b. Batch export auth files must also fail closed with 500 without returning archive bytes
+	exportReq, _ := http.NewRequest(http.MethodPost, serverURL+"/api/v1/management/auth-files/export", bytes.NewBufferString(`{"names":["openai.json"]}`))
+	exportReq.Header.Set("Origin", serverURL)
+	exportReq.Header.Set("Content-Type", "application/json")
+	exportResp, err := client.Do(exportReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer exportResp.Body.Close()
+	if exportResp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500 on export audit failure, got %d", exportResp.StatusCode)
+	}
+	var exportPayload map[string]any
+	_ = json.NewDecoder(exportResp.Body).Decode(&exportPayload)
+	if errMsg, ok := exportPayload["error"].(string); !ok || !strings.Contains(errMsg, "audit") {
+		t.Fatalf("expected export audit error message, got %#v", exportPayload)
 	}
 
 	// 2. Clear logs must fail with 500

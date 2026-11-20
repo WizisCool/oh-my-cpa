@@ -5,6 +5,7 @@ import { DropdownCaret } from '@/components/ui/dropdown-caret';
 import {
   CheckCircleOutlined,
   CheckSquareOutlined,
+  DownloadOutlined,
   StopOutlined,
   DeleteOutlined,
   CloseOutlined,
@@ -31,6 +32,8 @@ interface BatchActionBarProps {
   onDisable: () => void;
   onRefresh: () => void;
   canRefresh: boolean;
+  onExport: () => void;
+  canExport: boolean;
   onDelete: () => void;
   hiddenCount?: number;
 }
@@ -49,6 +52,8 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
   onDisable,
   onRefresh,
   canRefresh,
+  onExport,
+  canExport,
   onDelete,
   hiddenCount = 0,
 }) => {
@@ -101,6 +106,7 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
         <ToolButton size="sm" variant="ghost" icon={<CheckCircleOutlined />} label={t('af.batch_enable')} disabled={isMutating} onClick={onEnable} />
         <ToolButton size="sm" variant="ghost" icon={<StopOutlined />} label={t('af.batch_disable')} disabled={isMutating} onClick={onDisable} />
         <ToolButton size="sm" variant="ghost" icon={<SyncOutlined />} label={t('af.batch_refresh')} disabled={isMutating || !canRefresh} onClick={onRefresh} />
+        <ToolButton size="sm" variant="ghost" icon={<DownloadOutlined />} label={t('af.batch_export')} disabled={isMutating || !canExport} onClick={onExport} data-testid="auth-batch-export" />
         <ConfirmAction title={t('af.delete_selected_title')} description={deleteDescription} confirmLabel={t('common.delete')} isDanger onConfirm={onDelete}>
           <ToolButton size="sm" variant="ghost" danger icon={<DeleteOutlined />} label={t('af.delete_selected')} disabled={isMutating} />
         </ConfirmAction>
@@ -156,6 +162,16 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
         onClick={onRefresh}
       >
         {t('af.batch_refresh')}
+      </Button>
+      <Button
+        size="sm"
+        icon={<DownloadOutlined />}
+        loading={isMutating}
+        disabled={isMutating || !canExport}
+        onClick={onExport}
+        data-testid="auth-batch-export"
+      >
+        {t('af.batch_export')}
       </Button>
       <div className={styles['destructive-action']}>
         <ConfirmAction
