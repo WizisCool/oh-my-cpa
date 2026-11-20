@@ -24,9 +24,8 @@ export function StageProgress({ total, current, label, className, ...attributes 
       <div className={styles['caption']}>
         <span className={styles['label']}>{label}</span>
         {current >= 0 && (
-          <Count size="small" className={styles['count']}>
-            <span aria-hidden="true">{`${current + 1}/${total}`}</span>
-          </Count>
+          // The position is read aloud with the stage; only the segments below are decorative.
+          <Count size="small" className={styles['count']}>{`${current + 1}/${total}`}</Count>
         )}
       </div>
       <ol className={styles['track']} aria-hidden="true">
