@@ -94,6 +94,7 @@ export default {
   'trends.quota.no_cycles': 'Belum ada kitaran lengkap sebelum ini',
   'trends.quota.error_title': 'Kuota langganan tidak dapat dimuatkan',
   'trends.quota.stale_notice': 'Menunjukkan bacaan yang diperhatikan pada {at}; unjuran akan disambung selepas penyegaran berjaya.',
+  'trends.quota.cpa_unreachable_notice': 'Tidak dapat menyambung ke CPA. Menunjukkan bacaan yang diperhatikan pada {at}; unjuran akan disambung selepas sambungan pulih.',
   'trends.quota.approximate_hint': 'Dianggarkan daripada ringkasan penggunaan 15 minit',
   'trends.quota.physical_unavailable': 'Penggunaan kuota ciri ini tidak dijejaki mengikut permintaan',
 

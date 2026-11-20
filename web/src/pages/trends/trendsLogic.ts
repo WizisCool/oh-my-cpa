@@ -348,6 +348,36 @@ export function quotaCredentialAttention(credential: TrendsQuotaCredential): 'wa
  */
 const STALE_CREDENTIAL_STATUSES = new Set(['stale', 'error', 'unavailable', 'disabled', 'unknown']);
 
+export type TrendsQuotaNoticeKind = 'cpa_unreachable' | 'stale';
+
+export interface TrendsQuotaNoticeState {
+  kind: TrendsQuotaNoticeKind;
+  canRefreshQuota: boolean;
+}
+
+/**
+ * Classifies why the selected quota cycle cannot project forward: CPA itself could not be
+ * reached to verify live credentials (retry the read) or the observation is stale, failed, or
+ * past its reset (trigger a live upstream quota refresh).
+ */
+export function quotaNoticeState(
+  credential: TrendsQuotaCredential,
+  window: TrendsQuotaWindow,
+  isMembershipUnknown: boolean,
+  nowMs: number,
+): TrendsQuotaNoticeState | null {
+  if (isMembershipUnknown) {
+    return { kind: 'cpa_unreachable', canRefreshQuota: false };
+  }
+  if (STALE_CREDENTIAL_STATUSES.has(credential.status) || window.cycle_reset_ms <= nowMs) {
+    return {
+      kind: 'stale',
+      canRefreshQuota: credential.status !== 'disabled' && credential.auth_index.trim() !== '',
+    };
+  }
+  return null;
+}
+
 export function quotaRisk(items: readonly TrendsQuotaCredential[], nowMs?: number): { forecastable: number; limited: number; projected: number } {
   let forecastable = 0;
   let limited = 0;

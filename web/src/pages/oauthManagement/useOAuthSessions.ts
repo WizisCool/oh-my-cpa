@@ -2,6 +2,7 @@ import type { OAuthRecoveryTarget } from '../../types/oauth';
 import React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode, describeError } from '../../api/client';
+import { QUERY_KEYS } from '../../api/queryKeys';
 import { useT } from '../../i18n';
 import {
   resolveStartedOAuthFlow,
@@ -176,7 +177,8 @@ export function useOAuthSessions(
       callbackError: undefined,
     });
     void queryClient.invalidateQueries({ queryKey: ['management-auth-files'] });
-    void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
+    void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.quota });
+    void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trendsQuota });
     void queryClient.invalidateQueries({ queryKey: ['management-overview'] });
     completedRef.current?.(providerId, recoveryTargetsRef.current[providerId]);
     if (shouldNotifyCompletion) toast.success(t('oauth.status_success_badge'));

@@ -28,6 +28,7 @@ import {
   quotaCycleBars,
   quotaDivider,
   quotaEventsHref,
+  quotaNoticeState,
   quotaWindowName,
   readTrendsView,
   resolvePerfBuckets,
@@ -724,4 +725,35 @@ test('stability failure attribution rolls up model, provider, credential and lan
     { id: 'codex-b', family: 'codex', name: 'Codex B', auth_indexes: [] },
   ];
   assert.equal(resolveTrendsManagementTarget('provider', 'codex', credentials, multiFamilyProviders), null);
+});
+
+test('quotaNoticeState distinguishes CPA unreachability from stale or expired observations', () => {
+  const activeWin = quotaWindow({ cycle_start_ms: 0, cycle_reset_ms: 5 * HOUR });
+  const activeCred = credential('cred-1', [activeWin]);
+
+  assert.equal(quotaNoticeState(activeCred, activeWin, false, 2 * HOUR), null);
+  assert.deepEqual(
+    quotaNoticeState({ ...activeCred, status: 'stale' }, activeWin, true, 2 * HOUR),
+    { kind: 'cpa_unreachable', canRefreshQuota: false },
+  );
+  assert.deepEqual(
+    quotaNoticeState({ ...activeCred, status: 'stale' }, activeWin, false, 2 * HOUR),
+    { kind: 'stale', canRefreshQuota: true },
+  );
+  assert.deepEqual(
+    quotaNoticeState({ ...activeCred, status: 'error' }, activeWin, false, 2 * HOUR),
+    { kind: 'stale', canRefreshQuota: true },
+  );
+  assert.deepEqual(
+    quotaNoticeState(activeCred, activeWin, false, 5 * HOUR),
+    { kind: 'stale', canRefreshQuota: true },
+  );
+  assert.deepEqual(
+    quotaNoticeState({ ...activeCred, status: 'disabled' }, activeWin, false, 2 * HOUR),
+    { kind: 'stale', canRefreshQuota: false },
+  );
+  assert.deepEqual(
+    quotaNoticeState({ ...activeCred, auth_index: '  ', status: 'stale' }, activeWin, false, 2 * HOUR),
+    { kind: 'stale', canRefreshQuota: false },
+  );
 });

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode, ApiError } from '../api/client';
+import { QUERY_KEYS } from '../api/queryKeys';
 import type { ManagementAuthFile } from '../types/managementAuthFile';
 
 export type SIWCPhase = 'starting' | 'waiting' | 'verifying' | 'success' | 'error' | 'cancelled';
@@ -81,7 +82,8 @@ export function useSIWCBindings(): SIWCBindings {
         stop(key);
         update(key, { phase: 'success', isBusy: false, confirmedFile: result.file, state: undefined, url: undefined, callbackUrl: '', error: undefined });
         void queryClient.invalidateQueries({ queryKey: ['management-auth-files'] });
-        void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
+        void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.quota });
+        void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trendsQuota });
         void queryClient.invalidateQueries({ queryKey: ['management-overview'] });
         return;
       }

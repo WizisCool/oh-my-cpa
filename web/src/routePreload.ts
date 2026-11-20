@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { api, apiErrorCode } from './api/client';
+import { QUERY_KEYS } from './api/queryKeys';
 import { preloadDashboardCharts, preloadInsightsCharts, preloadTrendsCharts } from './charts/lazyCharts';
 import {
   dashboardHeatmapSwr,
@@ -232,7 +233,7 @@ export function prefetchLandingRouteData(
   if (normalizeConsolePath(pathname) === '/trends') {
     const quotaQuery = trendsQuotaParamsFromSearch(search);
     void queryClient.prefetchQuery({
-      queryKey: ['trends-quota', quotaQuery],
+      queryKey: [...QUERY_KEYS.trendsQuota, quotaQuery],
       queryFn: ({ signal }) => api.getTrendsQuota(quotaQuery, signal),
       staleTime: 30_000,
       retry: retryTrendsQuery,

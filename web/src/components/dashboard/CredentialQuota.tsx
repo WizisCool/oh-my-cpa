@@ -6,6 +6,7 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { api } from '../../api/client';
+import { QUERY_KEYS } from '../../api/queryKeys';
 import { useT, type TFunc } from '../../i18n';
 import { LoadFailure, useToast } from '../feedback';
 import { EmptyState } from '../common/EmptyState';
@@ -421,7 +422,10 @@ export const CredentialQuota: React.FC = React.memo(function CredentialQuota() {
       } else {
         toast.success(t('omc.quota_refresh_report_clean', { succeeded: outcome.succeeded, skipped: 0 }), { key: QUOTA_REFRESH_TOAST_KEY });
       }
-      await queryClient.invalidateQueries({ queryKey: [CREDENTIAL_QUOTA_QUERY_KEY] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: [CREDENTIAL_QUOTA_QUERY_KEY] }),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trendsQuota }),
+      ]);
     } finally {
       isRefreshRunningRef.current = false;
       setIsRefreshingQuota(false);

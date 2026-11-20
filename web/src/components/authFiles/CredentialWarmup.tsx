@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, describeError } from '../../api/client';
+import { QUERY_KEYS } from '../../api/queryKeys';
 import { useI18n, useT, type TFunc } from '../../i18n';
 import { languageLocale } from '../../i18n/language';
 import { formatEventDuration } from '../../types/usageEventMetrics';
@@ -688,7 +689,8 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
     mutationFn: (id: string) => api.runWarmupTask(id),
     onSuccess: (resp) => {
       applyState(resp.state);
-      void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.quota });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trendsQuota });
       const title = t(OUTCOME_KEYS[resp.run.outcome]);
       const detail = resp.run.message || undefined;
       if (resp.run.outcome === 'ok') toast.success(title);

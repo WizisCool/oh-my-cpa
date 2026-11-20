@@ -817,6 +817,17 @@ test('state SSE channel suspends when hidden and reconcileStateSyncEvent applies
   assert.equal(tracker.lastVersion, 2);
   assert.equal(queryClient.getQueryState(QUERY_KEYS.providers(false))?.isInvalidated, true);
 
+  // Quota state_sync must invalidate both management-quota and trends-quota caches together.
+  queryClient.setQueryData(QUERY_KEYS.quota, { quotas: [] });
+  queryClient.setQueryData([...QUERY_KEYS.trendsQuota, ''], { items: [] });
+  await reconcileStateSyncEvent(
+    queryClient,
+    { type: 'state_sync', version: 3, scopes: ['management-quota'] },
+    tracker,
+  );
+  assert.equal(queryClient.getQueryState(QUERY_KEYS.quota)?.isInvalidated, true);
+  assert.equal(queryClient.getQueryState([...QUERY_KEYS.trendsQuota, ''])?.isInvalidated, true);
+
   // Verify resolveStateEventsURL honors root and custom OMCPA_BASE_PATH via window.__OMCPA_CONFIG__.
   const g = globalThis as { window?: { __OMCPA_CONFIG__?: { basePath?: string; apiBaseUrl?: string } } };
   const prevWindow = g.window;

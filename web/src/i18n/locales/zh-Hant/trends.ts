@@ -94,6 +94,7 @@ export default {
   'trends.quota.no_cycles': '還沒有完整的歷史週期',
   'trends.quota.error_title': '訂閱配額讀取失敗',
   'trends.quota.stale_notice': '目前顯示 {at} 的觀測讀數，重新整理恢復後將繼續推演。',
+  'trends.quota.cpa_unreachable_notice': '無法連線至 CPA，目前顯示 {at} 的觀測讀數，恢復連線後將繼續推演。',
   'trends.quota.approximate_hint': '基於分桶匯總推算的近似口徑',
   'trends.quota.physical_unavailable': '該功能配額暫無請求用量明細',
 

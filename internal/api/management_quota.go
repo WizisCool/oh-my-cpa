@@ -425,6 +425,7 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 		_ = h.recordAudit(request, "quota.refresh", "quota", targetIndex, outcome, map[string]any{
 			"status": refreshed.Status,
 		})
+		h.publishStateSync("management-quota")
 
 		writeJSON(writer, http.StatusOK, QuotaSingleRefreshResponseDTO{
 			Status: "ok",
@@ -508,6 +509,9 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 				out = append(out, r)
 			}
 		}
+		if len(out) > 0 {
+			h.publishStateSync("management-quota")
+		}
 		writeJSON(writer, http.StatusOK, QuotaBatchRefreshResponseDTO{Status: "ok", Quotas: out, Total: len(out)})
 		return
 	}
@@ -544,6 +548,9 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 		writeFrame("quota", r)
 	}
 	writeFrame("done", map[string]any{"status": "ok", "total": total})
+	if total > 0 {
+		h.publishStateSync("management-quota")
+	}
 }
 
 // finishBatchReading audits a Meta read and attaches the quota forecasts before a batch reading is

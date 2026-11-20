@@ -1201,4 +1201,89 @@ describe('trends page', () => {
       observeSpy.mockRestore();
     }
   });
+
+  it('distinguishes CPA unreachability with an inline Retry action that recovers once CPA responds', async () => {
+    let isCpaOffline = true;
+    api.on('GET', '/management/trends/quota', () => (
+      isCpaOffline
+        ? {
+            ...QUOTA,
+            summary: { ...QUOTA.summary, active_credentials: 0, is_membership_unknown: true },
+            items: [{
+              ...QUOTA.items[0]!,
+              status: 'unknown',
+              windows: [{ ...QUOTA.items[0]!.windows[0]!, status: 'normal', projected_exhaust_at_ms: undefined, projected_end_percent: undefined, burn_rate_per_hour: undefined }],
+            }],
+          }
+        : QUOTA
+    ));
+
+    mount();
+    const notice = await screen.findByTestId('trends-quota-stale-notice', {}, { timeout: 5000 });
+    expect(notice.textContent).toContain('Cannot reach CPA');
+    expect(screen.getByTestId('trends-tile-quota').textContent).toContain('—');
+    expect(screen.queryByTestId('trends-quota-notice-refresh')).toBeNull();
+
+    isCpaOffline = false;
+    fireEvent.click(screen.getByTestId('trends-quota-notice-retry'));
+    await waitFor(() => expect(screen.queryByTestId('trends-quota-stale-notice')).toBeNull());
+    expect(screen.getByTestId('trends-tile-quota').textContent).toContain('1');
+  });
+
+  it('refreshes a stale quota credential directly from the notice, links management-quota cache, and reports failures', async () => {
+    const sseFrame = (event: string, data: unknown) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    let isStale = true;
+    api.on('GET', '/management/trends/quota', () => (
+      isStale
+        ? {
+            ...QUOTA,
+            items: [{
+              ...QUOTA.items[0]!,
+              status: 'stale',
+              windows: [{ ...QUOTA.items[0]!.windows[0]!, status: 'normal', projected_exhaust_at_ms: undefined, projected_end_percent: undefined, burn_rate_per_hour: undefined }],
+            }],
+          }
+        : QUOTA
+    ));
+    const heldRefresh = api.hold('POST', '/management/quota/refresh');
+
+    const { client } = mount();
+    client.setQueryData(['management-quota'], { quotas: [] });
+    const notice = await screen.findByTestId('trends-quota-stale-notice', {}, { timeout: 5000 });
+    expect(notice.textContent).not.toContain('Cannot reach CPA');
+    const refreshBtn = screen.getByTestId('trends-quota-notice-refresh');
+
+    // Rapid second click must not start a duplicate refresh while the first is in flight.
+    fireEvent.click(refreshBtn);
+    fireEvent.click(refreshBtn);
+    const refreshReq = await heldRefresh.arrived;
+    expect(refreshReq.body).toEqual({ auth_indexes: ['c1'] });
+    expect(api.writes('/management/quota/refresh')).toHaveLength(1);
+
+    // First attempt fails upstream: notice stays visible and failure reason is reported.
+    heldRefresh.release(new Response(
+      sseFrame('quota', { auth_index: 'c1', name: 'c1.json', status: 'error', error: 'HTTP 401 token expired' }) +
+      sseFrame('done', { status: 'ok', total: 1 }),
+      { status: 200, headers: { 'Content-Type': 'text/event-stream; charset=utf-8' } },
+    ));
+    const failureReport = await screen.findByTestId('quota-operation-report', {}, { timeout: 5000 });
+    expect(failureReport.textContent).toContain('Team Codex');
+    expect(failureReport.textContent).toContain('HTTP 401 token expired');
+    expect(screen.getByTestId('trends-quota-stale-notice')).toBeTruthy();
+    expect(client.getQueryState(['management-quota'])?.isInvalidated).toBe(true);
+
+    // Second attempt succeeds: both caches invalidate and the stale notice clears.
+    client.setQueryData(['management-quota'], { quotas: [] });
+    api.on('POST', '/management/quota/refresh', () => {
+      isStale = false;
+      return new Response(
+        sseFrame('quota', { auth_index: 'c1', name: 'c1.json', status: 'healthy' }) +
+        sseFrame('done', { status: 'ok', total: 1 }),
+        { status: 200, headers: { 'Content-Type': 'text/event-stream; charset=utf-8' } },
+      );
+    });
+    fireEvent.click(screen.getByTestId('trends-quota-notice-refresh'));
+    await waitFor(() => expect(screen.queryByTestId('trends-quota-stale-notice')).toBeNull());
+    expect(client.getQueryState(['management-quota'])?.isInvalidated).toBe(true);
+  });
 });
