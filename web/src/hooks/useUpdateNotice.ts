@@ -1,6 +1,7 @@
 import React from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { createPageActivityMonitor } from '../api/liveChannel';
 import { systemLiveChannel } from '../api/systemLive';
 import { isDemoMode } from '../types/demoMode';
 import type { ReleaseProduct } from '../types/system';
@@ -25,6 +26,13 @@ export const UPDATE_STATUS_QUERY_KEY = ['system-updates'] as const;
  * second interval.
  */
 export const UPDATE_STATUS_REFRESH_MS = 60 * 60 * 1000;
+
+/**
+ * Shortest interval between two `ready`-triggered re-reads on stream reconnect.
+ * Real `updates` events always invalidate immediately; throttling `ready` keeps brief mobile
+ * background/foreground switches from issuing redundant update-status fetches.
+ */
+const UPDATE_READY_REVALIDATE_MIN_AGE_MS = 60_000;
 
 /**
  * The stored dismissals and the two writes the System Information page offers.
@@ -78,9 +86,57 @@ export function usePendingUpdates(): { products: ReleaseProduct[]; hasPluginUpda
   const isDemo = isDemoMode();
   React.useEffect(() => {
     if (isDemo) return undefined;
-    return systemLiveChannel().subscribe({
-      onSignal: () => { void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY }); },
+    const activity = createPageActivityMonitor();
+    let deferredTimer: number | null = null;
+    const clearDeferred = () => {
+      if (deferredTimer !== null) {
+        window.clearTimeout(deferredTimer);
+        deferredTimer = null;
+      }
+    };
+    const scheduleDeferred = (delayMs: number) => {
+      clearDeferred();
+      if (!activity.isActive()) return;
+      deferredTimer = window.setTimeout(() => {
+        deferredTimer = null;
+        if (!activity.isActive()) return;
+        const latestUpdatedAt = queryClient.getQueryState(UPDATE_STATUS_QUERY_KEY)?.dataUpdatedAt ?? 0;
+        const latestAgeMs = latestUpdatedAt > 0 ? Date.now() - latestUpdatedAt : Infinity;
+        if (latestAgeMs < UPDATE_READY_REVALIDATE_MIN_AGE_MS) {
+          scheduleDeferred(Math.max(0, UPDATE_READY_REVALIDATE_MIN_AGE_MS - latestAgeMs));
+          return;
+        }
+        void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
+      }, delayMs);
+    };
+    const unsubscribeActivity = activity.subscribe(() => {
+      if (!activity.isActive()) {
+        clearDeferred();
+      }
     });
+    const unsubscribe = systemLiveChannel().subscribe({
+      onSignal: (signal) => {
+        if (!activity.isActive()) {
+          clearDeferred();
+          return;
+        }
+        if (signal === 'ready') {
+          const updatedAt = queryClient.getQueryState(UPDATE_STATUS_QUERY_KEY)?.dataUpdatedAt ?? 0;
+          const ageMs = updatedAt > 0 ? Date.now() - updatedAt : Infinity;
+          if (ageMs < UPDATE_READY_REVALIDATE_MIN_AGE_MS) {
+            scheduleDeferred(Math.max(0, UPDATE_READY_REVALIDATE_MIN_AGE_MS - ageMs));
+            return;
+          }
+        }
+        clearDeferred();
+        void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
+      },
+    });
+    return () => {
+      clearDeferred();
+      unsubscribeActivity();
+      unsubscribe();
+    };
   }, [isDemo, queryClient]);
   const { dismissals, isLoaded } = useUpdateDismissals();
   return React.useMemo(

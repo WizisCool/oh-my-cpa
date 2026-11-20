@@ -1,5 +1,6 @@
 const CHUNK_RELOAD_STORAGE_KEY = 'omc:chunk-reload:v1';
 const CHUNK_RELOAD_COOLDOWN_MS = 30_000;
+const RESUME_PRELOAD_GRACE_MS = 5_000;
 
 const MODULE_LOAD_FAILURES = [
   /Failed to fetch dynamically imported module/i,
@@ -15,7 +16,14 @@ interface PendingReloadState {
   readonly readNow: () => number;
 }
 
+interface ResumeGraceState {
+  readonly resumedAt: number;
+  readonly graceMs: number;
+  readonly readNow: () => number;
+}
+
 let reloadPending: PendingReloadState | null = null;
+let lastResumeGrace: ResumeGraceState | null = null;
 
 export function isModuleLoadFailure(error: unknown): boolean {
   return error instanceof Error && MODULE_LOAD_FAILURES.some((pattern) => pattern.test(error.message));
@@ -35,23 +43,47 @@ export function clearChunkReloadPending(): void {
   reloadPending = null;
 }
 
+export function getChunkReloadGraceRemainingMs(now?: () => number): number {
+  if (lastResumeGrace === null) return 0;
+  const currentTime = (now ?? lastResumeGrace.readNow)();
+  const elapsed = currentTime - lastResumeGrace.resumedAt;
+  if (elapsed < 0 || elapsed >= lastResumeGrace.graceMs) {
+    lastResumeGrace = null;
+    return 0;
+  }
+  return lastResumeGrace.graceMs - elapsed;
+}
+
 export interface AttemptChunkReloadOptions {
   readonly now?: () => number;
   readonly storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
   readonly reload?: () => void;
   readonly isOnline?: () => boolean;
+  readonly isVisible?: () => boolean;
   readonly cooldownMs?: number;
+}
+
+export interface InstallChunkLoadRecoveryOptions extends AttemptChunkReloadOptions {
+  readonly documentTarget?: Pick<Document, 'visibilityState' | 'addEventListener' | 'removeEventListener'> | null;
+  readonly resumeGraceMs?: number;
 }
 
 /**
  * Reloads the document once within `cooldownMs` when a stale HTML shell requests a retired chunk.
- * Returns `true` only when a reload is initiated so offline or persistently missing chunks fall
- * back to the error screen rather than looping.
+ * Returns `true` only when a reload is initiated so offline, hidden, or persistently missing chunks
+ * fall back to the error screen rather than looping or disrupting a backgrounded tab.
  */
 export function attemptChunkReload(options: AttemptChunkReloadOptions = {}): boolean {
   const now = options.now ?? (() => Date.now());
   const cooldownMs = options.cooldownMs ?? CHUNK_RELOAD_COOLDOWN_MS;
   const currentTime = now();
+
+  const isVisible = options.isVisible ?? (() => typeof document === 'undefined' || document.visibilityState === 'visible');
+  if (!isVisible()) return false;
+
+  if (getChunkReloadGraceRemainingMs(options.now) > 0) {
+    return false;
+  }
 
   if (reloadPending) {
     const elapsed = currentTime - reloadPending.startedAt;
@@ -97,17 +129,84 @@ export function attemptChunkReload(options: AttemptChunkReloadOptions = {}): boo
 
 export function installChunkLoadRecovery(
   target: Pick<Window, 'addEventListener' | 'removeEventListener'> = window,
-  options: AttemptChunkReloadOptions = {},
+  options: InstallChunkLoadRecoveryOptions = {},
 ): () => void {
+  const now = options.now ?? (() => Date.now());
+  const resumeGraceMs = options.resumeGraceMs ?? RESUME_PRELOAD_GRACE_MS;
+  const doc = options.documentTarget !== undefined
+    ? options.documentTarget
+    : (typeof document !== 'undefined' ? document : null);
+  const isVisible = options.isVisible ?? (() => !doc || doc.visibilityState === 'visible');
+
+  let wasHidden = !isVisible();
+  let ownedGrace: ResumeGraceState | null = null;
+
+  const setGrace = () => {
+    ownedGrace = { resumedAt: now(), graceMs: resumeGraceMs, readNow: now };
+    lastResumeGrace = ownedGrace;
+  };
+
+  const clearOwnedGrace = () => {
+    if (ownedGrace !== null && lastResumeGrace === ownedGrace) {
+      lastResumeGrace = null;
+    }
+    ownedGrace = null;
+  };
+
+  const markHidden = () => {
+    wasHidden = true;
+    clearOwnedGrace();
+  };
+
+  const markVisible = () => {
+    if (wasHidden) {
+      wasHidden = false;
+      setGrace();
+    }
+  };
+
+  const onVisibilityChange = () => {
+    if (isVisible()) markVisible();
+    else markHidden();
+  };
+
+  const onPageHide = () => {
+    markHidden();
+  };
+
+  const onPageShow = (event: Event) => {
+    clearChunkReloadPending();
+    if (!isVisible()) {
+      markHidden();
+      return;
+    }
+    if ((event as PageTransitionEvent).persisted || wasHidden) {
+      wasHidden = false;
+      setGrace();
+    }
+  };
+
   const onPreloadError = (event: Event) => {
     const payload = (event as Event & { payload?: unknown }).payload;
     if (!isModuleLoadFailure(payload)) return;
     // Keep the original rejection rather than calling event.preventDefault(), which causes Vite's
     // preload helper to resolve to undefined and mask chunk failures as property-read TypeErrors.
-    attemptChunkReload(options);
+    // Mobile OSes frequently abort in-flight background/resume module fetches as sockets wake up;
+    // `attemptChunkReload` enforces both visibility and the post-resume grace window across both
+    // `vite:preloadError` and `RouteErrorPage` automatic recovery paths.
+    attemptChunkReload({ ...options, isVisible });
   };
+
   target.addEventListener('vite:preloadError', onPreloadError);
+  target.addEventListener('pagehide', onPageHide);
+  target.addEventListener('pageshow', onPageShow);
+  doc?.addEventListener('visibilitychange', onVisibilityChange);
+
   return () => {
+    clearOwnedGrace();
     target.removeEventListener('vite:preloadError', onPreloadError);
+    target.removeEventListener('pagehide', onPageHide);
+    target.removeEventListener('pageshow', onPageShow);
+    doc?.removeEventListener('visibilitychange', onVisibilityChange);
   };
 }

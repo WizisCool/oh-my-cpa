@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { UNAVAILABLE_RETRY_MS } from '../../src/api/liveChannel.ts';
+import { createPageActivityMonitor, UNAVAILABLE_RETRY_MS } from '../../src/api/liveChannel.ts';
 import {
   createLiveReadPolicy,
   createUsageLiveChannel,
@@ -166,4 +166,87 @@ test('the fallback tick runs only while no stream is open, someone is looking an
   assert.equal(policy.onTick({ ...base, isLive: true }), false, 'a live stream replaces the poll');
   assert.equal(policy.onTick({ ...base, isVisible: false }), false, 'a hidden tab has no reader');
   assert.equal(policy.onTick({ ...base, isBusy: true }), false, 'a busy read skips the tick rather than queueing it');
+});
+
+test('page activity monitor closes SSE streams on pagehide/freeze and reopens on pageshow/resume', () => {
+  const docHandlers = new Map<string, Set<() => void>>();
+  const winHandlers = new Map<string, Set<() => void>>();
+  let visibilityState: DocumentVisibilityState = 'visible';
+  const fakeDoc = {
+    get visibilityState() {
+      return visibilityState;
+    },
+    addEventListener: (name: string, fn: () => void) => {
+      const set = docHandlers.get(name) ?? new Set<() => void>();
+      set.add(fn);
+      docHandlers.set(name, set);
+    },
+    removeEventListener: (name: string, fn: () => void) => {
+      docHandlers.get(name)?.delete(fn);
+    },
+  };
+  const fakeWin = {
+    addEventListener: (name: string, fn: () => void) => {
+      const set = winHandlers.get(name) ?? new Set<() => void>();
+      set.add(fn);
+      winHandlers.set(name, set);
+    },
+    removeEventListener: (name: string, fn: () => void) => {
+      winHandlers.get(name)?.delete(fn);
+    },
+  };
+
+  const sources: FakeSource[] = [];
+  const activity = createPageActivityMonitor({
+    doc: fakeDoc as unknown as Document,
+    win: fakeWin as unknown as Window,
+  });
+  const channel = createUsageLiveChannel({
+    createSource: () => {
+      const source = new FakeSource();
+      sources.push(source);
+      return source as unknown as EventSource;
+    },
+    url: () => '/api/v1/usage/live',
+    isVisible: activity.isActive,
+    onVisibilityChange: activity.subscribe,
+    setTimer: () => 0,
+    clearTimer: () => {},
+  });
+
+  const unsub = channel.subscribe({ onSignal: () => {} });
+  assert.equal(sources.length, 1);
+  assert.equal(sources[0].isClosed, false);
+
+  for (const fn of winHandlers.get('pagehide') ?? []) fn();
+  assert.equal(activity.isActive(), false);
+  assert.equal(sources[0].isClosed, true, 'pagehide must close the SSE socket for bfcache/suspension');
+
+  for (const fn of winHandlers.get('pageshow') ?? []) fn();
+  assert.equal(activity.isActive(), true);
+  assert.equal(sources.length, 2, 'pageshow reopens the stream');
+
+  for (const fn of docHandlers.get('freeze') ?? []) fn();
+  assert.equal(sources[1].isClosed, true, 'freeze closes the SSE socket');
+
+  visibilityState = 'hidden';
+  for (const fn of docHandlers.get('resume') ?? []) fn();
+  assert.equal(sources.length, 2, 'resume while still hidden keeps the socket closed');
+
+  visibilityState = 'visible';
+  for (const fn of docHandlers.get('visibilitychange') ?? []) fn();
+  assert.equal(sources.length, 3, 'returning visible reopens the socket');
+
+  // Unsubscribing after pagehide drops the pageshow listener; resubscribing once visible must
+  // reset stale suspension state and open a fresh stream.
+  for (const fn of winHandlers.get('pagehide') ?? []) fn();
+  assert.equal(sources[2].isClosed, true);
+  unsub();
+  assert.equal(winHandlers.get('pageshow')?.size ?? 0, 0);
+
+  const resub = channel.subscribe({ onSignal: () => {} });
+  assert.equal(activity.isActive(), true, 'new monitoring lifetime resets stale suspension state');
+  assert.equal(sources.length, 4, 'resubscribing on a visible page opens a fresh stream');
+  resub();
+  assert.equal(sources[3].isClosed, true);
 });

@@ -14,6 +14,7 @@ import { getAppConfig } from '../../types/config';
 import {
   attemptChunkReload,
   clearChunkReloadPending,
+  getChunkReloadGraceRemainingMs,
   isChunkReloadPending,
   isModuleLoadFailure,
 } from '../../utils/chunkRecovery';
@@ -36,10 +37,51 @@ export const RouteErrorPage: React.FC = () => {
   }), [error, version]);
 
   React.useEffect(() => {
-    if (!isModuleFailure) return;
-    if (isChunkReloadPending() || attemptChunkReload()) {
-      setIsReloading(true);
-    }
+    if (!isModuleFailure) return undefined;
+    let timer: number | null = null;
+    const clearTimer = () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    };
+    const scheduleOrAttempt = () => {
+      clearTimer();
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      if (isChunkReloadPending() || attemptChunkReload()) {
+        setIsReloading(true);
+        return;
+      }
+      const graceRemainingMs = getChunkReloadGraceRemainingMs();
+      if (graceRemainingMs > 0) {
+        timer = window.setTimeout(() => {
+          timer = null;
+          if (isChunkReloadPending() || attemptChunkReload()) {
+            setIsReloading(true);
+          }
+        }, graceRemainingMs + 50);
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        scheduleOrAttempt();
+      } else {
+        clearTimer();
+      }
+    };
+    const onPageShow = () => {
+      scheduleOrAttempt();
+    };
+    scheduleOrAttempt();
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      clearTimer();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pageshow', onPageShow);
+    };
   }, [isModuleFailure]);
 
   React.useEffect(() => {

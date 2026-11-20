@@ -8,6 +8,18 @@ import {
   isModuleLoadFailure,
 } from '../../src/utils/chunkRecovery.ts';
 import {
+  clearReloadRecoveryState,
+  consumeScrollSnapshot,
+  consumeStandaloneRoute,
+  isTransientSessionError,
+  readAuthShellHint,
+  RELOAD_SCROLL_STORAGE_KEY,
+  saveScrollSnapshot,
+  saveStandaloneRoute,
+  STANDALONE_ROUTE_STORAGE_KEY,
+  writeAuthShellHint,
+} from '../../src/utils/reloadRecovery.ts';
+import {
   createRouteErrorDiagnostics,
   formatRouteErrorReport,
   redactDiagnosticText,
@@ -134,6 +146,9 @@ function memoryStorage() {
     getItem: (key: string) => store.get(key) ?? null,
     setItem: (key: string, value: string) => {
       store.set(key, value);
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
     },
   };
 }
@@ -269,4 +284,194 @@ test('installChunkLoadRecovery reloads on vite:preloadError only for module-load
 
   dispose();
   clearChunkReloadPending();
+});
+
+test('chunk recovery refuses hidden tabs and suppresses eager preload reloads during post-resume grace', () => {
+  clearChunkReloadPending();
+  const storage = memoryStorage();
+  let clock = 100_000;
+  let reloads = 0;
+
+  assert.equal(
+    attemptChunkReload({
+      now: () => clock,
+      storage,
+      isOnline: () => true,
+      isVisible: () => false,
+      reload: () => {
+        reloads += 1;
+      },
+    }),
+    false,
+  );
+  assert.equal(reloads, 0);
+
+  const winListeners = new Map<string, Set<EventListener>>();
+  const docListeners = new Map<string, Set<EventListener>>();
+  let visibilityState: DocumentVisibilityState = 'visible';
+  const fakeWindow = {
+    addEventListener: (type: string, listener: EventListener) => {
+      const group = winListeners.get(type) ?? new Set<EventListener>();
+      group.add(listener);
+      winListeners.set(type, group);
+    },
+    removeEventListener: (type: string, listener: EventListener) => {
+      winListeners.get(type)?.delete(listener);
+    },
+  };
+  const fakeDoc = {
+    get visibilityState() {
+      return visibilityState;
+    },
+    addEventListener: (type: string, listener: EventListener) => {
+      const group = docListeners.get(type) ?? new Set<EventListener>();
+      group.add(listener);
+      docListeners.set(type, group);
+    },
+    removeEventListener: (type: string, listener: EventListener) => {
+      docListeners.get(type)?.delete(listener);
+    },
+  };
+
+  const emitWin = (type: string, event: Event) => {
+    for (const listener of winListeners.get(type) ?? []) listener(event);
+  };
+  const emitDoc = (type: string) => {
+    for (const listener of docListeners.get(type) ?? []) listener(new Event(type));
+  };
+  const emitPreloadFailure = () => {
+    const evt = new Event('vite:preloadError', { cancelable: true }) as Event & { payload?: unknown };
+    evt.payload = new TypeError('Importing a module script failed.');
+    emitWin('vite:preloadError', evt);
+  };
+
+  const dispose = installChunkLoadRecovery(fakeWindow as unknown as Window, {
+    documentTarget: fakeDoc as unknown as Document,
+    now: () => clock,
+    storage,
+    isOnline: () => true,
+    resumeGraceMs: 5_000,
+    reload: () => {
+      reloads += 1;
+    },
+  });
+
+  try {
+    // Tab goes to background: aborted preloads must not reload.
+    visibilityState = 'hidden';
+    emitDoc('visibilitychange');
+    emitPreloadFailure();
+    assert.equal(reloads, 0);
+
+    // Tab returns to foreground: transient failures within grace window do not trigger eager reload,
+    // including direct RouteErrorPage automatic recovery calls via attemptChunkReload().
+    clock += 10_000;
+    visibilityState = 'visible';
+    emitDoc('visibilitychange');
+    clock += 1_000;
+    emitPreloadFailure();
+    assert.equal(reloads, 0);
+    assert.equal(
+      attemptChunkReload({
+        now: () => clock,
+        storage,
+        isOnline: () => true,
+        isVisible: () => true,
+        reload: () => {
+          reloads += 1;
+        },
+      }),
+      false,
+      'direct attemptChunkReload also honors the post-resume grace window',
+    );
+    assert.equal(reloads, 0);
+
+    // Once settled past the grace window, a real foreground stale chunk triggers one guarded reload.
+    clock += 5_000;
+    emitPreloadFailure();
+    assert.equal(reloads, 1);
+
+    // If pageshow fires while the document is still hidden, keep hidden tracking until visibility
+    // returns so the resume grace period still starts when the user actually focuses the tab.
+    clock += 60_000;
+    clearChunkReloadPending();
+    visibilityState = 'hidden';
+    emitDoc('visibilitychange');
+    emitWin('pageshow', new Event('pageshow'));
+    clock += 10_000;
+    visibilityState = 'visible';
+    emitDoc('visibilitychange');
+    clock += 1_000;
+    emitPreloadFailure();
+    assert.equal(reloads, 1, 'visibility return after background pageshow still receives resume grace');
+
+    clock += 5_000;
+    emitPreloadFailure();
+    assert.equal(reloads, 2, 'foreground preload failure after grace window reloads once');
+  } finally {
+    dispose();
+    clearChunkReloadPending();
+  }
+});
+
+test('reloadRecovery enforces transient-vs-401 classification and strict non-sensitive route/scroll allowlists', () => {
+  assert.equal(isTransientSessionError(new TypeError('Failed to fetch')), true);
+  assert.equal(isTransientSessionError({ status: 0 }), true);
+  assert.equal(isTransientSessionError({ status: 502 }), true);
+  assert.equal(isTransientSessionError({ status: 503 }), true);
+  assert.equal(isTransientSessionError({ status: 408 }), true);
+  assert.equal(isTransientSessionError({ status: 401 }), false);
+  assert.equal(isTransientSessionError({ status: 403 }), false);
+  assert.equal(isTransientSessionError({ status: 400 }), false);
+
+  const session = memoryStorage();
+  const local = memoryStorage();
+  let clock = 500_000;
+
+  assert.equal(readAuthShellHint(session), false);
+  writeAuthShellHint(true, session);
+  assert.equal(readAuthShellHint(session), true);
+
+  // Scroll snapshot strips query/fragment at write time, persists only allowlisted routes, and consumes once within TTL.
+  saveScrollSnapshot('/usage/events?key=secret#frag', 420.4, { storage: session, now: () => clock });
+  const rawScroll = session.getItem(RELOAD_SCROLL_STORAGE_KEY);
+  assert.ok(rawScroll !== null);
+  assert.equal(JSON.parse(rawScroll).path, '/usage/events');
+  assert.equal(rawScroll.includes('secret'), false);
+  assert.equal(rawScroll.includes('frag'), false);
+  assert.equal(consumeScrollSnapshot('/dashboard', { storage: session, now: () => clock }), null);
+  saveScrollSnapshot('/usage/events', 420.4, { storage: session, now: () => clock });
+  assert.equal(consumeScrollSnapshot('/usage/events', { storage: session, now: () => clock + 1_000 }), 420);
+  assert.equal(consumeScrollSnapshot('/usage/events', { storage: session, now: () => clock + 1_000 }), null);
+
+  // Sensitive/dynamic routes are rejected at write time (no backing storage entry) and expired snapshots are ignored.
+  saveScrollSnapshot('/authorize/abc123', 300, { storage: session, now: () => clock });
+  assert.equal(session.getItem(RELOAD_SCROLL_STORAGE_KEY), null);
+  assert.equal(consumeScrollSnapshot('/authorize/abc123', { storage: session, now: () => clock }), null);
+  saveScrollSnapshot('/dashboard', 250, { storage: session, now: () => clock });
+  assert.equal(consumeScrollSnapshot('/dashboard', { storage: session, now: () => clock + 31 * 60_000 }), null);
+
+  // Standalone route recovery ignores normal browser tabs, strips query/fragment, and rejects sensitive routes at write time.
+  saveStandaloneRoute('/trends', { storage: local, now: () => clock, isStandalone: () => false });
+  assert.equal(local.getItem(STANDALONE_ROUTE_STORAGE_KEY), null);
+  assert.equal(consumeStandaloneRoute({ storage: local, now: () => clock, isStandalone: () => true }), null);
+  saveStandaloneRoute('/authorize/secret-id', { storage: local, now: () => clock, isStandalone: () => true });
+  assert.equal(local.getItem(STANDALONE_ROUTE_STORAGE_KEY), null);
+  assert.equal(consumeStandaloneRoute({ storage: local, now: () => clock, isStandalone: () => true }), null);
+  saveStandaloneRoute('/trends?provider=openai#secret', { storage: local, now: () => clock, isStandalone: () => true });
+  const rawRoute = local.getItem(STANDALONE_ROUTE_STORAGE_KEY);
+  assert.ok(rawRoute !== null);
+  assert.equal(JSON.parse(rawRoute).path, '/trends');
+  assert.equal(rawRoute.includes('openai'), false);
+  assert.equal(rawRoute.includes('secret'), false);
+  assert.equal(consumeStandaloneRoute({ storage: local, now: () => clock + 10_000, isStandalone: () => true }), '/trends');
+
+  // Clearing recovery state wipes auth shell hint, scroll snapshot, and standalone route together.
+  writeAuthShellHint(true, session);
+  saveScrollSnapshot('/dashboard', 120, { storage: session, now: () => clock });
+  saveStandaloneRoute('/pricing', { storage: local, now: () => clock, isStandalone: () => true });
+  clearReloadRecoveryState(session, local);
+  assert.equal(readAuthShellHint(session), false);
+  assert.equal(consumeScrollSnapshot('/dashboard', { storage: session, now: () => clock }), null);
+  assert.equal(consumeStandaloneRoute({ storage: local, now: () => clock, isStandalone: () => true }), null);
 });

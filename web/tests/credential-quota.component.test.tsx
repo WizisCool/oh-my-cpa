@@ -692,7 +692,7 @@ describe('dashboard model panels and heatmap alignment states', () => {
         requests: number;
         priced_requests: number;
         cost_usd: number | null;
-        buckets: number[];
+        series: Array<{ t: number; tokens: number }>;
       }>,
     };
     api.on('GET', '/management/dashboard/models', () => modelsPayload);
@@ -728,7 +728,10 @@ describe('dashboard model panels and heatmap alignment states', () => {
             requests: 4,
             priced_requests: 4,
             cost_usd: 0.12,
-            buckets: [400, 800],
+            series: [
+              { t: NOW_MS - 120_000, tokens: 400 },
+              { t: NOW_MS - 60_000, tokens: 800 },
+            ],
           },
         ],
       };

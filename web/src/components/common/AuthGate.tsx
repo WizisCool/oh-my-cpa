@@ -3,12 +3,13 @@ import { flushSync } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PasswordInput } from '@/components/ui/input';
-import { ArrowRightOutlined, LockOutlined } from '../icons';
+import { ArrowRightOutlined, LockOutlined, ReloadOutlined } from '../icons';
 import { api, ApiError, setUnauthorizedHandler } from '../../api/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useT } from '../../i18n';
 import { BrandArtwork } from './BrandArtwork';
 import { PreferenceMenus } from './PreferenceMenus';
+import { ShellLoading } from './ShellLoading';
 import { isDemoMode } from '../../types/demoMode';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useToast } from '../feedback';
@@ -25,7 +26,15 @@ import { readKeepSignedIn, writeKeepSignedIn } from './keepSignedIn';
 import { createNamedLoader, lazyRoute } from '../../utils/routeLoader';
 import { currentConsolePathname, prefetchLandingRouteData, preloadBootChunks, warmRouteIntent } from '../../routePreload';
 import { parseTimeZone, primeTimeZone } from '../../utils/time';
+import {
+  clearReloadRecoveryState,
+  isTransientSessionError,
+  readAuthShellHint,
+  writeAuthShellHint,
+} from '../../utils/reloadRecovery';
 import styles from './AuthGate.module.css';
+
+const SESSION_RETRY_DELAYS_MS = [400, 1200] as const;
 
 const loadSignInStage = createNamedLoader(() => import('./SignInStage'), 'SignInStage');
 const LazySignInStage = lazyRoute<{ state: SignInStageState; failures: number }>(loadSignInStage);
@@ -56,14 +65,30 @@ const AUTH_PLACEHOLDERS = [
 
 export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const t = useT();
+  const tRef = React.useRef(t);
+  React.useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   const toast = useToast();
   const queryClient = useQueryClient();
   const isDemo = isDemoMode();
-  const [status, setStatus] = React.useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
+  const [status, setStatus] = React.useState<'loading' | 'authenticated' | 'reconnecting' | 'unauthenticated'>('loading');
+  const [hasInitialShellHint] = React.useState<boolean>(() => isDemo || readAuthShellHint());
+  const checkGenerationRef = React.useRef(0);
+  const retryTimerRef = React.useRef<number | null>(null);
+  const [isRetryingSession, setIsRetryingSession] = React.useState(false);
   useDocumentTitle(status === 'unauthenticated' ? t('auth.submit') : null);
   const [error, setError] = React.useState<string>();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const isSubmittingRef = React.useRef(false);
   const [isKeptSignedIn, setIsKeptSignedIn] = React.useState(readKeepSignedIn);
+
+  const clearPendingRetry = React.useCallback(() => {
+    if (retryTimerRef.current !== null) {
+      window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, []);
 
   const forgetGatewayCredential = React.useCallback(() => {
     clearMirroredCPAMCCredential();
@@ -99,52 +124,122 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const fieldRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const isNarrow = useIsNarrowViewport();
-  useProgressTask(status === 'loading');
+  useProgressTask(status === 'loading' || isRetryingSession);
   useProgressTask(isSubmitting);
 
-  const checkSession = React.useCallback(async () => {
-    try {
-      const session = await api.getSession();
-      if (!session.authenticated) {
-        forgetGatewayCredential();
-        void loadSignInStage().catch(() => undefined);
-        setStatus('unauthenticated');
-        return;
+  const enterUnauthenticated = React.useCallback((message?: string) => {
+    checkGenerationRef.current += 1;
+    clearPendingRetry();
+    setIsRetryingSession(false);
+    clearReloadRecoveryState();
+    forgetGatewayCredential();
+    setError(message);
+    void loadSignInStage().catch(() => undefined);
+    setStatus('unauthenticated');
+  }, [clearPendingRetry, forgetGatewayCredential]);
+
+  const checkSession = React.useCallback(async (options: { allowAutoRetry?: boolean; showSpinner?: boolean } = {}) => {
+    const { allowAutoRetry = true, showSpinner = false } = options;
+    clearPendingRetry();
+    const generation = ++checkGenerationRef.current;
+    if (showSpinner) setIsRetryingSession(true);
+
+    const runAttempt = async (attempt: number): Promise<void> => {
+      try {
+        const session = await api.getSession();
+        if (checkGenerationRef.current !== generation) return;
+        if (!session.authenticated) {
+          enterUnauthenticated(undefined);
+          return;
+        }
+        writeAuthShellHint(true);
+        setError(undefined);
+        warmAuthenticatedBootstrap();
+        setStatus('authenticated');
+      } catch (err) {
+        if (checkGenerationRef.current !== generation) return;
+        if (err instanceof ApiError && err.status === 401) {
+          enterUnauthenticated(undefined);
+          return;
+        }
+        if (isTransientSessionError(err)) {
+          const isOnline = typeof navigator === 'undefined' || navigator.onLine !== false;
+          const nextDelay = allowAutoRetry && isOnline ? SESSION_RETRY_DELAYS_MS[attempt] : undefined;
+          if (nextDelay !== undefined) {
+            await new Promise<void>((resolve) => {
+              retryTimerRef.current = window.setTimeout(() => {
+                retryTimerRef.current = null;
+                resolve();
+              }, nextDelay);
+            });
+            if (checkGenerationRef.current !== generation) return;
+            await runAttempt(attempt + 1);
+            return;
+          }
+          // Keep transient transport errors in reconnect mode regardless of shell hint so
+          // saved recovery state survives offline cold launches or mobile wake-ups.
+          setError(err instanceof Error ? err.message : tRef.current('auth.connect_failed'));
+          setStatus('reconnecting');
+          return;
+        }
+        enterUnauthenticated(err instanceof Error ? err.message : tRef.current('auth.connect_failed'));
       }
-      warmAuthenticatedBootstrap();
-      setStatus('authenticated');
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        forgetGatewayCredential();
-        void loadSignInStage().catch(() => undefined);
-        setStatus('unauthenticated');
-      } else {
-        setError(err instanceof Error ? err.message : t('auth.connect_failed'));
-        void loadSignInStage().catch(() => undefined);
-        setStatus('unauthenticated');
+    };
+
+    try {
+      await runAttempt(0);
+    } finally {
+      if (checkGenerationRef.current === generation) {
+        setIsRetryingSession(false);
       }
     }
-  }, [t, forgetGatewayCredential, warmAuthenticatedBootstrap]);
+  }, [clearPendingRetry, enterUnauthenticated, warmAuthenticatedBootstrap]);
 
   React.useEffect(() => {
     // Download static shell + landing-route code chunks in parallel with session check.
     preloadBootChunks();
     setUnauthorizedHandler(() => {
-      forgetGatewayCredential();
-      void loadSignInStage().catch(() => undefined);
-      setStatus('unauthenticated');
+      enterUnauthenticated(undefined);
     });
-    void checkSession();
-    return () => setUnauthorizedHandler(undefined);
-  }, [checkSession, forgetGatewayCredential]);
+    void checkSession({ allowAutoRetry: true });
+    return () => {
+      checkGenerationRef.current += 1;
+      clearPendingRetry();
+      setUnauthorizedHandler(undefined);
+    };
+  }, [checkSession, clearPendingRetry, enterUnauthenticated]);
+
+  React.useEffect(() => {
+    if (status !== 'reconnecting') return undefined;
+    const retryOnRecovery = () => {
+      if (isSubmittingRef.current) return;
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      void checkSession({ allowAutoRetry: false, showSpinner: true });
+    };
+    window.addEventListener('online', retryOnRecovery);
+    document.addEventListener('visibilitychange', retryOnRecovery);
+    return () => {
+      window.removeEventListener('online', retryOnRecovery);
+      document.removeEventListener('visibilitychange', retryOnRecovery);
+    };
+  }, [status, checkSession]);
 
   const login = async (values: { password: string }) => {
+    // Take ownership of the gate immediately so any in-flight session probe cannot
+    // resolve afterward and kick a freshly signed-in operator back to sign-in.
+    checkGenerationRef.current += 1;
+    clearPendingRetry();
+    setIsRetryingSession(false);
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     setError(undefined);
     try {
       await api.login(values.password, isKeptSignedIn);
       forgetGatewayCredential();
       await queryClient.invalidateQueries();
+      writeAuthShellHint(true);
+      if (!isDemo) setPassword('');
       warmAuthenticatedBootstrap();
       enterConsole(() => setStatus('authenticated'));
       toast.success(t('auth.success'));
@@ -154,6 +249,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
       setStatus('unauthenticated');
       setFailures((count) => count + 1);
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -175,22 +271,24 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   };
 
   if (status === 'authenticated') return <>{children}</>;
+  if (status === 'loading' && hasInitialShellHint) return <ShellLoading />;
 
   const isLoading = status === 'loading';
-  const isStaged = !isLoading && !isNarrow;
+  const isReconnecting = status === 'reconnecting';
+  const isStaged = !isLoading && !isReconnecting && !isNarrow;
   const stageState: SignInStageState = isSubmitting ? 'submitting' : error ? 'failed' : 'idle';
   const rise = (order: number) => ({ '--rise': order }) as React.CSSProperties;
 
   return (
     <div className={styles['shell']} data-staged={isStaged || undefined}>
-      <ProgressBar source={progressTasks} label={isLoading ? t('auth.checking') : t('common.loading')} className="auth-progress" />
+      <ProgressBar source={progressTasks} label={isLoading || isRetryingSession ? t('auth.checking') : t('common.loading')} className="auth-progress" />
       <div className={styles['pane']}>
         <header className={styles['header']}>
           <BrandArtwork shape="wordmark" height={22} className="app-brand-logo" />
           <div className={styles['menus']}><PreferenceMenus /></div>
         </header>
         <main className={styles['main']}>
-          <section className={`auth-card ${styles['card']}`} aria-labelledby={isLoading ? undefined : 'auth-title'} aria-busy={isLoading || undefined}>
+          <section className={`auth-card ${styles['card']}`} aria-labelledby={isLoading ? undefined : 'auth-title'} aria-busy={isLoading || isRetryingSession || undefined}>
             {isLoading ? (
               <LoadingRegion isImmediate>
                 {AUTH_PLACEHOLDERS.map((placeholder, row) => <Placeholder key={row} {...placeholder} row={row} />)}
@@ -200,6 +298,33 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 </div>
                 <Placeholder height={40} row={5} className="is-control" />
               </LoadingRegion>
+            ) : isReconnecting ? (
+              <>
+                <h1 id="auth-title" className={`terminal-title auth-title ${styles['rise']}`} style={rise(0)}>
+                  {t('auth.reconnect_title')}
+                </h1>
+                {error && <Notice tone="warning" description={error} className="auth-alert" />}
+                <div className={styles['reconnect-actions']}>
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    block
+                    loading={isRetryingSession}
+                    icon={<ReloadOutlined />}
+                    onClick={() => void checkSession({ allowAutoRetry: false, showSpinner: true })}
+                  >
+                    {t('auth.reconnect_retry')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="lg"
+                    block
+                    onClick={() => enterUnauthenticated(undefined)}
+                  >
+                    {t('auth.use_signin')}
+                  </Button>
+                </div>
+              </>
             ) : (
               <>
                 <h1 id="auth-title" className={`terminal-title auth-title ${styles['rise']}`} style={rise(0)}>{t('auth.title')}</h1>

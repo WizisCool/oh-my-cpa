@@ -40,6 +40,12 @@ export interface RouteRegistryOptions {
   readonly now?: () => number;
   readonly scheduleIdle?: (callback: () => void) => () => void;
   readonly isVisible?: () => boolean;
+  /**
+   * Decides whether speculative idle chunk prewarming should run on the current device/network.
+   * Mobile / coarse-pointer / Save-Data devices skip background prewarming to avoid inflating
+   * WebContent memory (and OS eviction pressure) or triggering aborted dynamic imports on suspend.
+   */
+  readonly canIdlePrewarm?: () => boolean;
 }
 
 export interface RouteRegistry {
@@ -73,6 +79,24 @@ function defaultScheduleIdle(callback: () => void): () => void {
   return () => clearTimeout(timer);
 }
 
+function defaultCanIdlePrewarm(): boolean {
+  if (typeof window === 'undefined') return true;
+  if (typeof window.matchMedia === 'function') {
+    if (window.matchMedia('(max-width: 900px)').matches) return false;
+    if (window.matchMedia('(pointer: coarse)').matches) return false;
+  }
+  if (typeof navigator !== 'undefined') {
+    const nav = navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+      deviceMemory?: number;
+    };
+    if (nav.connection?.saveData) return false;
+    if (nav.connection?.effectiveType === '2g' || nav.connection?.effectiveType === 'slow-2g') return false;
+    if (typeof nav.deviceMemory === 'number' && nav.deviceMemory <= 4) return false;
+  }
+  return true;
+}
+
 /**
  * Central registry binding route descriptors to chunk preloading, intent data prewarming, and
  * idle-time progressive warmups.
@@ -85,6 +109,7 @@ export function createRouteRegistry(
   const now = options.now ?? (() => (typeof performance !== 'undefined' ? performance.now() : Date.now()));
   const scheduleIdle = options.scheduleIdle ?? defaultScheduleIdle;
   const isVisible = options.isVisible ?? (() => typeof document === 'undefined' || document.visibilityState === 'visible');
+  const canIdlePrewarm = options.canIdlePrewarm ?? defaultCanIdlePrewarm;
 
   const exactMap = new Map<string, RouteDescriptor>();
   const prefixList: RouteDescriptor[] = [];
@@ -130,6 +155,7 @@ export function createRouteRegistry(
       }
     },
     scheduleIdlePrewarm(excludePath) {
+      if (!canIdlePrewarm()) return () => undefined;
       const skipped = excludePath ? normalizePathname(excludePath) : undefined;
       const ordered = [
         ...descriptors.filter((d) => d.priority === 'critical' && d.path !== skipped),
@@ -141,23 +167,47 @@ export function createRouteRegistry(
       let cancelled = false;
       let cancelCurrent: (() => void) | undefined;
 
+      const cancelPending = () => {
+        cancelled = true;
+        cancelCurrent?.();
+        cancelCurrent = undefined;
+      };
+
+      const onVisibilityOrHide = () => {
+        if (!isVisible()) cancelPending();
+      };
+
       const step = () => {
         cancelCurrent = undefined;
         if (cancelled) return;
-        if (!isVisible()) return;
+        if (!isVisible() || !canIdlePrewarm()) {
+          cancelPending();
+          return;
+        }
         const next = ordered[index++];
         if (!next) return;
         void next.preloadChunk().catch(() => undefined).finally(() => {
-          if (!cancelled && index < ordered.length) {
+          if (!cancelled && isVisible() && index < ordered.length) {
             cancelCurrent = scheduleIdle(step);
           }
         });
       };
 
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', onVisibilityOrHide);
+      }
+      if (typeof window !== 'undefined') {
+        window.addEventListener('pagehide', cancelPending);
+      }
       cancelCurrent = scheduleIdle(step);
       return () => {
-        cancelled = true;
-        cancelCurrent?.();
+        cancelPending();
+        if (typeof document !== 'undefined') {
+          document.removeEventListener('visibilitychange', onVisibilityOrHide);
+        }
+        if (typeof window !== 'undefined') {
+          window.removeEventListener('pagehide', cancelPending);
+        }
       };
     },
     resetCooldowns() {
@@ -333,6 +383,8 @@ export interface HotRouteSlotEntry<TOutlet = React.ReactNode, TLocationContext =
 export interface ReconcileHotRouteOptions {
   readonly maxSlots?: number;
   readonly pinnedKeys?: ReadonlySet<string>;
+  /** When true and no hot route is active (`active === null`), drop all cached off-screen slots. */
+  readonly dropWhenInactive?: boolean;
 }
 
 interface LocationFields {
@@ -382,7 +434,10 @@ export function reconcileHotRouteSlots<TOutlet, TLocationContext>(
   active: { readonly key: string; readonly outlet: TOutlet; readonly locationContext: TLocationContext } | null,
   options: ReconcileHotRouteOptions = {},
 ): readonly HotRouteSlotEntry<TOutlet, TLocationContext>[] {
-  if (!active) return slots;
+  if (!active) {
+    if (options.dropWhenInactive) return slots.length === 0 ? slots : [];
+    return slots;
+  }
   const maxSlots = Math.max(1, options.maxSlots ?? 2);
   const pinnedKeys = options.pinnedKeys ?? PINNED_HOT_ROUTES;
   const nextStep = slots.reduce((max, item) => Math.max(max, item.lastActiveStep), 0) + 1;
@@ -392,17 +447,47 @@ export function reconcileHotRouteSlots<TOutlet, TLocationContext>(
     const existing = slots[existingIndex]!;
     const isLatest = existing.lastActiveStep === nextStep - 1;
     const sameLocation = isSameRouteLocation(existing.locationContext, active.locationContext);
-    if (sameLocation && isLatest) {
+    if (sameLocation && isLatest && slots.length <= maxSlots) {
       return slots;
     }
-    const updated = [...slots];
-    updated[existingIndex] = {
+    const nextEntry: HotRouteSlotEntry<TOutlet, TLocationContext> = {
       key: active.key,
       // Keep `existing.outlet` element identity so React skips top-down subtree reconciliation on warm return.
       outlet: existing.outlet,
       locationContext: sameLocation ? existing.locationContext : active.locationContext,
       lastActiveStep: isLatest ? existing.lastActiveStep : nextStep,
     };
+    if (maxSlots === 1) {
+      return [nextEntry];
+    }
+    const updated = [...slots];
+    updated[existingIndex] = nextEntry;
+    while (updated.length > maxSlots) {
+      let evictIndex = -1;
+      let oldestStep = Infinity;
+      for (let i = 0; i < updated.length; i += 1) {
+        const candidate = updated[i]!;
+        if (candidate.key === active.key || pinnedKeys.has(candidate.key)) continue;
+        if (candidate.lastActiveStep < oldestStep) {
+          oldestStep = candidate.lastActiveStep;
+          evictIndex = i;
+        }
+      }
+      if (evictIndex < 0) {
+        // Every remaining non-active candidate is pinned; evict the least recently used one.
+        oldestStep = Infinity;
+        for (let i = 0; i < updated.length; i += 1) {
+          const candidate = updated[i]!;
+          if (candidate.key === active.key) continue;
+          if (candidate.lastActiveStep < oldestStep) {
+            oldestStep = candidate.lastActiveStep;
+            evictIndex = i;
+          }
+        }
+      }
+      if (evictIndex < 0) break;
+      updated.splice(evictIndex, 1);
+    }
     return updated;
   }
 
@@ -413,34 +498,39 @@ export function reconcileHotRouteSlots<TOutlet, TLocationContext>(
     lastActiveStep: nextStep,
   };
 
+  if (maxSlots === 1) {
+    return [nextEntry];
+  }
+
   if (slots.length < maxSlots) {
     return [...slots, nextEntry];
   }
 
-  let evictIndex = -1;
-  let oldestStep = Infinity;
-  for (let i = 0; i < slots.length; i += 1) {
-    const candidate = slots[i]!;
-    if (pinnedKeys.has(candidate.key)) continue;
-    if (candidate.lastActiveStep < oldestStep) {
-      oldestStep = candidate.lastActiveStep;
-      evictIndex = i;
-    }
-  }
-  if (evictIndex < 0) {
-    // Every slot is pinned; replace the oldest slot only if maxSlots must be respected.
-    evictIndex = 0;
-    oldestStep = slots[0]!.lastActiveStep;
-    for (let i = 1; i < slots.length; i += 1) {
-      if (slots[i]!.lastActiveStep < oldestStep) {
-        oldestStep = slots[i]!.lastActiveStep;
+  const replaced = [...slots];
+  while (replaced.length >= maxSlots) {
+    let evictIndex = -1;
+    let oldestStep = Infinity;
+    for (let i = 0; i < replaced.length; i += 1) {
+      const candidate = replaced[i]!;
+      if (pinnedKeys.has(candidate.key)) continue;
+      if (candidate.lastActiveStep < oldestStep) {
+        oldestStep = candidate.lastActiveStep;
         evictIndex = i;
       }
     }
+    if (evictIndex < 0) {
+      // Every slot is pinned; replace the oldest slot only if maxSlots must be respected.
+      evictIndex = 0;
+      oldestStep = replaced[0]!.lastActiveStep;
+      for (let i = 1; i < replaced.length; i += 1) {
+        if (replaced[i]!.lastActiveStep < oldestStep) {
+          oldestStep = replaced[i]!.lastActiveStep;
+          evictIndex = i;
+        }
+      }
+    }
+    replaced.splice(evictIndex, 1);
   }
-
-  const replaced = [...slots];
-  replaced.splice(evictIndex, 1);
   replaced.push(nextEntry);
   return replaced;
 }

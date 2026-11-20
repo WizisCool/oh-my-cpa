@@ -3,8 +3,17 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider, useRouteError } from 'react-router-dom';
 import { DeferredMount } from '../src/components/common/DeferredMount';
+import { AuthGate } from '../src/components/common/AuthGate';
 import { RouteErrorPage } from '../src/components/common/RouteErrorPage';
 import * as chunkRecovery from '../src/utils/chunkRecovery';
+import { api, ApiError } from '../src/api/client';
+import {
+  clearReloadRecoveryState,
+  consumeStandaloneRoute,
+  readAuthShellHint,
+  saveStandaloneRoute,
+  writeAuthShellHint,
+} from '../src/utils/reloadRecovery';
 import { Tooltip } from '../src/components/common/Tooltip';
 import { progressTasks } from '../src/utils/progressTasks';
 import { AppDrawer } from '../src/components/common/AppDrawer';
@@ -29,7 +38,7 @@ import { Tabs } from '../src/components/ui/tabs';
 import { Combobox } from '../src/components/ui/combobox';
 import { AutoComplete } from '../src/components/ui/autocomplete';
 import { DataTable } from '../src/components/ui/table';
-import { I18nProvider, useT, type MessageKey } from '../src/i18n';
+import { I18nProvider, useI18n, useT, type MessageKey } from '../src/i18n';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { DashboardTrendChart } from '../src/charts/DashboardTrendChart';
 import { formatCacheRate } from '../src/theme/cacheScale';
@@ -554,15 +563,289 @@ describe('DeferredMount', () => {
 
       attemptSpy.mockReturnValueOnce(false);
       const throttledRouter = createMemoryRouter([{ path: '/', element: <ThrowingRoute />, errorElement: <RouteErrorPage /> }]);
-      renderWithOmc(
+      const throttledView = renderWithOmc(
         <ThemeProvider>
           <RouterProvider router={throttledRouter} />
         </ThemeProvider>,
       );
       expect((await screen.findByTestId('route-error-message')).textContent).toBe('Importing a module script failed.');
+      throttledView.unmount();
+
+      // A committed route failure during the post-resume grace window defers one guarded retry
+      // until grace expires, cancels that retry on unmount, and re-arms on foreground transitions.
+      const graceSpy = vi.spyOn(chunkRecovery, 'getChunkReloadGraceRemainingMs').mockReturnValue(200);
+      const visibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+      let visibilityState: DocumentVisibilityState = 'visible';
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => visibilityState,
+      });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        attemptSpy.mockClear();
+        attemptSpy.mockReturnValueOnce(false).mockReturnValueOnce(true);
+        const deferredRouter = createMemoryRouter([{ path: '/', element: <ThrowingRoute />, errorElement: <RouteErrorPage /> }]);
+        const deferredView = renderWithOmc(
+          <ThemeProvider>
+            <RouterProvider router={deferredRouter} />
+          </ThemeProvider>,
+        );
+        expect(attemptSpy).toHaveBeenCalledTimes(1);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(260);
+        });
+        expect(attemptSpy).toHaveBeenCalledTimes(2);
+        expect(screen.queryByTestId('route-error-message')).toBeNull();
+        deferredView.unmount();
+
+        // Unmounting before grace expires cancels the scheduled retry.
+        attemptSpy.mockClear();
+        attemptSpy.mockReturnValue(false);
+        graceSpy.mockReturnValue(300);
+        const cancelledRouter = createMemoryRouter([{ path: '/', element: <ThrowingRoute />, errorElement: <RouteErrorPage /> }]);
+        const cancelledView = renderWithOmc(
+          <ThemeProvider>
+            <RouterProvider router={cancelledRouter} />
+          </ThemeProvider>,
+        );
+        expect(attemptSpy).toHaveBeenCalledTimes(1);
+        cancelledView.unmount();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(400);
+        });
+        expect(attemptSpy).toHaveBeenCalledTimes(1);
+
+        // Failing while hidden waits for foreground return, honors the new grace window, and re-arms across hide/resume.
+        visibilityState = 'hidden';
+        attemptSpy.mockClear();
+        attemptSpy.mockReturnValueOnce(false).mockReturnValueOnce(false).mockReturnValueOnce(true);
+        graceSpy.mockReturnValue(0);
+        const hiddenRouter = createMemoryRouter([{ path: '/', element: <ThrowingRoute />, errorElement: <RouteErrorPage /> }]);
+        const hiddenView = renderWithOmc(
+          <ThemeProvider>
+            <RouterProvider router={hiddenRouter} />
+          </ThemeProvider>,
+        );
+        expect(attemptSpy).toHaveBeenCalledTimes(0);
+
+        // Foreground return starts a 300ms grace window; hiding again cancels the pending timer.
+        visibilityState = 'visible';
+        graceSpy.mockReturnValue(300);
+        act(() => {
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+        expect(attemptSpy).toHaveBeenCalledTimes(1);
+        visibilityState = 'hidden';
+        act(() => {
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(400);
+        });
+        expect(attemptSpy).toHaveBeenCalledTimes(1);
+
+        // Returning to foreground again re-arms the deferred timer and reloads once grace expires.
+        visibilityState = 'visible';
+        graceSpy.mockReturnValue(250);
+        act(() => {
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+        expect(attemptSpy).toHaveBeenCalledTimes(2);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(310);
+        });
+        expect(attemptSpy).toHaveBeenCalledTimes(3);
+        expect(screen.queryByTestId('route-error-message')).toBeNull();
+        hiddenView.unmount();
+      } finally {
+        vi.useRealTimers();
+        if (visibilityDescriptor) {
+          Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
+        } else {
+          delete (document as { visibilityState?: DocumentVisibilityState }).visibilityState;
+        }
+        graceSpy.mockRestore();
+      }
     } finally {
       attemptSpy.mockRestore();
       chunkRecovery.clearChunkReloadPending();
+    }
+  });
+});
+
+describe('AuthGate mobile session continuity', () => {
+  it('shows shell loading with an auth hint, retries transient failures without kicking to sign-in, and preserves recovery state', async () => {
+    clearReloadRecoveryState();
+    writeAuthShellHint(true);
+    const sessionSpy = vi.spyOn(api, 'getSession');
+    const prefsSpy = vi.spyOn(api, 'getPreferences').mockResolvedValue({});
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+    try {
+      function ConsoleChild() {
+        const { setLang } = useI18n();
+        return (
+          <div data-testid="protected-console">
+            Console ready
+            <button type="button" onClick={() => setLang('zh')}>Switch lang</button>
+          </div>
+        );
+      }
+
+      // Simulate waking up offline / transient network failure (status 0) across retries.
+      sessionSpy.mockRejectedValue(new ApiError('Network request failed', 0));
+      const view = renderWithOmc(
+        <ThemeProvider>
+          <AuthGate>
+            <ConsoleChild />
+          </AuthGate>
+        </ThemeProvider>,
+      );
+
+      // While checking with a prior auth hint, ShellLoading stands in rather than the sign-in card
+      // and must never mount protected console children before server verification succeeds.
+      expect(view.container.querySelector('.shell-loading')).not.toBeNull();
+      expect(screen.queryByTestId('protected-console')).toBeNull();
+
+      // Advance deterministically past both bounded retry delays (400ms + 1200ms).
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+
+      // After bounded retries fail transiently, AuthGate stays in reconnect mode, keeps the hint,
+      // and still never mounts protected content.
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+      expect(screen.queryByLabelText('Management key')).toBeNull();
+      expect(screen.queryByTestId('protected-console')).toBeNull();
+      expect(readAuthShellHint()).toBe(true);
+
+      // Once connectivity returns, clicking Retry enters the console directly.
+      sessionSpy.mockResolvedValueOnce({ authenticated: true });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      });
+      expect(screen.getByTestId('protected-console').textContent).toContain('Console ready');
+
+      // Changing locale updates `t`, which must never re-run the AuthGate session check.
+      const callsBeforeLocaleSwitch = sessionSpy.mock.calls.length;
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Switch lang' }));
+      });
+      expect(document.documentElement.lang).toBe('zh-CN');
+      expect(sessionSpy.mock.calls.length).toBe(callsBeforeLocaleSwitch);
+
+      view.unmount();
+      window.localStorage.removeItem('omc-lang');
+
+      // Even without a prior shell hint, exhausted transient transport errors remain in reconnect
+      // mode and preserve saved standalone-route recovery state until the server actually refuses.
+      clearReloadRecoveryState();
+      saveStandaloneRoute('/trends', { isStandalone: () => true });
+      sessionSpy.mockRejectedValue(new ApiError('Network request failed', 0));
+      const coldOfflineView = renderWithOmc(
+        <ThemeProvider>
+          <AuthGate>
+            <ConsoleChild />
+          </AuthGate>
+        </ThemeProvider>,
+      );
+      expect(coldOfflineView.container.querySelector('.shell-loading')).toBeNull();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+      expect(screen.queryByLabelText('Management key')).toBeNull();
+      expect(consumeStandaloneRoute({ isStandalone: () => true })).toBe('/trends');
+      coldOfflineView.unmount();
+      window.localStorage.removeItem('omc-lang');
+    } finally {
+      vi.useRealTimers();
+      window.localStorage.removeItem('omc-lang');
+      sessionSpy.mockRestore();
+      prefsSpy.mockRestore();
+      clearReloadRecoveryState();
+    }
+  });
+
+  it('withdraws mirrored credential on 401 and ignores stale 401 from abandoned probes via real api.getSession', async () => {
+    clearReloadRecoveryState();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const prefsSpy = vi.spyOn(api, 'getPreferences').mockResolvedValue({});
+    const jsonResponse = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+    try {
+      // An actual 401 from the real api.getSession clears the shell hint, withdraws mirrored CPAMC credential, and shows sign-in.
+      writeAuthShellHint(true);
+      window.localStorage.setItem('cli-proxy-auth', JSON.stringify({ managementKey: 'stale-secret' }));
+      fetchSpy.mockResolvedValueOnce(jsonResponse({ error: 'authentication required' }, 401));
+      const rejectedView = renderWithOmc(
+        <ThemeProvider>
+          <AuthGate>
+            <div data-testid="protected-console">Console ready</div>
+          </AuthGate>
+        </ThemeProvider>,
+      );
+      expect(await screen.findByLabelText('Management key')).toBeTruthy();
+      expect(readAuthShellHint()).toBe(false);
+      expect(window.localStorage.getItem('cli-proxy-auth')).toBeNull();
+      rejectedView.unmount();
+
+      // A stale 401 from an abandoned reconnect probe (exercising real api.getSession) must never
+      // invoke the global unauthorized handler, sign out a subsequent login, or clear its mirror.
+      writeAuthShellHint(true);
+      fetchSpy.mockRejectedValue(new TypeError('Failed to fetch'));
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const staleView = renderWithOmc(
+        <ThemeProvider>
+          <AuthGate>
+            <div data-testid="protected-console">Console ready</div>
+          </AuthGate>
+        </ThemeProvider>,
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+      vi.useRealTimers();
+      const retryBtn = screen.getByRole('button', { name: 'Retry' });
+      let resolveStaleFetch!: (response: Response) => void;
+      fetchSpy.mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveStaleFetch = resolve; }));
+      fireEvent.click(retryBtn);
+      fireEvent.click(screen.getByRole('button', { name: 'Go to sign in' }));
+      const loginSpy = vi.spyOn(api, 'login').mockResolvedValueOnce({ authenticated: true });
+      try {
+        const keyInput = await screen.findByLabelText('Management key');
+        fireEvent.change(keyInput, { target: { value: 'valid-secret' } });
+        fireEvent.submit(keyInput.closest('form')!);
+        expect((await screen.findByTestId('protected-console')).textContent).toContain('Console ready');
+        window.localStorage.setItem('cli-proxy-auth', JSON.stringify({ managementKey: 'fresh-secret' }));
+
+        // Stale HTTP 401 response settles through real api.getSession after login succeeded: must be ignored.
+        await act(async () => {
+          resolveStaleFetch(jsonResponse({ error: 'authentication required' }, 401));
+        });
+        expect(screen.getByTestId('protected-console').textContent).toContain('Console ready');
+        expect(window.localStorage.getItem('cli-proxy-auth')).toContain('fresh-secret');
+      } finally {
+        window.localStorage.removeItem('cli-proxy-auth');
+        loginSpy.mockRestore();
+        staleView.unmount();
+      }
+    } finally {
+      vi.useRealTimers();
+      window.localStorage.removeItem('cli-proxy-auth');
+      fetchSpy.mockRestore();
+      prefsSpy.mockRestore();
+      clearReloadRecoveryState();
     }
   });
 });

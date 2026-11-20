@@ -5,7 +5,7 @@ import path from 'path';
 import { resolveApiTarget, resolveBasePath } from '../scripts/api-target.mjs';
 import { syncLobeIcons } from '../scripts/sync-lobe-icons.mjs';
 import { bundleGraphPlugin } from '../scripts/bundle-graph.mjs';
-import { bareBaseRedirectPlugin, devRuntimeConfigPlugin } from '../scripts/dev-base-redirect.mjs';
+import { bareBaseRedirectPlugin, devHmrResiliencePlugin, devRuntimeConfigPlugin } from '../scripts/dev-base-redirect.mjs';
 import { compactEnglishCatalogPlugin } from '../scripts/compact-locales.mjs';
 
 const repoRoot = path.resolve(__dirname, '..');
@@ -32,6 +32,7 @@ export default defineConfig(({ command }) => ({
     react(),
     bundleGraphPlugin(repoRoot),
     bareBaseRedirectPlugin(),
+    devHmrResiliencePlugin(),
     devRuntimeConfigPlugin(devBasePath),
     compactEnglishCatalogPlugin(repoRoot),
   ],

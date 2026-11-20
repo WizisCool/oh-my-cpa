@@ -49,6 +49,7 @@ import { MotionPreferenceSync, MotionProvider } from './hooks/useReducedMotionPr
 import { useConsoleFonts } from './hooks/useFonts';
 import { DEFAULT_SWR_STALE_TIME_MS } from './api/queryKeys';
 import { useEventSource } from './hooks/useEventSource';
+import { consumeStandaloneRoute } from './utils/reloadRecovery';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -91,6 +92,15 @@ const StateEventsSync: React.FC = () => {
   return null;
 };
 
+/**
+ * Restores the last whitelisted console route when an installed standalone PWA restarts at
+ * `start_url` (`./`); regular browser tabs always land on `/dashboard` as before.
+ */
+const ConsoleIndexRedirect: React.FC = () => {
+  const [target] = React.useState(() => consumeStandaloneRoute() ?? '/dashboard');
+  return <Navigate to={target} replace />;
+};
+
 const ThemedShell: React.FC = () => (
   <MotionProvider>
     <MotionPreferenceSync />
@@ -119,7 +129,7 @@ const AppRoutes: React.FC = () => {
       ),
       errorElement: <RouteErrorPage />,
       children: [
-        { index: true, element: <Navigate to="/dashboard" replace /> },
+        { index: true, element: <ConsoleIndexRedirect /> },
         { path: 'dashboard', element: <DashboardPage /> },
         { path: 'insights', element: <InsightsPage /> },
         { path: 'trends', element: <TrendsPage /> },

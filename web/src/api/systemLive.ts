@@ -1,5 +1,5 @@
 import { getAppConfig } from '../types/config';
-import { createLiveChannel, type ChannelDeps, type LiveChannelState } from './liveChannel';
+import { createLiveChannel, createPageActivityMonitor, type ChannelDeps, type LiveChannelState } from './liveChannel';
 
 /**
  * The live update channel: one server-sent event stream per tab that says "the stored update
@@ -45,14 +45,12 @@ let sharedChannel: ReturnType<typeof createUpdateLiveChannel> | null = null;
 /** The tab's one channel, created on first use. */
 export function systemLiveChannel() {
   if (!sharedChannel) {
+    const activity = createPageActivityMonitor();
     sharedChannel = createUpdateLiveChannel({
       createSource: (url) => new EventSource(url, { withCredentials: true }),
       url: systemLiveURL,
-      isVisible: () => document.visibilityState === 'visible',
-      onVisibilityChange: (handler) => {
-        document.addEventListener('visibilitychange', handler);
-        return () => document.removeEventListener('visibilitychange', handler);
-      },
+      isVisible: activity.isActive,
+      onVisibilityChange: activity.subscribe,
       setTimer: (handler, ms) => window.setTimeout(handler, ms),
       clearTimer: (timer) => window.clearTimeout(timer as number),
     });

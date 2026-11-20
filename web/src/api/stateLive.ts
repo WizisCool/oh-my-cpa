@@ -1,7 +1,7 @@
 import { getAppConfig } from '../types/config';
 import type { ConfigScalars } from '../types/configManagement';
 import type { ManagementOAuthModelAlias } from '../types/managementOAuthModelAlias';
-import { UNAVAILABLE_RETRY_MS, type LiveChannelState } from './liveChannel';
+import { createPageActivityMonitor, UNAVAILABLE_RETRY_MS, type LiveChannelState } from './liveChannel';
 
 export type StateLiveEventType = 'ready' | 'state_sync' | 'sync_error';
 
@@ -298,15 +298,12 @@ export function stateLiveChannel(endpoint = '/api/events') {
   const resolvedUrl = resolveStateEventsURL(endpoint);
   let channel = sharedChannels.get(resolvedUrl);
   if (!channel) {
+    const activity = createPageActivityMonitor();
     channel = createStateLiveChannel({
       createSource: (url) => new EventSource(url, { withCredentials: true }),
       url: () => resolvedUrl,
-      isVisible: () => typeof document === 'undefined' || document.visibilityState === 'visible',
-      onVisibilityChange: (handler) => {
-        if (typeof document === 'undefined') return () => undefined;
-        document.addEventListener('visibilitychange', handler);
-        return () => document.removeEventListener('visibilitychange', handler);
-      },
+      isVisible: activity.isActive,
+      onVisibilityChange: activity.subscribe,
       setTimer: (handler, ms) => window.setTimeout(handler, ms),
       clearTimer: (timer) => window.clearTimeout(timer as number),
     });
