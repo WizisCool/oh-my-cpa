@@ -66,12 +66,14 @@ const AUTH_PLACEHOLDERS = [
 export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const t = useT();
   const tRef = React.useRef(t);
-  tRef.current = t;
+  React.useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   const toast = useToast();
   const queryClient = useQueryClient();
   const isDemo = isDemoMode();
   const [status, setStatus] = React.useState<'loading' | 'authenticated' | 'reconnecting' | 'unauthenticated'>('loading');
-  const hasShellHintRef = React.useRef<boolean>(isDemo || readAuthShellHint());
+  const [hasInitialShellHint] = React.useState<boolean>(() => isDemo || readAuthShellHint());
   const checkGenerationRef = React.useRef(0);
   const retryTimerRef = React.useRef<number | null>(null);
   const [isRetryingSession, setIsRetryingSession] = React.useState(false);
@@ -130,7 +132,6 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
     clearPendingRetry();
     setIsRetryingSession(false);
     clearReloadRecoveryState();
-    hasShellHintRef.current = false;
     forgetGatewayCredential();
     setError(message);
     void loadSignInStage().catch(() => undefined);
@@ -152,7 +153,6 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
           return;
         }
         writeAuthShellHint(true);
-        hasShellHintRef.current = true;
         setError(undefined);
         warmAuthenticatedBootstrap();
         setStatus('authenticated');
@@ -176,13 +176,11 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
             await runAttempt(attempt + 1);
             return;
           }
+          // Keep transient transport errors in reconnect mode regardless of shell hint so
+          // saved recovery state survives offline cold launches or mobile wake-ups.
           setError(err instanceof Error ? err.message : tRef.current('auth.connect_failed'));
-          if (hasShellHintRef.current) {
-            // Keep the shell hint intact on transient network failure so a waking mobile browser
-            // reconnects instead of kicking a signed-in operator back to the password form.
-            setStatus('reconnecting');
-            return;
-          }
+          setStatus('reconnecting');
+          return;
         }
         enterUnauthenticated(err instanceof Error ? err.message : tRef.current('auth.connect_failed'));
       }
@@ -241,7 +239,6 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
       forgetGatewayCredential();
       await queryClient.invalidateQueries();
       writeAuthShellHint(true);
-      hasShellHintRef.current = true;
       if (!isDemo) setPassword('');
       warmAuthenticatedBootstrap();
       enterConsole(() => setStatus('authenticated'));
@@ -274,7 +271,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   };
 
   if (status === 'authenticated') return <>{children}</>;
-  if (status === 'loading' && hasShellHintRef.current) return <ShellLoading />;
+  if (status === 'loading' && hasInitialShellHint) return <ShellLoading />;
 
   const isLoading = status === 'loading';
   const isReconnecting = status === 'reconnecting';

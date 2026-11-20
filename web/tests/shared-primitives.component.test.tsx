@@ -7,7 +7,13 @@ import { AuthGate } from '../src/components/common/AuthGate';
 import { RouteErrorPage } from '../src/components/common/RouteErrorPage';
 import * as chunkRecovery from '../src/utils/chunkRecovery';
 import { api, ApiError } from '../src/api/client';
-import { clearReloadRecoveryState, readAuthShellHint, writeAuthShellHint } from '../src/utils/reloadRecovery';
+import {
+  clearReloadRecoveryState,
+  consumeStandaloneRoute,
+  readAuthShellHint,
+  saveStandaloneRoute,
+  writeAuthShellHint,
+} from '../src/utils/reloadRecovery';
 import { Tooltip } from '../src/components/common/Tooltip';
 import { progressTasks } from '../src/utils/progressTasks';
 import { AppDrawer } from '../src/components/common/AppDrawer';
@@ -566,8 +572,15 @@ describe('DeferredMount', () => {
       throttledView.unmount();
 
       // A committed route failure during the post-resume grace window defers one guarded retry
-      // until grace expires, and cancels that retry if the error screen unmounts first.
-      const graceSpy = vi.spyOn(chunkRecovery, 'getChunkReloadGraceRemainingMs').mockReturnValue(20);
+      // until grace expires, cancels that retry on unmount, and re-arms on foreground transitions.
+      const graceSpy = vi.spyOn(chunkRecovery, 'getChunkReloadGraceRemainingMs').mockReturnValue(200);
+      const visibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+      let visibilityState: DocumentVisibilityState = 'visible';
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => visibilityState,
+      });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       try {
         attemptSpy.mockClear();
         attemptSpy.mockReturnValueOnce(false).mockReturnValueOnce(true);
@@ -577,25 +590,80 @@ describe('DeferredMount', () => {
             <RouterProvider router={deferredRouter} />
           </ThemeProvider>,
         );
-        await waitFor(() => expect(attemptSpy).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(attemptSpy).toHaveBeenCalledTimes(2), { timeout: 1000 });
+        expect(attemptSpy).toHaveBeenCalledTimes(1);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(260);
+        });
+        expect(attemptSpy).toHaveBeenCalledTimes(2);
         expect(screen.queryByTestId('route-error-message')).toBeNull();
         deferredView.unmount();
 
+        // Unmounting before grace expires cancels the scheduled retry.
         attemptSpy.mockClear();
         attemptSpy.mockReturnValue(false);
-        graceSpy.mockReturnValue(150);
+        graceSpy.mockReturnValue(300);
         const cancelledRouter = createMemoryRouter([{ path: '/', element: <ThrowingRoute />, errorElement: <RouteErrorPage /> }]);
         const cancelledView = renderWithOmc(
           <ThemeProvider>
             <RouterProvider router={cancelledRouter} />
           </ThemeProvider>,
         );
-        await waitFor(() => expect(attemptSpy).toHaveBeenCalledTimes(1));
-        cancelledView.unmount();
-        await new Promise((resolve) => window.setTimeout(resolve, 240));
         expect(attemptSpy).toHaveBeenCalledTimes(1);
+        cancelledView.unmount();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(400);
+        });
+        expect(attemptSpy).toHaveBeenCalledTimes(1);
+
+        // Failing while hidden waits for foreground return, honors the new grace window, and re-arms across hide/resume.
+        visibilityState = 'hidden';
+        attemptSpy.mockClear();
+        attemptSpy.mockReturnValueOnce(false).mockReturnValueOnce(false).mockReturnValueOnce(true);
+        graceSpy.mockReturnValue(0);
+        const hiddenRouter = createMemoryRouter([{ path: '/', element: <ThrowingRoute />, errorElement: <RouteErrorPage /> }]);
+        const hiddenView = renderWithOmc(
+          <ThemeProvider>
+            <RouterProvider router={hiddenRouter} />
+          </ThemeProvider>,
+        );
+        expect(attemptSpy).toHaveBeenCalledTimes(0);
+
+        // Foreground return starts a 300ms grace window; hiding again cancels the pending timer.
+        visibilityState = 'visible';
+        graceSpy.mockReturnValue(300);
+        act(() => {
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+        expect(attemptSpy).toHaveBeenCalledTimes(1);
+        visibilityState = 'hidden';
+        act(() => {
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(400);
+        });
+        expect(attemptSpy).toHaveBeenCalledTimes(1);
+
+        // Returning to foreground again re-arms the deferred timer and reloads once grace expires.
+        visibilityState = 'visible';
+        graceSpy.mockReturnValue(250);
+        act(() => {
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+        expect(attemptSpy).toHaveBeenCalledTimes(2);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(310);
+        });
+        expect(attemptSpy).toHaveBeenCalledTimes(3);
+        expect(screen.queryByTestId('route-error-message')).toBeNull();
+        hiddenView.unmount();
       } finally {
+        vi.useRealTimers();
+        if (visibilityDescriptor) {
+          Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
+        } else {
+          delete (document as { visibilityState?: DocumentVisibilityState }).visibilityState;
+        }
         graceSpy.mockRestore();
       }
     } finally {
@@ -606,11 +674,12 @@ describe('DeferredMount', () => {
 });
 
 describe('AuthGate mobile session continuity', () => {
-  it('shows shell loading with an auth hint, retries transient failures without kicking to sign-in, and clears hint on 401', async () => {
+  it('shows shell loading with an auth hint, retries transient failures without kicking to sign-in, and preserves recovery state', async () => {
     clearReloadRecoveryState();
     writeAuthShellHint(true);
     const sessionSpy = vi.spyOn(api, 'getSession');
     const prefsSpy = vi.spyOn(api, 'getPreferences').mockResolvedValue({});
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
     try {
       function ConsoleChild() {
@@ -638,27 +707,65 @@ describe('AuthGate mobile session continuity', () => {
       expect(view.container.querySelector('.shell-loading')).not.toBeNull();
       expect(screen.queryByTestId('protected-console')).toBeNull();
 
+      // Advance deterministically past both bounded retry delays (400ms + 1200ms).
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+
       // After bounded retries fail transiently, AuthGate stays in reconnect mode, keeps the hint,
       // and still never mounts protected content.
-      expect(await screen.findByRole('button', { name: 'Retry' }, { timeout: 4000 })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
       expect(screen.queryByLabelText('Management key')).toBeNull();
       expect(screen.queryByTestId('protected-console')).toBeNull();
       expect(readAuthShellHint()).toBe(true);
 
       // Once connectivity returns, clicking Retry enters the console directly.
       sessionSpy.mockResolvedValueOnce({ authenticated: true });
-      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-      expect((await screen.findByTestId('protected-console')).textContent).toContain('Console ready');
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      });
+      expect(screen.getByTestId('protected-console').textContent).toContain('Console ready');
 
       // Changing locale updates `t`, which must never re-run the AuthGate session check.
       const callsBeforeLocaleSwitch = sessionSpy.mock.calls.length;
-      fireEvent.click(screen.getByRole('button', { name: 'Switch lang' }));
-      await waitFor(() => expect(document.documentElement.lang).toBe('zh-CN'));
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Switch lang' }));
+      });
+      expect(document.documentElement.lang).toBe('zh-CN');
       expect(sessionSpy.mock.calls.length).toBe(callsBeforeLocaleSwitch);
 
       view.unmount();
       window.localStorage.removeItem('omc-lang');
+
+      // Even without a prior shell hint, exhausted transient transport errors remain in reconnect
+      // mode and preserve saved standalone-route recovery state until the server actually refuses.
+      clearReloadRecoveryState();
+      saveStandaloneRoute('/trends', { isStandalone: () => true });
+      sessionSpy.mockRejectedValue(new ApiError('Network request failed', 0));
+      const coldOfflineView = renderWithOmc(
+        <ThemeProvider>
+          <AuthGate>
+            <ConsoleChild />
+          </AuthGate>
+        </ThemeProvider>,
+      );
+      expect(coldOfflineView.container.querySelector('.shell-loading')).toBeNull();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+      expect(screen.queryByLabelText('Management key')).toBeNull();
+      expect(consumeStandaloneRoute({ isStandalone: () => true })).toBe('/trends');
+      coldOfflineView.unmount();
+      window.localStorage.removeItem('omc-lang');
     } finally {
+      vi.useRealTimers();
       window.localStorage.removeItem('omc-lang');
       sessionSpy.mockRestore();
       prefsSpy.mockRestore();
@@ -694,6 +801,7 @@ describe('AuthGate mobile session continuity', () => {
       // invoke the global unauthorized handler, sign out a subsequent login, or clear its mirror.
       writeAuthShellHint(true);
       fetchSpy.mockRejectedValue(new TypeError('Failed to fetch'));
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const staleView = renderWithOmc(
         <ThemeProvider>
           <AuthGate>
@@ -701,7 +809,14 @@ describe('AuthGate mobile session continuity', () => {
           </AuthGate>
         </ThemeProvider>,
       );
-      const retryBtn = await screen.findByRole('button', { name: 'Retry' }, { timeout: 4000 });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+      vi.useRealTimers();
+      const retryBtn = screen.getByRole('button', { name: 'Retry' });
       let resolveStaleFetch!: (response: Response) => void;
       fetchSpy.mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveStaleFetch = resolve; }));
       fireEvent.click(retryBtn);
@@ -726,6 +841,7 @@ describe('AuthGate mobile session continuity', () => {
         staleView.unmount();
       }
     } finally {
+      vi.useRealTimers();
       window.localStorage.removeItem('cli-proxy-auth');
       fetchSpy.mockRestore();
       prefsSpy.mockRestore();

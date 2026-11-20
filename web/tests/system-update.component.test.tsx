@@ -5,6 +5,7 @@ import { renderWithOmc } from './support/render';
 import { UpdateAction, UpdateStatusLine, UpdaterSetup, UPDATER_INSTALL_COMMAND } from '../src/pages/SystemPage/UpdateControls';
 import { UPDATER_QUERY_KEY, useConsoleUpdate, type UpdateOutcome } from '../src/pages/SystemPage/useConsoleUpdate';
 import { UPDATE_STATUS_REFRESH_MS, usePendingUpdates } from '../src/hooks/useUpdateNotice';
+import * as systemLive from '../src/api/systemLive';
 import { deriveUpdateOffer } from '../src/pages/SystemPage/versionPresentation';
 import type { SystemProductVersion } from '../src/types/system';
 import { createSystemUpdaterFixture, SYSTEM_UPDATER_CONTRACT } from '../../scripts/acceptance/system-updater-fixture.mjs';
@@ -130,5 +131,76 @@ it('automatically refreshes plugin update observations on the shared notice inte
     surface.unmount();
   } finally {
     vi.useRealTimers();
+  }
+});
+
+it('cancels deferred ready revalidation when the page hides and catches up on foreground ready', async () => {
+  const visibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+  let visibilityState: DocumentVisibilityState = 'visible';
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => visibilityState,
+  });
+  let emitSignal: ((signal: systemLive.UpdateLiveSignal) => void) | undefined;
+  const channelSpy = vi.spyOn(systemLive, 'systemLiveChannel').mockReturnValue({
+    subscribe: ({ onSignal }) => {
+      emitSignal = onSignal;
+      return () => {
+        emitSignal = undefined;
+      };
+    },
+    getState: () => 'live',
+  });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    const server = installOmcApi();
+    server.on('GET', '/management/system/updates', () => ({
+      omc_version: { ...VERSION, state: 'up_to_date' },
+      cpa_version: { ...VERSION, product: 'cpa', state: 'up_to_date' },
+      plugin_update_available: false,
+    }));
+    function Reminders() {
+      const { hasPluginUpdate } = usePendingUpdates();
+      return <output data-testid="plugin-update-notice">{String(hasPluginUpdate)}</output>;
+    }
+    const surface = renderWithOmc(<Reminders />);
+    const updateRequests = () => server.requests.filter((request) => request.path === '/management/system/updates');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(updateRequests()).toHaveLength(1);
+
+    // A ready signal inside the 60s window schedules deferred revalidation without refetching immediately.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+      emitSignal?.('ready');
+    });
+    expect(updateRequests()).toHaveLength(1);
+
+    // Hiding the page cancels the deferred timer so no background refetch fires when the window elapses.
+    visibilityState = 'hidden';
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(70_000);
+    });
+    expect(updateRequests()).toHaveLength(1);
+
+    // Returning to foreground and receiving ready catches up immediately now that >60s have elapsed.
+    visibilityState = 'visible';
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      emitSignal?.('ready');
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(updateRequests()).toHaveLength(2);
+    surface.unmount();
+  } finally {
+    vi.useRealTimers();
+    channelSpy.mockRestore();
+    if (visibilityDescriptor) {
+      Object.defineProperty(document, 'visibilityState', visibilityDescriptor);
+    } else {
+      delete (document as { visibilityState?: DocumentVisibilityState }).visibilityState;
+    }
   }
 });

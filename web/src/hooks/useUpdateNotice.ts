@@ -1,6 +1,7 @@
 import React from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { createPageActivityMonitor } from '../api/liveChannel';
 import { systemLiveChannel } from '../api/systemLive';
 import { isDemoMode } from '../types/demoMode';
 import type { ReleaseProduct } from '../types/system';
@@ -85,6 +86,7 @@ export function usePendingUpdates(): { products: ReleaseProduct[]; hasPluginUpda
   const isDemo = isDemoMode();
   React.useEffect(() => {
     if (isDemo) return undefined;
+    const activity = createPageActivityMonitor();
     let deferredTimer: number | null = null;
     const clearDeferred = () => {
       if (deferredTimer !== null) {
@@ -94,8 +96,10 @@ export function usePendingUpdates(): { products: ReleaseProduct[]; hasPluginUpda
     };
     const scheduleDeferred = (delayMs: number) => {
       clearDeferred();
+      if (!activity.isActive()) return;
       deferredTimer = window.setTimeout(() => {
         deferredTimer = null;
+        if (!activity.isActive()) return;
         const latestUpdatedAt = queryClient.getQueryState(UPDATE_STATUS_QUERY_KEY)?.dataUpdatedAt ?? 0;
         const latestAgeMs = latestUpdatedAt > 0 ? Date.now() - latestUpdatedAt : Infinity;
         if (latestAgeMs < UPDATE_READY_REVALIDATE_MIN_AGE_MS) {
@@ -105,8 +109,17 @@ export function usePendingUpdates(): { products: ReleaseProduct[]; hasPluginUpda
         void queryClient.invalidateQueries({ queryKey: UPDATE_STATUS_QUERY_KEY });
       }, delayMs);
     };
+    const unsubscribeActivity = activity.subscribe(() => {
+      if (!activity.isActive()) {
+        clearDeferred();
+      }
+    });
     const unsubscribe = systemLiveChannel().subscribe({
       onSignal: (signal) => {
+        if (!activity.isActive()) {
+          clearDeferred();
+          return;
+        }
         if (signal === 'ready') {
           const updatedAt = queryClient.getQueryState(UPDATE_STATUS_QUERY_KEY)?.dataUpdatedAt ?? 0;
           const ageMs = updatedAt > 0 ? Date.now() - updatedAt : Infinity;
@@ -121,6 +134,7 @@ export function usePendingUpdates(): { products: ReleaseProduct[]; hasPluginUpda
     });
     return () => {
       clearDeferred();
+      unsubscribeActivity();
       unsubscribe();
     };
   }, [isDemo, queryClient]);
