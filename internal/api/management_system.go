@@ -141,6 +141,9 @@ type SystemCPADTO struct {
 	Status         string `json:"status"`
 	EndpointMasked string `json:"endpoint_masked"`
 	LatencyMS      int64  `json:"latency_ms"`
+	// ServerID is CPA's deployment UUID (distinct from any Home node ID),
+	// omitted when the gateway is offline or predates CPA v8.1.0.
+	ServerID string `json:"server_id,omitempty"`
 }
 
 type SystemCollectorDTO struct {
@@ -284,12 +287,14 @@ func (h *Handler) getSystemInfo(writer http.ResponseWriter, request *http.Reques
 	// writes only its own variable, and they are assembled after the last one returns.
 	gateway := h.systemGatewayClient(ctx)
 	var (
-		wg          sync.WaitGroup
-		cpaVersion  = "unknown"
-		credentials *int
-		plugins     *int
-		providers   *int
-		volumes     SystemDataVolumesDTO
+		wg             sync.WaitGroup
+		cpaVersion     = "unknown"
+		cpaServerID    string
+		headerServerID string
+		credentials    *int
+		plugins        *int
+		providers      *int
+		volumes        SystemDataVolumesDTO
 	)
 	run := func(read func()) {
 		wg.Add(1)
@@ -300,11 +305,12 @@ func (h *Handler) getSystemInfo(writer http.ResponseWriter, request *http.Reques
 	}
 	run(func() { dto.OMCVersion = h.productVersionDTO(ctx, release.ProductOMC, h.omcVersion()) })
 	run(func() {
-		// One read of the credential list answers two questions: the version header the
-		// gateway stamps on it, and how many credentials it holds.
-		cpaVersion, credentials = gatewayVersionAndCredentials(ctx, gateway.client)
+		// One read of the credential list answers three questions: the version and
+		// server-identity headers the gateway stamps on it, and how many credentials it holds.
+		cpaVersion, headerServerID, credentials = gatewayVersionAndCredentials(ctx, gateway.client)
 		dto.CPAVersion = h.productVersionDTO(ctx, release.ProductCPA, cpaVersion)
 	})
+	run(func() { cpaServerID = gatewayServerID(ctx, gateway.client) })
 	run(func() { dto.CPA = gateway.healthDTO(ctx) })
 	run(func() { plugins = gatewayPluginCount(ctx, gateway.client) })
 	run(func() { providers = gatewayProviderCount(ctx, gateway.client) })
@@ -314,6 +320,10 @@ func (h *Handler) getSystemInfo(writer http.ResponseWriter, request *http.Reques
 	run(func() { dto.MaintenanceAdmission = h.maintenanceAdmissionDTO(ctx) })
 	wg.Wait()
 
+	if cpaServerID == "" {
+		cpaServerID = headerServerID
+	}
+	dto.CPA.ServerID = cpaServerID
 	volumes.Credentials = credentials
 	volumes.Plugins = plugins
 	volumes.Providers = providers
@@ -362,19 +372,33 @@ func (g systemGateway) healthDTO(ctx context.Context) SystemCPADTO {
 	return dto
 }
 
-// gatewayVersionAndCredentials reads the credential list once for the version header the
-// gateway stamps on it and the number of credentials it holds. A gateway that cannot be
-// read reports "unknown" and no count, rather than zero credentials.
-func gatewayVersionAndCredentials(ctx context.Context, client *management.Client) (string, *int) {
+// gatewayVersionAndCredentials reads the credential list once for the version and
+// server-identity headers the gateway stamps on it and the number of credentials it holds.
+// A gateway that cannot be read reports "unknown", empty identity, and no count, rather
+// than zero credentials.
+func gatewayVersionAndCredentials(ctx context.Context, client *management.Client) (string, string, *int) {
 	if client == nil {
-		return "unknown", nil
+		return "unknown", "", nil
 	}
 	files, meta, err := client.AuthFilesWithMeta(ctx)
 	if err != nil {
-		return "unknown", nil
+		return "unknown", "", nil
 	}
 	count := len(files.Files)
-	return safeVersionHeader(meta.Header), &count
+	return safeVersionHeader(meta.Header), management.SafeServerIDHeader(meta.Header), &count
+}
+
+// gatewayServerID reads CPA's deployment identity from GET /v8/management/server/server-id.
+// Gateways older than v8.1.0 answer 404, which leaves the identity absent rather than failing the page.
+func gatewayServerID(ctx context.Context, client *management.Client) string {
+	if client == nil {
+		return ""
+	}
+	identity, _, err := client.ServerID(ctx)
+	if err != nil {
+		return ""
+	}
+	return identity.ServerID
 }
 
 func gatewayPluginCount(ctx context.Context, client *management.Client) *int {
@@ -1018,10 +1042,17 @@ func (h *Handler) getSystemDiagnostics(writer http.ResponseWriter, request *http
 		schemaVersion = facts.SchemaVersion
 	}
 
+	gateway := h.systemGatewayClient(ctx)
+	cpaVersion, headerServerID, _ := gatewayVersionAndCredentials(ctx, gateway.client)
+	cpaServerID := gatewayServerID(ctx, gateway.client)
+	if cpaServerID == "" {
+		cpaServerID = headerServerID
+	}
+
 	diagnostics := map[string]any{
 		"generated_at":   time.Now().UTC().Format(time.RFC3339),
 		"omc_version":    h.omcVersion(),
-		"cpa_version":    h.observedCPAVersion(ctx),
+		"cpa_version":    cpaVersion,
 		"schema_version": schemaVersion,
 		"runtime": map[string]any{
 			"go_version":     runtime.Version(),
@@ -1072,6 +1103,9 @@ func (h *Handler) getSystemDiagnostics(writer http.ResponseWriter, request *http
 			"enabled": h.cfg.Usage.Enabled,
 			"mode":    h.cfg.Usage.Mode,
 		},
+	}
+	if cpaServerID != "" {
+		diagnostics["cpa_server_id"] = cpaServerID
 	}
 
 	if h.repo != nil {

@@ -569,3 +569,133 @@ func TestRuntimeConfigRevisionCanonicalizesWithoutReturningSecrets(t *testing.T)
 		t.Fatalf("a changed runtime value was not observed: %q %q %v", second, third, err)
 	}
 }
+
+func TestApplyConfigChangesValidatesServerID(t *testing.T) {
+	invalidCases := map[string][]ConfigChange{
+		"empty string":           {{Path: []string{"server", "server-id"}, Value: ""}},
+		"nil uuid":               {{Path: []string{"server", "server-id"}, Value: "00000000-0000-0000-0000-000000000000"}},
+		"non-hyphenated uuid":    {{Path: []string{"server", "server-id"}, Value: "20fb88e473ab44dbb5b54e7120ba3368"}},
+		"garbage string":         {{Path: []string{"server", "server-id"}, Value: "not-a-uuid"}},
+		"non-string value":       {{Path: []string{"server", "server-id"}, Value: 12345}},
+		"removal forbidden":      {{Path: []string{"server", "server-id"}, Remove: true}},
+		"nested child forbidden": {{Path: []string{"server", "server-id", "nested"}, Value: "20fb88e4-73ab-44db-b5b5-4e7120ba3368"}},
+		"invalid inside server":  {{Path: []string{"server"}, Value: map[string]any{"port": 8317, "server-id": "bad"}}},
+	}
+
+	for name, changes := range invalidCases {
+		t.Run(name, func(t *testing.T) {
+			gateway := &configGateway{stored: "config-version: 8\n"}
+			client := newConfigClient(t, gateway)
+			err := client.ApplyConfigChanges(context.Background(), changes)
+			if !errors.Is(err, ErrInvalidConfigChange) {
+				t.Fatalf("err = %v, want ErrInvalidConfigChange", err)
+			}
+			if got := gateway.sent(); len(got) != 0 {
+				t.Fatalf("invalid server.server-id reached CPA: %v", got)
+			}
+		})
+	}
+
+	// Valid nonzero hyphenated UUID and server map without server-id (when stored has no server-id) pass.
+	gateway := &configGateway{stored: "config-version: 8\n"}
+	client := newConfigClient(t, gateway)
+	if err := client.ApplyConfigChanges(context.Background(), []ConfigChange{
+		{Path: []string{"server", "server-id"}, Value: "20FB88E4-73AB-44DB-B5B5-4E7120BA3368"},
+	}); err != nil {
+		t.Fatalf("valid server.server-id failed: %v", err)
+	}
+	if err := client.ApplyConfigChanges(context.Background(), []ConfigChange{
+		{Path: []string{"server"}, Value: map[string]any{"port": 8318}},
+	}); err != nil {
+		t.Fatalf("server map without server-id failed when stored has none: %v", err)
+	}
+
+	// When stored YAML already holds server.server-id, ancestor replacements/removals
+	// on `server` cannot omit or delete it, while leaf edits and explicit valid replacements pass.
+	const storedWithID = "config-version: 8\nserver:\n  server-id: 11111111-1111-4111-8111-111111111111\n  port: 8317\n"
+	ancestorRefusals := map[string][]ConfigChange{
+		"server map omitting server-id": {{Path: []string{"server"}, Value: map[string]any{"port": 8318}}},
+		"server removal":                {{Path: []string{"server"}, Remove: true}},
+		"server non-map replacement":    {{Path: []string{"server"}, Value: "invalid"}},
+	}
+	for name, changes := range ancestorRefusals {
+		t.Run("stored identity/"+name, func(t *testing.T) {
+			gw := &configGateway{stored: storedWithID}
+			c := newConfigClient(t, gw)
+			err := c.ApplyConfigChanges(context.Background(), changes)
+			if !errors.Is(err, ErrInvalidConfigChange) {
+				t.Fatalf("err = %v, want ErrInvalidConfigChange", err)
+			}
+			for _, req := range gw.sent() {
+				if !strings.HasPrefix(req, "GET ") {
+					t.Fatalf("ancestor change that drops server.server-id wrote to CPA: %v", gw.sent())
+				}
+			}
+		})
+	}
+
+	// YAML merge keys (`<<`) that supply server.server-id are also protected.
+	t.Run("stored identity via yaml merge", func(t *testing.T) {
+		gw := &configGateway{stored: "config-version: 8\nserver: {<<: {server-id: 11111111-1111-4111-8111-111111111111}, port: 8317}\n"}
+		c := newConfigClient(t, gw)
+		err := c.ApplyConfigChanges(context.Background(), []ConfigChange{
+			{Path: []string{"server"}, Value: map[string]any{"port": 8318}},
+		})
+		if !errors.Is(err, ErrInvalidConfigChange) {
+			t.Fatalf("err = %v, want ErrInvalidConfigChange", err)
+		}
+	})
+
+	// When an earlier PATCH in the same batch causes CPA to allocate a server-id
+	// (reported via X-CPA-SERVER-ID), a subsequent `server` replacement carries
+	// that ID forward so CPA does not drop and rotate it.
+	t.Run("preserve id allocated during earlier patch in batch", func(t *testing.T) {
+		const allocated = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+		var putBody string
+		server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			body, _ := io.ReadAll(request.Body)
+			switch {
+			case request.Method == http.MethodGet && request.URL.Path == "/v0/management/config.yaml":
+				_, _ = writer.Write([]byte("config-version: 8\nserver:\n  port: 8317\n"))
+			case request.Method == http.MethodPatch && request.URL.Path == "/v8/management/config":
+				writer.Header().Set(ServerIDHeader, allocated)
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = writer.Write([]byte(`{"status":"ok"}`))
+			case request.Method == http.MethodPut && request.URL.Path == "/v8/management/config/server":
+				putBody = string(body)
+				writer.Header().Set(ServerIDHeader, allocated)
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = writer.Write([]byte(`{"status":"ok"}`))
+			default:
+				http.NotFound(writer, request)
+			}
+		}))
+		t.Cleanup(server.Close)
+		c, err := NewClient(server.URL, "management-secret", time.Second, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := c.ApplyConfigChanges(context.Background(), []ConfigChange{
+			{Path: []string{"observability", "logs", "debug"}, Value: true},
+			{Path: []string{"server"}, Value: map[string]any{"port": 8318}},
+		}); err != nil {
+			t.Fatalf("ApplyConfigChanges failed: %v", err)
+		}
+		if !strings.Contains(putBody, allocated) {
+			t.Fatalf("PUT /config/server body = %q, want allocated server-id %q preserved", putBody, allocated)
+		}
+	})
+
+	gw := &configGateway{stored: storedWithID}
+	c := newConfigClient(t, gw)
+	if err := c.ApplyConfigChanges(context.Background(), []ConfigChange{
+		{Path: []string{"server", "port"}, Value: 8318},
+	}); err != nil {
+		t.Fatalf("leaf port edit failed with stored server.server-id: %v", err)
+	}
+	if err := c.ApplyConfigChanges(context.Background(), []ConfigChange{
+		{Path: []string{"server"}, Value: map[string]any{"port": 8318, "server-id": "20fb88e4-73ab-44db-b5b5-4e7120ba3368"}},
+	}); err != nil {
+		t.Fatalf("server replacement preserving valid server-id failed: %v", err)
+	}
+}

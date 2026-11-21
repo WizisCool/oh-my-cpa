@@ -19,6 +19,7 @@ import { type Document } from 'yaml';
 import { PayloadRulesEditor } from './PayloadRulesEditor';
 import { IceServersEditor } from './IceServersEditor';
 import { PatternRulesEditor } from './PatternRulesEditor';
+import { ServerIdField } from './ServerIdField';
 import { StringMapEditor } from './StringMapEditor';
 
 import type { useT } from '../../i18n';
@@ -112,6 +113,23 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
         placeholder={field.placeholderKey ? t(field.placeholderKey) : field.placeholder ?? ''}
         value={String(val ?? '')}
         onChange={(e) => updateFieldInDoc(field, e.target.value)}
+      />
+    );
+  }
+
+  if (field.type === 'server_id') {
+    return (
+      <ServerIdField
+        field={field}
+        value={val}
+        disabled={disabled}
+        ariaDescribedBy={ariaDescribedBy}
+        draftState={view.serverIdDrafts[field.id]}
+        issue={view.serverIdIssues[field.id]}
+        onDraftStateChange={view.setServerIdDraft}
+        onValidationChange={view.setServerIdIssue}
+        t={t}
+        onChange={(target, next) => updateFieldInDoc(target, next)}
       />
     );
   }
@@ -284,6 +302,7 @@ export function renderGridField(view: ConfigSectionContext, field: ConfigFieldDe
     field.type === 'json_editor' ||
     field.type === 'string_map' ||
     field.type === 'pattern_rules' ||
+    field.type === 'server_id' ||
     field.id === 'proxyUrl' ||
     field.id === 'authDir' ||
     field.id === 'logDir' ||

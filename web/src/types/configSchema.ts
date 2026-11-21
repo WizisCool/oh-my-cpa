@@ -12,6 +12,7 @@ export type ConfigSectionId =
 export type ConfigFieldType =
   | 'switch'
   | 'string'
+  | 'server_id'
   | 'number'
   | 'select'
   | 'api_keys'
@@ -92,7 +93,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_service',
     descKey: 'cfg.grp_service_desc',
     variant: 'form-grid',
-    fieldIds: ['host', 'port', 'authDir', 'kvStoreDisabled', 'kvStorePath', 'trustedProxies', 'maxRequestBodyBytes', 'shutdownTimeout', 'githubToken'],
+    fieldIds: ['host', 'port', 'serverId', 'authDir', 'kvStoreDisabled', 'kvStorePath', 'trustedProxies', 'maxRequestBodyBytes', 'shutdownTimeout', 'githubToken'],
   },
   {
     id: 'grp_apikeys',
@@ -372,6 +373,15 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     max: 65535,
     defaultValue: 8317,
     keywords: ['port', 'listen'],
+  },
+  {
+    id: 'serverId',
+    sectionId: 'connectivity',
+    labelKey: 'cfg.f_server_id',
+    yamlPath: ['server', 'server-id'],
+    type: 'server_id',
+    placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    keywords: ['server-id', 'server id', 'uuid', 'deployment', 'identity'],
   },
   {
     id: 'authDir',
