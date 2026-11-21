@@ -64,6 +64,9 @@
 
   --color-destructive: var(--danger);
   --color-destructive-foreground: #ffffff;
+  --color-danger-ink: color-mix(in srgb, var(--danger) 65%, var(--fg));
+  --color-danger-wash: color-mix(in srgb, var(--danger) 12%, transparent);
+  --color-danger-wash-active: color-mix(in srgb, var(--danger) 16%, transparent);
   --color-success: var(--success);
   --color-warn: var(--warn);
   --color-danger: var(--danger);
@@ -529,6 +532,7 @@
   }
   ::selection { background: var(--accent); color: var(--accent-on); }
   button, input, textarea, select { font: inherit; color: inherit; }
+  code, kbd, samp, pre { font-family: var(--font-mono); }
   a { color: inherit; }
   [hidden]:where(:not([hidden='until-found'])) { display: none !important; }
 }

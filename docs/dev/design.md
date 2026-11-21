@@ -195,11 +195,12 @@ weights; a page does not restyle one into another with a class.
 | `dashed` | An empty slot that adds an entry to a list | Any other action |
 
 `filled` is a field-shaped trigger (the time-range button) that sits among selects and must look
-like one. `danger` turns any weight into its destructive form; a destructive row action stays in
-the hint ink until the pointer reaches it. Sizes follow the place, not the importance: `default`
-(32px) for page and dialog actions, `sm` (28px) inside rows, card heads and dense toolbars, `lg`
-only on the sign-in form. An icon-only action is a `ToolButton`, which carries the name the glyph
-cannot.
+like one. `danger` turns any weight into its destructive form: a primary confirmation takes the
+solid danger fill, while a resting secondary or row action stays quiet on its normal material
+until the pointer, keyboard focus or confirmation popover reaches it. Sizes follow the place, not
+the importance: `default` (32px) for page and dialog actions, `sm` (28px) inside rows, card heads
+and dense toolbars, `lg` only on the sign-in form. An icon-only action is a `ToolButton`, which
+carries the name the glyph cannot.
 
 ## Composition and shared controls
 

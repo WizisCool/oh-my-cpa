@@ -56,7 +56,7 @@ export default {
   "omc.github_token_configured": "已設定",
   "omc.github_token_not_configured": "未設定",
   "omc.github_token_input": "存取權杖",
-  "omc.github_token_desc": "用於提升 OMC 版本檢查與 CPA 外掛商店的 GitHub API 速率限制；寫入 CPA 設定的 server.github-token，也可在設定面板或 config.yaml 中直接編輯。",
+  "omc.github_token_desc": "用於提升 OMC 版本檢查與 CPA 外掛商店的 GitHub API 速率限制。",
   "omc.github_token_replace_placeholder": "輸入新權杖以替換目前設定",
   "omc.github_token_test": "測試配額",
   "omc.github_token_clear": "清除",

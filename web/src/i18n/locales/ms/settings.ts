@@ -56,7 +56,7 @@ export default {
   "omc.github_token_configured": "Dikonfigurasi",
   "omc.github_token_not_configured": "Belum dikonfigurasi",
   "omc.github_token_input": "Token akses peribadi",
-  "omc.github_token_desc": "Meningkatkan had kadar API GitHub untuk semakan versi OMC dan kedai pemalam CPA. Ditulis ke server.github-token dalam konfigurasi CPA serta kekal segerak dengan halaman Konfigurasi dan config.yaml.",
+  "omc.github_token_desc": "Meningkatkan had kadar API GitHub untuk semakan versi OMC dan kedai pemalam CPA.",
   "omc.github_token_replace_placeholder": "Masukkan token baharu untuk menggantikan token sedia ada",
   "omc.github_token_test": "Uji kuota",
   "omc.github_token_clear": "Padam",
