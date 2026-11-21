@@ -399,6 +399,8 @@ func (u *Upstream) serve(writer http.ResponseWriter, request *http.Request) {
 		writeFixtureJSON(writer, http.StatusOK, u.fixture.config)
 	case request.Method == http.MethodGet && path == "/config.yaml":
 		writer.Header().Set("Content-Type", "application/yaml")
+		writer.Header().Set("X-CPA-Version", fixtureCPAVersion)
+		writer.Header().Set("X-CPA-SERVER-ID", fixtureCPAServerID)
 		writer.WriteHeader(http.StatusOK)
 		_, _ = writer.Write([]byte(u.fixture.configYAML))
 	case request.Method == http.MethodGet && strings.HasPrefix(path, "/config/"):
@@ -430,6 +432,8 @@ func (u *Upstream) serve(writer http.ResponseWriter, request *http.Request) {
 		u.serveLogs(writer, request)
 	case request.Method == http.MethodGet && path == "/observability/logs/errors":
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{"files": errorLogFiles(u.now)})
+	case request.Method == http.MethodGet && path == "/server/server-id":
+		writeFixtureJSON(writer, http.StatusOK, map[string]any{"server-id": fixtureCPAServerID})
 	case request.Method == http.MethodGet && path == "/server/latest-version":
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{"latest-version": fixtureCPALatestVersion})
 	case request.Method == http.MethodGet && path == "/oauth/status":
@@ -670,11 +674,16 @@ func decodeFixtureJSON(request *http.Request, target any) error {
 
 func writeFixtureJSON(writer http.ResponseWriter, status int, payload any) {
 	writer.Header().Set("Content-Type", "application/json")
-	// The console reads CPA's own version header for its system panel.
+	// The console reads CPA's own version and deployment-identity headers for its system panel.
 	writer.Header().Set("X-CPA-Version", fixtureCPAVersion)
+	writer.Header().Set("X-CPA-SERVER-ID", fixtureCPAServerID)
 	writer.WriteHeader(status)
 	_ = json.NewEncoder(writer).Encode(payload)
 }
+
+// fixtureCPAServerID is the fixed deployment UUID the demo gateway publishes on
+// /v8/management/server/server-id, X-CPA-SERVER-ID, and server.server-id.
+const fixtureCPAServerID = "7d9a3e2c-4b18-4f5a-9c6e-8a2b1d4f6e90"
 
 // fixtureCPAVersion is the gateway version the fixture reports. It is a fixed
 // plausible release rather than a real one, so the system panel has something to

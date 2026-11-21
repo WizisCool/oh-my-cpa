@@ -17,6 +17,12 @@ import {
 } from '../../src/components/config/PatternRulesEditor.tsx';
 import { validateGoRe2Pattern } from '../../src/components/config/goRegex.ts';
 import { rebaseStringMapDraft, stringMapRowsToWire } from '../../src/components/config/StringMapEditor.tsx';
+import {
+  generateServerId,
+  isValidServerId,
+  reconcileServerIdDraft,
+  validateServerIdInput,
+} from '../../src/components/config/ServerIdField.tsx';
 import { writePayloadCategory } from '../../src/components/config/payloadRules.ts';
 import { ALL_CONFIG_FIELDS, CONFIG_GROUPS, type ConfigFieldDefinition } from '../../src/types/configSchema.ts';
 
@@ -1680,4 +1686,79 @@ test('model catalog source fields preserve absent default, emit canonical patche
   assert.deepEqual(computeConfigChanges(parseDocument(newerYaml), rebased), [
     { path: ['models', 'devin-catalog'], value: 'https://custom.example.test/devin.json' },
   ]);
+});
+
+test('server.server-id validates nonzero hyphenated UUIDs, generates valid v4 IDs, and stays omitted when untouched', () => {
+  const serviceGroup = CONFIG_GROUPS.find((group) => group.id === 'grp_service');
+  assert.ok(serviceGroup?.fieldIds.includes('serverId'));
+
+  const serverIdField = field('serverId');
+  assert.deepEqual(serverIdField.yamlPath, ['server', 'server-id']);
+  assert.equal(serverIdField.type, 'server_id');
+  assert.equal(serverIdField.defaultValue, undefined);
+
+  // Validation matches CPA's nonzero hyphenated 36-char UUID rule.
+  assert.equal(isValidServerId('20fb88e4-73ab-44db-b5b5-4e7120ba3368'), true);
+  assert.equal(isValidServerId('  20FB88E4-73AB-44DB-B5B5-4E7120BA3368  '), true);
+  assert.equal(isValidServerId('00000000-0000-0000-0000-000000000000'), false);
+  assert.equal(isValidServerId('20fb88e473ab44dbb5b54e7120ba3368'), false);
+  assert.equal(isValidServerId('not-a-uuid'), false);
+  assert.equal(isValidServerId(''), false);
+  assert.deepEqual(validateServerIdInput('   '), { kind: 'empty' });
+  assert.deepEqual(validateServerIdInput('00000000-0000-0000-0000-000000000000'), { kind: 'invalid_uuid' });
+  assert.equal(validateServerIdInput('20fb88e4-73ab-44db-b5b5-4e7120ba3368'), null);
+
+  // Generated UUIDs are always lowercase, valid, and nonzero (including getRandomValues fallback).
+  const generated = generateServerId();
+  assert.equal(isValidServerId(generated), true);
+  assert.equal(generated, generated.toLowerCase());
+
+  const originalRandomUUID = globalThis.crypto?.randomUUID;
+  if (globalThis.crypto) {
+    Object.defineProperty(globalThis.crypto, 'randomUUID', { value: undefined, configurable: true });
+    try {
+      const fallback = generateServerId();
+      assert.equal(isValidServerId(fallback), true);
+      assert.equal(fallback, fallback.toLowerCase());
+      assert.equal(fallback[14], '4');
+    } finally {
+      Object.defineProperty(globalThis.crypto, 'randomUUID', { value: originalRandomUUID, configurable: true });
+    }
+  }
+
+  // Omitted server.server-id stays omitted during unrelated edits.
+  const bareServer = parseDocument(SERVER_YAML);
+  const editedPort = bareServer.clone();
+  updateFieldWithBaseline(editedPort, bareServer, field('port'), 8318);
+  assert.equal(getFieldSemanticValue(bareServer, serverIdField), undefined);
+  assert.deepEqual(computeConfigChanges(bareServer, editedPort), [
+    { path: ['server', 'port'], value: 8318 },
+  ]);
+
+  // Explicit server.server-id edit emits only server.server-id and rebases cleanly across concurrent sibling edits.
+  const withIdYaml = 'server:\n  server-id: 11111111-1111-4111-8111-111111111111\n  port: 8317\n';
+  const baseDoc = parseDocument(withIdYaml);
+  const draftDoc = baseDoc.clone();
+  updateFieldWithBaseline(draftDoc, baseDoc, serverIdField, '20FB88E4-73AB-44DB-B5B5-4E7120BA3368');
+  assert.deepEqual(computeConfigChanges(baseDoc, draftDoc), [
+    { path: ['server', 'server-id'], value: '20FB88E4-73AB-44DB-B5B5-4E7120BA3368' },
+  ]);
+
+  const concurrentYaml = 'server:\n  server-id: 11111111-1111-4111-8111-111111111111\n  port: 9000\n';
+  const rebased = parseDocument(rebaseDraft(baseDoc, draftDoc, concurrentYaml) ?? '');
+  assert.equal(rebased.getIn(['server', 'port']), 9000);
+  assert.equal(getFieldSemanticValue(rebased, serverIdField), '20FB88E4-73AB-44DB-B5B5-4E7120BA3368');
+
+  // Reconciling a draft advances rollback when it tracked the old baseline, while keeping pre-edit unsaved values.
+  const idA = '11111111-1111-4111-8111-111111111111';
+  const idB = '22222222-2222-4222-8222-222222222222';
+  const idC = '33333333-3333-4333-8333-333333333333';
+  assert.deepEqual(
+    reconcileServerIdDraft({ isEditing: true, inputValue: 'bad', previousValue: idA }, idA, idB),
+    { isEditing: true, inputValue: 'bad', previousValue: idB },
+  );
+  assert.deepEqual(
+    reconcileServerIdDraft({ isEditing: true, inputValue: 'bad', previousValue: idC }, idA, idB),
+    { isEditing: true, inputValue: 'bad', previousValue: idC },
+  );
 });

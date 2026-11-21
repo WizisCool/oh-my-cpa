@@ -114,6 +114,16 @@ CPA owns phrase normalization, prompt sanitization and Anthropic refusal-fallbac
 injection (`upstream.claude.server-side-fallback`), reporting the serving model in
 responses and usage records when a fallback fires.
 
+The deployment identity (`server.server-id`, `GET /v8/management/server/server-id` and
+the `X-CPA-SERVER-ID` management response header) is a non-secret deployment UUID
+distinct from any Home node identifier. OMC reads it through the existing admin system
+surface and omits it when the gateway predates support or is offline. Because CPA's
+management write handler silently allocates a new UUIDv4 when `server.server-id` is
+missing, blank or invalid, OMC validates a nonzero hyphenated UUID before sending
+configuration patches, refuses patch-level removal of `server.server-id`, leaves the
+key untouched on unrelated edits, and displays the lowercased value read back from CPA
+after saving rather than echoing the submitted input.
+
 A multi-path change can require several CPA calls (merge, map replacement, deletion).
 It is not an upstream atomic transaction. Pre-write backup and honest failure/readback
 reporting matter precisely because an earlier call can succeed before a later one fails.

@@ -38,6 +38,8 @@ export interface SystemCPAInfo {
   status: string;
   endpoint_masked: string;
   latency_ms: number;
+  /** Deployment UUID reported by CPA v8.1.0+, omitted when unavailable. */
+  server_id?: string;
 }
 
 /** Background usage collector state. */

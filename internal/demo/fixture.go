@@ -771,7 +771,7 @@ func configDocument() map[string]any {
 	}
 	return map[string]any{
 		"config-version": 8,
-		"server":         map[string]any{"host": "0.0.0.0", "port": 8317},
+		"server":         map[string]any{"server-id": fixtureCPAServerID, "host": "0.0.0.0", "port": 8317},
 		"management":     map[string]any{"allow-remote": false, "disable-control-panel": false},
 		"access":         map[string]any{"api-keys": gatewayKeyValues()},
 		"requests":       map[string]any{"proxy-url": ""},

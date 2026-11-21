@@ -1096,3 +1096,29 @@ func TestUpstreamPreservesUnavailableStateAcrossDisablement(t *testing.T) {
 		}
 	}
 }
+
+func TestUpstreamServesDemoServerID(t *testing.T) {
+	upstream := startTestUpstream(t)
+	client, err := management.NewClient(upstream.BaseURL(), upstream.ManagementKey(), 2*time.Second, false)
+	if err != nil {
+		t.Fatalf("new management client: %v", err)
+	}
+
+	identity, meta, err := client.ServerID(context.Background())
+	if err != nil {
+		t.Fatalf("ServerID failed: %v", err)
+	}
+	if identity.ServerID != fixtureCPAServerID {
+		t.Fatalf("ServerID = %q, want %q", identity.ServerID, fixtureCPAServerID)
+	}
+	if got := meta.Header.Get(management.ServerIDHeader); got != fixtureCPAServerID {
+		t.Fatalf("%s header = %q, want %q", management.ServerIDHeader, got, fixtureCPAServerID)
+	}
+	cfgYAML, err := client.ConfigYAML(context.Background())
+	if err != nil {
+		t.Fatalf("ConfigYAML failed: %v", err)
+	}
+	if !strings.Contains(cfgYAML, "server-id: "+fixtureCPAServerID) {
+		t.Fatalf("demo config.yaml missing server.server-id: %s", cfgYAML)
+	}
+}

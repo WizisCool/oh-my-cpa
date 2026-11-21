@@ -220,6 +220,7 @@ func TestOnlyDeclaredReadsUseV0(t *testing.T) {
 	_, _, _ = client.Logs(context.Background(), LogsQuery{})
 	_, _ = client.RequestErrorLogs(context.Background())
 	_, _, _ = client.LatestVersion(context.Background())
+	_, _, _ = client.ServerID(context.Background())
 	_, _ = client.PluginList(context.Background())
 	_, _ = client.PluginStore(context.Background(), false)
 	_, _ = client.OAuthStatus(context.Background(), "state-1")

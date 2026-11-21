@@ -2133,3 +2133,180 @@ describe('ConfigOutline', () => {
     expect(container.querySelector('.config-outline')).toBeNull();
   });
 });
+
+function ConfigServiceDraft() {
+  const draft = useConfigDraft();
+  const t = useT();
+  const serviceGroup = CONFIG_GROUPS.find((group) => group.id === 'grp_service')!;
+  return (
+    <div>
+      <output data-testid="service-draft">{draft.rawYaml}</output>
+      <output data-testid="service-dirty">{String(draft.isDirty)}</output>
+      <output data-testid="service-errors">{String(draft.hasConfigErrors)}</output>
+      {renderGroupPanel(
+        {
+          ...draft,
+          doc: draft.docRef.current,
+          configuredKeyCount: 0,
+          navigate: () => undefined,
+          searchQuery: '',
+          searchMatchedGroups: [],
+          t,
+        },
+        serviceGroup,
+      )}
+      <ConfigDirtyBar
+        isDirty={draft.isDirty}
+        isSaving={draft.saveMutation.isPending}
+        yamlError={draft.hasYamlErrors}
+        payloadIssuesCount={draft.blockingPayloadIssuesCount}
+        validationError={draft.firstFieldErrorMessage}
+        showErrorFeedback={draft.showErrorFeedback}
+        onSave={() => void draft.saveConfig()}
+        onDiscard={draft.handleDiscardChanges}
+      />
+    </div>
+  );
+}
+
+describe('ServerIdField configuration workflow', () => {
+  it('validates nonzero hyphenated UUIDs before sending, supports regenerate and cancel, and renders CPA readback after save', async () => {
+    const initialUUID = '11111111-1111-4111-8111-111111111111';
+    const submittedUpper = '20FB88E4-73AB-44DB-B5B5-4E7120BA3368';
+    const savedLower = '20fb88e4-73ab-44db-b5b5-4e7120ba3368';
+    const initialYaml = `server:\n  server-id: ${initialUUID}\n  port: 8317\n`;
+
+    const patchSpy = vi.spyOn(api, 'patchConfig').mockResolvedValue({
+      status: 'ok',
+      revision: 'rev-2',
+      safe_yaml: `server:\n  server-id: ${savedLower}\n  port: 8317\n`,
+    });
+    const client = createTestQueryClient();
+    client.setQueryData(['management-config'], {
+      ...TEST_SCALARS_STUB,
+      revision: 'rev-1',
+      safe_yaml: initialYaml,
+      stored_layout: 'v8',
+    });
+
+    try {
+      renderWithOmc(<ConfigServiceDraft />, { client, isStrict: true });
+      await waitFor(() => expect(screen.getByTestId('cfg-server-id-value').textContent).toBe(initialUUID));
+      expect(screen.getByTestId('service-dirty').textContent).toBe('false');
+
+      // Enter edit mode; invalid UUID and nil UUID show inline errors and block save.
+      fireEvent.click(screen.getByTestId('cfg-server-id-edit'));
+      const input = screen.getByTestId('cfg-server-id-input') as HTMLInputElement;
+      expect(input.value).toBe(initialUUID);
+
+      fireEvent.change(input, { target: { value: '00000000-0000-0000-0000-000000000000' } });
+      expect(screen.getByRole('alert').textContent).toContain('36-character nonzero hyphenated UUID');
+      expect(input.getAttribute('aria-invalid')).toBe('true');
+      expect(screen.getByTestId('service-errors').textContent).toBe('true');
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+      expect(patchSpy).not.toHaveBeenCalled();
+
+      // Clearing an existing server-id is also rejected so an empty/deleted write cannot reach CPA.
+      fireEvent.change(input, { target: { value: '' } });
+      expect(screen.getByRole('alert').textContent).toContain('Enter a nonzero hyphenated UUID');
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+      expect(patchSpy).not.toHaveBeenCalled();
+
+      // Cancel via Escape restores the baseline, clears dirty/error state, and returns focus to the Edit button.
+      fireEvent.keyDown(input, { key: 'Escape' });
+      await waitFor(() => expect(screen.getByTestId('cfg-server-id-value').textContent).toBe(initialUUID));
+      expect(document.activeElement).toBe(screen.getByTestId('cfg-server-id-edit'));
+      expect(screen.getByTestId('service-dirty').textContent).toBe('false');
+      expect(screen.getByTestId('service-errors').textContent).toBe('false');
+
+      // Regenerate stages a new valid UUIDv4 without sending until saved, and Discard reverts cleanly.
+      fireEvent.click(screen.getByTestId('cfg-server-id-regenerate'));
+      const regenerated = screen.getByTestId('cfg-server-id-value').textContent ?? '';
+      expect(regenerated).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      expect(regenerated).not.toBe(initialUUID);
+      expect(patchSpy).not.toHaveBeenCalled();
+      expect(screen.getByTestId('service-dirty').textContent).toBe('true');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
+      await waitFor(() => expect(screen.getByTestId('cfg-server-id-value').textContent).toBe(initialUUID));
+
+      // Saving an uppercase UUID displays CPA's lowercased readback rather than echoing the submitted input.
+      fireEvent.click(screen.getByTestId('cfg-server-id-edit'));
+      fireEvent.change(screen.getByTestId('cfg-server-id-input'), { target: { value: submittedUpper } });
+      expect(screen.getByTestId('service-errors').textContent).toBe('false');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+
+      await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+      expect(patchSpy).toHaveBeenCalledWith(
+        [{ path: ['server', 'server-id'], value: submittedUpper }],
+        'rev-1',
+      );
+      await waitFor(() => expect(screen.getByTestId('cfg-server-id-value').textContent).toBe(savedLower));
+      expect(screen.getByTestId('service-dirty').textContent).toBe('false');
+    } finally {
+      patchSpy.mockRestore();
+    }
+  });
+
+  it('reconciles Cancel rollback when baseline changes during invalid input while preserving pre-edit unsaved changes', async () => {
+    const idA = '11111111-1111-4111-8111-111111111111';
+    const idB = '22222222-2222-4222-8222-222222222222';
+    const idD = '44444444-4444-4444-8444-444444444444';
+
+    const client = createTestQueryClient();
+    client.setQueryData(['management-config'], {
+      ...TEST_SCALARS_STUB,
+      revision: 'rev-1',
+      safe_yaml: `server:\n  server-id: ${idA}\n  port: 8317\n`,
+      stored_layout: 'v8',
+    });
+
+    renderWithOmc(<ConfigServiceDraft />, { client, isStrict: true });
+    await waitFor(() => expect(screen.getByTestId('cfg-server-id-value').textContent).toBe(idA));
+
+    // Scenario 1: invalid input -> baseline advances A -> B -> Cancel must retain B and clear dirty state.
+    fireEvent.click(screen.getByTestId('cfg-server-id-edit'));
+    fireEvent.change(screen.getByTestId('cfg-server-id-input'), { target: { value: 'not-a-uuid' } });
+    expect(screen.getByTestId('service-errors').textContent).toBe('true');
+
+    act(() => {
+      client.setQueryData(['management-config'], {
+        ...TEST_SCALARS_STUB,
+        revision: 'rev-2',
+        safe_yaml: `server:\n  server-id: ${idB}\n  port: 8317\n`,
+        stored_layout: 'v8',
+      });
+    });
+
+    fireEvent.click(screen.getByTestId('cfg-server-id-cancel'));
+    await waitFor(() => expect(screen.getByTestId('cfg-server-id-value').textContent).toBe(idB));
+    expect(screen.getByTestId('service-dirty').textContent).toBe('false');
+    expect(screen.getByTestId('service-errors').textContent).toBe('false');
+    expect(screen.getByTestId('service-draft').textContent).toContain(`server-id: ${idB}`);
+
+    // Scenario 2: pre-edit unsaved local edit (via Regenerate) -> enter edit & type invalid -> baseline advances B -> D -> Cancel preserves staged local value.
+    fireEvent.click(screen.getByTestId('cfg-server-id-regenerate'));
+    const stagedLocal = screen.getByTestId('cfg-server-id-value').textContent ?? '';
+    expect(stagedLocal).not.toBe(idB);
+    expect(screen.getByTestId('service-dirty').textContent).toBe('true');
+
+    fireEvent.click(screen.getByTestId('cfg-server-id-edit'));
+    fireEvent.change(screen.getByTestId('cfg-server-id-input'), { target: { value: 'still-bad' } });
+
+    act(() => {
+      client.setQueryData(['management-config'], {
+        ...TEST_SCALARS_STUB,
+        revision: 'rev-3',
+        safe_yaml: `server:\n  server-id: ${idD}\n  port: 8317\n`,
+        stored_layout: 'v8',
+      });
+    });
+
+    fireEvent.click(screen.getByTestId('cfg-server-id-cancel'));
+    await waitFor(() => expect(screen.getByTestId('cfg-server-id-value').textContent).toBe(stagedLocal));
+    expect(screen.getByTestId('service-dirty').textContent).toBe('true');
+    expect(screen.getByTestId('service-errors').textContent).toBe('false');
+  });
+});

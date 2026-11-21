@@ -202,6 +202,7 @@ export interface DemoSandboxState {
   system: {
     outboundProxy?: OutboundProxySettings;
     githubToken?: GitHubTokenStatus;
+    cpaServerId?: string;
     dataRetentionDays?: number;
     logsClearedAtMs?: number;
     lastMaintenanceAtMs?: number;
@@ -808,6 +809,28 @@ function syncSandboxGitHubTokenFromDoc(
     masked_token: masked,
     cpa_revision: revision,
   };
+}
+
+const SANDBOX_UUID_HYPHENATED_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const SANDBOX_NIL_UUID = '00000000-0000-0000-0000-000000000000';
+
+function syncSandboxServerIdFromDoc(
+  state: DemoSandboxState,
+  yamlDoc: { getIn: (path: string[]) => unknown; setIn: (path: string[], value: unknown) => void },
+  safeDoc: { setIn: (path: string[], value: unknown) => void } | null,
+): void {
+  const raw = yamlDoc.getIn(['server', 'server-id']);
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (SANDBOX_UUID_HYPHENATED_RE.test(trimmed) && trimmed.toLowerCase() !== SANDBOX_NIL_UUID) {
+      const lower = trimmed.toLowerCase();
+      yamlDoc.setIn(['server', 'server-id'], lower);
+      safeDoc?.setIn(['server', 'server-id'], lower);
+      state.system.cpaServerId = lower;
+      return;
+    }
+  }
+  delete state.system.cpaServerId;
 }
 
 async function ensureConfigState(state: DemoSandboxState, fetchBaseline: FetchBaselineFn): Promise<{
@@ -2558,10 +2581,15 @@ export async function interceptDemoRequest(
       const res = await fetchBaseline(pathWithQuery, options);
       if (!res.ok) return res;
       const base = (await res.json()) as SystemInfoResponse;
-      if (state.system.lastUpdateCheckAtMs) {
+      if (state.system.lastUpdateCheckAtMs || state.system.cpaServerId) {
         return jsonResponse({
           ...base,
-          omc_version: base.omc_version ? { ...base.omc_version, checked_at_ms: state.system.lastUpdateCheckAtMs } : base.omc_version,
+          omc_version: state.system.lastUpdateCheckAtMs && base.omc_version
+            ? { ...base.omc_version, checked_at_ms: state.system.lastUpdateCheckAtMs }
+            : base.omc_version,
+          cpa: state.system.cpaServerId && base.cpa
+            ? { ...base.cpa, server_id: state.system.cpaServerId }
+            : base.cpa,
         });
       }
       return jsonResponse(base);
@@ -2887,6 +2915,7 @@ export async function interceptDemoRequest(
     pushConfigBackup(state, backupsList, sourceRes.yaml, sourceRes.revision, 'config_changes');
     const revision = nextRevision(state);
     syncSandboxGitHubTokenFromDoc(state, yamlDoc, safeDoc, revision);
+    syncSandboxServerIdFromDoc(state, yamlDoc, safeDoc);
     const nextYaml = yamlDoc.toString();
     const nextSafeYaml = safeDoc.toString();
     state.config.yaml = nextYaml;
@@ -2911,6 +2940,7 @@ export async function interceptDemoRequest(
     pushConfigBackup(state, backupsList, sourceRes.yaml, sourceRes.revision, 'config_source');
     const revision = nextRevision(state);
     syncSandboxGitHubTokenFromDoc(state, doc, null, revision);
+    syncSandboxServerIdFromDoc(state, doc, null);
     const sanitizedYaml = doc.toString();
     state.config.yaml = sanitizedYaml;
     state.config.safeYaml = sanitizedYaml;
@@ -2999,6 +3029,7 @@ export async function interceptDemoRequest(
     const doc = parseDocument(targetYaml);
     const revision = nextRevision(state);
     syncSandboxGitHubTokenFromDoc(state, doc, null, revision);
+    syncSandboxServerIdFromDoc(state, doc, null);
     const sanitizedYaml = doc.toString();
     state.config.yaml = sanitizedYaml;
     state.config.safeYaml = sanitizedYaml;

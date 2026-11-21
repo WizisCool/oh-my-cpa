@@ -23,6 +23,12 @@ import {
   type PatternRulesDraftState,
   type PatternRulesValidationIssue,
 } from './PatternRulesEditor';
+import {
+  formatServerIdIssue,
+  reconcileServerIdDraft,
+  type ServerIdDraftState,
+  type ServerIdValidationIssue,
+} from './ServerIdField';
 import { formatStringMapIssue, type StringMapDraftState, type StringMapValidationIssue } from './StringMapEditor';
 import type { YamlSourceEditorRef } from './YamlSourceEditor';
 import { useConfirmModal, useToast } from '../feedback';
@@ -73,6 +79,8 @@ export function useConfigDraft() {
   const [stringMapIssues, setStringMapIssues] = React.useState<Record<string, StringMapValidationIssue>>({});
   const [patternRulesDrafts, setPatternRulesDrafts] = React.useState<Record<string, PatternRulesDraftState>>({});
   const [patternRulesIssues, setPatternRulesIssues] = React.useState<Record<string, PatternRulesValidationIssue>>({});
+  const [serverIdDrafts, setServerIdDrafts] = React.useState<Record<string, ServerIdDraftState>>({});
+  const [serverIdIssues, setServerIdIssues] = React.useState<Record<string, ServerIdValidationIssue>>({});
   const [hasPendingPayloadEdits, setHasPendingPayloadEdits] = React.useState(false);
   const [unresolvedReplacePending, setUnresolvedReplacePending] = React.useState<UnresolvedReplacePendingEntry[]>([]);
   const [payloadResetVersion, setPayloadResetVersion] = React.useState(0);
@@ -84,6 +92,7 @@ export function useConfigDraft() {
   const serverRevisionRef = React.useRef('');
   const stringMapIssuesRef = React.useRef<Record<string, StringMapValidationIssue>>({});
   const patternRulesIssuesRef = React.useRef<Record<string, PatternRulesValidationIssue>>({});
+  const serverIdIssuesRef = React.useRef<Record<string, ServerIdValidationIssue>>({});
   const hasLivePendingPositionsRef = React.useRef(false);
   const unresolvedReplacePendingRef = React.useRef<UnresolvedReplacePendingEntry[]>([]);
   const hasPendingPayloadEditsRef = React.useRef(false);
@@ -114,6 +123,10 @@ export function useConfigDraft() {
     patternRulesIssuesRef.current = patternRulesIssues;
   }, [patternRulesIssues]);
 
+  React.useEffect(() => {
+    serverIdIssuesRef.current = serverIdIssues;
+  }, [serverIdIssues]);
+
   const clearStringMapState = React.useCallback(() => {
     stringMapIssuesRef.current = {};
     setStringMapDrafts({});
@@ -124,6 +137,12 @@ export function useConfigDraft() {
     patternRulesIssuesRef.current = {};
     setPatternRulesDrafts({});
     setPatternRulesIssues({});
+  }, []);
+
+  const clearServerIdState = React.useCallback(() => {
+    serverIdIssuesRef.current = {};
+    setServerIdDrafts({});
+    setServerIdIssues({});
   }, []);
 
   const setStringMapDraft = React.useCallback((fieldId: string, state: StringMapDraftState | null) => {
@@ -193,6 +212,34 @@ export function useConfigDraft() {
     setPatternRulesIssues(next);
   }, []);
 
+  const setServerIdDraft = React.useCallback((fieldId: string, state: ServerIdDraftState | null) => {
+    setServerIdDrafts((prev) => {
+      if (state === null) {
+        if (!Object.prototype.hasOwnProperty.call(prev, fieldId)) return prev;
+        const next = { ...prev };
+        delete next[fieldId];
+        return next;
+      }
+      return { ...prev, [fieldId]: state };
+    });
+  }, []);
+
+  const setServerIdIssue = React.useCallback((fieldId: string, issue: ServerIdValidationIssue | null) => {
+    const prev = serverIdIssuesRef.current;
+    if (issue === null) {
+      if (!Object.prototype.hasOwnProperty.call(prev, fieldId)) return;
+      const next = { ...prev };
+      delete next[fieldId];
+      serverIdIssuesRef.current = next;
+      setServerIdIssues(next);
+      return;
+    }
+    if (prev[fieldId]?.kind === issue.kind) return;
+    const next = { ...prev, [fieldId]: issue };
+    serverIdIssuesRef.current = next;
+    setServerIdIssues(next);
+  }, []);
+
   const viewModeRef = React.useRef(viewMode);
   viewModeRef.current = viewMode;
 
@@ -244,6 +291,7 @@ export function useConfigDraft() {
       if (!hasLocalEdits) {
         clearStringMapState();
         clearPatternRulesState();
+        clearServerIdState();
         clearPendingPayloadState();
         replaceDraft(yaml);
         return true;
@@ -254,6 +302,33 @@ export function useConfigDraft() {
       const rebased = rebaseDraft(draftBase, docRef.current, yaml);
       if (rebased !== null) {
         replaceDraft(rebased);
+        const readServerIdString = (doc: Document | null, field: ConfigFieldDefinition): string => {
+          if (!doc) return '';
+          const raw = getFieldSemanticValue(doc, field);
+          return typeof raw === 'string' ? raw.trim() : '';
+        };
+        setServerIdDrafts((prev) => {
+          const keys = Object.keys(prev);
+          if (keys.length === 0) return prev;
+          let changed = false;
+          const next: Record<string, ServerIdDraftState> = {};
+          for (const fieldId of keys) {
+            const draft = prev[fieldId];
+            const field = ALL_CONFIG_FIELDS.find((entry) => entry.id === fieldId);
+            if (!field) {
+              next[fieldId] = draft;
+              continue;
+            }
+            const reconciled = reconcileServerIdDraft(
+              draft,
+              readServerIdString(draftBase, field),
+              readServerIdString(serverDocRef.current, field),
+            );
+            next[fieldId] = reconciled;
+            if (reconciled !== draft) changed = true;
+          }
+          return changed ? next : prev;
+        });
         if (!payloadEditorMountedRef.current) {
           const recomputed = validatePayloadDocument(docRef.current, unresolvedReplacePendingRef.current);
           payloadIssuesRef.current = recomputed;
@@ -263,7 +338,7 @@ export function useConfigDraft() {
       }
       return false;
     },
-    [clearPatternRulesState, clearPendingPayloadState, clearStringMapState, replaceDraft],
+    [clearPatternRulesState, clearPendingPayloadState, clearServerIdState, clearStringMapState, replaceDraft],
   );
 
   React.useEffect(() => {
@@ -278,6 +353,7 @@ export function useConfigDraft() {
       rawYamlRef.current !== serverYamlRef.current
         || Object.keys(stringMapIssuesRef.current).length > 0
         || Object.keys(patternRulesIssuesRef.current).length > 0
+        || Object.keys(serverIdIssuesRef.current).length > 0
         || hasPendingPayloadEditsRef.current,
     );
   }, [configQuery.data?.safe_yaml, configQuery.data?.revision, viewMode, adoptBaseline]);
@@ -290,7 +366,8 @@ export function useConfigDraft() {
 
   const hasStringMapIssues = Object.keys(stringMapIssues).length > 0;
   const hasPatternRulesIssues = Object.keys(patternRulesIssues).length > 0;
-  const hasFieldIssues = hasStringMapIssues || hasPatternRulesIssues;
+  const hasServerIdIssues = Object.keys(serverIdIssues).length > 0;
+  const hasFieldIssues = hasStringMapIssues || hasPatternRulesIssues || hasServerIdIssues;
   const firstStringMapErrorMessage = React.useMemo(() => {
     const first = Object.values(stringMapIssues)[0];
     return first ? formatStringMapIssue(first, t) : undefined;
@@ -299,7 +376,11 @@ export function useConfigDraft() {
     const first = Object.values(patternRulesIssues)[0];
     return first ? formatPatternRulesIssue(first, t) : undefined;
   }, [patternRulesIssues, t]);
-  const firstFieldErrorMessage = firstStringMapErrorMessage ?? firstPatternRulesErrorMessage;
+  const firstServerIdErrorMessage = React.useMemo(() => {
+    const first = Object.values(serverIdIssues)[0];
+    return first ? formatServerIdIssue(first, t) : undefined;
+  }, [serverIdIssues, t]);
+  const firstFieldErrorMessage = firstServerIdErrorMessage ?? firstStringMapErrorMessage ?? firstPatternRulesErrorMessage;
   firstFieldErrorMessageRef.current = firstFieldErrorMessage;
 
   const isDirty = rawYaml !== serverYaml || hasFieldIssues || hasPendingPayloadEdits;
@@ -386,6 +467,7 @@ export function useConfigDraft() {
         rawYamlRef.current !== variables.yamlToSave
         || Object.keys(stringMapIssuesRef.current).length > 0
         || Object.keys(patternRulesIssuesRef.current).length > 0
+        || Object.keys(serverIdIssuesRef.current).length > 0
         || hasPendingPayloadEditsRef.current;
       let savedDraft: Document | null = null;
       try {
@@ -413,6 +495,7 @@ export function useConfigDraft() {
         if (!hasNewerDraft) {
           clearStringMapState();
           clearPatternRulesState();
+          clearServerIdState();
           clearPendingPayloadState();
         }
       } else if (!payloadEditorMountedRef.current || didRebase) {
@@ -423,6 +506,7 @@ export function useConfigDraft() {
       setShowErrorFeedback(false);
       setValidateTrigger(0);
       void queryClient.invalidateQueries({ queryKey: ['management-config'] });
+      void queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
       void queryClient.invalidateQueries({ queryKey: GITHUB_TOKEN_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: ['management-config-backups'] });
       void queryClient.invalidateQueries({ queryKey: ['model-square'] });
@@ -457,10 +541,11 @@ export function useConfigDraft() {
     setPayloadIssues([]);
     clearStringMapState();
     clearPatternRulesState();
+    clearServerIdState();
     setPayloadResetVersion((v) => v + 1);
     setShowErrorFeedback(false);
     setValidateTrigger(0);
-  }, [clearPatternRulesState, clearPendingPayloadState, clearStringMapState]);
+  }, [clearPatternRulesState, clearPendingPayloadState, clearServerIdState, clearStringMapState]);
 
   const [payloadIssues, setPayloadIssues] = React.useState<PayloadValidationIssue[]>([]);
 
@@ -507,6 +592,7 @@ export function useConfigDraft() {
       rawYamlRef.current !== serverYamlRef.current
       || Object.keys(stringMapIssuesRef.current).length > 0
       || Object.keys(patternRulesIssuesRef.current).length > 0
+      || Object.keys(serverIdIssuesRef.current).length > 0
       || hasPendingPayloadEditsRef.current,
     [],
   );
@@ -629,7 +715,8 @@ export function useConfigDraft() {
     if (!isDirtyNow() || saveMutation.isPending) return;
     const hasCurrentFieldIssues =
       Object.keys(stringMapIssuesRef.current).length > 0
-      || Object.keys(patternRulesIssuesRef.current).length > 0;
+      || Object.keys(patternRulesIssuesRef.current).length > 0
+      || Object.keys(serverIdIssuesRef.current).length > 0;
     if (
       hasYamlErrorsNow()
       || (viewModeRef.current === 'visual' && payloadIssuesRef.current.some(isBlockingPayloadIssue))
@@ -683,6 +770,7 @@ export function useConfigDraft() {
           rawYamlRef.current !== serverYamlRef.current
           || Object.keys(stringMapIssuesRef.current).length > 0
           || Object.keys(patternRulesIssuesRef.current).length > 0
+          || Object.keys(serverIdIssuesRef.current).length > 0
           || hasPendingPayloadEditsRef.current
         )) {
           resolve(true);
@@ -722,6 +810,7 @@ export function useConfigDraft() {
         setServerRevision(src.revision);
         clearStringMapState();
         clearPatternRulesState();
+        clearServerIdState();
         try {
           docRef.current = parseDocument(src.yaml);
           serverDocRef.current = parseDocument(src.yaml);
@@ -830,6 +919,11 @@ export function useConfigDraft() {
     patternRulesIssues,
     setPatternRulesIssue,
     firstPatternRulesErrorMessage,
+    serverIdDrafts,
+    setServerIdDraft,
+    serverIdIssues,
+    setServerIdIssue,
+    firstServerIdErrorMessage,
     firstFieldErrorMessage,
     hasYamlErrors,
     hasConfigErrors,

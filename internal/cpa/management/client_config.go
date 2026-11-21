@@ -241,7 +241,8 @@ func (c *Client) UpdateConfigYAML(ctx context.Context, rawYAML string) error {
 		return err
 	}
 	version := storedConfigVersion(stored)
-	return c.writeConfigAt(ctx, http.MethodPut, "/config.yaml", []byte(rawYAML), "application/yaml", &version)
+	_, err = c.writeConfigAt(ctx, http.MethodPut, "/config.yaml", []byte(rawYAML), "application/yaml", &version)
+	return err
 }
 
 // ErrManagementSecretKeyChange reports a configuration write that would rotate
@@ -271,14 +272,14 @@ func storedConfigVersion(stored string) string {
 // version sends the write unconditionally: a gateway older than v8.0.31
 // reports no tag, and CPA omits it when it cannot read its save back. Older
 // gateways ignore If-Match, so the guard costs them nothing.
-func (c *Client) writeConfigAt(ctx context.Context, method, endpoint string, data []byte, contentType string, version *string) error {
+func (c *Client) writeConfigAt(ctx context.Context, method, endpoint string, data []byte, contentType string, version *string) (ResponseMeta, error) {
 	var body io.Reader
 	if data != nil {
 		body = bytes.NewReader(data)
 	}
 	request, err := c.newRequest(ctx, method, endpoint, body, contentType)
 	if err != nil {
-		return err
+		return ResponseMeta{}, err
 	}
 	if *version != "" {
 		request.Header.Set("If-Match", *version)
@@ -287,15 +288,15 @@ func (c *Client) writeConfigAt(ctx context.Context, method, endpoint string, dat
 	if err != nil {
 		var httpErr *HTTPError
 		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusPreconditionFailed {
-			return fmt.Errorf("%w: %w", ErrConfigChanged, err)
+			return meta, fmt.Errorf("%w: %w", ErrConfigChanged, err)
 		}
-		return err
+		return meta, err
 	}
 	*version = meta.Header.Get("ETag")
 	if observe, ok := ctx.Value(configWriteObserverKey{}).(func(string)); ok {
 		observe(*version)
 	}
-	return nil
+	return meta, nil
 }
 
 // ConfigChange is one entry of a sparse configuration write: a value for a v8
@@ -335,7 +336,12 @@ func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange)
 	}
 	stored, err := c.keepStoredConfigChecked(
 		ctx,
-		func(stored string) error { return ensureChangesManagementSecretKeyUnchanged(stored, changes) },
+		func(stored string) error {
+			if err := ensureChangesManagementSecretKeyUnchanged(stored, changes); err != nil {
+				return err
+			}
+			return ensureChangesServerIDProtected(stored, changes)
+		},
 	)
 	if err != nil {
 		return err
@@ -355,6 +361,7 @@ func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange)
 		}
 	}
 	hasLanded := false
+	activeServerID := ""
 	failed := func(err error) error {
 		scrubWriteRejection(err, stored, changes)
 		if hasLanded {
@@ -367,7 +374,14 @@ func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange)
 		if err != nil {
 			return fmt.Errorf("encode CPA request: %w", err)
 		}
-		return c.writeConfigAt(ctx, method, endpoint, data, "application/json", &version)
+		meta, err := c.writeConfigAt(ctx, method, endpoint, data, "application/json", &version)
+		if err != nil {
+			return err
+		}
+		if id := SafeServerIDHeader(meta.Header); id != "" {
+			activeServerID = id
+		}
+		return nil
 	}
 	if len(merge) > 0 {
 		if err := writeJSON(http.MethodPatch, "/config", merge); err != nil {
@@ -376,17 +390,40 @@ func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange)
 		hasLanded = true
 	}
 	for _, change := range replacements {
-		if err := writeJSON(http.MethodPut, configPathEndpoint(change.Path), change.Value); err != nil {
+		value := change.Value
+		// If an earlier write in this non-atomic batch caused CPA to allocate and
+		// persist a server-id, carry it forward on a subsequent `server` replacement
+		// that omitted it so CPA does not drop and re-allocate a second UUID.
+		if activeServerID != "" && len(change.Path) == 1 && change.Path[0] == "server" {
+			if serverMap, ok := value.(map[string]any); ok {
+				if _, hasID := serverMap["server-id"]; !hasID {
+					cloned := make(map[string]any, len(serverMap)+1)
+					for k, v := range serverMap {
+						cloned[k] = v
+					}
+					cloned["server-id"] = activeServerID
+					value = cloned
+				}
+			}
+		}
+		if err := writeJSON(http.MethodPut, configPathEndpoint(change.Path), value); err != nil {
 			return failed(err)
 		}
 		hasLanded = true
 	}
 	for _, change := range removals {
-		if err := c.writeConfigAt(ctx, http.MethodDelete, configPathEndpoint(change.Path), nil, "", &version); err != nil {
+		if activeServerID != "" && len(change.Path) == 1 && change.Path[0] == "server" {
+			return failed(fmt.Errorf("%w: server cannot be removed after server.server-id was allocated", ErrInvalidConfigChange))
+		}
+		meta, err := c.writeConfigAt(ctx, http.MethodDelete, configPathEndpoint(change.Path), nil, "", &version)
+		if err != nil {
 			if isConfigPathMissing(err) {
 				continue
 			}
 			return failed(err)
+		}
+		if id := SafeServerIDHeader(meta.Header); id != "" {
+			activeServerID = id
 		}
 		hasLanded = true
 	}
@@ -509,6 +546,9 @@ func validateConfigChanges(changes []ConfigChange) error {
 		if !change.Remove && change.Value == nil {
 			return fmt.Errorf("%w: %s has no value", ErrInvalidConfigChange, label)
 		}
+		if err := validateServerIDChange(change); err != nil {
+			return err
+		}
 		// Two changes on one path, or on a path and a key below it, would depend
 		// on the order CPA applies them in. Keys are compared one by one because
 		// a mapping key may itself contain a dot.
@@ -518,6 +558,86 @@ func validateConfigChanges(changes []ConfigChange) error {
 			}
 		}
 		seen = append(seen, change.Path)
+	}
+	return nil
+}
+
+var serverIDConfigPath = []string{"server", "server-id"}
+
+// validateServerIDChange enforces CPA's nonzero hyphenated UUID rule before a
+// change set is sent. CPA's management write handler silently allocates a new
+// UUIDv4 whenever server.server-id is missing, empty, or invalid, so rejecting
+// invalid values and removals here prevents accidental identity rotation.
+func validateServerIDChange(change ConfigChange) error {
+	if isPathPrefix(serverIDConfigPath, change.Path) {
+		if len(change.Path) > len(serverIDConfigPath) {
+			return fmt.Errorf("%w: server.server-id must be a nonzero hyphenated UUID string", ErrInvalidConfigChange)
+		}
+		if change.Remove {
+			return fmt.Errorf("%w: server.server-id cannot be removed; set a nonzero hyphenated UUID instead", ErrInvalidConfigChange)
+		}
+		return validateServerIDValue(change.Value)
+	}
+	if len(change.Path) == 1 && change.Path[0] == "server" && !change.Remove {
+		if serverMap, ok := change.Value.(map[string]any); ok {
+			if rawID, present := serverMap["server-id"]; present {
+				return validateServerIDValue(rawID)
+			}
+		}
+	}
+	return nil
+}
+
+// ensureChangesServerIDProtected prevents an ancestor write on `server` (which
+// replaces or deletes the whole mapping) from dropping a stored server.server-id
+// and triggering silent UUID rotation on CPA.
+func ensureChangesServerIDProtected(stored string, changes []ConfigChange) error {
+	touchesServerAncestor := false
+	for _, change := range changes {
+		if len(change.Path) == 1 && change.Path[0] == "server" {
+			touchesServerAncestor = true
+			break
+		}
+	}
+	if !touchesServerAncestor {
+		return nil
+	}
+	_, present, err := configyaml.ServerID(stored)
+	if err != nil {
+		return fmt.Errorf("%w: read the stored server.server-id: %v", ErrInvalidConfigChange, err)
+	}
+	if !present {
+		return nil
+	}
+	for _, change := range changes {
+		if len(change.Path) != 1 || change.Path[0] != "server" {
+			continue
+		}
+		if change.Remove {
+			return fmt.Errorf("%w: server cannot be removed while server.server-id is set", ErrInvalidConfigChange)
+		}
+		serverMap, ok := change.Value.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: server replacement must preserve server.server-id", ErrInvalidConfigChange)
+		}
+		rawID, hasID := serverMap["server-id"]
+		if !hasID {
+			return fmt.Errorf("%w: server replacement must include a nonzero hyphenated server-id", ErrInvalidConfigChange)
+		}
+		if err := validateServerIDValue(rawID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateServerIDValue(value any) error {
+	raw, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("%w: server.server-id must be a nonzero hyphenated UUID string", ErrInvalidConfigChange)
+	}
+	if _, valid := NormalizeServerID(raw); !valid {
+		return fmt.Errorf("%w: server.server-id must be a nonzero hyphenated UUID", ErrInvalidConfigChange)
 	}
 	return nil
 }

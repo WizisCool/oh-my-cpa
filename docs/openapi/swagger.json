@@ -17267,6 +17267,10 @@
         "latency_ms": {
           "type": "integer"
         },
+        "server_id": {
+          "description": "ServerID is CPA's deployment UUID (distinct from any Home node ID),\nomitted when the gateway is offline or predates CPA v8.1.0.",
+          "type": "string"
+        },
         "status": {
           "type": "string"
         }
