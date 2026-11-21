@@ -1223,3 +1223,91 @@ func TestGitHubTokenReadbackFailureReportsUnconfirmedAndWakesExchangeRateRefresh
 		t.Fatalf("woken tasks = %v, want [exchange_rates]", woken)
 	}
 }
+
+func TestManagementConfigPatchValidatesServerIDAndReturnsCPAReadback(t *testing.T) {
+	var currentYAML = "config-version: 8\nserver:\n  server-id: 11111111-1111-4111-8111-111111111111\n  port: 8317\n"
+	var writeCount int
+
+	cpaHandler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		path := strings.TrimPrefix(request.URL.Path, "/v8/management")
+		switch {
+		case request.Method == http.MethodGet && path == "/config.yaml":
+			writer.Header().Set("Content-Type", "application/yaml")
+			_, _ = writer.Write([]byte(currentYAML))
+		case request.Method == http.MethodGet && path == "/config":
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"config-version":8,"server":{"server-id":"11111111-1111-4111-8111-111111111111","port":8317}}`))
+		case request.Method == http.MethodPatch && path == "/config":
+			writeCount++
+			var body struct {
+				Server struct {
+					ServerID string `json:"server-id"`
+				} `json:"server"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				writer.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			// Simulate CPA merging PATCH fields and lowercasing server.server-id on write.
+			savedID := "11111111-1111-4111-8111-111111111111"
+			if strings.TrimSpace(body.Server.ServerID) != "" {
+				savedID = strings.ToLower(strings.TrimSpace(body.Server.ServerID))
+				currentYAML = fmt.Sprintf("config-version: 8\nserver:\n  server-id: %s\n  port: 8317\n", savedID)
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(fmt.Sprintf(`{"status":"ok","config-version":8,"server-id":%q}`, savedID)))
+		default:
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"status":"ok"}`))
+		}
+	})
+
+	client, baseURL, _ := startDashboardTestServerStoring(t, currentYAML, cpaHandler)
+
+	_, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config")
+	var loaded struct {
+		Revision string `json:"revision"`
+		SafeYAML string `json:"safe_yaml"`
+	}
+	if err := json.Unmarshal(payload, &loaded); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(loaded.SafeYAML, "11111111-1111-4111-8111-111111111111") {
+		t.Fatalf("safe_yaml omitted server.server-id: %s", loaded.SafeYAML)
+	}
+
+	// Invalid values and removal are rejected before reaching CPA.
+	for _, change := range []map[string]any{
+		{"path": []string{"server", "server-id"}, "value": "not-a-uuid"},
+		{"path": []string{"server", "server-id"}, "value": "00000000-0000-0000-0000-000000000000"},
+		{"path": []string{"server", "server-id"}, "remove": true},
+	} {
+		patchBody, _ := json.Marshal(map[string]any{"revision": loaded.Revision, "changes": []any{change}})
+		resp, body := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/config", string(patchBody))
+		if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(body), "config_invalid_change") {
+			t.Fatalf("change %v: status = %d body = %s, want 400 config_invalid_change", change, resp.StatusCode, body)
+		}
+	}
+	if writeCount != 0 {
+		t.Fatalf("invalid server.server-id writes reached CPA: count=%d", writeCount)
+	}
+
+	// Uppercase valid UUID is accepted and response reflects CPA's lowercased readback.
+	validUpper := "20FB88E4-73AB-44DB-B5B5-4E7120BA3368"
+	validLower := "20fb88e4-73ab-44db-b5b5-4e7120ba3368"
+	patchBody, _ := json.Marshal(map[string]any{
+		"revision": loaded.Revision,
+		"changes":  []any{map[string]any{"path": []string{"server", "server-id"}, "value": validUpper}},
+	})
+	resp, body := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/config", string(patchBody))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("valid server.server-id patch status = %d body = %s", resp.StatusCode, body)
+	}
+	var saved ManagementConfigPatchResponseDTO
+	if err := json.Unmarshal(body, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(saved.SafeYAML, validLower) || strings.Contains(saved.SafeYAML, validUpper) {
+		t.Fatalf("safe_yaml must carry CPA's lowercased readback, got:\n%s", saved.SafeYAML)
+	}
+}

@@ -374,3 +374,127 @@ func TestDataRetentionIsAuditedAndStored(t *testing.T) {
 		t.Fatalf("retention after stale write = %+v, %v; want the other console's 30 days", setting, err)
 	}
 }
+
+func TestSystemInfoCPAServerIDDiscoveryAndFallback(t *testing.T) {
+	const (
+		endpointUUIDUpper = "20FB88E4-73AB-44DB-B5B5-4E7120BA3368"
+		endpointUUIDLower = "20fb88e4-73ab-44db-b5b5-4e7120ba3368"
+		headerUUIDLower   = "9a4c6e1b-2d3f-4a5b-8c7d-1e2f3a4b5c6d"
+	)
+
+	cases := []struct {
+		name           string
+		serverIDStatus int
+		serverIDBody   string
+		headerServerID string
+		wantServerID   string
+	}{
+		{
+			name:           "reads dedicated endpoint and normalizes lowercase",
+			serverIDStatus: http.StatusOK,
+			serverIDBody:   `{"server-id":"` + endpointUUIDUpper + `"}`,
+			headerServerID: headerUUIDLower,
+			wantServerID:   endpointUUIDLower,
+		},
+		{
+			name:           "falls back to X-CPA-SERVER-ID header when endpoint returns 404",
+			serverIDStatus: http.StatusNotFound,
+			serverIDBody:   `{"error":"not found"}`,
+			headerServerID: headerUUIDLower,
+			wantServerID:   headerUUIDLower,
+		},
+		{
+			name:           "omits server_id on older gateway without endpoint or header",
+			serverIDStatus: http.StatusNotFound,
+			serverIDBody:   `{"error":"not found"}`,
+			headerServerID: "",
+			wantServerID:   "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				writer.Header().Set("Content-Type", "application/json")
+				writer.Header().Set("X-CPA-Version", "8.1.0")
+				if tc.headerServerID != "" {
+					writer.Header().Set("X-CPA-SERVER-ID", tc.headerServerID)
+				}
+				switch {
+				case strings.HasSuffix(request.URL.Path, "/server/server-id"):
+					writer.WriteHeader(tc.serverIDStatus)
+					_, _ = writer.Write([]byte(tc.serverIDBody))
+				case strings.HasSuffix(request.URL.Path, "/credentials"):
+					_, _ = writer.Write([]byte(`{"files":[]}`))
+				case strings.HasSuffix(request.URL.Path, "/plugins"):
+					_, _ = writer.Write([]byte(`[]`))
+				case strings.Contains(request.URL.Path, "api-key"):
+					_, _ = writer.Write([]byte(`[]`))
+				default:
+					_, _ = writer.Write([]byte(`{"status":"ok"}`))
+				}
+			}))
+			t.Cleanup(cpaServer.Close)
+
+			db, err := repository.Open(context.Background(), fmt.Sprintf("file:mem_sys_id_%d?mode=memory&cache=shared", time.Now().UnixNano()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = db.Close() })
+			repo := repository.New(db)
+			cipher, err := crypto.New("01234567890123456789012345678901")
+			if err != nil {
+				t.Fatal(err)
+			}
+			ciphertext, nonce, err := cipher.Encrypt([]byte("cpa-secret-key"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			now := time.Now().UTC()
+			if err := repo.UpsertInstance(context.Background(), domain.CPAInstance{
+				ID: "default", Name: "Default", BaseURL: cpaServer.URL,
+				ManagementKeyCiphertext: ciphertext, ManagementKeyNonce: nonce,
+				CreatedAt: now, UpdatedAt: now,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			authManager, err := auth.New("management-secret-value", "/omc", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			handler := NewHandler(config.Config{BasePath: "/omc", Version: "v0.4.10"}, repo, cipher, nil, authManager)
+			appServer := httptest.NewServer(handler.Router())
+			t.Cleanup(appServer.Close)
+			client := signedInClient(t, appServer.URL+"/omc/api/auth/login", "management-secret-value")
+
+			resp, payload := getJSON(t, client, appServer.URL+"/omc/api/v1/management/system")
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("system status = %d body %s", resp.StatusCode, payload)
+			}
+			var info SystemInfoDTO
+			if err := json.Unmarshal(payload, &info); err != nil {
+				t.Fatal(err)
+			}
+			if info.CPA.ServerID != tc.wantServerID {
+				t.Fatalf("cpa.server_id = %q, want %q", info.CPA.ServerID, tc.wantServerID)
+			}
+
+			diagResp, diagPayload := getJSON(t, client, appServer.URL+"/omc/api/v1/management/system/diagnostics")
+			if diagResp.StatusCode != http.StatusOK {
+				t.Fatalf("diagnostics status = %d body %s", diagResp.StatusCode, diagPayload)
+			}
+			var bundle map[string]any
+			if err := json.Unmarshal(diagPayload, &bundle); err != nil {
+				t.Fatal(err)
+			}
+			gotDiagID, hasDiagID := bundle["cpa_server_id"]
+			if tc.wantServerID == "" {
+				if hasDiagID {
+					t.Fatalf("diagnostics unexpectedly included cpa_server_id=%v", gotDiagID)
+				}
+			} else if gotDiagID != tc.wantServerID {
+				t.Fatalf("diagnostics cpa_server_id = %v, want %q", gotDiagID, tc.wantServerID)
+			}
+		})
+	}
+}

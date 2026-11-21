@@ -73,6 +73,37 @@ func ManagementSecretKey(rawYAML string) (string, bool, error) {
 	return "", false, nil
 }
 
+// ServerID reports the configured server.server-id stored in a configuration
+// document, returning present=false when the key is omitted, null, or blank.
+// Decoding through yaml.v3 resolves anchors, aliases, and merge keys (`<<`) the
+// same way CPA's loader does.
+func ServerID(rawYAML string) (string, bool, error) {
+	if strings.TrimSpace(rawYAML) == "" {
+		return "", false, nil
+	}
+	var root map[string]any
+	if err := yaml.Unmarshal([]byte(rawYAML), &root); err != nil {
+		return "", false, err
+	}
+	server, ok := root["server"].(map[string]any)
+	if !ok {
+		return "", false, nil
+	}
+	raw, exists := server["server-id"]
+	if !exists || raw == nil {
+		return "", false, nil
+	}
+	str, ok := raw.(string)
+	if !ok {
+		return "", true, fmt.Errorf("server.server-id must be a scalar")
+	}
+	value := strings.TrimSpace(str)
+	if value == "" {
+		return "", false, nil
+	}
+	return value, true, nil
+}
+
 // RestoreSentinelsAt is RestoreSentinels for one value of a sparse write: the
 // value the console submits for `path` has its masked secrets and cleaned proxy
 // URLs put back from the stored document at the same path, under the same

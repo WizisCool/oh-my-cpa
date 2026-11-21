@@ -119,7 +119,7 @@ func (c *Client) MoveProviderFamily(ctx context.Context, sourceFamily, targetFam
 		return 0, 0, err
 	}
 	version := storedConfigVersion(stored)
-	err = c.writeConfigAt(ctx, http.MethodPatch, "/config", data, "application/json", &version)
+	_, err = c.writeConfigAt(ctx, http.MethodPatch, "/config", data, "application/json", &version)
 	if err != nil {
 		scrubWriteRejection(err, stored, changes)
 	}

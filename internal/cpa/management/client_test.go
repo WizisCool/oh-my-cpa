@@ -455,3 +455,80 @@ func TestConfiguredModelRoutesRetainPrefixesAndAliases(t *testing.T) {
 		t.Fatalf("routes = %#v", routes)
 	}
 }
+
+func TestServerIDReadsEndpointNormalizesAndFallsBackToHeader(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want string
+		ok   bool
+	}{
+		{"20fb88e4-73ab-44db-b5b5-4e7120ba3368", "20fb88e4-73ab-44db-b5b5-4e7120ba3368", true},
+		{"  20FB88E4-73AB-44DB-B5B5-4E7120BA3368  ", "20fb88e4-73ab-44db-b5b5-4e7120ba3368", true},
+		{"00000000-0000-0000-0000-000000000000", "", false},
+		{"20fb88e473ab44dbb5b54e7120ba3368", "", false},
+		{"urn:uuid:20fb88e4-73ab-44db-b5b5-4e7120ba3368", "", false},
+		{"not-a-uuid", "", false},
+		{"", "", false},
+	} {
+		got, ok := NormalizeServerID(tc.raw)
+		if ok != tc.ok || got != tc.want {
+			t.Fatalf("NormalizeServerID(%q) = (%q, %t), want (%q, %t)", tc.raw, got, ok, tc.want, tc.ok)
+		}
+	}
+
+	const validUpper = "20FB88E4-73AB-44DB-B5B5-4E7120BA3368"
+	const validLower = "20fb88e4-73ab-44db-b5b5-4e7120ba3368"
+
+	cases := []struct {
+		name        string
+		status      int
+		headerID    string
+		body        string
+		wantID      string
+		wantMissing bool
+	}{
+		{name: "normalizes uppercase body", status: http.StatusOK, headerID: validLower, body: `{"server-id":"` + validUpper + `"}`, wantID: validLower},
+		{name: "falls back to header on empty body", status: http.StatusOK, headerID: validUpper, body: `{"server-id":""}`, wantID: validLower},
+		{name: "drops malformed body value", status: http.StatusOK, headerID: validLower, body: `{"server-id":"not-a-uuid"}`, wantID: ""},
+		{name: "drops nil uuid body", status: http.StatusOK, headerID: "", body: `{"server-id":"00000000-0000-0000-0000-000000000000"}`, wantID: ""},
+		{name: "reports missing capability on older gateway", status: http.StatusNotFound, body: `{"error":"not found"}`, wantMissing: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				if request.URL.Path != "/v8/management/server/server-id" {
+					writer.WriteHeader(http.StatusNotFound)
+					return
+				}
+				if tc.headerID != "" {
+					writer.Header().Set(ServerIDHeader, tc.headerID)
+				}
+				writer.Header().Set("Content-Type", "application/json")
+				writer.WriteHeader(tc.status)
+				_, _ = writer.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+
+			client, err := NewClient(server.URL, "secret", time.Second, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(client.forgetManagementV8)
+
+			identity, _, err := client.ServerID(context.Background())
+			if tc.wantMissing {
+				if !IsMissingCapability(err) {
+					t.Fatalf("expected missing capability error, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ServerID failed: %v", err)
+			}
+			if identity.ServerID != tc.wantID {
+				t.Fatalf("ServerID = %q, want %q", identity.ServerID, tc.wantID)
+			}
+		})
+	}
+}

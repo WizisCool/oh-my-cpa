@@ -7,7 +7,45 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/google/uuid"
 )
+
+// ServerIDHeader is the response header CPA attaches to authenticated
+// management responses when a deployment identity is available.
+const ServerIDHeader = "X-CPA-SERVER-ID"
+
+// ServerIdentityDTO holds the non-secret deployment identity reported by CPA's
+// GET /v8/management/server/server-id endpoint. It is distinct from any Home
+// node identifier.
+type ServerIdentityDTO struct {
+	ServerID string `json:"server-id"`
+}
+
+// NormalizeServerID validates CPA's server.server-id format: a 36-character
+// nonzero hyphenated UUID. It returns the canonical lowercase UUID on success.
+func NormalizeServerID(raw string) (string, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if len(trimmed) != 36 {
+		return "", false
+	}
+	parsed, err := uuid.Parse(trimmed)
+	if err != nil || parsed == uuid.Nil {
+		return "", false
+	}
+	return parsed.String(), true
+}
+
+// SafeServerIDHeader reads and validates the X-CPA-SERVER-ID response header.
+func SafeServerIDHeader(headers http.Header) string {
+	if headers == nil {
+		return ""
+	}
+	if normalized, ok := NormalizeServerID(headers.Get(ServerIDHeader)); ok {
+		return normalized
+	}
+	return ""
+}
 
 // ApiCallRequest represents the payload passed to CPA's /api-call proxy endpoint.
 // It is used internally by quota service facades and must never be exposed as an
@@ -78,6 +116,26 @@ func (r ApiCallResponse) NormalizedBody() ([]byte, error) {
 		}
 	}
 	return trimmed, nil
+}
+
+// ServerID reads CPA's active deployment UUID from GET /v8/management/server/server-id.
+// Gateways older than v8.1.0 answer 404 (IsMissingCapability); standby gateways may
+// report an empty identity. Malformed values are never passed through.
+func (c *Client) ServerID(ctx context.Context) (ServerIdentityDTO, ResponseMeta, error) {
+	var response ServerIdentityDTO
+	meta, err := c.DoJSONWithMeta(ctx, http.MethodGet, "/server/server-id", &response)
+	if err != nil {
+		return ServerIdentityDTO{}, meta, err
+	}
+	if normalized, ok := NormalizeServerID(response.ServerID); ok {
+		return ServerIdentityDTO{ServerID: normalized}, meta, nil
+	}
+	if strings.TrimSpace(response.ServerID) == "" {
+		if headerID := SafeServerIDHeader(meta.Header); headerID != "" {
+			return ServerIdentityDTO{ServerID: headerID}, meta, nil
+		}
+	}
+	return ServerIdentityDTO{}, meta, nil
 }
 
 // LatestVersion reads the CPA-managed latest version endpoint. It may itself
