@@ -1,0 +1,8 @@
+{
+  "plan": {
+    "plan_type": "ultra",
+    "plan_label": "Claude Ultra",
+    "tier": "elite"
+  },
+  "status": "idle"
+}

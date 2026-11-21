@@ -1,0 +1,8 @@
+{
+  "plan": {
+    "plan_type": "team",
+    "plan_label": "Claude Team",
+    "tier": "standard"
+  },
+  "status": "idle"
+}

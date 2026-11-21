@@ -1,0 +1,15 @@
+{
+  "why": "A consumer Claude Ultra subscription reports default_claude_max_20x on an active organization.",
+  "now_ms": 1735689600000,
+  "body": {
+    "account": {
+      "has_claude_pro": false,
+      "has_claude_max": true
+    },
+    "organization": {
+      "organization_type": "claude_max",
+      "rate_limit_tier": "default_claude_max_20x",
+      "subscription_status": "active"
+    }
+  }
+}
