@@ -4,6 +4,8 @@ import { UPDATE_STAGE_ORDER, deriveUpdateOffer, deriveVersionPresentation, summa
 import { isUpdateDismissed, listPendingUpdates, parseUpdateDismissals, withDismissal } from '../../src/utils/updateDismissals.ts';
 import type { SystemProductVersion, SystemUpdateJob, SystemUpdaterResponse } from '../../src/types/system.ts';
 import { DEFAULT_UPDATE_CHECK, parseUpdateCheck } from '../../src/types/updateCheck.ts';
+import { DEFAULT_EXCHANGE_RATE_REFRESH, parseExchangeRateRefresh } from '../../src/types/exchangeRateRefresh.ts';
+import { isGitHubTokenError } from '../../src/types/githubToken.ts';
 
 function createVersion(overrides: Partial<SystemProductVersion> = {}): SystemProductVersion {
   return {
@@ -171,11 +173,12 @@ test('a running update reports the step it has reached, in the order the updater
 });
 
 
-test('the scheduled update check keeps an interval the sweep can honour and ignores the rest', () => {
-  assert.deepEqual(parseUpdateCheck({ interval_minutes: 360 }), { interval_minutes: 360 });
-  // A document a newer build wrote keeps its known field; the server's write validation is
+test('the scheduled update check keeps valid split or legacy intervals and ignores invalid values', () => {
+  assert.deepEqual(parseUpdateCheck({ interval_minutes: 360 }), { interval_minutes: 360, plugin_interval_minutes: 360 });
+  assert.deepEqual(parseUpdateCheck({ interval_minutes: 0, plugin_interval_minutes: 120 }), { interval_minutes: 0, plugin_interval_minutes: 120 });
+  // A document a newer build wrote keeps its known fields; the server's write validation is
   // strict, so this is the read path only.
-  assert.deepEqual(parseUpdateCheck({ interval_minutes: 60, future_field: true }), { interval_minutes: 60 });
+  assert.deepEqual(parseUpdateCheck({ interval_minutes: 60, future_field: true }), { interval_minutes: 60, plugin_interval_minutes: 60 });
   for (const raw of [
     undefined,
     null,
@@ -183,6 +186,8 @@ test('the scheduled update check keeps an interval the sweep can honour and igno
     [60],
     { interval_minutes: 14 },
     { interval_minutes: 1441 },
+    { interval_minutes: 60, plugin_interval_minutes: 5 },
+    { interval_minutes: 60, plugin_interval_minutes: 1441 },
     { interval_minutes: '60' },
     { interval_minutes: 60.5 },
   ]) {
@@ -190,5 +195,19 @@ test('the scheduled update check keeps an interval the sweep can honour and igno
   }
   // Parity with `release.DefaultUpdateCheckSettings`, which is what a deployment that never
   // chose an interval actually runs.
-  assert.deepEqual(DEFAULT_UPDATE_CHECK, { interval_minutes: 60 });
+  assert.deepEqual(DEFAULT_UPDATE_CHECK, { interval_minutes: 60, plugin_interval_minutes: 60 });
+});
+
+test('exchange-rate refresh parser and GitHub token error matcher enforce contract bounds', () => {
+  assert.deepEqual(DEFAULT_EXCHANGE_RATE_REFRESH, { interval_hours: 24 });
+  assert.deepEqual(parseExchangeRateRefresh({ interval_hours: 0 }), { interval_hours: 0 });
+  assert.deepEqual(parseExchangeRateRefresh({ interval_hours: 72 }), { interval_hours: 72 });
+  for (const raw of [undefined, null, {}, { interval_hours: -1 }, { interval_hours: 169 }, { interval_hours: 1.5 }]) {
+    assert.equal(parseExchangeRateRefresh(raw), undefined);
+  }
+  assert.equal(isGitHubTokenError('the GitHub API rate limit for this address is exhausted'), true);
+  assert.equal(isGitHubTokenError('release feed rejected the configured GitHub token: check GitHub Token in OMC Settings (server.github-token)'), true);
+  assert.equal(isGitHubTokenError('HTTP 429 Too Many Requests'), true);
+  assert.equal(isGitHubTokenError('connection refused'), false);
+  assert.equal(isGitHubTokenError(''), false);
 });

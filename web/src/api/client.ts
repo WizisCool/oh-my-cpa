@@ -2,6 +2,7 @@ import type { BackupAuthorization, BackupArchive, BackupAutomation, BackupAutoma
 import type { RoutingBoard, RoutingModels, RoutingOutcome, RoutingPlanRequest } from '../types/routing';
 import type { ExchangeRates } from '../types/currencyDisplay';
 import type { OutboundProxyInput, OutboundProxySettings } from '../types/outboundProxy';
+import type { GitHubTokenInput, GitHubTokenStatus, GitHubTokenTestResult } from '../types/githubToken';
 import type { InsightsClientsResponse, InsightsCubeResponse, InsightsRhythmResponse } from '../types/insights';
 import type { TrendsQuotaResponse, TrendsTelemetryResponse, TrendsUsageResponse } from '../types/trends';
 import type { WarmupRunResponse, WarmupStateView, WarmupTaskInput } from '../types/warmup';
@@ -80,7 +81,7 @@ import type {
   PricingModelDetail,
   PricingModelUpdate,
   PricingResponse,
-  PricingSyncState,
+  PricingSyncScheduleResponse,
   ModelPrice,
   UpstreamModel,
 } from '../types/pricing';
@@ -1504,6 +1505,22 @@ export const api = {
     return request<OutboundProxySettings>('/management/outbound-proxy', { method: 'PUT', body: JSON.stringify(input) });
   },
 
+  async getGitHubToken(): Promise<GitHubTokenStatus> {
+    return request<GitHubTokenStatus>('/management/github-token', { method: 'GET' });
+  },
+
+  async setGitHubToken(input: GitHubTokenInput): Promise<GitHubTokenStatus> {
+    return request<GitHubTokenStatus>('/management/github-token', { method: 'PUT', body: JSON.stringify(input) });
+  },
+
+  async testGitHubToken(token?: string): Promise<GitHubTokenTestResult> {
+    const trimmed = token?.trim();
+    return request<GitHubTokenTestResult>('/management/github-token/test', {
+      method: 'POST',
+      body: JSON.stringify(trimmed ? { token: trimmed } : {}),
+    });
+  },
+
   async getDataRetention(): Promise<DataRetentionResponse> {
     return request<DataRetentionResponse>('/management/system/data-retention', { method: 'GET' });
   },
@@ -1656,8 +1673,14 @@ export const api = {
     return request<{ started: boolean }>('/pricing/sync', { method: 'POST' });
   },
 
-  async updatePricingSyncSchedule(intervalHours: number): Promise<{ interval_hours: number; state: PricingSyncState }> {
-    return request<{ interval_hours: number; state: PricingSyncState }>('/pricing/sync-schedule', {
+  async getPricingSyncSchedule(): Promise<PricingSyncScheduleResponse> {
+    return request<PricingSyncScheduleResponse>('/pricing/sync-schedule', {
+      method: 'GET',
+    });
+  },
+
+  async updatePricingSyncSchedule(intervalHours: number): Promise<PricingSyncScheduleResponse> {
+    return request<PricingSyncScheduleResponse>('/pricing/sync-schedule', {
       method: 'PUT',
       body: JSON.stringify({ interval_hours: intervalHours }),
     });

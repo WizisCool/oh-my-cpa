@@ -3,6 +3,7 @@ import type { MessageKey } from '../i18n/catalog';
 import { TimeZoneSelect } from '../components/common/TimeZoneSelect';
 import { useTimeZoneSetting } from '../utils/TimeZoneProvider';
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import { ColorPicker } from '@/components/ui/color-picker';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -40,26 +41,13 @@ import { REDUCED_MOTION_PREFERENCES, type ReducedMotionPreference } from '../uti
 import { SettingsGroup } from '../components/settings/SettingsGroup';
 import { SettingRow } from '../components/common/SettingRow';
 import { FontSettings } from '../components/settings/FontSettings';
+import { AutoRefreshSettings } from '../components/settings/AutoRefreshSettings';
+import { GitHubTokenSettings } from '../components/settings/GitHubTokenSettings';
 import { DataRetentionSettings } from '../components/settings/DataRetentionSettings';
 import { OutboundProxySettings } from '../components/settings/OutboundProxySettings';
 import { SidebarNavSettings } from '../components/settings/SidebarNavSettings';
-import { usePreference } from '../hooks/usePreference';
 import { useOmcPluginSource } from '../hooks/useOmcPluginSource';
 import { Notice } from '../components/feedback';
-import {
-  DEFAULT_UPDATE_CHECK,
-  UPDATE_CHECK_INTERVALS,
-  UPDATE_CHECK_PREFERENCE,
-  parseUpdateCheck,
-  type UpdateCheckSettings,
-} from '../types/updateCheck';
-import {
-  DEFAULT_QUOTA_AUTO_REFRESH,
-  QUOTA_AUTO_REFRESH_INTERVALS,
-  QUOTA_AUTO_REFRESH_PREFERENCE,
-  parseQuotaAutoRefresh,
-  type QuotaAutoRefreshSettings,
-} from '../types/quotaAutoRefresh';
 
 
 const MODE_LABEL_KEYS: Record<ThemeModePreference, MessageKey> = {
@@ -134,6 +122,7 @@ const REDUCED_MOTION_LABEL_KEYS: Record<ReducedMotionPreference, MessageKey> = {
 
 export const OmcSettingsPage: React.FC = () => {
   const t = useT();
+  const location = useLocation();
   const timezone = useTimeZoneSetting();
   const { lang, setLang } = useI18n();
   const {
@@ -150,6 +139,16 @@ export const OmcSettingsPage: React.FC = () => {
   // narrow breakpoint it becomes a vertical list instead, which is the shape that fits.
   const isNarrow = useIsNarrowViewport();
   const reducedMotion = useReducedMotionPreference();
+
+  // Deep links such as `/omc-settings#github-token` scroll straight to the target settings group.
+  React.useEffect(() => {
+    const id = location.hash.replace(/^#/, '');
+    if (!id) return;
+    const target = document.getElementById(id);
+    if (!target) return;
+    const behavior = document.documentElement.dataset.reducedMotion === 'true' ? 'auto' : 'smooth';
+    target.scrollIntoView({ behavior, block: 'start' });
+  }, [location.hash]);
 
   // The Chinese scale is words - 万, 亿 - so it is offered only to a Chinese
   // console. The option stays visible and disabled rather than hidden: an
@@ -225,9 +224,9 @@ export const OmcSettingsPage: React.FC = () => {
         />
       </SettingsGroup>
 
-      <QuotaAutoRefreshGroup />
+      <AutoRefreshSettings />
 
-      <UpdateCheckGroup />
+      <GitHubTokenSettings />
 
       <OutboundProxySettings />
 
@@ -324,101 +323,6 @@ const PluginSourceGroup: React.FC = () => {
           />
         )}
       />
-    </SettingsGroup>
-  );
-};
-
-/**
- * QuotaAutoRefreshGroup is the background quota refresh policy the server's loop reads.
- *
- * Unlike the display rows it changes what the deployment does on its own, not how the
- * console reads: each automatic read is a request to a provider made with the credential. The two
- * rows are the two independent triggers, so either can be used without the other.
- */
-const QuotaAutoRefreshGroup: React.FC = () => {
-  const t = useT();
-  const preference = usePreference<QuotaAutoRefreshSettings>(QUOTA_AUTO_REFRESH_PREFERENCE, DEFAULT_QUOTA_AUTO_REFRESH, parseQuotaAutoRefresh);
-  const settings = preference.value;
-  const formatInterval = (minutes: number) => {
-    if (minutes === 0) return t('omc.quota_auto_refresh_off');
-    return minutes % 60 === 0
-      ? t('omc.quota_auto_refresh_hours', { n: minutes / 60 })
-      : t('omc.quota_auto_refresh_minutes', { n: minutes });
-  };
-  // A value written elsewhere (the Agent accepts any supported interval) is kept selectable, so the
-  // control never shows a preset the deployment is not actually running.
-  const intervals: number[] = [...QUOTA_AUTO_REFRESH_INTERVALS];
-  if (!intervals.includes(settings.interval_minutes)) {
-    intervals.push(settings.interval_minutes);
-    intervals.sort((left, right) => left - right);
-  }
-  return (
-    <SettingsGroup title={t('omc.section_quota')}>
-      <SettingRow
-        label={t('omc.quota_auto_refresh_interval')}
-        description={t('omc.quota_auto_refresh_interval_desc')}
-        control={
-          <Select<number>
-            value={settings.interval_minutes}
-            disabled={!preference.loaded}
-            options={intervals.map((minutes) => ({ value: minutes, label: formatInterval(minutes) }))}
-            onChange={(minutes) => { void preference.set({ ...settings, interval_minutes: minutes }); }}
-            aria-label={t('omc.quota_auto_refresh_interval')}
-            popupMatchSelectWidth={false}
-          />
-        }
-      />
-      <SettingRow
-        label={t('omc.quota_refresh_on_reset')}
-        description={t('omc.quota_refresh_on_reset_desc')}
-        control={
-          <Switch
-            checked={settings.refresh_on_reset}
-            disabled={!preference.loaded}
-            onChange={(checked) => { void preference.set({ ...settings, refresh_on_reset: checked }); }}
-            aria-label={t('omc.quota_refresh_on_reset')}
-          />
-        }
-      />
-    </SettingsGroup>
-  );
-};
-
-/** Configure the scheduled release and plugin checks. */
-export const UpdateCheckGroup: React.FC = () => {
-  const t = useT();
-  const preference = usePreference<UpdateCheckSettings>(UPDATE_CHECK_PREFERENCE, DEFAULT_UPDATE_CHECK, parseUpdateCheck);
-  const settings = preference.value;
-
-  // A value written elsewhere is kept selectable, so the control never shows a preset the
-  // deployment is not actually running.
-  const intervals: number[] = [...UPDATE_CHECK_INTERVALS];
-
-  if (!intervals.includes(settings.interval_minutes)) {
-    intervals.push(settings.interval_minutes);
-    intervals.sort((left, right) => left - right);
-  }
-  const formatInterval = (minutes: number) => (minutes % 60 === 0
-    ? t('omc.update_check_hours', { n: minutes / 60 })
-    : t('omc.update_check_minutes', { n: minutes }));
-
-  return (
-    <SettingsGroup title={t('omc.section_update_check')}>
-      <SettingRow
-        label={t('omc.update_check_interval')}
-        description={t('omc.update_check_interval_desc')}
-        control={
-          <Select<number>
-            value={settings.interval_minutes}
-            disabled={!preference.loaded}
-            options={intervals.map((minutes) => ({ value: minutes, label: formatInterval(minutes) }))}
-            onChange={(minutes) => { void preference.set({ interval_minutes: minutes }); }}
-            aria-label={t('omc.update_check_interval')}
-            popupMatchSelectWidth={false}
-          />
-        }
-      />
-
     </SettingsGroup>
   );
 };

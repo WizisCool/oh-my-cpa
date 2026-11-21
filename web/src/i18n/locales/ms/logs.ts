@@ -209,6 +209,8 @@ export default {
   "audit.action.auth_file.display_name_clear": "Mengosongkan nama kelayakan",
   "audit.action.cpa_credential.reveal": "Mendedahkan kunci pengurusan CPA",
   "audit.action.outbound_proxy.save": "Menukar proksi keluar",
+  "audit.action.github_token.save": "Mengemas kini token GitHub",
+  "audit.action.github_token.clear": "Memadamkan token GitHub",
   "audit.action.routing.apply": "Menggunakan susunan penghalaan",
   "audit.action.plugin.settings": "Menukar tetapan sistem pemalam",
   "audit.action.pricing.model.dismiss_candidate": "Mengetepikan calon harga",

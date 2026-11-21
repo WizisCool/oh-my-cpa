@@ -61,6 +61,7 @@ export default {
   'sys.update_running': '正在更新',
   'sys.check_failed': '检查失败',
   'sys.check_failed_cached': '检查失败，保留上次结果',
+  'sys.configure_github_token': '配置 GitHub 令牌',
   'sys.check_updates_failed': '{products} 检查失败，请查看对应产品的提示',
   'sys.check_updates_cached_failed': '显示缓存结果：{products} 的上次检查失败',
   'sys.last_successful_check': '上次成功检查：{time}',

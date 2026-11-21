@@ -64,6 +64,7 @@ export default {
   'sys.update_running': 'Updating',
   'sys.check_failed': 'Check failed',
   'sys.check_failed_cached': 'Check failed; previous result retained',
+  'sys.configure_github_token': 'Configure GitHub token',
   'sys.check_updates_failed': 'Check failed for {products}; see the product details',
   'sys.check_updates_cached_failed': 'Showing cached results: the last check failed for {products}',
   'sys.last_successful_check': 'Last successful check: {time}',

@@ -1,37 +1,49 @@
 /**
- * The deployment-wide scheduled update check interval, stored as the `omc_update_check`
- * preference and read by the server's sweep on every tick (`internal/release/policy.go` owns
- * the bounds; the server refuses any document outside them).
+ * Deployment-wide scheduled update check intervals for OMC/CPA releases and
+ * the plugin store, stored as the `omc_update_check` preference (`internal/release/policy.go`
+ * owns the bounds; the server refuses any document outside them).
  */
 export interface UpdateCheckSettings {
-  /** The sweep reads the release feeds and the plugin store at this interval. */
+  /** Check OMC and CPA releases at this interval in minutes; 0 turns scheduled checks off. */
   interval_minutes: number;
+  /** Check installed plugins against the plugin store at this interval in minutes; 0 turns scheduled checks off. */
+  plugin_interval_minutes: number;
 }
 
 export const UPDATE_CHECK_PREFERENCE = 'omc_update_check';
 
-/** Mirrors `DefaultUpdateCheckSettings`: hourly checks. */
+/** Mirrors `DefaultUpdateCheckSettings`: hourly checks for both products and plugins. */
 export const DEFAULT_UPDATE_CHECK: UpdateCheckSettings = {
   interval_minutes: 60,
+  plugin_interval_minutes: 60,
 };
 
 export const UPDATE_CHECK_MIN_MINUTES = 15;
 export const UPDATE_CHECK_MAX_MINUTES = 24 * 60;
 
 /**
- * The intervals the settings page offers, ascending. The steps are dense where an operator is
- * trading freshness against GitHub's budget (15 and 30 minutes, hourly, two and three hours)
- * and sparse once the schedule is no longer what makes a notice late (6, 12 and 24 hours).
- * A stored value outside them is still shown.
+ * The intervals the settings page offers, ascending; 0 disables scheduled sweeps while
+ * keeping manual checks available. Any valid stored value outside these presets stays selectable.
  */
-export const UPDATE_CHECK_INTERVALS = [15, 30, 60, 120, 180, 360, 720, 1440] as const;
+export const UPDATE_CHECK_INTERVALS = [0, 15, 30, 60, 120, 180, 360, 720, 1440] as const;
 
-/** Read the stored update-check schedule. */
+export function isUpdateCheckInterval(minutes: unknown): minutes is number {
+  return typeof minutes === 'number'
+    && Number.isInteger(minutes)
+    && (minutes === 0 || (minutes >= UPDATE_CHECK_MIN_MINUTES && minutes <= UPDATE_CHECK_MAX_MINUTES));
+}
+
+/** Read the stored update-check schedule, mirroring legacy single-field documents onto plugins. */
 export function parseUpdateCheck(raw: unknown): UpdateCheckSettings | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
-  const { interval_minutes: intervalMinutes } = raw as Record<string, unknown>;
+  const record = raw as Record<string, unknown>;
+  const intervalMinutes = record.interval_minutes;
+  if (!isUpdateCheckInterval(intervalMinutes)) return undefined;
 
-  if (typeof intervalMinutes !== 'number' || !Number.isInteger(intervalMinutes)) return undefined;
-  if (intervalMinutes < UPDATE_CHECK_MIN_MINUTES || intervalMinutes > UPDATE_CHECK_MAX_MINUTES) return undefined;
-  return { interval_minutes: intervalMinutes };
+  if (!('plugin_interval_minutes' in record) || record.plugin_interval_minutes === undefined) {
+    return { interval_minutes: intervalMinutes, plugin_interval_minutes: intervalMinutes };
+  }
+  const pluginMinutes = record.plugin_interval_minutes;
+  if (!isUpdateCheckInterval(pluginMinutes)) return undefined;
+  return { interval_minutes: intervalMinutes, plugin_interval_minutes: pluginMinutes };
 }

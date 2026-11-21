@@ -133,6 +133,10 @@ type Handler struct {
 	// 250ms debounced write-behind persistence and SSE reconciliation; nil until
 	// EnableStateCoordinator is called.
 	stateCoord *statecoord.Coordinator[projectedConfigState]
+	// refreshWaker notifies named background refresh tasks when their schedule changes.
+	refreshWaker func(string)
+	// githubRateLimitURL overrides GitHub's /rate_limit endpoint in tests; empty uses api.github.com.
+	githubRateLimitURL string
 }
 
 // now is the handler's view of the clock.
@@ -180,6 +184,20 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 // SetOutboundTransport configures OMC-owned external downloads, not CPA or updater connections.
 func (h *Handler) SetOutboundTransport(transport http.RoundTripper) {
 	h.outboundTransport = transport
+}
+
+// SetRefreshWaker connects preference writes to the unified background refresh scheduler.
+func (h *Handler) SetRefreshWaker(waker func(string)) {
+	h.refreshWaker = waker
+}
+
+func (h *Handler) wakeRefresh(names ...string) {
+	if h == nil || h.refreshWaker == nil {
+		return
+	}
+	for _, name := range names {
+		h.refreshWaker(name)
+	}
 }
 
 func (h *Handler) Router() http.Handler {
@@ -313,6 +331,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Delete("/pricing/channels/{channel}", h.deletePricingChannel)
 				v1.Post("/pricing/price-unpriced", h.priceAllUnpricedUsage)
 				v1.Post("/pricing/sync", h.startPricingSync)
+				v1.Get("/pricing/sync-schedule", h.getPricingSyncSchedule)
 				v1.Put("/pricing/sync-schedule", h.updatePricingSyncSchedule)
 				v1.Get("/usage/events", h.listUsageEvents)
 				v1.Get("/usage/events/{id}", h.getUsageEvent)
@@ -342,6 +361,9 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/management/routing/models", h.getRoutingModels)
 				v1.Get("/management/outbound-proxy", h.getOutboundProxy)
 				v1.Put("/management/outbound-proxy", h.putOutboundProxy)
+				v1.Get("/management/github-token", h.getGitHubToken)
+				v1.Put("/management/github-token", h.putGitHubToken)
+				v1.Post("/management/github-token/test", h.testGitHubToken)
 				v1.Get("/management/config", h.managementConfigGet)
 				v1.Patch("/management/config", h.managementConfigPatch)
 				v1.Put("/management/config/source", h.managementConfigSourcePut)

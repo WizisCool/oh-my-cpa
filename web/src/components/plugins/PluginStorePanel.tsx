@@ -8,6 +8,7 @@ import { CloseOutlined, DownloadOutlined, GithubOutlined, LockOutlined, SettingO
 import { useI18n, useT } from '../../i18n';
 import { selectStorePluginMetadata } from '../../types/pluginStoreMetadata';
 import type { PluginStoreResponse, StorePluginItem } from '../../types/plugin';
+import { isGitHubTokenError } from '../../types/githubToken';
 import { useOmcPluginSource } from '../../hooks/useOmcPluginSource';
 import {
   filterStorePlugins,
@@ -56,6 +57,7 @@ interface PluginStorePanelProps {
   isRefreshing: boolean;
   onManage: (pluginId: string) => void;
   onOpenSettings: () => void;
+  onConfigureGitHubToken?: () => void;
 }
 
 /**
@@ -71,7 +73,7 @@ interface PluginStorePanelProps {
  * its own name, so the source of every card is the section it sits in. Installing a plugin
  * runs its code inside the gateway, so each card still says whose code it is.
  */
-export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefreshing, onManage, onOpenSettings }: PluginStorePanelProps) {
+export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefreshing, onManage, onOpenSettings, onConfigureGitHubToken }: PluginStorePanelProps) {
   const t = useT();
   const { lang } = useI18n();
   const isPhone = useIsPhoneViewport();
@@ -237,7 +239,7 @@ export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefres
       </Toolbar>
 
       {isOmcShown && (
-        <OmcShowcase section={omcSection} isDemo={isDemo} shouldHideEmpty={isNarrowed || sections.some((section) => section.kind === 'omc-community' && section.entries.length > 0)} onOpenSettings={onOpenSettings} extra={omcSection && showAll(omcSection)}>
+        <OmcShowcase section={omcSection} isDemo={isDemo} shouldHideEmpty={isNarrowed || sections.some((section) => section.kind === 'omc-community' && section.entries.length > 0)} onOpenSettings={onOpenSettings} onConfigureGitHubToken={onConfigureGitHubToken} extra={omcSection && showAll(omcSection)}>
           <FilterTransition itemKeys={omcSection ? storeSectionPreview(omcSection, isSourceChosen).map(storeCardKey) : []}>
             {omcSection && storeSectionPreview(omcSection, isSourceChosen).map((entry) => <StoreCard key={storeCardKey(entry)} isFeatured {...cardProps(entry)} />)}
           </FilterTransition>
@@ -257,7 +259,7 @@ export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefres
                 : <span className={styles['source-url']}>{section.url}</span>}
             extra={showAll(section)}
           />
-          {section.error && <SourceErrorNotice message={section.error} onOpenSettings={onOpenSettings} />}
+          {section.error && <SourceErrorNotice message={section.error} onOpenSettings={onOpenSettings} onConfigureGitHubToken={onConfigureGitHubToken} />}
           {section.entries.length > 0 && (
             <div className={styles['card-grid']}>
               <FilterTransition itemKeys={storeSectionPreview(section, isSourceChosen).map(storeCardKey)}>
@@ -278,6 +280,7 @@ export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefres
         isPluginSystemEnabled={store?.plugins_enabled ?? true}
         onClose={() => setInstalling(null)}
         onOpenSettings={onOpenSettings}
+        onConfigureGitHubToken={onConfigureGitHubToken}
       />
     </div>
   );
@@ -300,14 +303,27 @@ function FilterOption({ label, count, isOmc = false }: { label: string; count: n
 
 const storeCardKey = (entry: StorePluginItem) => entry.store_id || `${entry.source_id}/${entry.id}`;
 
-function SourceErrorNotice({ message, onOpenSettings }: { message: string; onOpenSettings: () => void }) {
+function SourceErrorNotice({
+  message,
+  onOpenSettings,
+  onConfigureGitHubToken,
+}: {
+  message: string;
+  onOpenSettings: () => void;
+  onConfigureGitHubToken?: () => void;
+}) {
   const t = useT();
+  const isTokenIssue = Boolean(onConfigureGitHubToken) && isGitHubTokenError(message);
   return (
     <Notice
       tone="warning"
       title={t('plugin.source_error_title')}
       description={message}
-      action={<Button size="sm" onClick={onOpenSettings}>{t('plugin.open_settings')}</Button>}
+      action={(
+        <Button size="sm" onClick={isTokenIssue ? onConfigureGitHubToken : onOpenSettings}>
+          {t(isTokenIssue ? 'plugin.configure_github_token' : 'plugin.open_settings')}
+        </Button>
+      )}
     />
   );
 }
@@ -318,6 +334,7 @@ interface OmcShowcaseProps {
   /** No "lists nothing" line: a search narrowed it, or the registry's curated half has entries. */
   shouldHideEmpty: boolean;
   onOpenSettings: () => void;
+  onConfigureGitHubToken?: () => void;
   /** A control for the whole section, beside the registry link. */
   extra?: React.ReactNode;
   children: React.ReactNode;
@@ -328,7 +345,7 @@ interface OmcShowcaseProps {
  * off the section stays, offering the switch itself: it is the source this console ships
  * with, and turning it back on should not take a trip to another page.
  */
-function OmcShowcase({ section, isDemo, shouldHideEmpty, onOpenSettings, extra, children }: OmcShowcaseProps) {
+function OmcShowcase({ section, isDemo, shouldHideEmpty, onOpenSettings, onConfigureGitHubToken, extra, children }: OmcShowcaseProps) {
   const t = useT();
   const toast = useToast();
   const source = useOmcPluginSource();
@@ -374,7 +391,7 @@ function OmcShowcase({ section, isDemo, shouldHideEmpty, onOpenSettings, extra, 
         </EmptyState>
       ) : (
         <>
-          {section?.error && <SourceErrorNotice message={section.error} onOpenSettings={onOpenSettings} />}
+          {section?.error && <SourceErrorNotice message={section.error} onOpenSettings={onOpenSettings} onConfigureGitHubToken={onConfigureGitHubToken} />}
           {(section?.entries.length ?? 0) > 0
             ? <div className={styles['showcase-grid']}>{children}</div>
             : !section?.error && !shouldHideEmpty && <EmptyState size="compact" title={t('plugin.omc_section_empty')} />}

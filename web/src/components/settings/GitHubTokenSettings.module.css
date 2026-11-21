@@ -1,0 +1,40 @@
+.status-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.input-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.token-input {
+  width: min(300px, 100%);
+  min-width: 0;
+}
+
+.masked-token {
+  color: var(--fg-2);
+  font-size: var(--text-xs);
+  word-break: break-all;
+}
+
+@media (max-width: 640px) {
+  .status-control {
+    justify-content: flex-start;
+  }
+
+  .input-control {
+    width: 100%;
+  }
+
+  .token-input {
+    flex: 1 1 auto;
+    width: auto;
+  }
+}

@@ -335,11 +335,37 @@ type PricingSyncStartResponseDTO struct {
 	Started bool `json:"started"`
 }
 
-// PricingSyncScheduleResponseDTO returns the updated auto-sync interval and sync state.
+// PricingSyncStateDTO is the allowlisted API projection for pricing sync schedule endpoints.
+// Raw upstream errors stay out of this projection; callers observe only the boolean failure signal.
+type PricingSyncStateDTO struct {
+	Source                string `json:"source"`
+	LastSuccessAtMS       *int64 `json:"last_success_at_ms,omitempty"`
+	HasFailed             bool   `json:"has_failed,omitempty"`
+	LastMatched           int64  `json:"last_matched"`
+	LastUnmatched         int64  `json:"last_unmatched"`
+	NextSyncAtMS          *int64 `json:"next_sync_at_ms,omitempty"`
+	AutoSyncIntervalHours int64  `json:"auto_sync_interval_hours"`
+	UpdatedAtMS           int64  `json:"updated_at_ms"`
+}
+
+func projectPricingSyncState(state pricing.SyncState) PricingSyncStateDTO {
+	return PricingSyncStateDTO{
+		Source:                state.Source,
+		LastSuccessAtMS:       state.LastSuccessAtMS,
+		HasFailed:             strings.TrimSpace(state.LastError) != "",
+		LastMatched:           state.LastMatched,
+		LastUnmatched:         state.LastUnmatched,
+		NextSyncAtMS:          state.NextSyncAtMS,
+		AutoSyncIntervalHours: state.AutoSyncIntervalHours,
+		UpdatedAtMS:           state.UpdatedAtMS,
+	}
+}
+
+// PricingSyncScheduleResponseDTO returns the auto-sync interval and allowlisted sync state.
 type PricingSyncScheduleResponseDTO struct {
-	IntervalHours int64             `json:"interval_hours"`
-	Known         bool              `json:"known"`
-	State         pricing.SyncState `json:"state"`
+	IntervalHours int64               `json:"interval_hours"`
+	Known         bool                `json:"known"`
+	State         PricingSyncStateDTO `json:"state"`
 }
 
 // listPricing returns the price book in one round trip: every priced model with
@@ -1085,6 +1111,34 @@ type pricingScheduleRequest struct {
 	IntervalHours *int64 `json:"interval_hours"`
 }
 
+// getPricingSyncSchedule returns the current automatic pricing sync cadence and sync state.
+//
+// @Summary Get pricing auto-sync schedule
+// @Description Return the configured automatic OpenRouter pricing refresh interval in hours and sync state.
+// @Tags Pricing
+// @Produce json
+// @Security CookieAuth
+// @Success 200 {object} PricingSyncScheduleResponseDTO
+// @Failure 401 {object} ErrorResponseDTO
+// @Failure 503 {object} ErrorResponseDTO
+// @Router /v1/pricing/sync-schedule [get]
+func (h *Handler) getPricingSyncSchedule(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	if !h.requirePricing(writer) {
+		return
+	}
+	state, known, err := h.pricing.SyncStateView(request.Context())
+	if err != nil {
+		writeInternalError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, PricingSyncScheduleResponseDTO{
+		IntervalHours: state.AutoSyncIntervalHours,
+		Known:         known,
+		State:         projectPricingSyncState(state),
+	})
+}
+
 // updatePricingSyncSchedule modifies the background sync interval (0 = disabled).
 //
 // @Summary Update pricing auto-sync schedule
@@ -1130,6 +1184,6 @@ func (h *Handler) updatePricingSyncSchedule(writer http.ResponseWriter, request 
 	writeJSON(writer, http.StatusOK, PricingSyncScheduleResponseDTO{
 		IntervalHours: hours,
 		Known:         known,
-		State:         state,
+		State:         projectPricingSyncState(state),
 	})
 }

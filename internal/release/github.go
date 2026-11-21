@@ -276,10 +276,10 @@ func (c *Client) fetchPage(ctx context.Context, repository, etag string, page in
 	case response.StatusCode == http.StatusNotFound:
 		return Feed{}, fmt.Errorf("release feed has no repository %q", repository)
 	case response.StatusCode == http.StatusUnauthorized && request.Header.Get("Authorization") != "":
-		// The token belongs to the gateway's configuration, so the operator has to be told which
-		// one to look at: without this, a revoked token reads as a plain upstream failure and the
-		// deployment silently stops noticing releases.
-		return Feed{}, errors.New("release feed rejected the configured GitHub token: check server.github-token on the configuration panel")
+		// The token lives at server.github-token and is managed from OMC Settings (or the
+		// configuration panel / config.yaml). Tell the operator clearly so a revoked token
+		// does not read as an unexplained upstream failure.
+		return Feed{}, errors.New("release feed rejected the configured GitHub token: check GitHub Token in OMC Settings (server.github-token)")
 	case response.StatusCode < 200 || response.StatusCode >= 300:
 		return Feed{}, fmt.Errorf("release feed answered status %d", response.StatusCode)
 	}

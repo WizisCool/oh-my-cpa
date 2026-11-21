@@ -125,8 +125,9 @@ export const PricingPage: React.FC = () => {
 
   const scheduleMutation = useMutation({
     mutationFn: (intervalHours: number) => api.updatePricingSyncSchedule(intervalHours),
-    onSuccess: () => {
+    onSuccess: (saved) => {
       toast.success(t('pricing.sync.schedule_updated'));
+      queryClient.setQueryData(PRICING_QUERY_KEYS.syncSchedule, saved);
       invalidate();
     },
     onError: (err) => toast.error(describeError(err)),
@@ -279,13 +280,19 @@ export const PricingPage: React.FC = () => {
           value={data?.sync.state.auto_sync_interval_hours ?? 24}
           onChange={(value) => scheduleMutation.mutate(value)}
           loading={scheduleMutation.isPending}
-          options={[
-            { label: t('pricing.sync.off'), value: 0 },
-            { label: t('pricing.sync.every_1h'), value: 1 },
-            { label: t('pricing.sync.every_6h'), value: 6 },
-            { label: t('pricing.sync.every_12h'), value: 12 },
-            { label: t('pricing.sync.every_24h'), value: 24 },
-          ]}
+          options={(() => {
+            const current = data?.sync.state.auto_sync_interval_hours ?? 24;
+            const presets = [0, 1, 6, 12, 24, 72, 168];
+            const values = presets.includes(current) ? presets : [...presets, current].sort((a, b) => a - b);
+            return values.map((hours) => ({
+              value: hours,
+              label: hours === 0
+                ? t('omc.auto_refresh_off')
+                : hours >= 48 && hours % 24 === 0
+                  ? t('omc.auto_refresh_days', { n: hours / 24 })
+                  : t('omc.auto_refresh_hours', { n: hours }),
+            }));
+          })()}
         />
       </label>
       <Button

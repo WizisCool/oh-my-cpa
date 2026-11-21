@@ -119,6 +119,23 @@ export interface PricingSyncState {
   next_sync_at_ms?: number | null;
 }
 
+export interface PricingSyncScheduleState {
+  source: string;
+  has_failed?: boolean;
+  last_matched: number;
+  last_unmatched: number;
+  last_success_at_ms?: number | null;
+  updated_at_ms: number;
+  auto_sync_interval_hours: number;
+  next_sync_at_ms?: number | null;
+}
+
+export interface PricingSyncScheduleResponse {
+  interval_hours: number;
+  known: boolean;
+  state: PricingSyncScheduleState;
+}
+
 export interface PricingProvider {
   endpoint_host?: string;
   id: string;

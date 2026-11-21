@@ -83,7 +83,7 @@ func (c *Client) FetchStargazers(ctx context.Context, repository string) (int64,
 	if response.StatusCode == http.StatusUnauthorized && request.Header.Get("Authorization") != "" {
 		// Same rule as the release feed: name the configuration field, because a revoked token
 		// would otherwise read as an ordinary upstream failure.
-		return 0, errors.New("star count read rejected the configured GitHub token: check server.github-token on the configuration panel")
+		return 0, errors.New("star count read rejected the configured GitHub token: check GitHub Token in OMC Settings (server.github-token)")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return 0, fmt.Errorf("repository read answered status %d", response.StatusCode)

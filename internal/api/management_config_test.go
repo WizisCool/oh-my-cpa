@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pluginregistry"
+	"gopkg.in/yaml.v3"
 )
 
 // configFixtureCPA is a v8 gateway's configuration endpoints: a JSON and a YAML
@@ -30,6 +32,9 @@ type configFixtureCPA struct {
 	keepProxyOnRemove bool
 	// rejectMessage replaces CPA's explanation when writes are refused.
 	rejectMessage string
+	// failYAMLAfterWrite simulates a transient gateway failure on the readback ConfigYAML after a write lands.
+	failYAMLAfterWrite bool
+	hasWritten         bool
 }
 
 // configFixtureManagedPlugins is the plugins section in the managed steady state: the
@@ -88,6 +93,10 @@ func (f *configFixtureCPA) serve(writer http.ResponseWriter, request *http.Reque
 			}
 			_ = json.NewEncoder(writer).Encode(f.configData)
 		case "/config.yaml":
+			if f.failYAMLAfterWrite && f.hasWritten {
+				writer.WriteHeader(http.StatusBadGateway)
+				return
+			}
 			writer.Header().Set("Content-Type", "application/yaml")
 			_, _ = writer.Write([]byte(f.yamlData))
 		default:
@@ -116,14 +125,28 @@ func (f *configFixtureCPA) serve(writer http.ResponseWriter, request *http.Reque
 	case request.Method == http.MethodPatch && path == "/config":
 		var patch map[string]any
 		if json.Unmarshal(body, &patch) == nil {
+			if f.configData == nil {
+				f.configData = map[string]any{}
+			}
 			if requests, ok := patch["requests"]; ok && !f.ignoreProxyWrites {
-				if f.configData == nil {
-					f.configData = map[string]any{}
-				}
 				f.configData["requests"] = requests
+			}
+			if server, ok := patch["server"].(map[string]any); ok {
+				existing, _ := f.configData["server"].(map[string]any)
+				if existing == nil {
+					existing = map[string]any{}
+				}
+				for key, value := range server {
+					existing[key] = value
+				}
+				f.configData["server"] = existing
+				if token, ok := server["github-token"].(string); ok {
+					f.setYAMLServerGitHubToken(token, false)
+				}
 			}
 		}
 		f.yamlData += "# written\n"
+		f.hasWritten = true
 	case request.Method == http.MethodDelete && path == "/config/requests/proxy-url":
 		if !f.keepProxyOnRemove {
 			if requests, ok := f.configData["requests"].(map[string]any); ok {
@@ -131,11 +154,43 @@ func (f *configFixtureCPA) serve(writer http.ResponseWriter, request *http.Reque
 			}
 		}
 		f.yamlData += "# written\n"
+		f.hasWritten = true
+	case request.Method == http.MethodDelete && path == "/config/server/github-token":
+		if server, ok := f.configData["server"].(map[string]any); ok {
+			delete(server, "github-token")
+		}
+		f.setYAMLServerGitHubToken("", true)
+		f.yamlData += "# written\n"
+		f.hasWritten = true
 	default:
 		f.yamlData += "# written\n"
+		f.hasWritten = true
 	}
 	writer.Header().Set("Content-Type", "application/json")
 	_, _ = writer.Write([]byte(`{"status":"ok","config-version":8}`))
+}
+
+func (f *configFixtureCPA) setYAMLServerGitHubToken(token string, remove bool) {
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(f.yamlData), &doc); err != nil || doc == nil {
+		return
+	}
+	server, _ := doc["server"].(map[string]any)
+	if server == nil {
+		if remove {
+			return
+		}
+		server = map[string]any{}
+		doc["server"] = server
+	}
+	if remove {
+		delete(server, "github-token")
+	} else {
+		server["github-token"] = token
+	}
+	if encoded, err := yaml.Marshal(doc); err == nil {
+		f.yamlData = string(encoded)
+	}
 }
 
 func (f *configFixtureCPA) recordedWrites() ([]string, []string) {
@@ -956,5 +1011,203 @@ func TestManagementConfigPatchModelsCatalogRefreshesProvenance(t *testing.T) {
 	}
 	if !strings.Contains(configRes.SafeYAML, catalogURL) || !strings.Contains(configRes.SafeYAML, codexPath) {
 		t.Fatalf("safe_yaml altered model catalog sources:\n%s", configRes.SafeYAML)
+	}
+}
+
+func TestGitHubTokenManageAndAudit(t *testing.T) {
+	fixture := &configFixtureCPA{}
+	var handler *Handler
+	client, baseURL, repo := startDashboardTestServer(t, fixture.serve, func(h *Handler) { handler = h })
+	endpoint := baseURL + "/omc/api/v1/management/github-token"
+
+	// Initial state: not configured.
+	resp, payload := getJSON(t, client, endpoint)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET github-token = %d %s", resp.StatusCode, payload)
+	}
+	var initial GitHubTokenStatusDTO
+	if err := json.Unmarshal(payload, &initial); err != nil {
+		t.Fatal(err)
+	}
+	if initial.Configured || initial.MaskedToken != "" || initial.CPARevision == "" {
+		t.Fatalf("initial status = %+v", initial)
+	}
+
+	// Reject whitespace in token.
+	badResp, _ := doJSON(t, client, http.MethodPut, endpoint, mustJSON(map[string]any{
+		"token": "ghp_bad token", "cpa_revision": initial.CPARevision,
+	}))
+	if badResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("whitespace token status = %d, want 400", badResp.StatusCode)
+	}
+
+	// Save a valid token: writes server.github-token, never returns raw token, invalidates releaseToken cache.
+	secret := "ghp_fixturetokenvalue1234567890abcd"
+	// Prime cache with empty answer before save.
+	if got := handler.ReleaseToken(t.Context()); got != "" {
+		t.Fatalf("initial cached token = %q, want empty", got)
+	}
+	saveResp, savePayload := doJSON(t, client, http.MethodPut, endpoint, mustJSON(map[string]any{
+		"token": secret, "cpa_revision": initial.CPARevision,
+	}))
+	if saveResp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT github-token = %d %s", saveResp.StatusCode, savePayload)
+	}
+	if strings.Contains(string(savePayload), secret) {
+		t.Fatalf("PUT github-token leaked raw secret: %s", savePayload)
+	}
+	var saved GitHubTokenStatusDTO
+	if err := json.Unmarshal(savePayload, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if !saved.Configured || saved.MaskedToken == "" || saved.CPARevision == "" || saved.CPARevision == initial.CPARevision {
+		t.Fatalf("saved status = %+v", saved)
+	}
+	// Cache must have been invalidated immediately without waiting for TTL.
+	if got := handler.ReleaseToken(t.Context()); got != secret {
+		t.Fatalf("ReleaseToken after save = %q, want saved token", got)
+	}
+
+	// Stale revision must be refused with 409 config_conflict.
+	conflictResp, conflictPayload := doJSON(t, client, http.MethodPut, endpoint, mustJSON(map[string]any{
+		"token": "ghp_other_token_1234567890", "cpa_revision": initial.CPARevision,
+	}))
+	if conflictResp.StatusCode != http.StatusConflict || !strings.Contains(string(conflictPayload), "config_conflict") {
+		t.Fatalf("stale revision = %d %s", conflictResp.StatusCode, conflictPayload)
+	}
+
+	// Clear token with empty string.
+	clearResp, clearPayload := doJSON(t, client, http.MethodPut, endpoint, mustJSON(map[string]any{
+		"token": "", "cpa_revision": saved.CPARevision,
+	}))
+	if clearResp.StatusCode != http.StatusOK {
+		t.Fatalf("clear github-token = %d %s", clearResp.StatusCode, clearPayload)
+	}
+	var cleared GitHubTokenStatusDTO
+	if err := json.Unmarshal(clearPayload, &cleared); err != nil {
+		t.Fatal(err)
+	}
+	if cleared.Configured || cleared.MaskedToken != "" {
+		t.Fatalf("cleared status = %+v", cleared)
+	}
+	if got := handler.ReleaseToken(t.Context()); got != "" {
+		t.Fatalf("ReleaseToken after clear = %q, want empty", got)
+	}
+
+	// Audit trail recorded save and clear without leaking secret material.
+	var auditCount int
+	if err := repo.SQL().QueryRow(`SELECT COUNT(*) FROM audit_events WHERE action IN ('github_token.save','github_token.clear') AND result='success'`).Scan(&auditCount); err != nil || auditCount != 2 {
+		t.Fatalf("audit count = %d, err = %v", auditCount, err)
+	}
+	var leaked int
+	if err := repo.SQL().QueryRow(`SELECT COUNT(*) FROM audit_events WHERE details_json LIKE ?`, "%"+secret+"%").Scan(&leaked); err != nil || leaked != 0 {
+		t.Fatalf("secret leaked into audit_events: %d %v", leaked, err)
+	}
+}
+
+func TestGitHubTokenTestProbe(t *testing.T) {
+	githubStub := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/rate_limit" {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		switch request.Header.Get("Authorization") {
+		case "":
+			_, _ = writer.Write([]byte(`{"resources":{"core":{"limit":60,"remaining":58,"used":2,"reset":1700003600}}}`))
+		case "Bearer ghp_saved_token_1234567890":
+			_, _ = writer.Write([]byte(`{"resources":{"core":{"limit":5000,"remaining":4995,"used":5,"reset":1700003600}}}`))
+		case "Bearer ghp_draft_token_1234567890":
+			_, _ = writer.Write([]byte(`{"resources":{"core":{"limit":5000,"remaining":4800,"used":200,"reset":1700003600}}}`))
+		default:
+			writer.WriteHeader(http.StatusUnauthorized)
+		}
+	}))
+	defer githubStub.Close()
+
+	fixture := &configFixtureCPA{}
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve, func(h *Handler) {
+		h.githubRateLimitURL = githubStub.URL
+	})
+	testURL := baseURL + "/omc/api/v1/management/github-token/test"
+
+	// Unconfigured -> anonymous quota.
+	resp, payload := doJSON(t, client, http.MethodPost, testURL, `{}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("anonymous test = %d %s", resp.StatusCode, payload)
+	}
+	var anon GitHubTokenTestResponseDTO
+	if err := json.Unmarshal(payload, &anon); err != nil || anon.Status != "anonymous" || anon.Authenticated || anon.Limit != 60 || anon.Remaining != 58 {
+		t.Fatalf("anonymous probe = %+v %v", anon, err)
+	}
+
+	// Candidate draft token tested before saving.
+	resp, payload = doJSON(t, client, http.MethodPost, testURL, `{"token":"ghp_draft_token_1234567890"}`)
+	if resp.StatusCode != http.StatusOK || strings.Contains(string(payload), "ghp_draft_token_1234567890") {
+		t.Fatalf("draft test = %d %s", resp.StatusCode, payload)
+	}
+	var draft GitHubTokenTestResponseDTO
+	if err := json.Unmarshal(payload, &draft); err != nil || draft.Status != "valid" || !draft.Authenticated || draft.Remaining != 4800 {
+		t.Fatalf("draft probe = %+v %v", draft, err)
+	}
+
+	// Invalid candidate returns HTTP 200 with status=invalid (never session 401).
+	resp, payload = doJSON(t, client, http.MethodPost, testURL, `{"token":"ghp_revoked"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("invalid token test = %d %s", resp.StatusCode, payload)
+	}
+	var invalid GitHubTokenTestResponseDTO
+	if err := json.Unmarshal(payload, &invalid); err != nil || invalid.Status != "invalid" || invalid.Authenticated {
+		t.Fatalf("invalid probe = %+v %v", invalid, err)
+	}
+
+	// Save token and verify empty-body test uses CPA's configured token.
+	_, initPayload := getJSON(t, client, baseURL+"/omc/api/v1/management/github-token")
+	var initStatus GitHubTokenStatusDTO
+	_ = json.Unmarshal(initPayload, &initStatus)
+	saveResp, _ := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/github-token", mustJSON(map[string]any{
+		"token": "ghp_saved_token_1234567890", "cpa_revision": initStatus.CPARevision,
+	}))
+	if saveResp.StatusCode != http.StatusOK {
+		t.Fatalf("save token = %d", saveResp.StatusCode)
+	}
+	resp, payload = doJSON(t, client, http.MethodPost, testURL, `{}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("configured probe status = %d %s", resp.StatusCode, payload)
+	}
+	var configured GitHubTokenTestResponseDTO
+	if err := json.Unmarshal(payload, &configured); err != nil || configured.Status != "valid" || configured.Remaining != 4995 {
+		t.Fatalf("configured probe = %+v %v", configured, err)
+	}
+}
+
+func TestGitHubTokenReadbackFailureReportsUnconfirmedAndWakesExchangeRateRefresh(t *testing.T) {
+	fixture := &configFixtureCPA{failYAMLAfterWrite: true}
+	var woken []string
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve, func(h *Handler) {
+		h.SetRefreshWaker(func(name string) {
+			woken = append(woken, name)
+		})
+	})
+
+	_, initPayload := getJSON(t, client, baseURL+"/omc/api/v1/management/github-token")
+	var initial GitHubTokenStatusDTO
+	if err := json.Unmarshal(initPayload, &initial); err != nil {
+		t.Fatal(err)
+	}
+	resp, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/github-token", mustJSON(map[string]any{
+		"token": "ghp_readback_fail_fixture_1234", "cpa_revision": initial.CPARevision,
+	}))
+	if resp.StatusCode != http.StatusBadGateway || !strings.Contains(string(payload), "github_token_cpa_unconfirmed") {
+		t.Fatalf("readback failure = %d %s, want 502 github_token_cpa_unconfirmed", resp.StatusCode, payload)
+	}
+
+	// Changing omc_exchange_rate_refresh must immediately wake the exchange_rates worker.
+	prefResp, prefPayload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/preferences/omc_exchange_rate_refresh", `{"interval_hours":6}`)
+	if prefResp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT omc_exchange_rate_refresh = %d %s", prefResp.StatusCode, prefPayload)
+	}
+	if len(woken) != 1 || woken[0] != "exchange_rates" {
+		t.Fatalf("woken tasks = %v, want [exchange_rates]", woken)
 	}
 }

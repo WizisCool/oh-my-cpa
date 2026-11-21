@@ -20,6 +20,7 @@ interface PluginInstallModalProps {
   isPluginSystemEnabled: boolean;
   onClose: () => void;
   onOpenSettings: () => void;
+  onConfigureGitHubToken?: () => void;
 }
 
 /**
@@ -28,7 +29,7 @@ interface PluginInstallModalProps {
  * the plugin id to be typed: running someone else's code in the gateway should take more
  * than one click.
  */
-export function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSettings }: PluginInstallModalProps) {
+export function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSettings, onConfigureGitHubToken }: PluginInstallModalProps) {
   const t = useT();
   const { lang } = useI18n();
   const toast = useToast();
@@ -77,7 +78,11 @@ export function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOp
         return;
       }
       if (code === 'plugin_store_rate_limited') {
-        toast.error(t('plugin.rate_limited'));
+        toast.error(t('plugin.rate_limited'), {
+          actions: onConfigureGitHubToken
+            ? <Button size="sm" onClick={() => { onClose(); onConfigureGitHubToken(); }}>{t('plugin.configure_github_token')}</Button>
+            : undefined,
+        });
         return;
       }
       toast.error(t('plugin.install_failed', { msg: describeError(err) }));

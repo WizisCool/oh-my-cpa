@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/exchangerate"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/outbound"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/refresh"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/release"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/timezone"
@@ -55,6 +55,9 @@ type App struct {
 	// release observes both products' published versions. It is nil in demo mode,
 	// where nothing may leave the process at all.
 	release *release.Service
+	// refreshScheduler owns all periodic background refresh loops (release updates,
+	// plugin updates, quota auto-refresh, pricing sync, exchange rates, provenance).
+	refreshScheduler *refresh.Scheduler
 	// maintenance owns its own database connection, so it is closed with the app.
 	maintenance     *repository.MaintenanceService
 	databaseBackups *backup.Manager
@@ -221,6 +224,13 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 	pricingService.SetModelLister(&cpaModelLister{repo: repo, cipher: cipher, cfg: cfg})
 	handler.SetPricing(pricingService)
 	exchangeRateService := exchangerate.NewService(repo, exchangerate.NewFrankfurterClientWithTransport(outboundTransport), logger)
+	exchangeRateService.SetIntervalPolicy(func(ctx context.Context) time.Duration {
+		raw, isStored, err := repo.GetPreference(ctx, repository.PreferenceExchangeRateRefresh)
+		if err != nil {
+			return exchangerate.RefreshInterval
+		}
+		return exchangerate.ResolveRefreshSettings(raw, isStored).Interval()
+	})
 	if !cfg.IsDemoMode {
 		handler.SetExchangeRates(exchangeRateService)
 	}
@@ -344,6 +354,41 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 		databaseBackups.StartAutomation()
 	}
 
+	var refreshScheduler *refresh.Scheduler
+	if !cfg.IsDemoMode {
+		refreshScheduler = refresh.New(logger)
+		refreshScheduler.Add(refresh.Task{Name: "pricing_sync", Run: pricingService.Run})
+		refreshScheduler.Add(refresh.Task{Name: "exchange_rates", Run: exchangeRateService.Run, Wake: exchangeRateService.Wake})
+		refreshScheduler.Add(refresh.Task{Name: "model_provenance", Run: handler.RunModelSquareProvenance})
+		refreshScheduler.Add(refresh.Task{Name: "quota_auto_refresh", Run: handler.RunQuotaAutoRefresh})
+		if releaseService != nil && cfg.Release.Enabled {
+			updatePolicy := func(ctx context.Context) release.UpdateCheckSettings {
+				raw, isStored, err := repo.GetPreference(ctx, repository.PreferenceUpdateCheck)
+				if err != nil {
+					return release.DefaultUpdateCheckSettings()
+				}
+				return release.ResolveUpdateCheckSettings(raw, isStored)
+			}
+			// Release checks wait for their first scheduled interval so restarts do not spend GitHub budget.
+			refreshScheduler.AddPeriodic(refresh.PeriodicConfig{
+				Name:       "release_updates",
+				Tick:       release.SweepTick,
+				RunOnStart: false,
+				Interval:   func(ctx context.Context) time.Duration { return updatePolicy(ctx).ReleaseInterval() },
+				Run:        releaseService.CheckAll,
+			})
+			// Plugin store updates use CPA's cached read at startup when enabled, and run independently of release checks.
+			refreshScheduler.AddPeriodic(refresh.PeriodicConfig{
+				Name:       "plugin_updates",
+				Tick:       release.SweepTick,
+				RunOnStart: true,
+				Interval:   func(ctx context.Context) time.Duration { return updatePolicy(ctx).PluginInterval() },
+				Run:        handler.CheckPluginUpdates,
+			})
+		}
+		handler.SetRefreshWaker(refreshScheduler.Wake)
+	}
+
 	return &App{
 		cfg:     cfg,
 		db:      db,
@@ -355,11 +400,12 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 		pipeline:         pipeline,
 		usageMaintenance: usageMaintenance,
 
-		pricing:         pricingService,
-		exchangeRates:   exchangeRateService,
-		release:         releaseService,
-		maintenance:     maintenanceService,
-		databaseBackups: databaseBackups,
+		pricing:          pricingService,
+		exchangeRates:    exchangeRateService,
+		release:          releaseService,
+		refreshScheduler: refreshScheduler,
+		maintenance:      maintenanceService,
+		databaseBackups:  databaseBackups,
 	}, nil
 }
 
@@ -559,68 +605,20 @@ func (a *App) Run(ctx context.Context) error {
 		}()
 	}
 
-	// Public reference data shares lifecycle ownership, not business scheduling:
-	// pricing also reconciles CPA changes, while FX uses its persisted daily clock.
-	// Independent workers keep a slow source from blocking the other source.
-	dataRefreshDone := make(chan struct{})
-	if a.cfg.IsDemoMode {
-		close(dataRefreshDone)
+	// All periodic background refresh loops (pricing sync, exchange rates, model
+	// provenance, quota auto-refresh, release updates, plugin updates) share one
+	// scheduler so lifecycle, wake-on-policy-change, and graceful shutdown stay uniform.
+	// Demo mode runs none of these loops.
+	refreshDone := make(chan struct{})
+	if a.refreshScheduler == nil || a.cfg.IsDemoMode {
+		close(refreshDone)
 	} else {
 		go func() {
-			defer close(dataRefreshDone)
-			var workers sync.WaitGroup
-			for _, job := range []struct {
-				name string
-				run  func(context.Context) error
-			}{
-				{"pricing", a.pricing.Run}, {"exchange_rates", a.exchangeRates.Run},
-				{"model_provenance", a.handler.RunModelSquareProvenance},
-			} {
-				workers.Add(1)
-				go func() {
-					defer workers.Done()
-					if err := job.run(runCtx); err != nil {
-						a.logger.Warn("reference data loop stopped", "source", job.name, "error", err)
-					}
-				}()
-			}
-			workers.Wait()
+			defer close(refreshDone)
+			a.refreshScheduler.Run(runCtx)
 		}()
 	}
 
-	// Release and plugin updates share one best-effort sweep: a
-	// version that was not checked is stale information, not a broken deployment.
-	// OMCPA_UPDATE_CHECK_ENABLED=false switches it off while leaving the page's own
-	// check and the manual button working, because those are an operator asking a
-	// question rather than the process deciding to reach the internet.
-	// Never in a demo, and that is not implied by the service being nil-safe: the demo
-	// builds a fixture-backed service so the page renders, and a sweep over that service
-	// would still be a loop this process started on its own. The demonstration starts
-	// exactly one loop, the HTTP server.
-	if a.release != nil && a.cfg.Release.Enabled && !a.cfg.IsDemoMode {
-		go func() {
-			// The schedule is the deployment's stored preference, read on every tick so a
-			// change in OMC Settings applies to the running process. An unreadable store keeps
-			// the documented hourly default rather than stopping the loop.
-			interval := func() time.Duration {
-				raw, isStored, err := a.repo.GetPreference(runCtx, repository.PreferenceUpdateCheck)
-				if err != nil {
-					return release.SweepInterval
-				}
-				return release.ResolveUpdateCheckSettings(raw, isStored).Interval()
-			}
-			a.logger.Info("release check sweep started", "interval", interval().String())
-			if err := a.release.Run(runCtx, interval, a.handler.CheckPluginUpdates); err != nil {
-				a.logger.Warn("release check sweep stopped", "error", err)
-			}
-		}()
-	}
-
-	// Automatic quota refresh is best effort too: a round that cannot reach CPA leaves the
-	// stored readings as they were. It reads providers through the gateway with each
-	// credential, so a demo, whose gateway is the fixture, never starts it.
-	// It is joined before Run returns, like the pipeline, because a round in flight writes
-	// observations to the database the caller closes next.
 	warmupDone := make(chan struct{})
 	if a.cfg.IsDemoMode {
 		close(warmupDone)
@@ -633,17 +631,6 @@ func (a *App) Run(ctx context.Context) error {
 		}()
 	}
 	defer func() { stop(); <-warmupDone }()
-	quotaRefreshDone := make(chan struct{})
-	if a.cfg.IsDemoMode {
-		close(quotaRefreshDone)
-	} else {
-		go func() {
-			defer close(quotaRefreshDone)
-			if err := a.handler.RunQuotaAutoRefresh(runCtx); err != nil && !errors.Is(err, context.Canceled) {
-				a.logger.Warn("automatic quota refresh loop stopped", "error", err)
-			}
-		}()
-	}
 
 	var runErr error
 	hasPipelineReturned := a.pipeline == nil
@@ -673,18 +660,13 @@ func (a *App) Run(ctx context.Context) error {
 	// Event streams never go idle, so they are ended before Shutdown waits on connections.
 	a.handler.CloseUpdateStreams()
 	a.handler.CloseStateCoordinator(shutdownContext)
-	select {
-	case <-dataRefreshDone:
-	case <-shutdownContext.Done():
-		a.logger.Warn("reference data refresh did not stop before the shutdown deadline")
-	}
 	if err := a.httpServer.Shutdown(shutdownContext); err != nil && runErr == nil {
 		runErr = fmt.Errorf("shutdown HTTP server: %w", err)
 	}
 	select {
-	case <-quotaRefreshDone:
+	case <-refreshDone:
 	case <-shutdownContext.Done():
-		a.logger.Warn("automatic quota refresh did not stop before the shutdown deadline")
+		a.logger.Warn("background refresh scheduler did not stop before the shutdown deadline")
 	}
 	// Maintenance writes in bounded batches, so it is joined like the pipeline: a
 	// batch still in flight must not find the database closed underneath it.
