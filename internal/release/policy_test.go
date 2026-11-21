@@ -15,10 +15,14 @@ import (
 func TestUpdateCheckSettingsAreStrictOnWriteAndLenientOnRead(t *testing.T) {
 	for _, raw := range []string{
 		`{}`,
+		`null`,
 		`{"interval_minutes":14}`,
 		`{"interval_minutes":1441}`,
 		`{"interval_minutes":60,"plugin_interval_minutes":5}`,
 		`{"interval_minutes":60,"plugin_interval_minutes":1441}`,
+		`{"interval_minutes":0,"plugin_interval_minutes":null}`,
+		`{"INTERVAL_MINUTES":0}`,
+		`{"interval_minutes":60,"PLUGIN_INTERVAL_MINUTES":120}`,
 		`{"interval_minutes":60,"refresh_on_reset":true}`,
 		`{"interval_minutes":"60"}`,
 		`{"interval_minutes":null}`,
@@ -75,6 +79,10 @@ func TestUpdateCheckSettingsAreStrictOnWriteAndLenientOnRead(t *testing.T) {
 	// Disabled (0) stored for either check stays disabled on read.
 	if got := ResolveUpdateCheckSettings(`{"interval_minutes":0,"plugin_interval_minutes":30}`, true); got.IntervalMinutes != 0 || got.PluginIntervalMinutes != 30 {
 		t.Fatalf("split stored intervals = %+v, want (0, 30)", got)
+	}
+	// A pre-existing document with null plugin_interval_minutes keeps the valid release interval and defaults plugins.
+	if got := ResolveUpdateCheckSettings(`{"interval_minutes":360,"plugin_interval_minutes":null}`, true); got.IntervalMinutes != 360 || got.PluginIntervalMinutes != DefaultUpdateCheckIntervalMinutes {
+		t.Fatalf("null plugin interval = %+v, want (360, %d)", got, DefaultUpdateCheckIntervalMinutes)
 	}
 }
 

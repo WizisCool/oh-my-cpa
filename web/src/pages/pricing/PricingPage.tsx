@@ -125,9 +125,10 @@ export const PricingPage: React.FC = () => {
 
   const scheduleMutation = useMutation({
     mutationFn: (intervalHours: number) => api.updatePricingSyncSchedule(intervalHours),
-    onSuccess: (saved) => {
-      toast.success(t('pricing.sync.schedule_updated'));
+    onSuccess: async (saved) => {
+      await queryClient.cancelQueries({ queryKey: PRICING_QUERY_KEYS.syncSchedule });
       queryClient.setQueryData(PRICING_QUERY_KEYS.syncSchedule, saved);
+      toast.success(t('pricing.sync.schedule_updated'));
       invalidate();
     },
     onError: (err) => toast.error(describeError(err)),

@@ -58,6 +58,7 @@ interface InstalledPluginsPanelProps {
   onConfigure: (plugin: PluginItem) => void;
   onBrowseStore: () => void;
   onOpenSettings: () => void;
+  onConfigureGitHubToken?: () => void;
   /** Requests fresh store data; the page owns the shared request and its feedback. */
   onCheckUpdates: () => Promise<void>;
   isCheckingUpdates: boolean;
@@ -80,6 +81,7 @@ export function InstalledPluginsPanel({
   onConfigure,
   onBrowseStore,
   onOpenSettings,
+  onConfigureGitHubToken,
   onCheckUpdates,
   isCheckingUpdates,
 }: InstalledPluginsPanelProps) {
@@ -417,6 +419,7 @@ export function InstalledPluginsPanel({
         isPluginSystemEnabled={isPluginSystemEnabled}
         onClose={() => setUpdating(null)}
         onOpenSettings={onOpenSettings}
+        onConfigureGitHubToken={onConfigureGitHubToken}
       />
     </div>
   );

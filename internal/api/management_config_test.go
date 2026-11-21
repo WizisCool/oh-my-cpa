@@ -1119,6 +1119,8 @@ func TestGitHubTokenTestProbe(t *testing.T) {
 			_, _ = writer.Write([]byte(`{"resources":{"core":{"limit":5000,"remaining":4995,"used":5,"reset":1700003600}}}`))
 		case "Bearer ghp_draft_token_1234567890":
 			_, _ = writer.Write([]byte(`{"resources":{"core":{"limit":5000,"remaining":4800,"used":200,"reset":1700003600}}}`))
+		case "Bearer ghp_exhausted_token_1234567890":
+			_, _ = writer.Write([]byte(`{"resources":{"core":{"limit":5000,"remaining":0,"used":5000,"reset":1700003600}}}`))
 		default:
 			writer.WriteHeader(http.StatusUnauthorized)
 		}
@@ -1149,6 +1151,16 @@ func TestGitHubTokenTestProbe(t *testing.T) {
 	var draft GitHubTokenTestResponseDTO
 	if err := json.Unmarshal(payload, &draft); err != nil || draft.Status != "valid" || !draft.Authenticated || draft.Remaining != 4800 {
 		t.Fatalf("draft probe = %+v %v", draft, err)
+	}
+
+	// Exhausted candidate token preserves `"remaining":0` on the wire so the console shows the zero budget.
+	resp, payload = doJSON(t, client, http.MethodPost, testURL, `{"token":"ghp_exhausted_token_1234567890"}`)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(payload), `"remaining":0`) {
+		t.Fatalf("exhausted probe = %d %s, want 200 with remaining:0", resp.StatusCode, payload)
+	}
+	var exhausted GitHubTokenTestResponseDTO
+	if err := json.Unmarshal(payload, &exhausted); err != nil || exhausted.Status != "valid" || exhausted.Limit != 5000 || exhausted.Remaining != 0 {
+		t.Fatalf("exhausted probe parsed = %+v %v", exhausted, err)
 	}
 
 	// Invalid candidate returns HTTP 200 with status=invalid (never session 401).

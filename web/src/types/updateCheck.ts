@@ -44,6 +44,9 @@ export function parseUpdateCheck(raw: unknown): UpdateCheckSettings | undefined 
     return { interval_minutes: intervalMinutes, plugin_interval_minutes: intervalMinutes };
   }
   const pluginMinutes = record.plugin_interval_minutes;
+  if (pluginMinutes === null) {
+    return { interval_minutes: intervalMinutes, plugin_interval_minutes: DEFAULT_UPDATE_CHECK.plugin_interval_minutes };
+  }
   if (!isUpdateCheckInterval(pluginMinutes)) return undefined;
   return { interval_minutes: intervalMinutes, plugin_interval_minutes: pluginMinutes };
 }

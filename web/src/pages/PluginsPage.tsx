@@ -129,7 +129,14 @@ export const PluginsPage: React.FC = () => {
         const listings = storeListingsByPluginId(store.plugins);
         const count = plugins.filter((plugin) => listings.get(plugin.id)?.update_available).length;
         if (store.source_errors.length > 0) {
-          const hasRateLimit = store.source_errors.some((source) => isGitHubTokenError(source.message));
+          const sourcesById = new Map((store.sources ?? []).map((source) => [source.id, source]));
+          const hasRateLimit = store.source_errors.some((source) => {
+            const registered = sourcesById.get(source.source_id);
+            return isGitHubTokenError(source.message, {
+              isBuiltInGitHub: Boolean(registered?.is_official || registered?.is_omc),
+              sourceUrl: source.source_url || registered?.url,
+            });
+          });
           toast.warning(t(isUpdateCheck && count > 0 ? 'plugin.check_updates_found' : 'plugin.store_refresh_partial', { n: count }), {
             items: store.source_errors.map((source) => ({ name: source.source_name, reason: source.message })),
             actions: hasRateLimit
@@ -255,6 +262,7 @@ export const PluginsPage: React.FC = () => {
             onConfigure={setConfiguring}
             onBrowseStore={() => selectTab('store')}
             onOpenSettings={() => selectTab('settings')}
+            onConfigureGitHubToken={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}
             onCheckUpdates={() => refreshStore(true)}
             isCheckingUpdates={isRefreshingStore}
           />

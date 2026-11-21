@@ -55,15 +55,20 @@ func (s RefreshSettings) Interval() time.Duration {
 
 // ParseRefreshSettings strictly decodes a stored exchange-rate refresh preference.
 func ParseRefreshSettings(raw []byte) (RefreshSettings, error) {
-	var document struct {
-		IntervalHours *int `json:"interval_hours"`
-	}
+	var fields map[string]json.RawMessage
 	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&document); err != nil || decoder.More() || document.IntervalHours == nil {
+	if err := decoder.Decode(&fields); err != nil || decoder.More() || fields == nil || len(fields) != 1 {
 		return RefreshSettings{}, ErrInvalidRefreshSettings
 	}
-	settings := RefreshSettings{IntervalHours: *document.IntervalHours}
+	rawHours, ok := fields["interval_hours"]
+	if !ok || bytes.Equal(bytes.TrimSpace(rawHours), []byte("null")) {
+		return RefreshSettings{}, ErrInvalidRefreshSettings
+	}
+	var hours int
+	if err := json.Unmarshal(rawHours, &hours); err != nil {
+		return RefreshSettings{}, ErrInvalidRefreshSettings
+	}
+	settings := RefreshSettings{IntervalHours: hours}
 	if err := settings.Validate(); err != nil {
 		return RefreshSettings{}, err
 	}
@@ -81,7 +86,7 @@ func ResolveRefreshSettings(raw string, isStored bool) RefreshSettings {
 		return settings
 	}
 	var hours int
-	if json.Unmarshal(fields["interval_hours"], &hours) == nil {
+	if value, ok := fields["interval_hours"]; ok && !bytes.Equal(bytes.TrimSpace(value), []byte("null")) && json.Unmarshal(value, &hours) == nil {
 		if candidate := (RefreshSettings{IntervalHours: hours}); candidate.Validate() == nil {
 			settings = candidate
 		}

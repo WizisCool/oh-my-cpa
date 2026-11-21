@@ -73,7 +73,8 @@ export const AutoRefreshSettings: React.FC = () => {
 
   const pricingScheduleMutation = useMutation({
     mutationFn: (intervalHours: number) => api.updatePricingSyncSchedule(intervalHours),
-    onSuccess: (saved) => {
+    onSuccess: async (saved) => {
+      await queryClient.cancelQueries({ queryKey: PRICING_QUERY_KEYS.syncSchedule });
       queryClient.setQueryData(PRICING_QUERY_KEYS.syncSchedule, saved);
       void invalidateSwrScopes(queryClient, 'pricing');
       toast.success(t('pricing.sync.schedule_updated'));

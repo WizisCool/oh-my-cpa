@@ -176,6 +176,12 @@ test('a running update reports the step it has reached, in the order the updater
 test('the scheduled update check keeps valid split or legacy intervals and ignores invalid values', () => {
   assert.deepEqual(parseUpdateCheck({ interval_minutes: 360 }), { interval_minutes: 360, plugin_interval_minutes: 360 });
   assert.deepEqual(parseUpdateCheck({ interval_minutes: 0, plugin_interval_minutes: 120 }), { interval_minutes: 0, plugin_interval_minutes: 120 });
+  // Matches Go ResolveUpdateCheckSettings: a stored document with null plugin_interval_minutes
+  // keeps the valid release interval and falls back to the default plugin interval.
+  assert.deepEqual(parseUpdateCheck({ interval_minutes: 360, plugin_interval_minutes: null }), {
+    interval_minutes: 360,
+    plugin_interval_minutes: DEFAULT_UPDATE_CHECK.plugin_interval_minutes,
+  });
   // A document a newer build wrote keeps its known fields; the server's write validation is
   // strict, so this is the read path only.
   assert.deepEqual(parseUpdateCheck({ interval_minutes: 60, future_field: true }), { interval_minutes: 60, plugin_interval_minutes: 60 });
@@ -208,6 +214,11 @@ test('exchange-rate refresh parser and GitHub token error matcher enforce contra
   assert.equal(isGitHubTokenError('the GitHub API rate limit for this address is exhausted'), true);
   assert.equal(isGitHubTokenError('release feed rejected the configured GitHub token: check GitHub Token in OMC Settings (server.github-token)'), true);
   assert.equal(isGitHubTokenError('HTTP 429 Too Many Requests'), true);
+  assert.equal(isGitHubTokenError('HTTP 429 Too Many Requests', { sourceUrl: 'https://raw.githubusercontent.com/org/plugins/main/registry.json' }), true);
+  assert.equal(isGitHubTokenError('HTTP 429 Too Many Requests', { isBuiltInGitHub: true }), true);
+  assert.equal(isGitHubTokenError('HTTP 429 Too Many Requests', { sourceUrl: 'https://plugins.internal.example/registry.json' }), false);
+  assert.equal(isGitHubTokenError('rate limit exceeded', { sourceUrl: 'https://evil-github.com.example/registry.json' }), false);
+  assert.equal(isGitHubTokenError('github token rejected', { sourceUrl: 'https://plugins.internal.example/registry.json' }), true);
   assert.equal(isGitHubTokenError('connection refused'), false);
   assert.equal(isGitHubTokenError(''), false);
 });

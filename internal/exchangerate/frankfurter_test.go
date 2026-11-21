@@ -171,7 +171,17 @@ func TestPersistedScheduleAndConcurrentRefresh(t *testing.T) {
 }
 
 func TestExchangeRateRefreshSettingsAndPause(t *testing.T) {
-	for _, raw := range []string{`{}`, `{"interval_hours":-1}`, `{"interval_hours":169}`, `{"interval_hours":24,"extra":true}`} {
+	for _, raw := range []string{
+		`{}`,
+		`null`,
+		`{"interval_hours":-1}`,
+		`{"interval_hours":169}`,
+		`{"interval_hours":null}`,
+		`{"interval_hours":12.5}`,
+		`{"INTERVAL_HOURS":0}`,
+		`{"interval_hours":24,"extra":true}`,
+		`{"interval_hours":24} trailing`,
+	} {
 		if _, err := ParseRefreshSettings([]byte(raw)); !errors.Is(err, ErrInvalidRefreshSettings) {
 			t.Fatalf("ParseRefreshSettings(%s) = %v, want ErrInvalidRefreshSettings", raw, err)
 		}

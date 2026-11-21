@@ -528,7 +528,7 @@ export const SystemPage: React.FC = () => {
         const summary = summarizeUpdateCheck([outcome.omc_version, outcome.cpa_version], outcome.served_from_cache);
         if (summary.kind === 'failed' || summary.kind === 'partial') {
           const products = summary.failedProducts.map((product) => t(product === 'omc' ? 'sys.omc_version' : 'sys.cpa_version')).join(', ');
-          const hasTokenError = [outcome.omc_version.check_error, outcome.cpa_version.check_error].some(isGitHubTokenError);
+          const hasTokenError = [outcome.omc_version.check_error, outcome.cpa_version.check_error].some((msg) => isGitHubTokenError(msg));
           toast.warning(t(outcome.served_from_cache ? 'sys.check_updates_cached_failed' : 'sys.check_updates_failed', { products }), {
             actions: hasTokenError
               ? <Button size="sm" onClick={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}>{t('sys.configure_github_token')}</Button>

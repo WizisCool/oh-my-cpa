@@ -259,7 +259,15 @@ export function PluginStorePanel({ store, isLoading, isDemo, onRefresh, isRefres
                 : <span className={styles['source-url']}>{section.url}</span>}
             extra={showAll(section)}
           />
-          {section.error && <SourceErrorNotice message={section.error} onOpenSettings={onOpenSettings} onConfigureGitHubToken={onConfigureGitHubToken} />}
+          {section.error && (
+            <SourceErrorNotice
+              message={section.error}
+              sourceUrl={section.url}
+              isBuiltInGitHub={section.kind !== 'custom'}
+              onOpenSettings={onOpenSettings}
+              onConfigureGitHubToken={onConfigureGitHubToken}
+            />
+          )}
           {section.entries.length > 0 && (
             <div className={styles['card-grid']}>
               <FilterTransition itemKeys={storeSectionPreview(section, isSourceChosen).map(storeCardKey)}>
@@ -305,15 +313,20 @@ const storeCardKey = (entry: StorePluginItem) => entry.store_id || `${entry.sour
 
 function SourceErrorNotice({
   message,
+  sourceUrl,
+  isBuiltInGitHub = false,
   onOpenSettings,
   onConfigureGitHubToken,
 }: {
   message: string;
+  sourceUrl?: string;
+  isBuiltInGitHub?: boolean;
   onOpenSettings: () => void;
   onConfigureGitHubToken?: () => void;
 }) {
   const t = useT();
-  const isTokenIssue = Boolean(onConfigureGitHubToken) && isGitHubTokenError(message);
+  const isTokenIssue = Boolean(onConfigureGitHubToken)
+    && isGitHubTokenError(message, { isBuiltInGitHub, sourceUrl });
   return (
     <Notice
       tone="warning"
@@ -391,7 +404,15 @@ function OmcShowcase({ section, isDemo, shouldHideEmpty, onOpenSettings, onConfi
         </EmptyState>
       ) : (
         <>
-          {section?.error && <SourceErrorNotice message={section.error} onOpenSettings={onOpenSettings} onConfigureGitHubToken={onConfigureGitHubToken} />}
+          {section?.error && (
+            <SourceErrorNotice
+              message={section.error}
+              sourceUrl={section.url}
+              isBuiltInGitHub
+              onOpenSettings={onOpenSettings}
+              onConfigureGitHubToken={onConfigureGitHubToken}
+            />
+          )}
           {(section?.entries.length ?? 0) > 0
             ? <div className={styles['showcase-grid']}>{children}</div>
             : !section?.error && !shouldHideEmpty && <EmptyState size="compact" title={t('plugin.omc_section_empty')} />}

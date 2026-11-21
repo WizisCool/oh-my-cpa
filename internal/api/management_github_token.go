@@ -40,7 +40,7 @@ type GitHubTokenTestResponseDTO struct {
 	Status        string `json:"status"`
 	Authenticated bool   `json:"authenticated"`
 	Limit         int    `json:"limit,omitempty"`
-	Remaining     int    `json:"remaining,omitempty"`
+	Remaining     int    `json:"remaining"`
 	Used          int    `json:"used,omitempty"`
 	ResetAtMS     *int64 `json:"reset_at_ms,omitempty"`
 	Message       string `json:"message,omitempty"`

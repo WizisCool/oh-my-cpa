@@ -90,23 +90,38 @@ func (s UpdateCheckSettings) Interval() time.Duration {
 
 // ParseUpdateCheckSettings strictly decodes a stored document. interval_minutes is required;
 // plugin_interval_minutes is optional for backward compatibility with older single-field
-// callers and mirrors interval_minutes when omitted.
+// callers and mirrors interval_minutes when omitted (explicit null and noncanonical field
+// names are rejected so stored JSON always matches ResolveUpdateCheckSettings).
 func ParseUpdateCheckSettings(raw []byte) (UpdateCheckSettings, error) {
-	var document struct {
-		IntervalMinutes       *int `json:"interval_minutes"`
-		PluginIntervalMinutes *int `json:"plugin_interval_minutes"`
-	}
+	var fields map[string]json.RawMessage
 	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&document); err != nil || decoder.More() || document.IntervalMinutes == nil {
+	if err := decoder.Decode(&fields); err != nil || decoder.More() || fields == nil {
 		return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
 	}
-	pluginMinutes := *document.IntervalMinutes
-	if document.PluginIntervalMinutes != nil {
-		pluginMinutes = *document.PluginIntervalMinutes
+	for key := range fields {
+		if key != "interval_minutes" && key != "plugin_interval_minutes" {
+			return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
+		}
+	}
+	rawInterval, hasInterval := fields["interval_minutes"]
+	if !hasInterval || bytes.Equal(bytes.TrimSpace(rawInterval), []byte("null")) {
+		return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
+	}
+	var intervalMinutes int
+	if err := json.Unmarshal(rawInterval, &intervalMinutes); err != nil {
+		return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
+	}
+	pluginMinutes := intervalMinutes
+	if rawPlugin, hasPlugin := fields["plugin_interval_minutes"]; hasPlugin {
+		if bytes.Equal(bytes.TrimSpace(rawPlugin), []byte("null")) {
+			return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
+		}
+		if err := json.Unmarshal(rawPlugin, &pluginMinutes); err != nil {
+			return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
+		}
 	}
 	settings := UpdateCheckSettings{
-		IntervalMinutes:       *document.IntervalMinutes,
+		IntervalMinutes:       intervalMinutes,
 		PluginIntervalMinutes: pluginMinutes,
 	}
 
@@ -133,13 +148,13 @@ func ResolveUpdateCheckSettings(raw string, isStored bool) UpdateCheckSettings {
 	}
 	hasValidInterval := false
 	var intervalMinutes int
-	if value, ok := fields["interval_minutes"]; ok && string(value) != "null" && json.Unmarshal(value, &intervalMinutes) == nil && isValidUpdateCheckMinutes(intervalMinutes) {
+	if value, ok := fields["interval_minutes"]; ok && !bytes.Equal(bytes.TrimSpace(value), []byte("null")) && json.Unmarshal(value, &intervalMinutes) == nil && isValidUpdateCheckMinutes(intervalMinutes) {
 		settings.IntervalMinutes = intervalMinutes
 		hasValidInterval = true
 	}
 	if value, ok := fields["plugin_interval_minutes"]; ok {
 		var pluginMinutes int
-		if string(value) != "null" && json.Unmarshal(value, &pluginMinutes) == nil && isValidUpdateCheckMinutes(pluginMinutes) {
+		if !bytes.Equal(bytes.TrimSpace(value), []byte("null")) && json.Unmarshal(value, &pluginMinutes) == nil && isValidUpdateCheckMinutes(pluginMinutes) {
 			settings.PluginIntervalMinutes = pluginMinutes
 		}
 	} else if hasValidInterval {
