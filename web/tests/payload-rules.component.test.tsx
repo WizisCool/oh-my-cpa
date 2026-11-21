@@ -2309,4 +2309,56 @@ describe('ServerIdField configuration workflow', () => {
     expect(screen.getByTestId('service-dirty').textContent).toBe('true');
     expect(screen.getByTestId('service-errors').textContent).toBe('false');
   });
+
+  it('reconciles Cancel rollback to the newly committed ID when the user keeps editing during an in-flight save', async () => {
+    const idA = '11111111-1111-4111-8111-111111111111';
+    const idB = '22222222-2222-4222-8222-222222222222';
+    const idC = '33333333-3333-4333-8333-333333333333';
+
+    let resolveSave!: (value: { status: string; revision: string; safe_yaml: string }) => void;
+    const patchSpy = vi.spyOn(api, 'patchConfig').mockImplementation(
+      () => new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    const client = createTestQueryClient();
+    client.setQueryData(['management-config'], {
+      ...TEST_SCALARS_STUB,
+      revision: 'rev-1',
+      safe_yaml: `server:\n  server-id: ${idA}\n  port: 8317\n`,
+      stored_layout: 'v8',
+    });
+
+    try {
+      renderWithOmc(<ConfigServiceDraft />, { client, isStrict: true });
+      await waitFor(() => expect(screen.getByTestId('cfg-server-id-value').textContent).toBe(idA));
+
+      // Edit A -> B and start saving while keeping edit mode open.
+      fireEvent.click(screen.getByTestId('cfg-server-id-edit'));
+      fireEvent.change(screen.getByTestId('cfg-server-id-input'), { target: { value: idB } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+      await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+
+      // While the save of B is in flight, continue editing to C.
+      fireEvent.change(screen.getByTestId('cfg-server-id-input'), { target: { value: idC } });
+
+      // Save of B completes; draft keeps C, while rollback advances from pre-save A to committed B.
+      await act(async () => {
+        resolveSave({
+          status: 'ok',
+          revision: 'rev-2',
+          safe_yaml: `server:\n  server-id: ${idB}\n  port: 8317\n`,
+        });
+      });
+
+      // Cancelling must revert to committed B (clean) rather than stale pre-save A.
+      fireEvent.click(screen.getByTestId('cfg-server-id-cancel'));
+      await waitFor(() => expect(screen.getByTestId('cfg-server-id-value').textContent).toBe(idB));
+      expect(screen.getByTestId('service-dirty').textContent).toBe('false');
+      expect(screen.getByTestId('service-draft').textContent).toContain(`server-id: ${idB}`);
+    } finally {
+      patchSpy.mockRestore();
+    }
+  });
 });

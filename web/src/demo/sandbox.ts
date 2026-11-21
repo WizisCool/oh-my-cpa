@@ -814,10 +814,30 @@ function syncSandboxGitHubTokenFromDoc(
 const SANDBOX_UUID_HYPHENATED_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const SANDBOX_NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
+function generateSandboxUUIDv4(): string {
+  const cryptoObj = globalThis.crypto;
+  if (cryptoObj && typeof cryptoObj.randomUUID === 'function') {
+    return cryptoObj.randomUUID().toLowerCase();
+  }
+  const bytes = new Uint8Array(16);
+  if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+    cryptoObj.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function syncSandboxServerIdFromDoc(
   state: DemoSandboxState,
   yamlDoc: { getIn: (path: string[]) => unknown; setIn: (path: string[], value: unknown) => void },
   safeDoc: { setIn: (path: string[], value: unknown) => void } | null,
+  allocateIfMissing = false,
 ): void {
   const raw = yamlDoc.getIn(['server', 'server-id']);
   if (typeof raw === 'string') {
@@ -830,7 +850,32 @@ function syncSandboxServerIdFromDoc(
       return;
     }
   }
+  if (allocateIfMissing) {
+    const generated = generateSandboxUUIDv4();
+    yamlDoc.setIn(['server', 'server-id'], generated);
+    safeDoc?.setIn(['server', 'server-id'], generated);
+    state.system.cpaServerId = generated;
+    return;
+  }
   delete state.system.cpaServerId;
+}
+
+function projectSandboxSystemInfo(
+  base: SystemInfoResponse | null,
+  state: DemoSandboxState,
+): SystemInfoResponse | null {
+  if (!base || (!state.system.lastUpdateCheckAtMs && !state.system.cpaServerId)) {
+    return base;
+  }
+  return {
+    ...base,
+    omc_version: state.system.lastUpdateCheckAtMs && base.omc_version
+      ? { ...base.omc_version, checked_at_ms: state.system.lastUpdateCheckAtMs }
+      : base.omc_version,
+    cpa: state.system.cpaServerId && base.cpa
+      ? { ...base.cpa, server_id: state.system.cpaServerId }
+      : base.cpa,
+  };
 }
 
 async function ensureConfigState(state: DemoSandboxState, fetchBaseline: FetchBaselineFn): Promise<{
@@ -2199,7 +2244,10 @@ export async function interceptDemoRequest(
     }
 
     if (pathname === '/management/system/diagnostics') {
-      const sysRes = await ensureBaseline<SystemInfoResponse>('system', '/management/system', fetchBaseline);
+      const sysRes = projectSandboxSystemInfo(
+        await ensureBaseline<SystemInfoResponse>('system', '/management/system', fetchBaseline),
+        state,
+      );
       const bundle = {
         generated_at: new Date().toISOString(),
         sandbox: true,
@@ -2581,18 +2629,7 @@ export async function interceptDemoRequest(
       const res = await fetchBaseline(pathWithQuery, options);
       if (!res.ok) return res;
       const base = (await res.json()) as SystemInfoResponse;
-      if (state.system.lastUpdateCheckAtMs || state.system.cpaServerId) {
-        return jsonResponse({
-          ...base,
-          omc_version: state.system.lastUpdateCheckAtMs && base.omc_version
-            ? { ...base.omc_version, checked_at_ms: state.system.lastUpdateCheckAtMs }
-            : base.omc_version,
-          cpa: state.system.cpaServerId && base.cpa
-            ? { ...base.cpa, server_id: state.system.cpaServerId }
-            : base.cpa,
-        });
-      }
-      return jsonResponse(base);
+      return jsonResponse(projectSandboxSystemInfo(base, state));
     }
 
     if (pathname === '/management/system/maintenance') {
@@ -2940,7 +2977,7 @@ export async function interceptDemoRequest(
     pushConfigBackup(state, backupsList, sourceRes.yaml, sourceRes.revision, 'config_source');
     const revision = nextRevision(state);
     syncSandboxGitHubTokenFromDoc(state, doc, null, revision);
-    syncSandboxServerIdFromDoc(state, doc, null);
+    syncSandboxServerIdFromDoc(state, doc, null, true);
     const sanitizedYaml = doc.toString();
     state.config.yaml = sanitizedYaml;
     state.config.safeYaml = sanitizedYaml;
@@ -3029,7 +3066,7 @@ export async function interceptDemoRequest(
     const doc = parseDocument(targetYaml);
     const revision = nextRevision(state);
     syncSandboxGitHubTokenFromDoc(state, doc, null, revision);
-    syncSandboxServerIdFromDoc(state, doc, null);
+    syncSandboxServerIdFromDoc(state, doc, null, true);
     const sanitizedYaml = doc.toString();
     state.config.yaml = sanitizedYaml;
     state.config.safeYaml = sanitizedYaml;

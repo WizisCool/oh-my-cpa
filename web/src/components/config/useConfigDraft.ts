@@ -279,6 +279,7 @@ export function useConfigDraft() {
   const adoptBaseline = React.useCallback(
     (yaml: string, revision: string, draftBase: Document | null, hasLocalEdits: boolean): boolean => {
       const previousYaml = serverYamlRef.current;
+      const previousServerDoc = serverDocRef.current;
       setServerYaml(yaml);
       serverYamlRef.current = yaml;
       setServerRevision(revision);
@@ -321,7 +322,7 @@ export function useConfigDraft() {
             }
             const reconciled = reconcileServerIdDraft(
               draft,
-              readServerIdString(draftBase, field),
+              readServerIdString(previousServerDoc, field),
               readServerIdString(serverDocRef.current, field),
             );
             next[fieldId] = reconciled;
