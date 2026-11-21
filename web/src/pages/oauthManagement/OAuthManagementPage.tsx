@@ -895,11 +895,11 @@ export const OAuthManagementPage: React.FC = () => {
             isMutating={actions.isOperating}
             onSelectPage={() => credentialActions.onSelect(selectablePage, true)}
             onClearSelection={clearSelection}
-            onEnable={() => void actions.batchStatus(false, selectedRecords)}
-            onDisable={() => void actions.batchStatus(true, selectedRecords)}
-            onRefresh={() => void actions.batchRefresh(selectedRecords)}
+            onEnable={() => actions.batchStatus(false, selectedRecords)}
+            onDisable={() => actions.batchStatus(true, selectedRecords)}
+            onRefresh={() => actions.batchRefresh(selectedRecords)}
             canRefresh
-            onDelete={() => void actions.batchDelete(selectedRecords)}
+            onDelete={() => actions.batchDelete(selectedRecords)}
           />
         </div>
       )}

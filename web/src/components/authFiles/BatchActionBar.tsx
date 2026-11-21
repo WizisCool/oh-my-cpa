@@ -7,7 +7,6 @@ import {
   CheckSquareOutlined,
   StopOutlined,
   DeleteOutlined,
-  CloseOutlined,
   SyncOutlined,
 } from '../icons';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
@@ -27,14 +26,23 @@ interface BatchActionBarProps {
   isMutating: boolean;
   onSelectPage: () => void;
   onClearSelection: () => void;
-  onEnable: () => void;
-  onDisable: () => void;
-  onRefresh: () => void;
+  /** Each batch handler settles when its work does, so the bar knows which action is still running. */
+  onEnable: () => Promise<unknown> | void;
+  onDisable: () => Promise<unknown> | void;
+  onRefresh: () => Promise<unknown> | void;
   canRefresh: boolean;
-  onDelete: () => void;
+  onDelete: () => Promise<unknown> | void;
   hiddenCount?: number;
 }
 
+type BatchAction = 'enable' | 'disable' | 'refresh' | 'delete';
+
+/**
+ * The OAuth list's selection bar. Desktop and phone share one anatomy - the way out, the count,
+ * how to widen the choice, then the actions with delete set apart - and differ only in whether the
+ * actions carry their words. Every action is the same quiet weight, so none reads as the page's
+ * main task, and only the one that is running shows it.
+ */
 export const BatchActionBar: React.FC<BatchActionBarProps> = ({
   selectedCount,
   selectablePageCount,
@@ -54,129 +62,99 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
 }) => {
   const t = useT();
   const isPhone = useIsPhoneViewport();
+  // `isMutating` is the workspace's busy flag, shared with uploads and row actions, so the spinner
+  // follows the handler this bar started and ends when that handler settles.
+  const [runningAction, setRunningAction] = React.useState<BatchAction | null>(null);
 
-  const hasSelection = selectedCount > 0;
-  if (!hasSelection) {
+  if (selectedCount === 0) {
     return null;
   }
 
   const deleteDescription = hiddenCount > 0
     ? `${t('af.delete_selected_desc')} ${t('omc.delete_hidden_scope', { hidden: hiddenCount, total: selectedCount })}`
     : t('af.delete_selected_desc');
+  const run = (action: BatchAction, handler: () => Promise<unknown> | void) => () => {
+    setRunningAction(action);
+    return Promise.resolve(handler()).finally(() => {
+      setRunningAction((current) => (current === action ? null : current));
+    });
+  };
+  const isScopeDisabled = isMutating || !isSelectionReady;
 
-  // A phone holds the bar on one line, as the request list's does: the count with how far it
-  // reaches, then the actions as glyphs, delete set apart, and the way out last.
-  if (isPhone) {
-    return (
-      <SelectionBar
-        className={styles.bar}
-        label={t('af.selected_n', { n: selectedCount })}
-        summary={t('af.selected_n', { n: selectedCount })}
-        note={hiddenCount > 0 ? t('omc.hidden_selection', { n: hiddenCount }) : undefined}
-        selection={(
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={isMutating || !isSelectionReady}
-              render={(
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className={styles['scope-menu']}
-                  icon={<CheckSquareOutlined />}
-                  aria-label={t('pro.select_all')}
-                  data-tip={t('pro.select_all')}
-                  disabled={isMutating || !isSelectionReady}
-                >
-                  <DropdownCaret />
-                </Button>
-              )}
-            />
-            <DropdownMenuContent placement="topLeft">
-              <DropdownMenuItem disabled={selectablePageCount === 0} onClick={onSelectPage}>{t('af.select_page')}</DropdownMenuItem>
-              <DropdownMenuItem disabled={!canSelectFiltered} onClick={onSelectFiltered}>{t('af.select_filtered', { n: selectableFilteredCount })}</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      >
-        <ToolButton size="sm" variant="ghost" icon={<CheckCircleOutlined />} label={t('af.batch_enable')} disabled={isMutating} onClick={onEnable} />
-        <ToolButton size="sm" variant="ghost" icon={<StopOutlined />} label={t('af.batch_disable')} disabled={isMutating} onClick={onDisable} />
-        <ToolButton size="sm" variant="ghost" icon={<SyncOutlined />} label={t('af.batch_refresh')} disabled={isMutating || !canRefresh} onClick={onRefresh} />
-        <ConfirmAction title={t('af.delete_selected_title')} description={deleteDescription} confirmLabel={t('common.delete')} isDanger onConfirm={onDelete}>
-          <ToolButton size="sm" variant="ghost" danger icon={<DeleteOutlined />} label={t('af.delete_selected')} disabled={isMutating} />
-        </ConfirmAction>
-        <span className={styles['phone-divider']} aria-hidden="true" />
-        <ToolButton size="sm" variant="ghost" icon={<CloseOutlined />} label={t('af.clear_selection')} disabled={isMutating} onClick={onClearSelection} />
-      </SelectionBar>
-    );
-  }
+  const actions: Array<{ key: BatchAction; icon: React.ReactNode; label: string; onClick: () => void; isDisabled?: boolean }> = [
+    { key: 'enable', icon: <CheckCircleOutlined />, label: t('af.batch_enable'), onClick: run('enable', onEnable) },
+    { key: 'disable', icon: <StopOutlined />, label: t('af.batch_disable'), onClick: run('disable', onDisable) },
+    { key: 'refresh', icon: <SyncOutlined />, label: t('af.batch_refresh'), onClick: run('refresh', onRefresh), isDisabled: !canRefresh },
+  ];
+  const isRunning = (action: BatchAction) => isMutating && runningAction === action;
+  const deleteButton = isPhone ? (
+    <ToolButton size="sm" variant="ghost" danger icon={<DeleteOutlined />} label={t('af.delete_selected')} loading={isRunning('delete')} disabled={isMutating} />
+  ) : (
+    <Button size="sm" variant="ghost" danger icon={<DeleteOutlined />} loading={isRunning('delete')} disabled={isMutating}>
+      {t('af.delete_selected')}
+    </Button>
+  );
 
   return (
     <SelectionBar
-      className={styles.bar}
       label={t('af.selected_n', { n: selectedCount })}
       summary={t('af.selected_n', { n: selectedCount })}
       note={hiddenCount > 0 ? t('omc.hidden_selection', { n: hiddenCount }) : undefined}
-      selection={(
-        <div className={styles['scope-controls']}>
-          <Button size="sm" disabled={isMutating || !isSelectionReady || selectablePageCount === 0} onClick={onSelectPage}>
+      onClear={onClearSelection}
+      clearLabel={t('af.clear_selection')}
+      isClearDisabled={isMutating}
+      selection={isPhone ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={isScopeDisabled}
+            render={(
+              <Button
+                size="sm"
+                variant="ghost"
+                className={styles['scope-menu']}
+                icon={<CheckSquareOutlined />}
+                aria-label={t('pro.select_all')}
+                data-tip={t('pro.select_all')}
+                disabled={isScopeDisabled}
+              >
+                <DropdownCaret />
+              </Button>
+            )}
+          />
+          <DropdownMenuContent placement="topLeft">
+            <DropdownMenuItem disabled={selectablePageCount === 0} onClick={onSelectPage}>{t('af.select_page')}</DropdownMenuItem>
+            <DropdownMenuItem disabled={!canSelectFiltered} onClick={onSelectFiltered}>{t('af.select_filtered', { n: selectableFilteredCount })}</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <>
+          <Button size="sm" variant="link" disabled={isScopeDisabled || selectablePageCount === 0} onClick={onSelectPage}>
             {t('af.select_page')}
           </Button>
-          <Button size="sm" disabled={isMutating || !isSelectionReady || !canSelectFiltered} onClick={onSelectFiltered}>
+          <Button size="sm" variant="link" disabled={isScopeDisabled || !canSelectFiltered} onClick={onSelectFiltered}>
             {t('af.select_filtered', { n: selectableFilteredCount })}
           </Button>
-          <Button size="sm" variant="ghost" icon={<CloseOutlined />} disabled={isMutating} onClick={onClearSelection}>
-            {t('af.clear_selection')}
-          </Button>
-        </div>
+        </>
       )}
     >
-      <Button
-        size="sm"
-        icon={<CheckCircleOutlined />}
-        loading={isMutating}
-        disabled={isMutating}
-        onClick={onEnable}
+      {actions.map(({ key, icon, label, onClick, isDisabled }) => (isPhone ? (
+        <ToolButton key={key} size="sm" variant="ghost" icon={icon} label={label} loading={isRunning(key)} disabled={isMutating || isDisabled} onClick={onClick} />
+      ) : (
+        <Button key={key} size="sm" variant="ghost" icon={icon} loading={isRunning(key)} disabled={isMutating || isDisabled} onClick={onClick}>
+          {label}
+        </Button>
+      )))}
+      <span className="selection-bar-divider" aria-hidden="true" />
+      <ConfirmAction
+        title={t('af.delete_selected_title')}
+        description={deleteDescription}
+        confirmLabel={t('common.delete')}
+        isDanger
+        // The dialog closes on confirm as before; the bar's delete button carries the wait.
+        onConfirm={() => { void run('delete', onDelete)(); }}
       >
-        {t('af.batch_enable')}
-      </Button>
-      <Button
-        size="sm"
-        icon={<StopOutlined />}
-        loading={isMutating}
-        disabled={isMutating}
-        onClick={onDisable}
-      >
-        {t('af.batch_disable')}
-      </Button>
-      <Button
-        size="sm"
-        icon={<SyncOutlined />}
-        loading={isMutating}
-        disabled={isMutating || !canRefresh}
-        onClick={onRefresh}
-      >
-        {t('af.batch_refresh')}
-      </Button>
-      <div className={styles['destructive-action']}>
-        <ConfirmAction
-          title={t('af.delete_selected_title')}
-          description={deleteDescription}
-          confirmLabel={t('common.delete')}
-          isDanger
-          onConfirm={onDelete}
-        >
-          <Button
-            size="sm"
-            variant="ghost"
-            danger
-            icon={<DeleteOutlined />}
-            loading={isMutating}
-            disabled={isMutating}
-          >
-            {t('af.delete_selected')}
-          </Button>
-        </ConfirmAction>
-      </div>
+        {deleteButton}
+      </ConfirmAction>
     </SelectionBar>
   );
 };

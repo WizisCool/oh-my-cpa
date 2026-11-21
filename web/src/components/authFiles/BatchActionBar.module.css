@@ -1,78 +1,17 @@
-/* The shared slab (index.css `.selection-bar`) holds the geometry; this bar adds the scope controls
-   and a destructive group set off from the rest. */
-.bar :global(.selection-bar-start) {
-  flex: 0 1 auto;
+/* The shared slab (index.css `.selection-bar`) holds the geometry; a phone folds this bar's
+   widening links into one menu glyph. */
+.scope-menu {
+  position: relative;
+  flex-shrink: 0;
+  gap: 2px;
+  padding-inline: 6px 4px;
+  color: var(--fg-2);
 }
 
-.scope-controls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.destructive-action {
-  padding-inline-start: 12px;
-  margin-inline-start: 4px;
-  border-inline-start: 1px solid var(--border-soft);
-}
-
-/* A phone's bar is one line: the count and the reach of the selection, then the glyphs. */
-@media (max-width: 640px) {
-  .bar:global(.selection-bar),
-  .bar :global(.selection-bar-start) {
-    flex-wrap: nowrap;
-  }
-
-  .bar:global(.selection-bar) {
-    gap: 4px;
-    padding: 6px;
-    padding-inline-start: 12px;
-  }
-
-  .bar :global(.selection-bar-start) {
-    flex: 1 1 auto;
-    min-width: 0;
-    gap: 4px;
-  }
-
-  .bar :global(.selection-bar-count) {
-    flex-shrink: 0;
-  }
-
-  .bar :global(.selection-bar-note) {
-    flex: 0 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .bar :global(.selection-bar-actions) {
-    flex: none;
-    gap: 0;
-  }
-
-  .scope-menu {
-    position: relative;
-    flex-shrink: 0;
-    gap: 2px;
-    padding-inline: 6px 4px;
-    color: var(--fg-2);
-  }
-
-  @media (pointer: coarse) {
-    .scope-menu::before {
-      content: '';
-      position: absolute;
-      inset: -6px -2px;
-    }
-  }
-
-  .phone-divider {
-    width: 1px;
-    height: 16px;
-    margin-inline: 4px;
-    background: var(--border-soft);
+@media (pointer: coarse) {
+  .scope-menu::before {
+    content: '';
+    position: absolute;
+    inset: -6px -2px;
   }
 }
