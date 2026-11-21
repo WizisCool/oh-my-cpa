@@ -582,6 +582,18 @@ test('foldable panels, Collapse variants, and payload builder do not clip edge s
   assert.match(payloadBranch, /className="payload-builder-group"/);
   assert.equal(/settings-group(?!-head)/.test(payloadBranch), false);
   assert.equal(/settings-group-body/.test(payloadBranch), false);
+
+  // Toast item lists sit inside the toast's scrollable body on an elevated surface, so they use an
+  // inset well on a recessed surface fill rather than an outset edge shadow that scroll clipping cuts off.
+  const toastReportRule = indexCss.match(/\.omc-toast-report\s*\{([^}]*)\}/)?.[1] ?? '';
+  assert.ok(toastReportRule.length > 0);
+  assert.doesNotMatch(toastReportRule, /\boverflow(?:-y)?:\s*(?:auto|scroll|hidden)\b/);
+
+  const toastItemsRule = indexCss.match(/\.omc-toast-items\s*\{([^}]*)\}/)?.[1] ?? '';
+  assert.ok(toastItemsRule.length > 0);
+  assert.match(toastItemsRule, /\bbackground:\s*var\(--surface\)\s*;/);
+  assert.match(toastItemsRule, /\bbox-shadow:\s*var\(--shadow-well\)\s*;/);
+  assert.doesNotMatch(toastItemsRule, /\b--shadow-edge\b/);
 });
 
 test('no retired input-wrapper slot selectors remain and alignment invariants hold', () => {

@@ -902,11 +902,9 @@ h1, h2, h3, h4 { font-family: inherit; }
    keeps its edge where the drop has nothing to fall on. Its icon is the notice's size,
    so a failure reads at the same weight whether it floats or sits in the page. */
 .omc-toast-detail { margin-bottom: 6px; }
-/* A report's per-target list scrolls inside the toast, so forty failures cannot push it past the
-   viewport. */
+/* The toast body (`components/ui/toast.tsx`) owns vertical scrolling; the report lays out its
+   groups without creating a second clipping scroll box. */
 .omc-toast-report {
-  max-height: min(320px, 50vh);
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -926,17 +924,20 @@ h1, h2, h3, h4 { font-family: inherit; }
   font-weight: 400;
   color: var(--muted);
 }
+/* Nested inside a floating toast (`--elevated`), the item list recedes one step into its host
+   using an inset well shadow so scrolling never clips an outset ring or drop shadow. */
 .omc-toast-items {
   border: 0;
   margin: 0;
   padding: 0;
   list-style: none;
-  box-shadow: var(--shadow-edge);
+  background: var(--surface);
+  box-shadow: var(--shadow-well);
   border-radius: var(--radius-lg);
 }
 .omc-toast-items li {
-  padding: 6px 10px;
-  border-top: 1px solid var(--border);
+  padding: 8px 10px;
+  border-top: 1px solid var(--float-rule);
 }
 .omc-toast-items li:first-child { border-top: 0; }
 .omc-toast-item-name {
