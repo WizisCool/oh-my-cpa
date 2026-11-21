@@ -16,8 +16,10 @@ import { SecretInput } from '../common/SecretInput';
 import { StatusLabel } from '../common/StatusLabel';
 import { ConfirmAction } from '../common/ConfirmAction';
 import { MetaLine } from '../common/MetaLine';
-import { LoadFailure, Notice, useToast } from '../feedback';
+import { LoadFailure, useToast } from '../feedback';
 import styles from './GitHubTokenSettings.module.css';
+
+const GITHUB_TOKEN_TEST_TOAST_KEY = 'github-token-test';
 
 function GitHubTokenForm({ status }: { status: GitHubTokenStatus }) {
   useTimeZone();
@@ -25,16 +27,18 @@ function GitHubTokenForm({ status }: { status: GitHubTokenStatus }) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [draft, setDraft] = React.useState('');
-  const [testResult, setTestResult] = React.useState<GitHubTokenTestResult | null>(null);
   const trimmedDraft = draft.trim();
   const tokenStateKey = `${status.cpa_revision}\0${status.configured ? '1' : '0'}\0${trimmedDraft}`;
   const activeTokenStateRef = React.useRef(tokenStateKey);
   activeTokenStateRef.current = tokenStateKey;
+  const previousTokenStateRef = React.useRef(tokenStateKey);
 
-  // Discard any previous quota-test notice as soon as the draft or saved-token revision moves.
+  // Dismiss any previous quota-test toast as soon as the draft or saved-token revision moves.
   React.useEffect(() => {
-    setTestResult(null);
-  }, [tokenStateKey]);
+    if (previousTokenStateRef.current === tokenStateKey) return;
+    previousTokenStateRef.current = tokenStateKey;
+    toast.dismiss(GITHUB_TOKEN_TEST_TOAST_KEY);
+  }, [toast, tokenStateKey]);
 
   const syncCaches = (saved: GitHubTokenStatus) => {
     queryClient.setQueryData(GITHUB_TOKEN_QUERY_KEY, saved);
@@ -51,7 +55,7 @@ function GitHubTokenForm({ status }: { status: GitHubTokenStatus }) {
     }),
     onSuccess: (saved, submittedToken) => {
       setDraft('');
-      setTestResult(null);
+      toast.dismiss(GITHUB_TOKEN_TEST_TOAST_KEY);
       syncCaches(saved);
       toast.success(submittedToken === '' ? t('omc.github_token_cleared') : t('omc.github_token_saved'));
     },
@@ -65,24 +69,9 @@ function GitHubTokenForm({ status }: { status: GitHubTokenStatus }) {
     },
   });
 
-  const testMutation = useMutation({
-    mutationFn: ({ candidate }: { candidate?: string; stateKey: string }) => api.testGitHubToken(candidate),
-    onSuccess: (result, variables) => {
-      if (variables.stateKey !== activeTokenStateRef.current) return;
-      setTestResult(result);
-    },
-    onError: (error, variables) => {
-      if (variables.stateKey !== activeTokenStateRef.current) return;
-      toast.error(t('omc.github_token_test_failed', { msg: describeError(error) }));
-    },
-  });
-
-  const isWriting = saveMutation.isPending;
-  const canSave = !isWriting && Boolean(status.cpa_revision) && trimmedDraft.length > 0;
-
-  const renderTestNotice = (result: GitHubTokenTestResult) => {
-    const quotaLine = result.limit !== undefined && result.limit > 0 && result.remaining !== undefined ? (
-      <MetaLine>
+  const notifyTestResult = (result: GitHubTokenTestResult) => {
+    const quotaDetail = result.limit !== undefined && result.limit > 0 && result.remaining !== undefined ? (
+      <MetaLine className={styles['toast-quota']}>
         <span>
           {t('omc.github_token_quota_remaining', {
             remaining: result.remaining.toLocaleString(),
@@ -93,34 +82,62 @@ function GitHubTokenForm({ status }: { status: GitHubTokenStatus }) {
           <span>{t('omc.github_token_quota_reset', { time: dayjs(result.reset_at_ms).format('HH:mm') })}</span>
         ) : null}
       </MetaLine>
-    ) : null;
+    ) : undefined;
 
     if (result.status === 'valid') {
-      return <Notice tone="success" title={t('omc.github_token_test_valid')} description={quotaLine} />;
+      toast.success(t('omc.github_token_test_valid'), { detail: quotaDetail, key: GITHUB_TOKEN_TEST_TOAST_KEY });
+      return;
     }
     if (result.status === 'anonymous') {
-      return <Notice tone="info" title={t('omc.github_token_test_anonymous')} description={quotaLine} />;
+      toast.info(t('omc.github_token_test_anonymous'), { detail: quotaDetail, key: GITHUB_TOKEN_TEST_TOAST_KEY });
+      return;
     }
     if (result.status === 'invalid') {
-      return <Notice tone="error" title={t('omc.github_token_test_invalid')} />;
+      toast.error(t('omc.github_token_test_invalid'), { key: GITHUB_TOKEN_TEST_TOAST_KEY });
+      return;
     }
-    return <Notice tone="warning" title={t('omc.github_token_test_error')} description={result.message} />;
+    toast.warning(t('omc.github_token_test_error'), {
+      detail: result.message || undefined,
+      key: GITHUB_TOKEN_TEST_TOAST_KEY,
+    });
   };
+
+  const testMutation = useMutation({
+    mutationFn: ({ candidate }: { candidate?: string; stateKey: string }) => api.testGitHubToken(candidate),
+    onSuccess: (result, variables) => {
+      if (variables.stateKey !== activeTokenStateRef.current) return;
+      notifyTestResult(result);
+    },
+    onError: (error, variables) => {
+      if (variables.stateKey !== activeTokenStateRef.current) return;
+      toast.error(t('omc.github_token_test_failed', { msg: describeError(error) }), {
+        key: GITHUB_TOKEN_TEST_TOAST_KEY,
+      });
+    },
+  });
+
+  const isWriting = saveMutation.isPending;
+  const isSaving = isWriting && saveMutation.variables !== '';
+  const isClearing = isWriting && saveMutation.variables === '';
+  const canSave = !isWriting && Boolean(status.cpa_revision) && trimmedDraft.length > 0;
 
   return (
     <>
       <SettingRow
-        label={t('omc.github_token_status')}
+        label={(
+          <span className={styles['status-heading']}>
+            <span>{t('omc.github_token_status')}</span>
+            <StatusLabel tone={status.configured ? 'success' : 'neutral'}>
+              {status.configured ? t('omc.github_token_configured') : t('omc.github_token_not_configured')}
+            </StatusLabel>
+          </span>
+        )}
         description={status.configured && status.masked_token
           ? <code className={`terminal-mono ${styles['masked-token']}`}>{status.masked_token}</code>
           : undefined}
         control={(
-          <div className={styles['status-control']}>
-            <StatusLabel tone={status.configured ? 'success' : 'neutral'}>
-              {status.configured ? t('omc.github_token_configured') : t('omc.github_token_not_configured')}
-            </StatusLabel>
+          <div className={styles['status-actions']}>
             <Button
-              size="sm"
               loading={testMutation.isPending}
               disabled={isWriting || testMutation.isPending}
               onClick={() => testMutation.mutate({ candidate: trimmedDraft || undefined, stateKey: tokenStateKey })}
@@ -133,11 +150,11 @@ function GitHubTokenForm({ status }: { status: GitHubTokenStatus }) {
                 title={t('omc.github_token_clear_title')}
                 description={t('omc.github_token_clear_desc')}
                 confirmLabel={t('omc.github_token_clear')}
-                isConfirming={isWriting}
+                isConfirming={isClearing}
                 disabled={isWriting || !status.cpa_revision}
-                onConfirm={() => saveMutation.mutateAsync('')}
+                onConfirm={() => saveMutation.mutateAsync('').catch(() => undefined)}
               >
-                <Button size="sm" variant="ghost" danger disabled={isWriting || !status.cpa_revision}>
+                <Button danger disabled={isWriting || !status.cpa_revision}>
                   {t('omc.github_token_clear')}
                 </Button>
               </ConfirmAction>
@@ -149,7 +166,13 @@ function GitHubTokenForm({ status }: { status: GitHubTokenStatus }) {
         label={t('omc.github_token_input')}
         description={t('omc.github_token_desc')}
         control={(
-          <div className={styles['input-control']}>
+          <form
+            className={styles['input-control']}
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (canSave) saveMutation.mutate(trimmedDraft);
+            }}
+          >
             <SecretInput
               className={styles['token-input']}
               value={draft}
@@ -159,21 +182,16 @@ function GitHubTokenForm({ status }: { status: GitHubTokenStatus }) {
               aria-label={t('omc.github_token_input')}
             />
             <Button
+              type="submit"
               variant="primary"
-              loading={isWriting}
+              loading={isSaving}
               disabled={!canSave}
-              onClick={() => saveMutation.mutate(trimmedDraft)}
             >
               {t('common.save')}
             </Button>
-          </div>
+          </form>
         )}
       />
-      {testResult && (
-        <div className="settings-inline-notice">
-          {renderTestNotice(testResult)}
-        </div>
-      )}
     </>
   );
 }

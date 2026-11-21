@@ -652,5 +652,20 @@ test('chip primitives keep unified breathing room, centered icons, and unclipped
   assert.match(indexCss, /\.status-label-text\s*\{[^}]*overflow:\s*hidden;[^}]*line-height:\s*1\.25;/);
   const comboboxTsx = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/ui/combobox.tsx'), 'utf8'));
   assert.equal((comboboxTsx.match(/<LineSlot className="leading-\[1\.25\]">\{renderChipLabel\(val\)\}<\/LineSlot>/g) ?? []).length, 2);
+
+  // Secondary destructive buttons share the calm `--shadow-control` secondary material at rest and
+  // reveal the WCAG-AA danger wash/ink when approached or open, never a bespoke red outline ring.
+  const buttonTsx = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/ui/button.tsx'), 'utf8'));
+  const destructiveSecondary = buttonTsx.match(/'destructive-secondary':\s*\n?\s*'([^']+)'/)?.[1] ?? '';
+  assert.ok(destructiveSecondary.length > 0);
+  assert.match(destructiveSecondary, /\bbg-secondary\b/);
+  assert.match(destructiveSecondary, /\bshadow-control\b/);
+  assert.match(destructiveSecondary, /\bhover:enabled:bg-danger-wash\b/);
+  assert.match(destructiveSecondary, /\bhover:enabled:text-danger-ink\b/);
+  assert.match(destructiveSecondary, /\bdata-\[popup-open\]:bg-danger-wash\b/);
+  assert.doesNotMatch(destructiveSecondary, /shadow-\[/);
+
+  // Code elements follow the operator-configured `--font-mono` role rather than the browser UA fallback.
+  assert.match(indexCss, /code,\s*kbd,\s*samp,\s*pre\s*\{\s*font-family:\s*var\(--font-mono\);\s*\}/);
 });
 
