@@ -1436,8 +1436,9 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
   justify-content: space-between;
   gap: 12px 20px;
   min-height: 46px;
-  /* The trailing buttons sit 6px inside the slab's corner, concentric with it (6 + 6 = 12). */
-  padding: 6px 6px 6px 16px;
+  /* The clear glyph and the trailing buttons sit 6px inside the slab's corner, concentric with it
+     (6 + 6 = 12). */
+  padding: 6px;
   border-radius: var(--radius-xl);
   background: var(--elevated);
   box-shadow: var(--shadow-float);
@@ -1445,12 +1446,22 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
   animation: selection-dock-in var(--motion-base) var(--ease-out) backwards;
 }
 .selection-bar-start,
-.selection-bar-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 14px; min-width: 0; }
+.selection-bar-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 16px; min-width: 0; }
+/* The way out hugs the count it ends; the widening links keep the start's wider rhythm. */
+.selection-bar-clear { margin-inline-end: -10px; color: var(--fg-2); }
 .selection-bar-actions {
-  gap: 8px;
+  gap: 4px;
   margin-inline-start: auto;
-  padding-inline-start: 16px;
+  padding-inline-start: 12px;
   border-inline-start: 1px solid var(--border-soft);
+}
+/* A destructive action stands apart from the rest by the same rule that sets the actions apart. */
+.selection-bar-divider {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin-inline: 6px;
+  background: var(--border-soft);
 }
 @keyframes selection-dock-in {
   from { opacity: 0; transform: translateY(8px); }
@@ -1463,7 +1474,27 @@ body.is-row-dragging, body.is-row-dragging * { cursor: grabbing !important; user
 }
 .selection-bar-count { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .selection-bar-note { color: var(--muted); }
-.selection-bar-start [data-slot="button"][data-variant="link"] { padding-inline: 0; }
+.selection-bar-start [data-slot="button"][data-variant="link"] { padding-inline: 0; white-space: nowrap; }
+/* A phone's bar is one line: the way out, the count and the reach of the selection, then the actions
+   as glyphs. The note and a widening link give way before the count does. */
+@media (max-width: 640px) {
+  .selection-bar,
+  .selection-bar-start { flex-wrap: nowrap; }
+  .selection-bar { gap: 8px; }
+  .selection-bar-start { flex: 1 1 auto; gap: 8px; }
+  .selection-bar-clear { margin-inline-end: 0; }
+  .selection-bar-count { flex-shrink: 0; }
+  .selection-bar-note,
+  .selection-bar-start [data-slot="button"][data-variant="link"] {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .selection-bar-actions { flex: none; gap: 0; }
+  .selection-bar-divider { margin-inline: 4px; }
+}
 
 /* Tag (components/common/Tag.tsx): a short label on a soft fill. A row carries several facts, and a
    neutral outline around each made the row a strip of boxes; a wash keeps each one legible as a

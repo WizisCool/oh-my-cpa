@@ -254,16 +254,20 @@ describe('ConfirmAction', () => {
 });
 
 describe('SelectionBar', () => {
-  it('announces the count, keeps the note beside it and the actions at the trailing edge', () => {
+  it('leads with the way out, announces the count, and keeps the actions at the trailing edge', () => {
+    const onClear = vi.fn();
     const { container } = render(
-      <SelectionBar label="Selection" summary="3 selected" note="2 on other pages">
+      <SelectionBar label="Selection" summary="3 selected" note="2 on other pages" onClear={onClear} clearLabel="Clear selection">
         <button type="button">Delete</button>
       </SelectionBar>,
     );
     expect(screen.getByRole('status').textContent).toBe('3 selected');
-    expect(container.querySelector('.selection-bar')).toBeTruthy();
+    expect(container.querySelector('.selection-bar-start')?.firstElementChild?.getAttribute('aria-label')).toBe('Clear selection');
     expect(container.querySelector('.selection-bar-note')?.textContent).toBe('2 on other pages');
     expect(container.querySelector('.selection-bar-actions button')?.textContent).toBe('Delete');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+    expect(onClear).toHaveBeenCalledTimes(1);
   });
 });
 
