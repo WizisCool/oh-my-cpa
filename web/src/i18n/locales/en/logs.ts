@@ -209,6 +209,8 @@ export default {
   'audit.action.auth_file.display_name_clear': 'Cleared a credential\'s name',
   'audit.action.cpa_credential.reveal': 'Revealed the CPA management key',
   'audit.action.outbound_proxy.save': 'Changed the outbound proxy',
+  'audit.action.github_token.save': 'Updated the GitHub token',
+  'audit.action.github_token.clear': 'Cleared the GitHub token',
   'audit.action.routing.apply': 'Applied the routing arrangement',
   'audit.action.plugin.settings': 'Changed plugin system settings',
   'audit.action.pricing.model.dismiss_candidate': 'Dismissed a price candidate',

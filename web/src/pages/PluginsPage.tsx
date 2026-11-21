@@ -7,6 +7,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError, apiErrorCode, describeError } from '../api/client';
 import { useT } from '../i18n';
 import type { PluginItem } from '../types/plugin';
+import { GITHUB_TOKEN_SETTINGS_PATH, isGitHubTokenError } from '../types/githubToken';
 import { PageHeader } from '../components/common/PageHeader';
 import { InstalledPluginsPanel } from '../components/plugins/InstalledPluginsPanel';
 import { PluginStorePanel } from '../components/plugins/PluginStorePanel';
@@ -128,9 +129,19 @@ export const PluginsPage: React.FC = () => {
         const listings = storeListingsByPluginId(store.plugins);
         const count = plugins.filter((plugin) => listings.get(plugin.id)?.update_available).length;
         if (store.source_errors.length > 0) {
+          const sourcesById = new Map((store.sources ?? []).map((source) => [source.id, source]));
+          const hasRateLimit = store.source_errors.some((source) => {
+            const registered = sourcesById.get(source.source_id);
+            return isGitHubTokenError(source.message, {
+              isBuiltInGitHub: Boolean(registered?.is_official || registered?.is_omc),
+              sourceUrl: source.source_url || registered?.url,
+            });
+          });
           toast.warning(t(isUpdateCheck && count > 0 ? 'plugin.check_updates_found' : 'plugin.store_refresh_partial', { n: count }), {
             items: store.source_errors.map((source) => ({ name: source.source_name, reason: source.message })),
-            actions: <Button size="sm" onClick={() => selectTab('settings')}>{t('plugin.open_settings')}</Button>,
+            actions: hasRateLimit
+              ? <Button size="sm" onClick={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}>{t('plugin.configure_github_token')}</Button>
+              : <Button size="sm" onClick={() => selectTab('settings')}>{t('plugin.open_settings')}</Button>,
           });
         } else if (isUpdateCheck) {
           // CPA can retain a previous version after a failed release lookup; zero is not proof of freshness.
@@ -147,7 +158,9 @@ export const PluginsPage: React.FC = () => {
           ? t('plugin.retry_after_seconds', { n: Math.ceil(retryAfter) }) : ''].filter(Boolean).join(' ');
         toast.error(t(isRateLimited ? 'plugin.rate_limited' : isUpdateCheck ? 'plugin.check_updates_failed' : 'plugin.store_refresh_failed'), {
           detail,
-          actions: isRateLimited ? <Button size="sm" onClick={() => selectTab('settings')}>{t('plugin.open_settings')}</Button> : undefined,
+          actions: isRateLimited
+            ? <Button size="sm" onClick={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}>{t('plugin.configure_github_token')}</Button>
+            : undefined,
         });
       } finally {
         setIsRefreshingStore(false);
@@ -249,6 +262,7 @@ export const PluginsPage: React.FC = () => {
             onConfigure={setConfiguring}
             onBrowseStore={() => selectTab('store')}
             onOpenSettings={() => selectTab('settings')}
+            onConfigureGitHubToken={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}
             onCheckUpdates={() => refreshStore(true)}
             isCheckingUpdates={isRefreshingStore}
           />
@@ -263,6 +277,7 @@ export const PluginsPage: React.FC = () => {
           isRefreshing={isRefreshingStore}
           onManage={manage}
           onOpenSettings={() => selectTab('settings')}
+          onConfigureGitHubToken={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}
         />
       )}
       {tab === 'settings' && <PluginSettingsPanel isDemo={false} />}

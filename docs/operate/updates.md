@@ -9,8 +9,10 @@ updater behave.
 
 The System Information page reports the running and published versions of both Oh My
 CPA and your gateway. It reads release metadata from `api.github.com` only — fixed host,
-no operator-supplied URL — using the OMC outbound network policy. A sweep runs on the interval chosen in OMC Settings → Update checks — hourly by
-default, adjustable from fifteen minutes to a day; opening the page and the
+no operator-supplied URL — using the OMC outbound network policy. Background sweeps run on the
+intervals chosen in **OMC Settings → Updates & auto-refresh** (OMC & CPA version checks and
+plugin store update checks can each be tuned independently from 15 minutes to 24 hours, or
+turned off, defaulting to hourly); opening the page and the
 **Check for updates** button also check, subject to a fifteen-minute floor per product —
 inside it the answer comes from the stored index and the message says so, because the feed
 is one shared per-address budget. A refused read — including a 429 — is reported on the page
@@ -27,8 +29,8 @@ fallback for a deployment whose stream is unavailable. **Ignore this version** o
 dot for that one release and is remembered by the deployment, not the browser; pressing it
 again restores the reminder, and a later release is flagged regardless.
 
-The background sweep also checks installed plugins through CPA's store, once at startup
-and on the same interval. The **Plugin Management** entry uses the same amber dot for available
+The background scheduler also checks installed plugins through CPA's store, once at startup
+(when enabled) and on its own configured interval. The **Plugin Management** entry uses the same amber dot for available
 plugin updates. The installed-plugins page enables a separate store query after its
 list contains plugins. Installation or removal refreshes the reminder.
 
@@ -48,8 +50,9 @@ when it is opened, which is what an air-gapped or test deployment wants, since a
 visit is not an operator asking a question. The **Check for updates** button works
 either way. GitHub's unauthenticated budget is 60 requests per hour for the address
 making them, and the page says so when a check is refused for that reason. The checks use the
-gateway's own GitHub token — Configuration → Access & Auth → GitHub token
-(`server.github-token`) — so a deployment configures GitHub once and both processes benefit:
+gateway's GitHub token (`server.github-token`), managed directly in **OMC Settings → GitHub token**
+(with live quota verification) and also editable via **Configuration → Access & Auth** or `config.yaml` —
+so a deployment configures GitHub once and both processes benefit:
 a token raises that budget to 5,000 and exempts conditional requests from it. OMC reads it
 from the gateway's configuration, holds it in memory, and never returns it to a browser.
 Release notes

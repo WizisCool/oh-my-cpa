@@ -29,6 +29,7 @@ import { Panel } from '../common/Panel';
 import { Tooltip } from '../common/Tooltip';
 import { BrandArtwork } from '../common/BrandArtwork';
 import { useOmcPluginSource } from '../../hooks/useOmcPluginSource';
+import { GITHUB_TOKEN_SETTINGS_PATH } from '../../types/githubToken';
 
 interface SettingsDraft {
   enabled: boolean;
@@ -301,7 +302,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
           <Notice
             tone="info"
             title={t('plugin.github_token_hint')}
-            action={<Link to="/config">{t('cfg.f_github_token')}</Link>}
+            action={<Link to={GITHUB_TOKEN_SETTINGS_PATH}>{t('plugin.configure_github_token')}</Link>}
           />
           {current.rules.length === 0 ? (
             <EmptyState size="compact" title={t('plugin.settings_auth_empty')} />

@@ -1,6 +1,7 @@
 import { DatabaseBackups } from './SystemPage/DatabaseBackups';
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
   DownloadOutlined,
@@ -49,6 +50,7 @@ import { StorageFootprint } from './SystemPage/StorageFootprint';
 import { INCOMPLETE_REASON_KEYS, MaintenanceOutcome, MaintenanceRunning } from './SystemPage/MaintenanceOutcome';
 import { UPDATE_STATUS_QUERY_KEY, useUpdateDismissals } from '../hooks/useUpdateNotice';
 import { isUpdateDismissed } from '../utils/updateDismissals';
+import { GITHUB_TOKEN_SETTINGS_PATH, isGitHubTokenError } from '../types/githubToken';
 import styles from './SystemPage.module.css';
 import { LoadFailure, Notice, useToast } from '../components/feedback';
 import { AppDrawer } from '../components/common/AppDrawer';
@@ -94,6 +96,7 @@ interface ProductBlockProps {
   updateOffer: UpdateOffer;
   isSubmittingUpdate: boolean;
   onUpdate: () => void;
+  onConfigureGitHubToken: () => void;
 }
 
 const ProductBlock: React.FC<ProductBlockProps> = ({
@@ -108,6 +111,7 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
   updateOffer,
   isSubmittingUpdate,
   onUpdate,
+  onConfigureGitHubToken,
 }) => {
   useTimeZone();
   const t = useT();
@@ -212,6 +216,9 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
             time: version.attempted_at_ms ? dayjs(version.attempted_at_ms).format('YYYY-MM-DD HH:mm:ss') : '—',
             msg: version.check_error,
           })}{version.checked_at_ms && <div>{t('sys.last_successful_check', { time: dayjs(version.checked_at_ms).format('YYYY-MM-DD HH:mm:ss') })}</div>}</>}
+          action={isGitHubTokenError(version.check_error) ? (
+            <Button size="sm" onClick={onConfigureGitHubToken}>{t('sys.configure_github_token')}</Button>
+          ) : undefined}
         />
       )}
 
@@ -222,6 +229,7 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
 export const SystemPage: React.FC = () => {
   useTimeZone();
   const t = useT();
+  const navigate = useNavigate();
   const toast = useToast();
   const queryClient = useQueryClient();
   const { dismissals, isLoaded: areDismissalsLoaded, dismiss, restore } = useUpdateDismissals();
@@ -520,7 +528,12 @@ export const SystemPage: React.FC = () => {
         const summary = summarizeUpdateCheck([outcome.omc_version, outcome.cpa_version], outcome.served_from_cache);
         if (summary.kind === 'failed' || summary.kind === 'partial') {
           const products = summary.failedProducts.map((product) => t(product === 'omc' ? 'sys.omc_version' : 'sys.cpa_version')).join(', ');
-          toast.warning(t(outcome.served_from_cache ? 'sys.check_updates_cached_failed' : 'sys.check_updates_failed', { products }));
+          const hasTokenError = [outcome.omc_version.check_error, outcome.cpa_version.check_error].some((msg) => isGitHubTokenError(msg));
+          toast.warning(t(outcome.served_from_cache ? 'sys.check_updates_cached_failed' : 'sys.check_updates_failed', { products }), {
+            actions: hasTokenError
+              ? <Button size="sm" onClick={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}>{t('sys.configure_github_token')}</Button>
+              : undefined,
+          });
         } else if (summary.kind === 'cached') {
           toast.info(t('sys.check_updates_cached'));
         } else if (summary.kind === 'checking') {
@@ -533,8 +546,16 @@ export const SystemPage: React.FC = () => {
       const detail = describeError(error);
       // One outcome, one surface: a check the operator asked for answers in a toast, and only an
       // automatic check, which nobody is waiting on, states its failure in the card.
-      if (shouldNotify) toast.error(t('sys.check_failed'), { detail });
-      else setUpdateCheckError(detail);
+      if (shouldNotify) {
+        toast.error(t('sys.check_failed'), {
+          detail,
+          actions: isGitHubTokenError(detail)
+            ? <Button size="sm" onClick={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}>{t('sys.configure_github_token')}</Button>
+            : undefined,
+        });
+      } else {
+        setUpdateCheckError(detail);
+      }
     } finally {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['management-system-info'] }),
@@ -673,7 +694,16 @@ export const SystemPage: React.FC = () => {
             </div>
           }
         >
-          {updateCheckError && <Notice tone="warning" title={t('sys.check_failed')} description={updateCheckError} />}
+          {updateCheckError && (
+            <Notice
+              tone="warning"
+              title={t('sys.check_failed')}
+              description={updateCheckError}
+              action={isGitHubTokenError(updateCheckError) ? (
+                <Button size="sm" onClick={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}>{t('sys.configure_github_token')}</Button>
+              ) : undefined}
+            />
+          )}
           {sysInfo && (
             <>
               <ProductBlock
@@ -688,6 +718,7 @@ export const SystemPage: React.FC = () => {
                 updateOffer={deriveUpdateOffer(sysInfo.omc_version, updater, 'omc')}
                 isSubmittingUpdate={submittingProduct === 'omc'}
                 onUpdate={() => void handleApplyUpdate('omc')}
+                onConfigureGitHubToken={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}
               />
               <ProductBlock
                 productTitle={t('sys.cpa_version')}
@@ -701,6 +732,7 @@ export const SystemPage: React.FC = () => {
                 updateOffer={deriveUpdateOffer(sysInfo.cpa_version, updater, 'cpa')}
                 isSubmittingUpdate={submittingProduct === 'cpa'}
                 onUpdate={() => void handleApplyUpdate('cpa')}
+                onConfigureGitHubToken={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}
               />
               <UpdaterSetup updater={updater} />
             </>

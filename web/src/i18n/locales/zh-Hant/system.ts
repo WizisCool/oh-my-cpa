@@ -64,6 +64,7 @@ export default {
   "sys.update_running": "正在更新",
   "sys.check_failed": "檢查失敗",
   "sys.check_failed_cached": "檢查失敗，保留上次結果",
+  "sys.configure_github_token": "設定 GitHub 權杖",
   "sys.check_updates_failed": "{products} 檢查失敗，請查看對應產品的提示",
   "sys.check_updates_cached_failed": "顯示快取結果：{products} 的上次檢查失敗",
   "sys.last_successful_check": "上次成功檢查：{time}",

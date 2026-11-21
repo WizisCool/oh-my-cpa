@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -23,13 +24,49 @@ type Fetcher interface {
 // Service owns only display rates. It has no access to price versions or usage
 // costs, so refreshing a rate cannot rewrite accounting history.
 type Service struct {
-	store      Store
-	fetcher    Fetcher
-	logger     *slog.Logger
-	permit     chan struct{}
-	wake       chan struct{}
-	clock      func() time.Time
-	retryDelay time.Duration
+	store          Store
+	fetcher        Fetcher
+	logger         *slog.Logger
+	permit         chan struct{}
+	wake           chan struct{}
+	clock          func() time.Time
+	retryDelay     time.Duration
+	policyMu       sync.RWMutex
+	intervalPolicy func(context.Context) time.Duration
+}
+
+// SetIntervalPolicy overrides the fixed daily refresh interval with a dynamic
+// policy reader (returning <= 0 pauses scheduled refreshes while keeping manual
+// refreshes available).
+func (s *Service) SetIntervalPolicy(policy func(context.Context) time.Duration) {
+	if s == nil {
+		return
+	}
+	s.policyMu.Lock()
+	s.intervalPolicy = policy
+	s.policyMu.Unlock()
+	s.Wake()
+}
+
+// Wake nudges the background loop so a changed refresh policy takes effect immediately.
+func (s *Service) Wake() {
+	if s == nil {
+		return
+	}
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+}
+
+func (s *Service) refreshInterval(ctx context.Context) time.Duration {
+	s.policyMu.RLock()
+	policy := s.intervalPolicy
+	s.policyMu.RUnlock()
+	if policy == nil {
+		return RefreshInterval
+	}
+	return policy(ctx)
 }
 
 func NewService(store Store, fetcher Fetcher, logger *slog.Logger) *Service {
@@ -94,6 +131,13 @@ func (s *Service) Refresh(ctx context.Context) (Snapshot, error) {
 // conversion on one snapshot until the process restarts.
 func (s *Service) Run(ctx context.Context) error {
 	for ctx.Err() == nil {
+		interval := s.refreshInterval(ctx)
+		if interval <= 0 {
+			if !s.waitForWake(ctx) {
+				return nil
+			}
+			continue
+		}
 		snapshot, err := s.store.ReadExchangeRates(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -105,20 +149,20 @@ func (s *Service) Run(ctx context.Context) error {
 			}
 			continue
 		}
-		delay := time.UnixMilli(snapshot.AttemptedAtMS).Add(RefreshInterval).Sub(s.clock())
+		delay := time.UnixMilli(snapshot.AttemptedAtMS).Add(interval).Sub(s.clock())
 		if delay <= 0 {
 			refreshCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			_, refreshErr := s.Refresh(refreshCtx)
 			cancel()
 			switch {
 			case refreshErr == nil, errors.Is(refreshErr, ErrFetchFailed):
-				// Either way the attempt was published, and its time sets the next daily tick.
+				// Either way the attempt was published, and its time sets the next scheduled tick.
 				continue
 			case ctx.Err() != nil:
 				return nil
 			case errors.Is(refreshErr, ErrRefreshRunning):
 				// A concurrent manual refresh publishes its own schedule and wake signal.
-				delay = RefreshInterval
+				delay = interval
 			default:
 				s.logger.Warn("exchange rate refresh failed", "error", refreshErr)
 				if !s.sleep(ctx, s.retryDelay) {
@@ -132,6 +176,15 @@ func (s *Service) Run(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (s *Service) waitForWake(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-s.wake:
+		return true
+	}
 }
 
 // sleep waits out a delay, ending early (false) when the run ends or a manual refresh

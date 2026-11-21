@@ -31,6 +31,7 @@ export function createPreferenceFixture({ serverTimezone = PREFERENCE_CONTRACT.s
     }
     if (key === 'omc_quota_auto_refresh' && !isQuotaAutoRefreshDocument(value)) return respond(400, { error: 'invalid_quota_auto_refresh' });
     if (key === 'omc_update_check' && !isUpdateCheckDocument(value)) return respond(400, { error: 'invalid_update_check' });
+    if (key === 'omc_exchange_rate_refresh' && !isExchangeRateRefreshDocument(value)) return respond(400, { error: 'invalid_exchange_rate_refresh' });
     if (key === 'omc_plugin_source_enabled' && typeof value !== 'boolean') return respond(400, { error: 'the plugin source preference must be true or false' });
     if (key === 'omc_sidebar_collapsed' && typeof value !== 'boolean') return respond(400, { error: 'the sidebar collapsed preference must be true or false' });
     // Credential/custom-icon reference validation remains in Go and each relevant
@@ -53,8 +54,22 @@ function isQuotaAutoRefreshDocument(value) {
 /** The server's strict shape for the scheduled update check (`release.ParseUpdateCheckSettings`). */
 function isUpdateCheckDocument(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = Object.keys(value).sort();
+  const isValidMinutes = (minutes) => Number.isInteger(minutes) && (minutes === 0 || (minutes >= 15 && minutes <= 1440));
+  if (keys.length === 1 && keys[0] === 'interval_minutes') {
+    return isValidMinutes(value.interval_minutes);
+  }
+  if (keys.length === 2 && keys[0] === 'interval_minutes' && keys[1] === 'plugin_interval_minutes') {
+    return isValidMinutes(value.interval_minutes) && isValidMinutes(value.plugin_interval_minutes);
+  }
+  return false;
+}
+
+/** The server's strict shape for the scheduled exchange-rate refresh (`exchangerate.ParseRefreshSettings`). */
+function isExchangeRateRefreshDocument(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const keys = Object.keys(value);
-  if (keys.length !== 1 || keys[0] !== 'interval_minutes') return false;
-  const minutes = value.interval_minutes;
-  return Number.isInteger(minutes) && minutes >= 15 && minutes <= 1440;
+  if (keys.length !== 1 || keys[0] !== 'interval_hours') return false;
+  const hours = value.interval_hours;
+  return Number.isInteger(hours) && (hours === 0 || (hours >= 1 && hours <= 168));
 }

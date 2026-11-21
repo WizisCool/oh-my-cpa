@@ -33,47 +33,97 @@ var ErrInvalidUpdateCheckSettings = errors.New("invalid_update_check")
 
 // UpdateCheckSettings stores the deployment's scheduled update-check policy.
 type UpdateCheckSettings struct {
-	// IntervalMinutes is how often the background sweep reads the release feeds and the
-	// plugin store.
+	// IntervalMinutes is how often the background sweep reads OMC and CPA release feeds.
+	// Zero disables scheduled release checks while keeping manual checks available.
 	IntervalMinutes int `json:"interval_minutes"`
+	// PluginIntervalMinutes is how often the background sweep observes plugin store updates.
+	// Zero disables scheduled plugin update checks while keeping manual checks available.
+	PluginIntervalMinutes int `json:"plugin_interval_minutes"`
 }
 
 // DefaultUpdateCheckSettings is the policy of a deployment that never chose one.
 func DefaultUpdateCheckSettings() UpdateCheckSettings {
-	return UpdateCheckSettings{IntervalMinutes: DefaultUpdateCheckIntervalMinutes}
+	return UpdateCheckSettings{
+		IntervalMinutes:       DefaultUpdateCheckIntervalMinutes,
+		PluginIntervalMinutes: DefaultUpdateCheckIntervalMinutes,
+	}
+}
+
+func isValidUpdateCheckMinutes(minutes int) bool {
+	return minutes == 0 || (minutes >= MinUpdateCheckIntervalMinutes && minutes <= MaxUpdateCheckIntervalMinutes)
 }
 
 // Validate reports whether the sweep can honour the policy.
 func (s UpdateCheckSettings) Validate() error {
-	if s.IntervalMinutes < MinUpdateCheckIntervalMinutes || s.IntervalMinutes > MaxUpdateCheckIntervalMinutes {
+	if !isValidUpdateCheckMinutes(s.IntervalMinutes) || !isValidUpdateCheckMinutes(s.PluginIntervalMinutes) {
 		return ErrInvalidUpdateCheckSettings
 	}
 	return nil
 }
 
-// Interval is the schedule as the sweep uses it. An unhonourable policy falls back to the
-// default rather than stopping the loop, because a schedule nobody can run is still a reason
-// to keep checking.
-func (s UpdateCheckSettings) Interval() time.Duration {
-	if s.Validate() != nil {
+// ReleaseInterval returns the scheduled OMC/CPA release check cadence, or 0 when disabled.
+func (s UpdateCheckSettings) ReleaseInterval() time.Duration {
+	if s.IntervalMinutes == 0 {
+		return 0
+	}
+	if !isValidUpdateCheckMinutes(s.IntervalMinutes) {
 		return time.Duration(DefaultUpdateCheckIntervalMinutes) * time.Minute
 	}
 	return time.Duration(s.IntervalMinutes) * time.Minute
 }
 
-// ParseUpdateCheckSettings strictly decodes a stored document. The field is required and
-// nothing else is accepted, so a write cannot silently lose the interval to a typo and leave
-// the sweep running on a default the operator never saw.
-func ParseUpdateCheckSettings(raw []byte) (UpdateCheckSettings, error) {
-	var document struct {
-		IntervalMinutes *int `json:"interval_minutes"`
+// PluginInterval returns the scheduled plugin store update check cadence, or 0 when disabled.
+func (s UpdateCheckSettings) PluginInterval() time.Duration {
+	if s.PluginIntervalMinutes == 0 {
+		return 0
 	}
+	if !isValidUpdateCheckMinutes(s.PluginIntervalMinutes) {
+		return time.Duration(DefaultUpdateCheckIntervalMinutes) * time.Minute
+	}
+	return time.Duration(s.PluginIntervalMinutes) * time.Minute
+}
+
+// Interval is the release-check schedule as the sweep uses it. Returns 0 when disabled.
+func (s UpdateCheckSettings) Interval() time.Duration {
+	return s.ReleaseInterval()
+}
+
+// ParseUpdateCheckSettings strictly decodes a stored document. interval_minutes is required;
+// plugin_interval_minutes is optional for backward compatibility with older single-field
+// callers and mirrors interval_minutes when omitted (explicit null and noncanonical field
+// names are rejected so stored JSON always matches ResolveUpdateCheckSettings).
+func ParseUpdateCheckSettings(raw []byte) (UpdateCheckSettings, error) {
+	var fields map[string]json.RawMessage
 	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&document); err != nil || decoder.More() || document.IntervalMinutes == nil {
+	if err := decoder.Decode(&fields); err != nil || decoder.More() || fields == nil {
 		return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
 	}
-	settings := UpdateCheckSettings{IntervalMinutes: *document.IntervalMinutes}
+	for key := range fields {
+		if key != "interval_minutes" && key != "plugin_interval_minutes" {
+			return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
+		}
+	}
+	rawInterval, hasInterval := fields["interval_minutes"]
+	if !hasInterval || bytes.Equal(bytes.TrimSpace(rawInterval), []byte("null")) {
+		return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
+	}
+	var intervalMinutes int
+	if err := json.Unmarshal(rawInterval, &intervalMinutes); err != nil {
+		return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
+	}
+	pluginMinutes := intervalMinutes
+	if rawPlugin, hasPlugin := fields["plugin_interval_minutes"]; hasPlugin {
+		if bytes.Equal(bytes.TrimSpace(rawPlugin), []byte("null")) {
+			return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
+		}
+		if err := json.Unmarshal(rawPlugin, &pluginMinutes); err != nil {
+			return UpdateCheckSettings{}, ErrInvalidUpdateCheckSettings
+		}
+	}
+	settings := UpdateCheckSettings{
+		IntervalMinutes:       intervalMinutes,
+		PluginIntervalMinutes: pluginMinutes,
+	}
 
 	if err := settings.Validate(); err != nil {
 		return UpdateCheckSettings{}, err
@@ -85,8 +135,8 @@ func ParseUpdateCheckSettings(raw []byte) (UpdateCheckSettings, error) {
 //
 // Reading is lenient where writing is strict: a document a newer build wrote may carry fields
 // this build does not know, and rejecting the whole document would replace the operator's
-// schedule with the default. The known field is kept when it is valid, and only a missing or
-// invalid one takes the default.
+// schedule with the default. Older single-field documents mirror interval_minutes onto
+// plugin_interval_minutes so an existing schedule stays intact on upgrade.
 func ResolveUpdateCheckSettings(raw string, isStored bool) UpdateCheckSettings {
 	settings := DefaultUpdateCheckSettings()
 	if !isStored || strings.TrimSpace(raw) == "" {
@@ -96,11 +146,19 @@ func ResolveUpdateCheckSettings(raw string, isStored bool) UpdateCheckSettings {
 	if json.Unmarshal([]byte(raw), &fields) != nil {
 		return settings
 	}
+	hasValidInterval := false
 	var intervalMinutes int
-	if json.Unmarshal(fields["interval_minutes"], &intervalMinutes) == nil {
-		if candidate := (UpdateCheckSettings{IntervalMinutes: intervalMinutes}); candidate.Validate() == nil {
-			settings = candidate
+	if value, ok := fields["interval_minutes"]; ok && !bytes.Equal(bytes.TrimSpace(value), []byte("null")) && json.Unmarshal(value, &intervalMinutes) == nil && isValidUpdateCheckMinutes(intervalMinutes) {
+		settings.IntervalMinutes = intervalMinutes
+		hasValidInterval = true
+	}
+	if value, ok := fields["plugin_interval_minutes"]; ok {
+		var pluginMinutes int
+		if !bytes.Equal(bytes.TrimSpace(value), []byte("null")) && json.Unmarshal(value, &pluginMinutes) == nil && isValidUpdateCheckMinutes(pluginMinutes) {
+			settings.PluginIntervalMinutes = pluginMinutes
 		}
+	} else if hasValidInterval {
+		settings.PluginIntervalMinutes = settings.IntervalMinutes
 	}
 
 	return settings

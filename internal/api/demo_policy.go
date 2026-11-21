@@ -190,6 +190,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPost, "/api/v1/pricing/price-unpriced", demoAllow, ""},
 	{http.MethodPut, "/api/v1/pricing/channels/{channel}", demoAllow, ""},
 	{http.MethodDelete, "/api/v1/pricing/channels/{channel}", demoAllow, ""},
+	{http.MethodGet, "/api/v1/pricing/sync-schedule", demoAllow, ""},
 	{http.MethodPut, "/api/v1/pricing/sync-schedule", demoAllow, ""},
 
 	// Observation of the fixture: the dashboard, the request records and the log
@@ -258,6 +259,7 @@ var demoPolicy = []demoPolicyRule{
 	// Configuration and capability reads. The console renders them; nothing here
 	// writes to the gateway.
 	{http.MethodGet, "/api/v1/management/outbound-proxy", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/github-token", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/config", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/config/source", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/config/backups", demoAllow, ""},
@@ -331,6 +333,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPost, "/api/v1/management/providers/pull-models", demoRefuse, "reading models from a provider is disabled: it would call the provider"},
 	{http.MethodPost, "/api/v1/management/providers/probe", demoRefuse, "probing a provider is disabled: it would call the provider"},
 	{http.MethodPost, "/api/v1/pricing/sync", demoRefuse, "syncing the price catalogue is disabled: it would call openrouter.ai"},
+	{http.MethodPost, "/api/v1/management/github-token/test", demoRefuse, "testing a GitHub token is disabled: it would call api.github.com"},
 	{http.MethodGet, "/api/v1/management/system/diagnostics", demoRefuse, "generating a diagnostic bundle is disabled"},
 
 	// Plugin execution.
@@ -361,6 +364,7 @@ var demoPolicy = []demoPolicyRule{
 
 	// Gateway configuration and credential state.
 	{http.MethodPut, "/api/v1/management/outbound-proxy", demoRefuse, "writing the gateway configuration is disabled"},
+	{http.MethodPut, "/api/v1/management/github-token", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodPatch, "/api/v1/management/config", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodPatch, "/api/v1/management/routing", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodGet, "/api/v1/management/config/backups/{id}", demoRefuse, "configuration backups hold the gateway's secrets"},

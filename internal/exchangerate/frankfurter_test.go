@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -166,5 +167,74 @@ func TestPersistedScheduleAndConcurrentRefresh(t *testing.T) {
 	store.save = nil
 	if store.snapshot.UpdatedAtMS != now.UnixMilli() {
 		t.Fatal("a transient write failure stopped the loop before it could publish")
+	}
+}
+
+func TestExchangeRateRefreshSettingsAndPause(t *testing.T) {
+	for _, raw := range []string{
+		`{}`,
+		`null`,
+		`{"interval_hours":-1}`,
+		`{"interval_hours":169}`,
+		`{"interval_hours":null}`,
+		`{"interval_hours":12.5}`,
+		`{"INTERVAL_HOURS":0}`,
+		`{"interval_hours":24,"extra":true}`,
+		`{"interval_hours":24} trailing`,
+	} {
+		if _, err := ParseRefreshSettings([]byte(raw)); !errors.Is(err, ErrInvalidRefreshSettings) {
+			t.Fatalf("ParseRefreshSettings(%s) = %v, want ErrInvalidRefreshSettings", raw, err)
+		}
+	}
+	off, err := ParseRefreshSettings([]byte(`{"interval_hours":0}`))
+	if err != nil || off.Interval() != 0 {
+		t.Fatalf("off = %+v, err = %v", off, err)
+	}
+	if got := ResolveRefreshSettings(`{"interval_hours":12,"future":true}`, true); got.Interval() != 12*time.Hour {
+		t.Fatalf("resolved = %+v, want 12h", got)
+	}
+	if got := ResolveRefreshSettings(`{"interval_hours":0}`, true); got.Interval() != 0 {
+		t.Fatalf("resolved off = %+v, want 0", got)
+	}
+
+	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
+	store := &scheduleStore{snapshot: Snapshot{AttemptedAtMS: now.Add(-48 * time.Hour).UnixMilli()}}
+	var calls atomic.Int64
+	service := NewService(store, fetchFunc(func(context.Context) ([]Rate, error) {
+		calls.Add(1)
+		return []Rate{{Currency: "MYR", Rate: 4, Date: "2026-10-27"}}, nil
+	}), nil)
+	service.clock = func() time.Time { return now }
+
+	var enabled atomic.Bool
+	service.SetIntervalPolicy(func(context.Context) time.Duration {
+		if !enabled.Load() {
+			return 0
+		}
+		return 6 * time.Hour
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store.save = cancel
+	done := make(chan error, 1)
+	go func() { done <- service.Run(ctx) }()
+
+	time.Sleep(20 * time.Millisecond)
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("disabled exchange-rate loop fetched %d times", got)
+	}
+	enabled.Store(true)
+	service.Wake()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("waking exchange-rate loop after enabling did not run due refresh")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("calls = %d, want 1", got)
 	}
 }

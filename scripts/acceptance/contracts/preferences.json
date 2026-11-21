@@ -39,6 +39,7 @@
     "update_dismissals",
     "omc_quota_auto_refresh",
     "omc_update_check",
+    "omc_exchange_rate_refresh",
     "omc_plugin_source_enabled",
     "omc_display_currency"
   ],
@@ -587,6 +588,57 @@
         "key": "omc_update_check",
         "value": {
           "interval_minutes": 360
+        }
+      }
+    },
+    {
+      "id": "update-check-split-write",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_update_check",
+      "body": "{\"interval_minutes\":0,\"plugin_interval_minutes\":120}",
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "key": "omc_update_check",
+        "value": {
+          "interval_minutes": 0,
+          "plugin_interval_minutes": 120
+        }
+      }
+    },
+    {
+      "id": "update-check-plugin-invalid",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_update_check",
+      "body": "{\"interval_minutes\":60,\"plugin_interval_minutes\":5}",
+      "authenticated": true,
+      "status": 400,
+      "response": {
+        "error": "invalid_update_check"
+      }
+    },
+    {
+      "id": "exchange-rate-refresh-invalid",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_exchange_rate_refresh",
+      "body": "{\"interval_hours\":200}",
+      "authenticated": true,
+      "status": 400,
+      "response": {
+        "error": "invalid_exchange_rate_refresh"
+      }
+    },
+    {
+      "id": "exchange-rate-refresh-write",
+      "method": "PUT",
+      "path": "/omc/api/v1/preferences/omc_exchange_rate_refresh",
+      "body": "{\"interval_hours\":12}",
+      "authenticated": true,
+      "status": 200,
+      "response": {
+        "key": "omc_exchange_rate_refresh",
+        "value": {
+          "interval_hours": 12
         }
       }
     }

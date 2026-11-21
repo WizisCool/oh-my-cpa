@@ -64,6 +64,7 @@ export default {
   "sys.update_running": "Sedang mengemas kini",
   "sys.check_failed": "Semakan gagal",
   "sys.check_failed_cached": "Semakan gagal; hasil sebelumnya dikekalkan",
+  "sys.configure_github_token": "Konfigurasi token GitHub",
   "sys.check_updates_failed": "Semakan gagal untuk {products}; lihat butiran produk",
   "sys.check_updates_cached_failed": "Memaparkan hasil cache: semakan terakhir gagal untuk {products}",
   "sys.last_successful_check": "Semakan terakhir berjaya: {time}",

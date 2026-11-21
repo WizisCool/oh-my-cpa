@@ -9,6 +9,7 @@ export const PRICING_QUERY_KEYS = {
   book: ['pricing'] as const,
   attention: ['pricing-attention'] as const,
   catalog: ['pricing-catalog'] as const,
+  syncSchedule: ['pricing-sync-schedule'] as const,
   model: (model: string, channel?: string) => channel ? ['pricing-model', model, channel] as const : ['pricing-model', model] as const,
 };
 

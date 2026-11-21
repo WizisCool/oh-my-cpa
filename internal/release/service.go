@@ -922,7 +922,8 @@ func (s *Service) Run(ctx context.Context, interval func() time.Duration, observ
 		case <-ctx.Done():
 			return nil
 		case now := <-ticker.C:
-			if now.Sub(last) < s.sweepInterval(interval) {
+			cadence := s.sweepInterval(interval)
+			if cadence <= 0 || now.Sub(last) < cadence {
 				continue
 			}
 			last = now
@@ -942,14 +943,11 @@ func (s *Service) tick() time.Duration {
 	return SweepTick
 }
 
-// sweepInterval asks the policy for the current schedule, falling back to the default when it
-// reports nothing usable: a schedule nobody can honour is still a reason to keep checking.
+// sweepInterval asks the policy for the current schedule. A nil policy uses the
+// documented default; a policy returning <= 0 pauses scheduled checks.
 func (s *Service) sweepInterval(policy func() time.Duration) time.Duration {
 	if policy == nil {
 		return SweepInterval
 	}
-	if interval := policy(); interval > 0 {
-		return interval
-	}
-	return SweepInterval
+	return policy()
 }

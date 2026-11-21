@@ -19,7 +19,7 @@ export const QUOTA_AUTO_REFRESH_MIN_MINUTES = 5;
 export const QUOTA_AUTO_REFRESH_MAX_MINUTES = 24 * 60;
 
 /** The intervals the settings page offers; 0 is "off". Another stored value is still shown. */
-export const QUOTA_AUTO_REFRESH_INTERVALS = [0, 15, 30, 60, 180, 360] as const;
+export const QUOTA_AUTO_REFRESH_INTERVALS = [0, 15, 30, 60, 180, 360, 720, 1440] as const;
 
 export function isQuotaAutoRefreshInterval(minutes: unknown): minutes is number {
   return typeof minutes === 'number'

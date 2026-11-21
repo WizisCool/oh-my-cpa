@@ -390,8 +390,15 @@ func TestPricingPageDegradesWhenSyncStateUnreadable(t *testing.T) {
 }
 
 func TestUpdatePricingSyncSchedule(t *testing.T) {
-	fake := &fakePricing{state: pricing.SyncState{Source: pricing.SourceOpenRouter, AutoSyncIntervalHours: 24}, known: true}
+	fake := &fakePricing{state: pricing.SyncState{Source: pricing.SourceOpenRouter, AutoSyncIntervalHours: 24, LastError: "raw upstream 502 secret-url"}, known: true}
 	client, baseURL := startPricingTestServer(t, fake)
+	getResp, getPayload := getJSON(t, client, baseURL+"/omc/api/v1/pricing/sync-schedule")
+	if getResp.StatusCode != http.StatusOK || !strings.Contains(string(getPayload), `"interval_hours":24`) || !strings.Contains(string(getPayload), `"has_failed":true`) {
+		t.Fatalf("get schedule status = %d body %s", getResp.StatusCode, getPayload)
+	}
+	if strings.Contains(string(getPayload), "raw upstream 502") || strings.Contains(string(getPayload), "last_error") {
+		t.Fatalf("get schedule leaked raw sync error: %s", getPayload)
+	}
 	response, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/pricing/sync-schedule", `{"interval_hours":6}`)
 	if response.StatusCode != http.StatusOK || fake.state.AutoSyncIntervalHours != 6 {
 		t.Fatalf("update schedule status = %d body %s", response.StatusCode, payload)

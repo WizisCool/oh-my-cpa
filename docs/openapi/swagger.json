@@ -4910,6 +4910,178 @@
         }
       }
     },
+    "/v1/management/github-token": {
+      "get": {
+        "security": [
+          {
+            "CookieAuth": []
+          }
+        ],
+        "description": "Return whether CPA's server.github-token is configured, its redacted mask, and the current CPA configuration revision.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "Config"
+        ],
+        "summary": "Get GitHub token configuration status",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/api.GitHubTokenStatusDTO"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          }
+        }
+      },
+      "put": {
+        "security": [
+          {
+            "CookieAuth": []
+          }
+        ],
+        "description": "Set, replace, or clear CPA's server.github-token under revision check, pre-write backup, and audit logging, immediately invalidating OMC's in-memory token cache.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "Config"
+        ],
+        "summary": "Update or clear GitHub token",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Expected CPA configuration revision",
+            "name": "If-Match",
+            "in": "header"
+          },
+          {
+            "description": "GitHub token payload (empty token clears server.github-token)",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/api.gitHubTokenInput"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/api.GitHubTokenStatusDTO"
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          }
+        }
+      }
+    },
+    "/v1/management/github-token/test": {
+      "post": {
+        "security": [
+          {
+            "CookieAuth": []
+          }
+        ],
+        "description": "Probe GitHub's /rate_limit endpoint using an optional candidate token or the currently configured CPA server.github-token (anonymous when unset).",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "Config"
+        ],
+        "summary": "Test GitHub token and query API rate limit",
+        "parameters": [
+          {
+            "description": "Optional candidate token to test before saving",
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/api.gitHubTokenTestInput"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/api.GitHubTokenTestResponseDTO"
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          }
+        }
+      }
+    },
     "/v1/management/identity-directory": {
       "get": {
         "security": [
@@ -12544,6 +12716,41 @@
       }
     },
     "/v1/pricing/sync-schedule": {
+      "get": {
+        "security": [
+          {
+            "CookieAuth": []
+          }
+        ],
+        "description": "Return the configured automatic OpenRouter pricing refresh interval in hours and sync state.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "Pricing"
+        ],
+        "summary": "Get pricing auto-sync schedule",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/api.PricingSyncScheduleResponseDTO"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          }
+        }
+      },
       "put": {
         "security": [
           {
@@ -14676,6 +14883,46 @@
         }
       }
     },
+    "api.GitHubTokenStatusDTO": {
+      "type": "object",
+      "properties": {
+        "configured": {
+          "type": "boolean"
+        },
+        "cpa_revision": {
+          "type": "string"
+        },
+        "masked_token": {
+          "type": "string"
+        }
+      }
+    },
+    "api.GitHubTokenTestResponseDTO": {
+      "type": "object",
+      "properties": {
+        "authenticated": {
+          "type": "boolean"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        },
+        "remaining": {
+          "type": "integer"
+        },
+        "reset_at_ms": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string"
+        },
+        "used": {
+          "type": "integer"
+        }
+      }
+    },
     "api.HealthzResponseDTO": {
       "type": "object",
       "properties": {
@@ -15820,7 +16067,7 @@
           "type": "boolean"
         },
         "state": {
-          "$ref": "#/definitions/pricing.SyncState"
+          "$ref": "#/definitions/api.PricingSyncStateDTO"
         }
       }
     },
@@ -15829,6 +16076,35 @@
       "properties": {
         "started": {
           "type": "boolean"
+        }
+      }
+    },
+    "api.PricingSyncStateDTO": {
+      "type": "object",
+      "properties": {
+        "auto_sync_interval_hours": {
+          "type": "integer"
+        },
+        "has_failed": {
+          "type": "boolean"
+        },
+        "last_matched": {
+          "type": "integer"
+        },
+        "last_success_at_ms": {
+          "type": "integer"
+        },
+        "last_unmatched": {
+          "type": "integer"
+        },
+        "next_sync_at_ms": {
+          "type": "integer"
+        },
+        "source": {
+          "type": "string"
+        },
+        "updated_at_ms": {
+          "type": "integer"
         }
       }
     },
@@ -19922,6 +20198,25 @@
         },
         "updated_at_ms": {
           "type": "integer"
+        }
+      }
+    },
+    "api.gitHubTokenInput": {
+      "type": "object",
+      "properties": {
+        "cpa_revision": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        }
+      }
+    },
+    "api.gitHubTokenTestInput": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string"
         }
       }
     },

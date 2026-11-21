@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument, type Document } from 'yaml';
 
 import { api, ApiError, apiErrorCode, describeError } from '../../api/client';
+import { GITHUB_TOKEN_QUERY_KEY } from '../../types/githubToken';
 import { useT } from '../../i18n';
 import { getFieldSemanticValue, updateFieldWithBaseline, isConfigSemanticallyEqual } from './configDirty';
 import { computeConfigChanges, rebaseDraft } from './configPatch';
@@ -422,6 +423,7 @@ export function useConfigDraft() {
       setShowErrorFeedback(false);
       setValidateTrigger(0);
       void queryClient.invalidateQueries({ queryKey: ['management-config'] });
+      void queryClient.invalidateQueries({ queryKey: GITHUB_TOKEN_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: ['management-config-backups'] });
       void queryClient.invalidateQueries({ queryKey: ['model-square'] });
       void queryClient.invalidateQueries({ queryKey: ['auth-file-models'] });

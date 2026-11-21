@@ -209,6 +209,8 @@ export default {
   "audit.action.auth_file.display_name_clear": "清除憑證名稱",
   "audit.action.cpa_credential.reveal": "檢視 CPA 管理金鑰",
   "audit.action.outbound_proxy.save": "修改出站代理",
+  "audit.action.github_token.save": "更新 GitHub 權杖",
+  "audit.action.github_token.clear": "清除 GitHub 權杖",
   "audit.action.routing.apply": "套用路由編排",
   "audit.action.plugin.settings": "修改插件系統設定",
   "audit.action.pricing.model.dismiss_candidate": "忽略價格候選",

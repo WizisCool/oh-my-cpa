@@ -4,7 +4,7 @@
 
 ## 更新检查机制
 
-“系统信息”页定时向 `api.github.com` 查询 OMC 与 CPA 最新稳定版信息（遵循 OMC 出站网络策略），每款产品默认享有 15 分钟请求节流保护以避免耗尽 GitHub API 匿名配额（每秒/每小时 60 次；若网关配置了 `server.github-token`，OMC 会在内存中复用该令牌把配额提升至 5,000 次且不将令牌返回前端）。发现新版本时左侧导航栏会亮起提示圆点，也支持单版本忽略。插件列表同样定期通过 CPA 插件源检查可用更新。
+“系统信息”页定时向 `api.github.com` 查询 OMC 与 CPA 最新稳定版信息（遵循 OMC 出站网络策略），每款产品默认享有 15 分钟请求节流保护以避免耗尽 GitHub API 匿名配额（每小时 60 次；可在 **OMC 设置 → GitHub 令牌** 直接配置、测试配额或清除，也可在配置面板或 `config.yaml` 中写入 `server.github-token`，OMC 与 CPA 共用该令牌并将配额提升至 5,000 次且不返回明文）。发现新版本时左侧导航栏会亮起提示圆点，也支持单版本忽略。OMC/CPA 版本检查与插件商店更新检查可在 **OMC 设置 → 自动刷新与更新** 各自独立调整周期或关闭。
 
 关闭后台与开屏请求可分别设置 `OMCPA_UPDATE_CHECK_ENABLED=false` 与 `OMCPA_UPDATE_CHECK_ON_PAGE_LOAD=false`（手动点击**检查更新**仍可触发）。
 
