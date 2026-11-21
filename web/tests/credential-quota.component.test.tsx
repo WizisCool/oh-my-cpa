@@ -25,6 +25,7 @@ import { CredentialList } from '../src/pages/oauthManagement/CredentialList';
 import { ProviderStrip } from '../src/pages/oauthManagement/ProviderStrip';
 import type { CredentialActions } from '../src/pages/oauthManagement/CredentialParts';
 import { OAuthManagementPage } from '../src/pages/oauthManagement/OAuthManagementPage';
+import { BatchActionBar } from '../src/components/authFiles/BatchActionBar';
 import { installOmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 import { buildCredentialSections } from '../src/pages/oauthManagement/credentialSections';
@@ -520,6 +521,43 @@ describe('credential list row', () => {
     await waitFor(() => expect(screen.queryByTestId('oauth-credential-name-input')).toBeNull());
     expect(onRename).toHaveBeenCalledTimes(1);
     expect(onRename.mock.calls[0][1]).toBe('Team seat');
+  });
+});
+
+describe('OAuth selection bar', () => {
+  it('spins only the batch action it started, and only until that action settles', async () => {
+    let settleRefresh = () => {};
+    const onRefresh = vi.fn(() => new Promise<void>((resolve) => { settleRefresh = resolve; }));
+    const bar = (isMutating: boolean) => (
+      <BatchActionBar
+        selectedCount={2}
+        selectablePageCount={4}
+        selectableFilteredCount={9}
+        canSelectFiltered
+        isSelectionReady
+        onSelectFiltered={vi.fn()}
+        isMutating={isMutating}
+        onSelectPage={vi.fn()}
+        onClearSelection={vi.fn()}
+        onEnable={vi.fn()}
+        onDisable={vi.fn()}
+        onRefresh={onRefresh}
+        canRefresh
+        onDelete={vi.fn()}
+      />
+    );
+    const view = render(bar(false), { wrapper: ({ children }) => <I18nProvider>{children}</I18nProvider> });
+    const busyLabels = () => Array.from(document.querySelectorAll('.selection-bar [aria-busy="true"]'), (node) => node.textContent);
+
+    fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
+    view.rerender(bar(true));
+    expect(busyLabels()).toEqual([expect.stringMatching(/refresh/i)]);
+
+    await act(async () => { settleRefresh(); });
+    view.rerender(bar(false));
+    // The workspace's busy flag is shared with uploads and row actions; a later one spins nothing here.
+    view.rerender(bar(true));
+    expect(busyLabels()).toEqual([]);
   });
 });
 

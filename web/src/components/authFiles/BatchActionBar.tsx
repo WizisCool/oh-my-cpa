@@ -26,11 +26,12 @@ interface BatchActionBarProps {
   isMutating: boolean;
   onSelectPage: () => void;
   onClearSelection: () => void;
-  onEnable: () => void;
-  onDisable: () => void;
-  onRefresh: () => void;
+  /** Each batch handler settles when its work does, so the bar knows which action is still running. */
+  onEnable: () => Promise<unknown> | void;
+  onDisable: () => Promise<unknown> | void;
+  onRefresh: () => Promise<unknown> | void;
   canRefresh: boolean;
-  onDelete: () => void;
+  onDelete: () => Promise<unknown> | void;
   hiddenCount?: number;
 }
 
@@ -61,7 +62,9 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
 }) => {
   const t = useT();
   const isPhone = useIsPhoneViewport();
-  const [lastAction, setLastAction] = React.useState<BatchAction | null>(null);
+  // `isMutating` is the workspace's busy flag, shared with uploads and row actions, so the spinner
+  // follows the handler this bar started and ends when that handler settles.
+  const [runningAction, setRunningAction] = React.useState<BatchAction | null>(null);
 
   if (selectedCount === 0) {
     return null;
@@ -70,9 +73,11 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
   const deleteDescription = hiddenCount > 0
     ? `${t('af.delete_selected_desc')} ${t('omc.delete_hidden_scope', { hidden: hiddenCount, total: selectedCount })}`
     : t('af.delete_selected_desc');
-  const run = (action: BatchAction, handler: () => void) => () => {
-    setLastAction(action);
-    handler();
+  const run = (action: BatchAction, handler: () => Promise<unknown> | void) => () => {
+    setRunningAction(action);
+    return Promise.resolve(handler()).finally(() => {
+      setRunningAction((current) => (current === action ? null : current));
+    });
   };
   const isScopeDisabled = isMutating || !isSelectionReady;
 
@@ -81,7 +86,7 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
     { key: 'disable', icon: <StopOutlined />, label: t('af.batch_disable'), onClick: run('disable', onDisable) },
     { key: 'refresh', icon: <SyncOutlined />, label: t('af.batch_refresh'), onClick: run('refresh', onRefresh), isDisabled: !canRefresh },
   ];
-  const isRunning = (action: BatchAction) => isMutating && lastAction === action;
+  const isRunning = (action: BatchAction) => isMutating && runningAction === action;
   const deleteButton = isPhone ? (
     <ToolButton size="sm" variant="ghost" danger icon={<DeleteOutlined />} label={t('af.delete_selected')} loading={isRunning('delete')} disabled={isMutating} />
   ) : (
@@ -145,7 +150,8 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
         description={deleteDescription}
         confirmLabel={t('common.delete')}
         isDanger
-        onConfirm={run('delete', onDelete)}
+        // The dialog closes on confirm as before; the bar's delete button carries the wait.
+        onConfirm={() => { void run('delete', onDelete)(); }}
       >
         {deleteButton}
       </ConfirmAction>
