@@ -30,13 +30,11 @@ function GitHubTokenForm({ status }: { status: GitHubTokenStatus }) {
   const trimmedDraft = draft.trim();
   const tokenStateKey = `${status.cpa_revision}\0${status.configured ? '1' : '0'}\0${trimmedDraft}`;
   const activeTokenStateRef = React.useRef(tokenStateKey);
-  activeTokenStateRef.current = tokenStateKey;
-  const previousTokenStateRef = React.useRef(tokenStateKey);
 
-  // Dismiss any previous quota-test toast as soon as the draft or saved-token revision moves.
+  // Sync the active key after commit and dismiss any previous quota-test toast when it moves.
   React.useEffect(() => {
-    if (previousTokenStateRef.current === tokenStateKey) return;
-    previousTokenStateRef.current = tokenStateKey;
+    if (activeTokenStateRef.current === tokenStateKey) return;
+    activeTokenStateRef.current = tokenStateKey;
     toast.dismiss(GITHUB_TOKEN_TEST_TOAST_KEY);
   }, [toast, tokenStateKey]);
 

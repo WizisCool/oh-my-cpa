@@ -64,7 +64,7 @@
 
   --color-destructive: var(--danger);
   --color-destructive-foreground: #ffffff;
-  --color-danger-ink: color-mix(in srgb, var(--danger) var(--status-ink-share), var(--fg));
+  --color-danger-ink: color-mix(in srgb, var(--danger) 65%, var(--fg));
   --color-danger-wash: color-mix(in srgb, var(--danger) 12%, transparent);
   --color-danger-wash-active: color-mix(in srgb, var(--danger) 16%, transparent);
   --color-success: var(--success);

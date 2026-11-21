@@ -665,6 +665,25 @@ test('chip primitives keep unified breathing room, centered icons, and unclipped
   assert.match(destructiveSecondary, /\bdata-\[popup-open\]:bg-danger-wash\b/);
   assert.doesNotMatch(destructiveSecondary, /shadow-\[/);
 
+  // `--color-danger-ink` over `--color-danger-wash` and `--color-danger-wash-active` clears WCAG AA
+  // (>= 4.5:1) on bg, surface, and elevated grounds across every built-in palette.
+  const dangerInkShare = Number(/--color-danger-ink:\s*color-mix\(in srgb,\s*var\(--danger\)\s*(\d+)%,\s*var\(--fg\)\);/.exec(indexCss)?.[1]);
+  const dangerWashPct = Number(/--color-danger-wash:\s*color-mix\(in srgb,\s*var\(--danger\)\s*(\d+)%,\s*transparent\);/.exec(indexCss)?.[1]);
+  const dangerActivePct = Number(/--color-danger-wash-active:\s*color-mix\(in srgb,\s*var\(--danger\)\s*(\d+)%,\s*transparent\);/.exec(indexCss)?.[1]);
+  assert.ok(dangerInkShare > 0 && dangerWashPct > 0 && dangerActivePct > 0);
+  const contrastFloor = CONTRAST_FLOORS.text ?? 4.5;
+  for (const definition of BUILT_IN_PALETTES) {
+    const { palette } = resolvedBuiltInPalette(definition.id);
+    const ink = mixSrgb(palette.danger, palette.fg, (100 - dangerInkShare) / 100);
+    for (const [groundName, ground] of [['bg', palette.bg], ['surface', palette.surface], ['elevated', palette.elevated]] as const) {
+      for (const pct of [dangerWashPct, dangerActivePct]) {
+        const wash = mixSrgb(ground, palette.danger, pct / 100);
+        const ratio = contrastRatio(ink, wash);
+        assert.ok(ratio >= contrastFloor, `${definition.id} danger button on ${groundName} @${pct}% (${ratio.toFixed(2)}) < ${contrastFloor}`);
+      }
+    }
+  }
+
   // Code elements follow the operator-configured `--font-mono` role rather than the browser UA fallback.
   assert.match(indexCss, /code,\s*kbd,\s*samp,\s*pre\s*\{\s*font-family:\s*var\(--font-mono\);\s*\}/);
 });
