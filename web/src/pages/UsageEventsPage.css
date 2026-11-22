@@ -125,6 +125,27 @@
   overflow-y: hidden;
   position: relative;
 }
+/* The table and header share one view-transition snapshot: a column changes
+   the number of grid tracks, which cannot be interpolated with grid-template-columns.
+   Cross-fading the two layouts avoids a visible horizontal jump. */
+@supports (view-transition-name: omc-request-columns) {
+  .request-events-page .request-table-scroll-area {
+    view-transition-name: omc-request-columns;
+  }
+}
+:root:not([data-reduced-motion='true'])::view-transition-old(omc-request-columns) {
+  animation: var(--motion-base) var(--ease-standard) both omc-column-fade-out;
+}
+:root:not([data-reduced-motion='true'])::view-transition-new(omc-request-columns) {
+  animation: var(--motion-base) var(--ease-standard) both omc-column-fade-in;
+}
+@keyframes omc-column-fade-out {
+  to { opacity: 0; }
+}
+@keyframes omc-column-fade-in {
+  from { opacity: 0; }
+}
+
 .req-reset-columns-btn {
   font-size: var(--text-xs);
   padding: 0 8px;
@@ -180,7 +201,9 @@
   color: var(--fg-2);
   cursor: pointer;
   font-size: var(--text-sm);
-  transition: var(--select-transition), color var(--motion-base) var(--ease-out);
+  transition:
+    background-color var(--motion-base) var(--ease-standard),
+    color var(--motion-base) var(--ease-standard);
 }
 .req-column-choice:has([data-slot='checkbox'][data-checked]) {
   color: var(--fg);
@@ -188,9 +211,6 @@
 }
 .req-column-choice:hover:not(:has([data-slot='checkbox'][data-disabled])) {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-.req-column-choice:active:not(:has([data-slot='checkbox'][data-disabled])) {
-  transform: scale(var(--press-scale));
 }
 .req-column-choice:focus-within {
   outline: 2px solid var(--accent);
@@ -203,6 +223,21 @@
 :root[data-reduced-motion='true'] .req-column-choice {
   transition: none;
 }
+/* A checkbox mark fades in and out instead of changing its size. Only the
+   column chooser opts into this; other OMC checkboxes keep their own motion. */
+:root:not([data-reduced-motion='true']) .req-column-choice .omc-mark-pop {
+  transform: none;
+  transition: opacity var(--motion-base) var(--ease-standard);
+}
+:root:not([data-reduced-motion='true']) .req-column-choice .omc-mark-pop:is([data-starting-style], [data-ending-style]) {
+  transform: none;
+  opacity: 0;
+}
+:root:not([data-reduced-motion='true']) .req-column-choice .omc-mark-pop[data-ending-style] {
+  transition-duration: var(--motion-base);
+  transition-timing-function: var(--ease-standard);
+}
+
 .req-column-hint {
   margin: 0 0 10px;
   color: var(--muted);

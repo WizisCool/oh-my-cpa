@@ -31,6 +31,9 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
       await menu.evaluate((element) =>
         element.classList.contains('omc-float-surface') &&
         getComputedStyle(element).transitionProperty.includes('clip-path')));
+    check('table layout uses one cross-fade surface for header and rows',
+      await page.locator('.request-table-scroll-area').evaluate((element) =>
+        getComputedStyle(element).viewTransitionName === 'omc-request-columns'));
     const columnChecks = page.locator('.req-column-choice [data-slot="checkbox"]');
     check('column chooser uses 12 accessible project checkboxes',
       (await columnChecks.count()) === 12 &&
@@ -38,8 +41,11 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
     const modelToggle = columnChecks.nth(3);
     check('the model column is visible by default',
       (await modelToggle.getAttribute('aria-checked')) === 'true');
-    check('column checkmarks reuse the project spring animation',
-      (await modelToggle.locator('.omc-mark-pop').count()) === 1);
+    check('column checkmarks use opacity-only motion',
+      await modelToggle.locator('.omc-mark-pop').evaluate((element) => {
+        const style = getComputedStyle(element);
+        return style.transitionProperty === 'opacity' && style.transform === 'none';
+      }));
     const saveHidden = page.waitForResponse((response) =>
       response.request().method() === 'PUT' &&
       new URL(response.url()).pathname.endsWith('/api/v1/preferences/usage_events_hidden_columns') &&
@@ -48,6 +54,25 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
     await modelToggle.click();
     await saveHidden;
     check('model checkbox responds immediately to an uncheck',
+      (await modelToggle.getAttribute('aria-checked')) === 'false');
+    // Reversing the gesture before a transition finishes must preserve state.
+    const savedAgain = page.waitForResponse((response) =>
+      response.request().method() === 'PUT' &&
+      new URL(response.url()).pathname.endsWith('/api/v1/preferences/usage_events_hidden_columns') &&
+      response.ok(),
+    );
+    await modelToggle.click();
+    await savedAgain;
+    check('rapid re-toggle restores checked state',
+      (await modelToggle.getAttribute('aria-checked')) === 'true');
+    const savedHiddenAgain = page.waitForResponse((response) =>
+      response.request().method() === 'PUT' &&
+      new URL(response.url()).pathname.endsWith('/api/v1/preferences/usage_events_hidden_columns') &&
+      response.ok(),
+    );
+    await modelToggle.click();
+    await savedHiddenAgain;
+    check('second rapid toggle hides the column again',
       (await modelToggle.getAttribute('aria-checked')) === 'false');
     await page.waitForFunction(() =>
       document.querySelector('.request-stream')?.getAttribute('data-folded-columns')?.split(' ').includes('model'));

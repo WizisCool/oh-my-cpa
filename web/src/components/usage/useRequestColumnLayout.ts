@@ -1,4 +1,6 @@
 import React from 'react';
+import { flushSync } from 'react-dom';
+import { isMotionReduced } from '../../utils/motionPreference';
 
 import { usePreference } from '../../hooks/usePreference';
 import {
@@ -125,22 +127,39 @@ export function useRequestColumnLayout(isSelecting: boolean) {
     [colWidths, chrome, folded],
   );
 
+  // The request grid removes an entire CSS track when a column is hidden.
+  // A regular grid-template-columns transition cannot interpolate lists of
+  // different lengths, so cross-fade the table's before/after layouts instead.
+  // Flush the update into the snapshot callback; the chooser remains interactive,
+  // including when another selection interrupts an in-progress fade.
+  const showHiddenColumns = React.useCallback((next: RequestColumnId[]) => {
+    if (typeof document === 'undefined' || isMotionReduced() || typeof document.startViewTransition !== 'function') {
+      setHiddenColumns(next);
+      return;
+    }
+    const transition = document.startViewTransition(() => {
+      flushSync(() => setHiddenColumns(next));
+    });
+    // Rapid re-toggles can cancel an earlier transition, which is expected.
+    void transition.finished.catch(() => {});
+  }, []);
+
   const setColumnVisible = React.useCallback((id: RequestColumnId, visible: boolean) => {
     if (!hiddenColumnsLoaded) return;
     const previous = hiddenColumnsRef.current;
     const next = toggleRequestColumnVisibility(previous, id, visible);
     if (next.length === previous.length && next.every((column, index) => column === previous[index])) return;
     hiddenColumnsRef.current = next;
-    setHiddenColumns(next);
+    showHiddenColumns(next);
     void setHiddenColumnsPref(next);
-  }, [hiddenColumnsLoaded, setHiddenColumnsPref]);
+  }, [hiddenColumnsLoaded, setHiddenColumnsPref, showHiddenColumns]);
 
   const restoreColumnVisibility = React.useCallback(() => {
     if (!hiddenColumnsLoaded || hiddenColumnsRef.current.length === 0) return;
     hiddenColumnsRef.current = DEFAULT_HIDDEN_COLUMNS;
-    setHiddenColumns(DEFAULT_HIDDEN_COLUMNS);
+    showHiddenColumns(DEFAULT_HIDDEN_COLUMNS);
     void setHiddenColumnsPref(DEFAULT_HIDDEN_COLUMNS);
-  }, [hiddenColumnsLoaded, setHiddenColumnsPref]);
+  }, [hiddenColumnsLoaded, setHiddenColumnsPref, showHiddenColumns]);
 
   const handleResizeStart = React.useCallback(
     (colId: RequestColumnId, e: React.PointerEvent<HTMLSpanElement>) => {
