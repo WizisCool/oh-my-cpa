@@ -810,3 +810,9 @@ func TestProviderDeletionPartialSnapshotRefusal(t *testing.T) {
 		})
 	}
 }
+
+func TestIdentityDirectoryReservesCopilotBuiltinKey(t *testing.T) {
+	if !builtinAndReservedPluginKeys["copilot"] {
+		t.Fatal("expected copilot to be reserved in builtinAndReservedPluginKeys")
+	}
+}

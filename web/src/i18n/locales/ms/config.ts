@@ -377,6 +377,7 @@ export default {
   "cfg.backups_reason_client_keys": "Perubahan kunci klien",
   "cfg.backups_reason_oauth_aliases": "Perubahan alias model",
   "cfg.backups_reason_oauth_excluded_models": "Perubahan pengecualian model",
+  "cfg.backups_reason_oauth_request_scoped_errors": "Perubahan peraturan ralat",
   "cfg.backups_reason_plugin_settings": "Perubahan tetapan pemalam",
   "cfg.backups_reason_plugin_install": "Pemasangan pemalam",
   "cfg.backups_reason_plugin_delete": "Pembuangan pemalam",

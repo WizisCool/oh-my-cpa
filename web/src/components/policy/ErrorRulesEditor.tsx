@@ -35,6 +35,12 @@ interface ErrorRulesEditorProps {
   onChange: (rules: ErrorRuleDraft[]) => void;
   /** Problems are shown only after a save was attempted, so a rule being typed is not marked wrong. */
   showProblems: boolean;
+  /** Disables all editor inputs and actions while a save is pending or the surface is read-only. */
+  isDisabled?: boolean;
+  /** Overrides rule validation for surfaces whose gateway sanitization differs (e.g. OAuth trims patterns). */
+  validateRule?: (draft: ErrorRuleDraft) => ErrorRuleProblem | null;
+  /** Determines whether a match pattern should be marked empty when `problem === 'empty_match'`. */
+  isPatternEmpty?: (value: string) => boolean;
 }
 
 // Drafts need ids that survive reordering; a counter is enough because they never leave the form.
@@ -46,7 +52,14 @@ const nextDraftId = (prefix: string) => `${prefix}-new-${++nextDraftSerial}`;
  * hit a given upstream error. CPA takes the first rule that matches, so order is part of the
  * rule and each entry carries its position and its own move controls.
  */
-export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEditorProps) {
+export function ErrorRulesEditor({
+  rules,
+  onChange,
+  showProblems,
+  isDisabled = false,
+  validateRule = errorRuleProblem,
+  isPatternEmpty = (value) => value === '',
+}: ErrorRulesEditorProps) {
   const t = useT();
 
   const updateRule = (id: string, patch: Partial<ErrorRuleDraft>) =>
@@ -80,7 +93,7 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
       {rules.length > 0 && (
         <div className={styles['rule-list']}>
           {rules.map((rule, position) => {
-            const problem = showProblems ? errorRuleProblem(rule) : null;
+            const problem = showProblems ? validateRule(rule) : null;
             const ruleLabel = t('policy.rule_label', { n: position + 1 });
             return (
               <div
@@ -95,6 +108,7 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
                     value={rule.status}
                     inputMode="numeric"
                     maxLength={3}
+                    disabled={isDisabled}
                     status={problem === 'status' ? 'error' : undefined}
                     placeholder={t('policy.rule_status_placeholder')}
                     aria-label={`${ruleLabel}: ${t('policy.rule_status')}`}
@@ -103,6 +117,7 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
                   <Select
                     className={styles['rule-action']}
                     value={rule.action}
+                    disabled={isDisabled}
                     status={problem === 'action' ? 'error' : undefined}
                     options={actionOptions(rule.action)}
                     aria-label={`${ruleLabel}: ${t('policy.rule_action')}`}
@@ -113,7 +128,7 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
                       size="sm"
                       variant="ghost"
                       icon={<ArrowUpOutlined />}
-                      disabled={position === 0}
+                      disabled={isDisabled || position === 0}
                       aria-label={`${ruleLabel}: ${t('policy.rule_move_up')}`}
                       onClick={() => onChange(moveErrorRule(rules, rule.id, -1))}
                     />
@@ -121,7 +136,7 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
                       size="sm"
                       variant="ghost"
                       icon={<ArrowDownOutlined />}
-                      disabled={position === rules.length - 1}
+                      disabled={isDisabled || position === rules.length - 1}
                       aria-label={`${ruleLabel}: ${t('policy.rule_move_down')}`}
                       onClick={() => onChange(moveErrorRule(rules, rule.id, 1))}
                     />
@@ -129,6 +144,7 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
                       size="sm"
                       variant="ghost"
                       danger
+                      disabled={isDisabled}
                       icon={<DeleteOutlined />}
                       aria-label={`${ruleLabel}: ${t('common.delete')}`}
                       onClick={() => onChange(rules.filter((item) => item.id !== rule.id))}
@@ -141,6 +157,7 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
                       <Select
                         className={styles['match-kind']}
                         value={match.kind}
+                        disabled={isDisabled}
                         options={kindOptions}
                         aria-label={`${ruleLabel}: ${t('policy.rule_match_kind')}`}
                         onChange={(kind) => updateMatch(rule, match.id, { kind })}
@@ -148,7 +165,8 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
                       <Input
                         className={styles['match-value']}
                         value={match.value}
-                        status={problem === 'empty_match' && match.value === '' ? 'error' : undefined}
+                        disabled={isDisabled}
+                        status={problem === 'empty_match' && isPatternEmpty(match.value) ? 'error' : undefined}
                         placeholder={t(match.kind === 'regex' ? 'policy.rule_regex_placeholder' : 'policy.rule_text_placeholder')}
                         aria-label={`${ruleLabel}: ${t('policy.rule_match_value')}`}
                         onChange={(event) => updateMatch(rule, match.id, { value: event.target.value })}
@@ -156,6 +174,7 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
                       <Button
                         size="sm"
                         variant="ghost"
+                        disabled={isDisabled}
                         icon={<CloseOutlined />}
                         aria-label={`${ruleLabel}: ${t('policy.rule_remove_match')}`}
                         onClick={() =>
@@ -167,6 +186,7 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
                   <div>
                     <Button
                       size="sm"
+                      disabled={isDisabled}
                       icon={<PlusOutlined />}
                       onClick={() =>
                         updateRule(rule.id, {
@@ -188,6 +208,7 @@ export function ErrorRulesEditor({ rules, onChange, showProblems }: ErrorRulesEd
       )}
       <Button
         variant="dashed"
+        disabled={isDisabled}
         icon={<PlusOutlined />}
         onClick={() => onChange([...rules, createErrorRuleDraft(nextDraftId('rule'))])}
       >

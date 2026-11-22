@@ -377,6 +377,7 @@ export default {
   'cfg.backups_reason_client_keys': 'Client key change',
   'cfg.backups_reason_oauth_aliases': 'Model alias change',
   'cfg.backups_reason_oauth_excluded_models': 'Model exclusion change',
+  'cfg.backups_reason_oauth_request_scoped_errors': 'Error rule change',
   'cfg.backups_reason_plugin_settings': 'Plugin settings change',
   'cfg.backups_reason_plugin_install': 'Plugin install',
   'cfg.backups_reason_plugin_delete': 'Plugin removal',

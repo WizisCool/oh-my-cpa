@@ -250,6 +250,125 @@ func TestOAuthExcludedModelsAreReadAsCPAAppliesThem(t *testing.T) {
 	}
 }
 
+func TestOAuthChannelModelDefinitionsNormalizesCopilotPrefix(t *testing.T) {
+	gateway := &configGateway{answer: func(method, path string) (int, string) {
+		switch {
+		case method == http.MethodGet && path == "/v8/management/routing/model-definitions/copilot":
+			return http.StatusOK, `{"channel":"copilot","models":[{"id":"claude-sonnet-5"},{"id":"copilot/gpt-5.4"},{"id":"Copilot/mai-code-1"}]}`
+		case method == http.MethodGet && path == "/v8/management/routing/model-definitions/codex":
+			return http.StatusOK, `{"channel":"codex","models":[{"id":"gpt-5.4"}]}`
+		}
+		return 0, ""
+	}}
+	client := newConfigClient(t, gateway)
+	copilotModels, available, err := client.OAuthChannelModelDefinitions(context.Background(), "copilot")
+	if err != nil || !available {
+		t.Fatalf("copilot definitions = %#v, %v, %v", copilotModels, available, err)
+	}
+	wantCopilot := []string{"copilot/claude-sonnet-5", "copilot/gpt-5.4", "Copilot/mai-code-1"}
+	gotCopilot := make([]string, len(copilotModels))
+	for i, model := range copilotModels {
+		gotCopilot[i] = model.ID
+	}
+	if !reflect.DeepEqual(gotCopilot, wantCopilot) {
+		t.Fatalf("copilot model ids = %v, want %v", gotCopilot, wantCopilot)
+	}
+
+	codexModels, available, err := client.OAuthChannelModelDefinitions(context.Background(), "codex")
+	if err != nil || !available || len(codexModels) != 1 || codexModels[0].ID != "gpt-5.4" {
+		t.Fatalf("codex definitions = %#v, %v, %v", codexModels, available, err)
+	}
+}
+
+func TestOAuthRequestScopedErrorsAreReadAsCPAAppliesThem(t *testing.T) {
+	var raw map[string][]RequestScopedErrorRule
+	if err := json.Unmarshal([]byte(`{
+		"Copilot": [
+			{"status": 429, "match": ["  rate_limit  ", " "], "match-regexr": [" ^quota_.*$ ", ""], "action": " STOP-AND-COOLDOWN ", "future-field": true},
+			{"status": 0, "match": ["ignored"], "action": "stop"},
+			{"status": 400, "match": ["  "], "action": "stop"}
+		],
+		"copilot": [{"status": 500, "match": ["ignored-second-spelling"], "action": "continue"}],
+		" ": [{"status": 400, "match": ["orphan"], "action": "stop"}]
+	}`), &raw); err != nil {
+		t.Fatal(err)
+	}
+	got := sanitizeOAuthRequestScopedErrors(raw)
+	if len(got) != 1 || len(got["copilot"]) != 1 {
+		t.Fatalf("sanitized = %#v", got)
+	}
+	rule := got["copilot"][0]
+	if rule.Status != 429 || rule.Action != "stop-and-cooldown" || !reflect.DeepEqual(rule.Match, []string{"rate_limit"}) || !reflect.DeepEqual(rule.MatchRegex, []string{"^quota_.*$"}) {
+		t.Fatalf("rule = %#v", rule)
+	}
+	encoded, err := json.Marshal(rule)
+	if err != nil || !strings.Contains(string(encoded), `"future-field":true`) {
+		t.Fatalf("expected extra field preserved, got %s (%v)", encoded, err)
+	}
+}
+
+func TestPatchOAuthRequestScopedErrorsReplacesEverySpellingAndPreservesExtras(t *testing.T) {
+	var capturedBody string
+	gateway := &configGateway{stored: "config-version: 8\n", answer: func(method, path string) (int, string) {
+		if method == http.MethodGet && path == "/v8/management/config/oauth/request-scoped-errors" {
+			return http.StatusOK, `{"Copilot":[{"status":400,"match":["context_length"],"action":"stop","future-flag":1}],"claude":[{"status":500,"match":["overloaded"],"action":"continue"}]}`
+		}
+		return 0, ""
+	}}
+	backup := &recordingBackup{}
+	client := newConfigClient(t, gateway).WithConfigBackup(backup)
+	rules := []RequestScopedErrorRule{
+		{Status: 400, Match: []string{"context_length"}, Action: "stop"},
+		{Status: 429, MatchRegex: []string{"^rate_limit"}, Action: "continue-and-cooldown"},
+	}
+	if err := client.PatchOAuthRequestScopedErrors(context.Background(), "copilot", rules); err != nil {
+		t.Fatal(err)
+	}
+	sentList := gateway.sent()
+	sent := strings.Join(sentList, "\n")
+	patchIdx := -1
+	deleteIdx := -1
+	for i, req := range sentList {
+		if req == "PATCH /v8/management/config" {
+			patchIdx = i
+		}
+		if req == "DELETE /v8/management/config/oauth/request-scoped-errors/Copilot" {
+			deleteIdx = i
+		}
+	}
+	if patchIdx < 0 || deleteIdx < 0 || patchIdx > deleteIdx {
+		t.Fatalf("expected PATCH before DELETE so failed PATCH never drops old spelling; requests = %s", sent)
+	}
+	if strings.Contains(sent, "request-scoped-errors/claude") {
+		t.Fatalf("another provider was touched: %s", sent)
+	}
+	capturedBody = gateway.bodies["PATCH /v8/management/config"]
+	if !strings.Contains(capturedBody, `"future-flag":1`) || !strings.Contains(capturedBody, `"match-regexr":["^rate_limit"]`) {
+		t.Fatalf("expected preserved extra field and CPA match-regexr wire key, got %s", capturedBody)
+	}
+	if len(backup.snapshots) != 1 || backup.snapshots[0].Reason != BackupReasonOAuthErrorRules {
+		t.Fatalf("backup snapshots = %+v, want single snapshot with reason %q", backup.snapshots, BackupReasonOAuthErrorRules)
+	}
+}
+
+func TestPatchOAuthRequestScopedErrorsWritesNothingForAProviderWithoutRules(t *testing.T) {
+	gateway := &configGateway{stored: "config-version: 8\n", answer: func(method, path string) (int, string) {
+		if method == http.MethodGet && path == "/v8/management/config/oauth/request-scoped-errors" {
+			return http.StatusOK, `{"claude":[{"status":400,"match":["prompt is too long"],"action":"stop"}]}`
+		}
+		return 0, ""
+	}}
+	client := newConfigClient(t, gateway)
+	if err := client.PatchOAuthRequestScopedErrors(context.Background(), "copilot", nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, request := range gateway.sent() {
+		if !strings.HasPrefix(request, http.MethodGet) {
+			t.Fatalf("clearing a provider that stores no rules wrote to CPA: %s", request)
+		}
+	}
+}
+
 func TestPluginConfigTellsAnUnconfiguredPluginFromAnUnknownOne(t *testing.T) {
 	gateway := &configGateway{answer: func(method, path string) (int, string) {
 		switch {

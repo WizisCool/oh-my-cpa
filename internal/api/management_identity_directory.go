@@ -455,7 +455,7 @@ func (h *Handler) observeAuthFileIdentities(ctx context.Context, files []managem
 var builtinAndReservedPluginKeys = map[string]bool{
 	"kimi": true, "kimi-ai": true, "codex": true, "anthropic": true, "claude": true,
 	"antigravity": true, "xai": true, "grok": true, "devin": true, "meta": true,
-	"gemini": true, "google": true, "vertex": true, "interactions": true,
+	"copilot": true, "gemini": true, "google": true, "vertex": true, "interactions": true,
 }
 
 func (h *Handler) observePluginIdentities(ctx context.Context, plugins []PluginItemDTO) error {

@@ -122,6 +122,12 @@ const MODEL_MANUFACTURERS: Record<string, ModelManufacturer> = {
 };
 const AUTHOR_ALIASES: Record<string, string> = { 'x-ai': 'xai', qwen: 'alibaba', 'z-ai': 'zai', zhipuai: 'zai', 'zai-org': 'zai', mistralai: 'mistral', 'meta-llama': 'meta', 'moonshotai-cn': 'moonshotai', 'deepseek-ai': 'deepseek', inceptionlabs: 'inception', 'amazon-nova': 'amazon', bytedance: 'bytedance-seed' };
 const UNKNOWN_MANUFACTURER: ModelManufacturer = { id: 'unknown', name: '' };
+const COPILOT_FALLBACK_MANUFACTURER: ModelManufacturer = {
+  id: 'copilot',
+  name: 'GitHub Copilot',
+  iconId: 'GithubCopilot',
+  modelIconId: 'GithubCopilot',
+};
 const MODEL_FAMILY_RULES: readonly [RegExp, string][] = [
   [/^(?:gpt(?:-|\d)|chatgpt-|o[134](?:-|$)|codex(?:-|$))/, 'openai'],
   [/^claude(?:-|$)/, 'anthropic'], [/^(?:gemini|gemma)(?:-|$)/, 'google'],
@@ -131,7 +137,7 @@ const MODEL_FAMILY_RULES: readonly [RegExp, string][] = [
   [/^(?:mistral|mixtral|codestral|devstral|magistral|ministral|pixtral|voxtral)(?:[-\d]|$)/, 'mistral'],
   [/^(?:llama(?:[-\d.]|$)|muse-)/, 'meta'], [/^command(?:-|$)/, 'cohere'],
   [/^(?:doubao|seed)(?:-|$)/, 'bytedance-seed'], [/^mimo(?:-|$)/, 'xiaomi'],
-  [/^mercury(?:[-\d]|$)/, 'inception'], [/^index-/, 'bilibili'], [/^phi(?:[-\d]|$)/, 'microsoft'],
+  [/^mercury(?:[-\d]|$)/, 'inception'], [/^index-/, 'bilibili'], [/^(?:phi(?:[-\d]|$)|mai-)/, 'microsoft'],
   [/^nova-/, 'amazon'], [/^ernie(?:[-\d]|$)/, 'baidu'], [/^hunyuan(?:-|$)/, 'tencent'],
   [/^sonar(?:-|$)/, 'perplexity'], [/^nemotron(?:-|$)/, 'nvidia'], [/^step-/, 'stepfun'],
 ];
@@ -157,7 +163,10 @@ export function resolveModelManufacturer(identity: string, metadata?: ModelRefer
   const author = (metadata?.author || (metadata?.id ?? identity).split('/').slice(0, -1).join('/')).toLowerCase();
   const slug = identity.split('/').at(-1)?.toLowerCase() ?? '';
   const maker = MODEL_MANUFACTURERS[AUTHOR_ALIASES[author] ?? author] ?? MODEL_MANUFACTURERS[MODEL_FAMILY_RULES.find(([pattern]) => pattern.test(slug))?.[1] ?? ''];
-  if (!maker) return metadata && author ? { id: author, name: author } : UNKNOWN_MANUFACTURER;
+  if (!maker) {
+    if (author === 'copilot') return COPILOT_FALLBACK_MANUFACTURER;
+    return metadata && author ? { id: author, name: author } : UNKNOWN_MANUFACTURER;
+  }
   if (maker.id === 'openai' && slug.includes('codex')) return { ...maker, modelIconId: 'Codex' };
   if (maker.id === 'google' && slug.startsWith('gemma')) return { ...maker, modelIconId: 'Gemma' };
   return maker;

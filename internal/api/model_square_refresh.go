@@ -145,7 +145,7 @@ func safeModelCatalogProviders(providers []string) []string {
 		// These are the finite identifiers CPA's three native catalogs publish,
 		// not arbitrary labels from its source document or plugin registry.
 		switch provider {
-		case "claude", "gemini", "gemini-interactions", "vertex", "aistudio", "codex", "kimi", "kimi-ai", "kimi.ai", "kimi.com", "antigravity", "xai", "devin", "meta":
+		case "claude", "gemini", "gemini-interactions", "vertex", "aistudio", "codex", "kimi", "kimi-ai", "kimi.ai", "kimi.com", "antigravity", "xai", "devin", "meta", "copilot":
 			projected = append(projected, provider)
 		}
 	}

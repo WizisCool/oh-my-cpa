@@ -109,6 +109,7 @@ const FIXED_ROUTES = new Map([
   ['/api/v1/management/auth-files', 'auth-files'],
   ['/api/v1/management/auth-files/model-aliases', 'auth-files-model-aliases'],
   ['/api/v1/management/auth-files/excluded-models', 'auth-files-excluded-models'],
+  ['/api/v1/management/auth-files/request-scoped-errors', 'auth-files-request-scoped-errors'],
   ['/api/v1/management/oauth/providers', 'oauth-providers'],
   ['/api/v1/management/quota', 'quota'],
   ['/api/v1/management/quota/warmup/settings', 'warmup-settings'],

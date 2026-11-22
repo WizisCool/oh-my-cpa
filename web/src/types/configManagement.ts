@@ -67,6 +67,7 @@ export type ConfigBackupReason =
   | 'client_keys'
   | 'oauth_aliases'
   | 'oauth_excluded_models'
+  | 'oauth_request_scoped_errors'
   | 'plugin_settings'
   | 'plugin_install'
   | 'plugin_delete'

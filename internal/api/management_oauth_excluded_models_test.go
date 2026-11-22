@@ -266,6 +266,31 @@ func TestManagementOAuthProviderModelsPreserveUpstreamFailure(t *testing.T) {
 	}
 }
 
+func TestManagementOAuthProviderModelsCopilotPrefix(t *testing.T) {
+	client, baseURL, _ := startAuthFilesTestServer(t, "management-secret-value", func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if request.URL.Path == "/v8/management/routing/model-definitions/copilot" {
+			_, _ = writer.Write([]byte(`{"channel":"copilot","models":[{"id":"claude-sonnet-5","display_name":"Claude Sonnet 5"},{"id":"copilot/gpt-5.4","display_name":"GPT-5.4"}]}`))
+			return
+		}
+		_, _ = writer.Write([]byte(`{}`))
+	})
+	response, raw := doJSON(t, client, http.MethodGet, baseURL+"/omc/api/v1/management/auth-files/provider-models?provider=copilot", "")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("provider-models?provider=copilot = %d body = %s", response.StatusCode, raw)
+	}
+	var payload OAuthProviderModelsResponseDTO
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if !payload.Available || payload.Provider != "copilot" || len(payload.Models) != 2 {
+		t.Fatalf("unexpected copilot catalog payload: %+v", payload)
+	}
+	if payload.Models[0].ID != "copilot/claude-sonnet-5" || payload.Models[1].ID != "copilot/gpt-5.4" {
+		t.Fatalf("copilot catalog ids = %+v, want idempotent copilot/ prefix", payload.Models)
+	}
+}
+
 func TestManagementOAuthExcludedModelsAuditFailure(t *testing.T) {
 	for _, outcome := range []string{"attempt", "success"} {
 		t.Run(outcome, func(t *testing.T) {

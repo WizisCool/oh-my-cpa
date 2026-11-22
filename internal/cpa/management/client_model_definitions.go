@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // StaticModelDefinitions is fixed to CPA's own catalog channels. It never turns
@@ -54,6 +55,18 @@ func (c *Client) OAuthChannelModelDefinitions(ctx context.Context, channel strin
 	}
 	if response.Models == nil {
 		response.Models = []AuthModel{}
+	}
+	// CPA's static Copilot preset catalog stores unprefixed native IDs while
+	// Copilot credentials publish and match rules under the `copilot/` namespace
+	// before aliases and auth prefixes. Normalize idempotently so rule pickers
+	// and warmup read the exact IDs CPA evaluates.
+	if strings.EqualFold(strings.TrimSpace(channel), "copilot") {
+		for index := range response.Models {
+			id := strings.TrimSpace(response.Models[index].ID)
+			if id != "" && !strings.HasPrefix(strings.ToLower(id), "copilot/") {
+				response.Models[index].ID = "copilot/" + id
+			}
+		}
 	}
 	return response.Models, true, nil
 }

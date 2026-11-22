@@ -149,6 +149,7 @@ export default {
   'audit.action.oauth.cancel': '取消 OAuth 登录',
   'audit.action.oauth_model_alias.update': '修改 OAuth 模型别名',
   'audit.action.oauth_excluded_models.update': '修改 OAuth 模型禁用规则',
+  'audit.action.oauth_request_scoped_errors.update': '修改 OAuth 错误处理规则',
   'audit.action.model_catalog.refresh': '刷新 CPA 模型目录',
   'audit.action.config.save_source': '保存配置文件',
   'audit.action.config.save_scalar': '修改配置项',

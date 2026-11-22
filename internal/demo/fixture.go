@@ -788,9 +788,10 @@ func configDocument() map[string]any {
 			"usage": map[string]any{"usage-statistics-enabled": true},
 		},
 		"oauth": map[string]any{
-			"providers":       map[string]any{"aistudio": map[string]any{"ws-auth": false}},
-			"model-alias":     oauthModelAliases(),
-			"excluded-models": oauthExcludedModels(),
+			"providers":             map[string]any{"aistudio": map[string]any{"ws-auth": false}},
+			"model-alias":           oauthModelAliases(),
+			"excluded-models":       oauthExcludedModels(),
+			"request-scoped-errors": oauthRequestScopedErrors(),
 		},
 		"api-keys": upstreamGroups,
 		"plugins":  pluginsSection(),
@@ -855,6 +856,25 @@ func oauthExcludedModels() map[string]any {
 	return map[string]any{
 		"codex":  []string{"gpt-6.1-terra"},
 		"claude": []string{"claude-fable-5.1"},
+	}
+}
+
+func oauthRequestScopedErrors() map[string]any {
+	return map[string]any{
+		"codex": []map[string]any{
+			{
+				"status": 400,
+				"match":  []string{"context_window_exceeded"},
+				"action": "stop",
+			},
+		},
+		"claude": []map[string]any{
+			{
+				"status": 400,
+				"match":  []string{"prompt is too long"},
+				"action": "stop",
+			},
+		},
 	}
 }
 

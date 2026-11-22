@@ -9,8 +9,10 @@ import { useQuery } from '@tanstack/react-query';
 import {
   useOptimisticOAuthAliasesMutation,
   useOptimisticOAuthExcludedModelsMutation,
+  useOptimisticOAuthRequestScopedErrorsMutation,
 } from '../../hooks/useConfigMutations';
 import { api, ApiError } from '../../api/client';
+import { QUERY_KEYS } from '../../api/queryKeys';
 import { useT, type TFunc } from '../../i18n';
 import {
   createOAuthModelAliasDrafts,
@@ -22,6 +24,13 @@ import {
   type OAuthModelAliasValidationError,
 } from './oauthModelAliasLogic';
 import { excludedModelRulesEqual, normalizeExcludedModelRules } from './oauthExcludedModelLogic';
+import {
+  oauthErrorRuleDraftsEqual,
+  oauthErrorRuleProblem,
+  validateOAuthErrorRuleDrafts,
+} from './oauthRequestScopedErrorsLogic';
+import { readErrorRuleDrafts, type ErrorRuleDraft } from '../policy/errorRules';
+import { ErrorRulesEditor } from '../policy/ErrorRulesEditor';
 import { OAuthExcludedModelsPanel, type OAuthModelCatalogState } from './OAuthExcludedModelsPanel';
 import { OAuthModelAliasPanel } from './OAuthModelAliasPanel';
 import styles from './OAuthModelRulesDrawer.module.css';
@@ -32,7 +41,7 @@ import { SearchSelect } from '../common/SearchSelect';
 import { Tooltip } from '../common/Tooltip';
 import { AppDrawer } from '../common/AppDrawer';
 
-export type OAuthModelRulesSection = 'aliases' | 'excluded';
+export type OAuthModelRulesSection = 'aliases' | 'excluded' | 'errors';
 
 interface OAuthModelRulesDrawerProps {
   open: boolean;
@@ -45,8 +54,6 @@ interface OAuthModelRulesDrawerProps {
   initialProvider?: string;
 }
 
-const ALIASES_QUERY_KEY = ['management-oauth-model-aliases'] as const;
-const EXCLUDED_QUERY_KEY = ['management-oauth-excluded-models'] as const;
 const CATALOG_STALE_MS = 5 * 60_000;
 
 function validationMessage(error: OAuthModelAliasValidationError, t: TFunc, alias?: string): string {
@@ -103,23 +110,34 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
   const [aliasBaseline, setAliasBaseline] = useState<ManagementOAuthModelAliasDraft[]>([]);
   const [ruleDrafts, setRuleDrafts] = useState<string[]>([]);
   const [ruleBaseline, setRuleBaseline] = useState<string[]>([]);
+  const [errorRuleDrafts, setErrorRuleDrafts] = useState<ErrorRuleDraft[]>([]);
+  const [errorRuleBaseline, setErrorRuleBaseline] = useState<ErrorRuleDraft[]>([]);
+  const [showErrorRuleProblems, setShowErrorRuleProblems] = useState(false);
 
   const aliasesQuery = useQuery({
-    queryKey: ALIASES_QUERY_KEY,
+    queryKey: QUERY_KEYS.oauthModelAliases,
     queryFn: () => api.getManagementOAuthModelAliases(),
     enabled: open,
     staleTime: 30_000,
     retry: false,
   });
   const excludedQuery = useQuery({
-    queryKey: EXCLUDED_QUERY_KEY,
+    queryKey: QUERY_KEYS.oauthExcludedModels,
     queryFn: () => api.getManagementOAuthExcludedModels(),
+    enabled: open,
+    staleTime: 30_000,
+    retry: false,
+  });
+  const errorRulesQuery = useQuery({
+    queryKey: QUERY_KEYS.oauthRequestScopedErrors,
+    queryFn: () => api.getManagementOAuthRequestScopedErrors(),
     enabled: open,
     staleTime: 30_000,
     retry: false,
   });
   const savedAliases = aliasesQuery.data?.aliases;
   const savedRules = excludedQuery.data?.excluded_models;
+  const savedErrorRules = errorRulesQuery.data?.request_scoped_errors;
 
   const provider = normalizeOAuthModelAliasProvider(selectedProvider);
   const catalogQuery = useQuery({
@@ -137,28 +155,38 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
 
   const knownProviders = useMemo(() => {
     const values = new Set<string>();
-    [...Object.keys(savedAliases ?? {}), ...Object.keys(savedRules ?? {}), ...providerOptions].forEach((value) => {
+    [
+      ...Object.keys(savedAliases ?? {}),
+      ...Object.keys(savedRules ?? {}),
+      ...Object.keys(savedErrorRules ?? {}),
+      ...providerOptions,
+    ].forEach((value) => {
       const normalized = normalizeOAuthModelAliasProvider(value);
       if (normalized && isValidOAuthModelAliasProvider(normalized)) values.add(normalized);
     });
     return Array.from(values).sort();
-  }, [providerOptions, savedAliases, savedRules]);
+  }, [providerOptions, savedAliases, savedErrorRules, savedRules]);
 
   const isAliasDirty = !oauthModelAliasDraftsEqual(aliasDrafts, aliasBaseline);
   const isRuleDirty = !excludedModelRulesEqual(ruleDrafts, ruleBaseline);
-  const isDirty = isAliasDirty || isRuleDirty;
+  const isErrorRulesDirty = !oauthErrorRuleDraftsEqual(errorRuleDrafts, errorRuleBaseline);
+  const isDirty = isAliasDirty || isRuleDirty || isErrorRulesDirty;
 
   const loadProvider = useCallback((providerValue: string) => {
     const normalized = normalizeOAuthModelAliasProvider(providerValue);
     const aliases = createOAuthModelAliasDrafts(savedAliases?.[normalized] ?? []);
     const rules = normalizeExcludedModelRules(savedRules?.[normalized] ?? []);
+    const errorRules = readErrorRuleDrafts(savedErrorRules?.[normalized]);
     setSelectedProvider(normalized);
     setProviderSearch('');
     setAliasDrafts(aliases);
     setAliasBaseline(aliases);
     setRuleDrafts(rules);
     setRuleBaseline(rules);
-  }, [savedAliases, savedRules]);
+    setErrorRuleDrafts(errorRules);
+    setErrorRuleBaseline(errorRules);
+    setShowErrorRuleProblems(false);
+  }, [savedAliases, savedErrorRules, savedRules]);
 
   useEffect(() => {
     if (!open || !provider || isAliasDirty || !savedAliases) return;
@@ -174,18 +202,28 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
     setRuleBaseline(next);
   }, [open, provider, isRuleDirty, savedRules]);
 
-  const isSettled = !aliasesQuery.isLoading && !excludedQuery.isLoading;
+  useEffect(() => {
+    if (!open || !provider || isErrorRulesDirty || !savedErrorRules) return;
+    const next = readErrorRuleDrafts(savedErrorRules[provider]);
+    setErrorRuleDrafts(next);
+    setErrorRuleBaseline(next);
+    setShowErrorRuleProblems(false);
+  }, [open, provider, isErrorRulesDirty, savedErrorRules]);
+
+  const isSettled = !aliasesQuery.isLoading && !excludedQuery.isLoading && !errorRulesQuery.isLoading;
   useEffect(() => {
     if (!open || !isSettled || selectedProvider) return;
     // Open on the provider asked for, else one that already carries rules, so the drawer
     // shows the configuration that exists rather than an empty editor for the first name.
     const requested = normalizeOAuthModelAliasProvider(initialProvider ?? '');
     const first = (requested && isValidOAuthModelAliasProvider(requested) ? requested : undefined)
-      ?? knownProviders.find((value) => savedAliases?.[value]?.length || savedRules?.[value]?.length)
+      ?? knownProviders.find(
+        (value) => savedAliases?.[value]?.length || savedRules?.[value]?.length || savedErrorRules?.[value]?.length,
+      )
       ?? knownProviders[0]
       ?? '';
     if (first) loadProvider(first);
-  }, [initialProvider, isSettled, knownProviders, loadProvider, open, savedAliases, savedRules, selectedProvider]);
+  }, [initialProvider, isSettled, knownProviders, loadProvider, open, savedAliases, savedErrorRules, savedRules, selectedProvider]);
 
   useEffect(() => {
     if (!open) {
@@ -196,6 +234,9 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
       setAliasBaseline([]);
       setRuleDrafts([]);
       setRuleBaseline([]);
+      setErrorRuleDrafts([]);
+      setErrorRuleBaseline([]);
+      setShowErrorRuleProblems(false);
     }
   }, [open]);
 
@@ -216,7 +257,17 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
       onSaved();
     },
   });
-  const isSaving = aliasMutation.isPending || ruleMutation.isPending;
+  const errorRulesMutation = useOptimisticOAuthRequestScopedErrorsMutation({
+    formatError: (error) => safeError(error, t),
+    onSuccess: (_provider, rules) => {
+      const next = readErrorRuleDrafts(rules);
+      setErrorRuleDrafts(next);
+      setErrorRuleBaseline(next);
+      setShowErrorRuleProblems(false);
+      onSaved();
+    },
+  });
+  const isSaving = aliasMutation.isPending || ruleMutation.isPending || errorRulesMutation.isPending;
 
   const saveAliases = async () => {
     const validation = validateOAuthModelAliasDrafts(provider, aliasDrafts);
@@ -245,21 +296,55 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
     }
   };
 
+  const saveErrorRules = async () => {
+    setShowErrorRuleProblems(true);
+    const validation = validateOAuthErrorRuleDrafts(provider, errorRuleDrafts);
+    if (!validation.ok) {
+      if (validation.error === 'provider') {
+        toast.error(t('af.alias_error_provider'));
+      } else if (validation.error === 'too_many') {
+        toast.error(t('af.error_rules_error_too_many'));
+      } else {
+        toast.error(t('af.error_rules_error_invalid', { n: validation.position + 1 }));
+      }
+      return;
+    }
+    try {
+      await errorRulesMutation.mutateAsync({ provider: validation.provider, rules: validation.rules });
+      toast.success(t('af.error_rules_saved'));
+    } catch {
+      // Error toast & cache rollback handled by useOptimisticOAuthRequestScopedErrorsMutation.
+    }
+  };
+
   const hasSavedAliases = Boolean(provider && savedAliases?.[provider]?.length);
   const hasSavedRules = Boolean(provider && savedRules?.[provider]?.length);
+  const hasSavedErrorRules = Boolean(provider && savedErrorRules?.[provider]?.length);
 
   const confirmClear = () => {
-    const isAliases = section === 'aliases';
+    const titleKey = section === 'aliases'
+      ? 'af.alias_delete_confirm_title'
+      : section === 'errors'
+        ? 'af.error_rules_delete_confirm_title'
+        : 'af.excluded_delete_confirm_title';
+    const descKey = section === 'aliases'
+      ? 'af.alias_delete_confirm_desc'
+      : section === 'errors'
+        ? 'af.error_rules_delete_confirm_desc'
+        : 'af.excluded_delete_confirm_desc';
     modal.confirm({
-      title: t(isAliases ? 'af.alias_delete_confirm_title' : 'af.excluded_delete_confirm_title'),
-      content: t(isAliases ? 'af.alias_delete_confirm_desc' : 'af.excluded_delete_confirm_desc', { provider }),
+      title: t(titleKey),
+      content: t(descKey, { provider }),
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       okButtonProps: { danger: true },
       onOk: async () => {
-        if (isAliases) {
+        if (section === 'aliases') {
           await aliasMutation.mutateAsync({ provider, aliases: [] });
           toast.success(t('af.alias_delete_success', { provider }));
+        } else if (section === 'errors') {
+          await errorRulesMutation.mutateAsync({ provider, rules: [] });
+          toast.success(t('af.error_rules_delete_success', { provider }));
         } else {
           await ruleMutation.mutateAsync({ provider, models: [] });
           toast.success(t('af.excluded_delete_success', { provider }));
@@ -296,6 +381,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
             {t('af.rules_provider_counts', {
               aliases: savedAliases?.[value]?.length ?? 0,
               excluded: savedRules?.[value]?.length ?? 0,
+              errors: savedErrorRules?.[value]?.length ?? 0,
             })}
           </span>
         </span>
@@ -316,19 +402,38 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
       });
     }
     return options;
-  }, [knownProviders, pluginLogos, pluginTitles, savedAliases, savedRules, t, typedProvider]);
+  }, [knownProviders, pluginLogos, pluginTitles, savedAliases, savedErrorRules, savedRules, t, typedProvider]);
 
-  const sectionQuery = section === 'aliases' ? aliasesQuery : excludedQuery;
-  const isSectionDirty = section === 'aliases' ? isAliasDirty : isRuleDirty;
-  const hasSavedSection = section === 'aliases' ? hasSavedAliases : hasSavedRules;
+  const sectionQuery = section === 'aliases'
+    ? aliasesQuery
+    : section === 'errors'
+      ? errorRulesQuery
+      : excludedQuery;
+  const isSectionDirty = section === 'aliases'
+    ? isAliasDirty
+    : section === 'errors'
+      ? isErrorRulesDirty
+      : isRuleDirty;
+  const hasSavedSection = section === 'aliases'
+    ? hasSavedAliases
+    : section === 'errors'
+      ? hasSavedErrorRules
+      : hasSavedRules;
   const isSectionReady = Boolean(provider) && sectionQuery.isSuccess;
 
-  const sectionLabel = (value: OAuthModelRulesSection, count: number, isSectionChanged: boolean) => (
-    <span className={styles['section-tab']} data-testid={`oauth-model-rules-tab-${value}`}>
-      {t(value === 'aliases' ? 'af.rules_tab_aliases' : 'af.rules_tab_excluded', { n: count })}
-      {isSectionChanged && <span className={styles['dirty-pip']} role="img" aria-label={t('af.rules_tab_unsaved')} />}
-    </span>
-  );
+  const sectionLabel = (value: OAuthModelRulesSection, count: number, isSectionChanged: boolean) => {
+    const labelKey = value === 'aliases'
+      ? 'af.rules_tab_aliases'
+      : value === 'errors'
+        ? 'af.rules_tab_errors'
+        : 'af.rules_tab_excluded';
+    return (
+      <span className={styles['section-tab']} data-testid={`oauth-model-rules-tab-${value}`}>
+        {t(labelKey, { n: count })}
+        {isSectionChanged && <span className={styles['dirty-pip']} role="img" aria-label={t('af.rules_tab_unsaved')} />}
+      </span>
+    );
+  };
 
   const renderSection = () => {
     if (sectionQuery.isError) {
@@ -358,6 +463,26 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
         />
       );
     }
+    if (section === 'errors') {
+      return (
+        <div className={styles['excluded-box']} data-testid="oauth-error-rules-panel">
+          <div className={styles['excluded-header']}>
+            <span className={styles['summary-count']} data-testid="oauth-error-rules-summary">
+              {t('af.error_rules_summary', { n: errorRuleDrafts.length })}
+            </span>
+          </div>
+          <ErrorRulesEditor
+            key={provider}
+            rules={errorRuleDrafts}
+            onChange={setErrorRuleDrafts}
+            showProblems={showErrorRuleProblems}
+            isDisabled={isSaving}
+            validateRule={oauthErrorRuleProblem}
+            isPatternEmpty={(value) => value.trim() === ''}
+          />
+        </div>
+      );
+    }
     return (
       <OAuthExcludedModelsPanel
         // The typed-rule field and the catalog search belong to one provider.
@@ -373,6 +498,38 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
     );
   };
 
+  const clearButtonKey = section === 'aliases'
+    ? 'af.alias_delete_provider'
+    : section === 'errors'
+      ? 'af.error_rules_delete_provider'
+      : 'af.excluded_delete_provider';
+  const saveButtonKey = section === 'aliases'
+    ? 'af.alias_save'
+    : section === 'errors'
+      ? 'af.error_rules_save'
+      : 'af.excluded_save';
+
+  const handleRevertSection = () => {
+    if (section === 'aliases') {
+      setAliasDrafts(aliasBaseline);
+    } else if (section === 'errors') {
+      setErrorRuleDrafts(errorRuleBaseline);
+      setShowErrorRuleProblems(false);
+    } else {
+      setRuleDrafts(ruleBaseline);
+    }
+  };
+
+  const handleSaveSection = () => {
+    if (section === 'aliases') {
+      void saveAliases();
+    } else if (section === 'errors') {
+      void saveErrorRules();
+    } else {
+      void saveRules();
+    }
+  };
+
   const footerStart = (
     <Button
       danger
@@ -382,7 +539,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
       disabled={!isSectionReady || !hasSavedSection || isSectionDirty || isSaving}
       onClick={confirmClear}
     >
-      {t(section === 'aliases' ? 'af.alias_delete_provider' : 'af.excluded_delete_provider')}
+      {t(clearButtonKey)}
     </Button>
   );
   const footer = (
@@ -390,7 +547,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
       <Button
         data-testid="oauth-model-rules-revert"
         disabled={!isSectionDirty || isSaving}
-        onClick={() => (section === 'aliases' ? setAliasDrafts(aliasBaseline) : setRuleDrafts(ruleBaseline))}
+        onClick={handleRevertSection}
       >
         {t('af.rules_revert')}
       </Button>
@@ -400,9 +557,9 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
         data-testid="oauth-model-rules-save"
         loading={isSaving}
         disabled={!isSectionReady || !isSectionDirty}
-        onClick={() => void (section === 'aliases' ? saveAliases() : saveRules())}
+        onClick={handleSaveSection}
       >
-        {t(section === 'aliases' ? 'af.alias_save' : 'af.excluded_save')}
+        {t(saveButtonKey)}
       </Button>
     </>
   );
@@ -465,6 +622,7 @@ export const OAuthModelRulesDrawer: React.FC<OAuthModelRulesDrawerProps> = ({
                 // Disabling models is what operators come here for most, so it leads.
                 { value: 'excluded', label: sectionLabel('excluded', ruleDrafts.length, isRuleDirty) },
                 { value: 'aliases', label: sectionLabel('aliases', aliasDrafts.length, isAliasDirty) },
+                { value: 'errors', label: sectionLabel('errors', errorRuleDrafts.length, isErrorRulesDirty) },
               ]}
             />
             {renderSection()}

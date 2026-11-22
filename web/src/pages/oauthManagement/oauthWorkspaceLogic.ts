@@ -1,6 +1,7 @@
 import { deriveAuthFileIdentity, matchesStatusFilter, type AuthFileSortKey, type AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
 import { maskAccount } from '../../utils/maskAccount';
 import { canonicalDisplayProviderKey } from '../../types/credentialIdentity';
+import { PRIMARY_CREDENTIAL_PROVIDERS } from '../../types/credentialProviders';
 import { getCredentialProviderMetadata } from '../../types/providerMetadata';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import { OAUTH_PROVIDER_PATTERN } from '../../types/pluginOAuthProviders';
@@ -462,7 +463,6 @@ export function workspaceProviderOptions(
   records: OAuthWorkspaceRecord[],
   choices: OAuthProviderChoice[],
 ): string[] {
-  const pinned = ['claude', 'antigravity', 'codex', 'xai', 'kimi', 'devin', 'meta'];
   const observed = records.map((record) => record.displayProvider).filter((provider) => provider && provider !== 'unknown');
   const connectable = choices.map((choice) => {
     const id = normalizedKey(choice.id);
@@ -470,9 +470,9 @@ export function workspaceProviderOptions(
     return getCredentialProviderMetadata(id).id || id;
   }).filter(Boolean);
   const extras = Array.from(new Set([...observed, ...connectable]))
-    .filter((provider) => !pinned.includes(provider))
+    .filter((provider) => !PRIMARY_CREDENTIAL_PROVIDERS.includes(provider))
     .sort();
-  return [...pinned, ...extras];
+  return [...PRIMARY_CREDENTIAL_PROVIDERS, ...extras];
 }
 
 export function workspaceProviderCounts(records: OAuthWorkspaceRecord[]): Record<string, number> {

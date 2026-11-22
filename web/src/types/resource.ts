@@ -13,6 +13,7 @@ export type ProtocolDriver =
   | 'kimi'
   | 'devin'
   | 'meta'
+  | 'copilot'
   | 'custom'
   | string;
 

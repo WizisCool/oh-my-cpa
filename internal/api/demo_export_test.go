@@ -164,6 +164,7 @@ func demoExportCases() []demoExportCase {
 		// without a name is what the console's own model picker sends.
 		{Name: "auth-files-model-aliases", Path: "/api/v1/management/auth-files/model-aliases"},
 		{Name: "auth-files-excluded-models", Path: "/api/v1/management/auth-files/excluded-models"},
+		{Name: "auth-files-request-scoped-errors", Path: "/api/v1/management/auth-files/request-scoped-errors"},
 		// The rule editors read one catalog per provider; these are the fixture's
 		// providers that carry rules, which are the ones the drawer opens on.
 		{Name: "auth-files-provider-models-claude", Path: "/api/v1/management/auth-files/provider-models?provider=claude"},

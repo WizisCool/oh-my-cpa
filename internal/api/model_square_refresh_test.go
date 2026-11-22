@@ -260,3 +260,10 @@ func TestModelCatalogRefreshRequiresSessionOriginAndAudit(t *testing.T) {
 		})
 	}
 }
+
+func TestSafeModelCatalogProvidersIncludesCopilot(t *testing.T) {
+	got := safeModelCatalogProviders([]string{"copilot", "claude", "unknown-secret-channel"})
+	if !slices.Equal(got, []string{"claude", "copilot"}) {
+		t.Fatalf("safeModelCatalogProviders = %v, want [claude copilot]", got)
+	}
+}

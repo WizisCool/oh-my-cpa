@@ -374,6 +374,7 @@ export default {
   'cfg.backups_reason_client_keys': '修改客户端密钥',
   'cfg.backups_reason_oauth_aliases': '修改模型别名',
   'cfg.backups_reason_oauth_excluded_models': '修改模型禁用规则',
+  'cfg.backups_reason_oauth_request_scoped_errors': '修改错误处理规则',
   'cfg.backups_reason_plugin_settings': '修改插件设置',
   'cfg.backups_reason_plugin_install': '安装插件',
   'cfg.backups_reason_plugin_delete': '删除插件',

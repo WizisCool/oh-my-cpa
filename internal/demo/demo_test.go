@@ -604,6 +604,7 @@ func TestUpstreamServesTheConsoleSurface(t *testing.T) {
 		managementPrefix + "/config.yaml",
 		managementPrefix + "/config/oauth/model-alias",
 		managementPrefix + "/config/oauth/excluded-models",
+		managementPrefix + "/config/oauth/request-scoped-errors",
 		managementPrefix + "/routing/model-definitions/codex",
 		managementPrefix + "/config/plugins/configs/usage-exporter",
 		legacyManagementPrefix + "/config.yaml",

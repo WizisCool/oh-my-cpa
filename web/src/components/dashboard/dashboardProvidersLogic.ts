@@ -76,6 +76,7 @@ export const OAUTH_CHANNEL_META: Record<string, { protocol: string }> = {
   anthropic: { protocol: 'Anthropic Claude (OAuth)' },
   claude: { protocol: 'Anthropic Claude (OAuth)' },
   xai: { protocol: 'xAI Grok (OAuth)' },
+  copilot: { protocol: 'GitHub Copilot (OAuth)' },
   codebuddy: { protocol: 'Codebuddy (OAuth)' },
 };
 

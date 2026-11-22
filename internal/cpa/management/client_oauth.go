@@ -486,3 +486,108 @@ func (c *Client) PatchOAuthExcludedModels(ctx context.Context, provider string, 
 	}
 	return c.ApplyConfigChanges(WithBackupReason(ctx, BackupReasonOAuthExclusions), changes)
 }
+
+// OAUTH_REQUEST_SCOPED_ERRORS_PATH is where v8 keeps the request-scoped error
+// classification rules CPA applies to every OAuth/file-backed credential of a
+// provider, one ordered rule list per provider.
+var OAUTH_REQUEST_SCOPED_ERRORS_PATH = []string{"oauth", "request-scoped-errors"}
+
+// OAuthRequestScopedErrors reads CPA's global OAuth request-scoped error rules
+// as CPA applies them: the stored lists pass through the cleanup CPA runs when
+// it loads them (see sanitizeOAuthRequestScopedErrors).
+func (c *Client) OAuthRequestScopedErrors(ctx context.Context) (map[string][]RequestScopedErrorRule, error) {
+	var stored map[string][]RequestScopedErrorRule
+	if _, err := c.configValueAt(ctx, OAUTH_REQUEST_SCOPED_ERRORS_PATH, &stored); err != nil {
+		return nil, err
+	}
+	return sanitizeOAuthRequestScopedErrors(stored), nil
+}
+
+// sanitizeOAuthRequestScopedErrors mirrors CPA's SanitizeOAuthRequestScopedErrors:
+// providers are lower-cased, patterns and actions are trimmed, and rules missing
+// a positive status, any pattern or an action are dropped. On case-colliding
+// stored provider spellings, the first nonempty list in sorted order wins so
+// reads stay deterministic until a write removes alternate spellings.
+func sanitizeOAuthRequestScopedErrors(stored map[string][]RequestScopedErrorRule) map[string][]RequestScopedErrorRule {
+	providers := make([]string, 0, len(stored))
+	for provider := range stored {
+		providers = append(providers, provider)
+	}
+	sort.Strings(providers)
+	out := map[string][]RequestScopedErrorRule{}
+	for _, rawProvider := range providers {
+		provider := strings.ToLower(strings.TrimSpace(rawProvider))
+		if provider == "" || out[provider] != nil {
+			continue
+		}
+		if clean := sanitizeOAuthRequestScopedErrorList(stored[rawProvider]); len(clean) > 0 {
+			out[provider] = clean
+		}
+	}
+	return out
+}
+
+func sanitizeOAuthRequestScopedErrorList(rules []RequestScopedErrorRule) []RequestScopedErrorRule {
+	var clean []RequestScopedErrorRule
+	for _, rule := range rules {
+		action := strings.ToLower(strings.TrimSpace(rule.Action))
+		var match []string
+		for _, item := range rule.Match {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				match = append(match, trimmed)
+			}
+		}
+		var matchRegex []string
+		for _, item := range rule.MatchRegex {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				matchRegex = append(matchRegex, trimmed)
+			}
+		}
+		if rule.Status <= 0 || (len(match) == 0 && len(matchRegex) == 0) || action == "" {
+			continue
+		}
+		clean = append(clean, RequestScopedErrorRule{
+			Status:     rule.Status,
+			Match:      match,
+			MatchRegex: matchRegex,
+			Action:     action,
+			extra:      rule.extra,
+		})
+	}
+	return clean
+}
+
+// PatchOAuthRequestScopedErrors replaces one provider's global error rules, and
+// removes the provider when the list is empty. Unchanged rules at the same
+// position retain any wire fields the console does not model, and case-colliding
+// spellings of the same provider are removed together.
+func (c *Client) PatchOAuthRequestScopedErrors(ctx context.Context, provider string, rules []RequestScopedErrorRule) error {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	var stored map[string][]RequestScopedErrorRule
+	if _, err := c.configValueAt(ctx, OAUTH_REQUEST_SCOPED_ERRORS_PATH, &stored); err != nil {
+		return err
+	}
+	existing := sanitizeOAuthRequestScopedErrors(stored)[provider]
+	merged := make([]RequestScopedErrorRule, len(rules))
+	for index, rule := range rules {
+		if index < len(existing) && existing[index].IsSameRule(rule) {
+			merged[index] = existing[index]
+			continue
+		}
+		merged[index] = rule
+	}
+	path := append(append([]string{}, OAUTH_REQUEST_SCOPED_ERRORS_PATH...), provider)
+	var changes []ConfigChange
+	_, isStored := stored[provider]
+	for storedProvider := range stored {
+		if storedProvider != provider && strings.ToLower(strings.TrimSpace(storedProvider)) == provider {
+			changes = append(changes, ConfigChange{Path: append(append([]string{}, OAUTH_REQUEST_SCOPED_ERRORS_PATH...), storedProvider), Remove: true})
+		}
+	}
+	if len(merged) > 0 {
+		changes = append(changes, ConfigChange{Path: path, Value: merged})
+	} else if isStored {
+		changes = append(changes, ConfigChange{Path: path, Remove: true})
+	}
+	return c.ApplyConfigChanges(WithBackupReason(ctx, BackupReasonOAuthErrorRules), changes)
+}

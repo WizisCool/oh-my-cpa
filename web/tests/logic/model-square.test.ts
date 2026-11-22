@@ -139,3 +139,26 @@ test('setting a model icon to empty removes the override and leaves the others',
   assert.deepEqual(withModelIcon(icons, 'new', 'Claude'), { ...icons, new: 'Claude' });
   assert.deepEqual(icons, { 'gpt-5': 'Codex', 'team/fast': 'Gemini' });
 });
+
+test('Copilot-prefixed models resolve to their true maker including MAI-Code, falling back to GitHub Copilot only when unidentified', () => {
+  const expected: Array<[string, string]> = [
+    ['copilot/claude-sonnet-5', 'anthropic'],
+    ['copilot/gpt-5.4', 'openai'],
+    ['copilot/gemini-2.5-pro', 'google'],
+    ['copilot/grok-code-fast-1', 'xai'],
+    ['copilot/kimi-k2.5', 'moonshotai'],
+    ['copilot/mai-code-1', 'microsoft'],
+    ['mai-code-2', 'microsoft'],
+  ];
+  for (const [model, makerId] of expected) {
+    assert.equal(resolveModelManufacturer(model).id, makerId, model);
+  }
+  const fallback = resolveModelManufacturer('copilot/future-internal-model');
+  assert.deepEqual(fallback, {
+    id: 'copilot',
+    name: 'GitHub Copilot',
+    iconId: 'GithubCopilot',
+    modelIconId: 'GithubCopilot',
+  });
+  assert.ok(LOBE_ICON_CATALOG.some((item) => item.id === fallback.iconId));
+});

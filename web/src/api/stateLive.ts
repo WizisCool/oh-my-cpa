@@ -1,6 +1,7 @@
 import { getAppConfig } from '../types/config';
 import type { ConfigScalars } from '../types/configManagement';
 import type { ManagementOAuthModelAlias } from '../types/managementOAuthModelAlias';
+import type { ProviderErrorRule } from '../types/providers';
 import { createPageActivityMonitor, UNAVAILABLE_RETRY_MS, type LiveChannelState } from './liveChannel';
 
 export type StateLiveEventType = 'ready' | 'state_sync' | 'sync_error';
@@ -27,6 +28,7 @@ export interface SafeProjectedStateSnapshot {
   auth_file_statuses: SafeAuthFileStatusItem[];
   oauth_model_aliases: Record<string, ManagementOAuthModelAlias[]>;
   oauth_excluded_models: Record<string, string[]>;
+  oauth_request_scoped_errors: Record<string, ProviderErrorRule[]>;
 }
 
 export interface StateEnvelope<T> {
@@ -103,6 +105,23 @@ function parseSafeSnapshot(raw: unknown): SafeProjectedStateSnapshot | undefined
       }
     }
   }
+  const oauthErrorRules: Record<string, ProviderErrorRule[]> = {};
+  if (isRecord(raw.oauth_request_scoped_errors)) {
+    for (const [provider, rules] of Object.entries(raw.oauth_request_scoped_errors)) {
+      if (!Array.isArray(rules)) continue;
+      const parsed: ProviderErrorRule[] = [];
+      for (const entry of rules) {
+        if (!isRecord(entry) || typeof entry.status !== 'number' || typeof entry.action !== 'string') continue;
+        parsed.push({
+          status: entry.status,
+          action: entry.action,
+          ...(isStringArray(entry.match) && entry.match.length > 0 ? { match: entry.match } : {}),
+          ...(isStringArray(entry.match_regex) && entry.match_regex.length > 0 ? { match_regex: entry.match_regex } : {}),
+        });
+      }
+      if (parsed.length > 0) oauthErrorRules[provider] = parsed;
+    }
+  }
   const authStatuses: SafeAuthFileStatusItem[] = [];
   if (Array.isArray(raw.auth_file_statuses)) {
     for (const item of raw.auth_file_statuses) {
@@ -127,6 +146,7 @@ function parseSafeSnapshot(raw: unknown): SafeProjectedStateSnapshot | undefined
     auth_file_statuses: authStatuses,
     oauth_model_aliases: oauthAliases,
     oauth_excluded_models: oauthExcluded,
+    oauth_request_scoped_errors: oauthErrorRules,
   };
 }
 

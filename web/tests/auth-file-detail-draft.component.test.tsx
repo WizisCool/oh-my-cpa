@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { AuthFileDetailDrawer } from '../src/components/authFiles/AuthFileDetailDrawer';
+import { OAuthModelRulesDrawer } from '../src/components/authFiles/OAuthModelRulesDrawer';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
 import { installOmcApi, json, type OmcApi } from './support/omcApi';
 
@@ -174,5 +175,78 @@ it('disables credential model alias reordering when read-only or while saving', 
     await waitFor(() => expect(list.querySelectorAll('[data-reorder-handle]')).toHaveLength(2));
   } finally {
     savingView.unmount();
+  }
+});
+
+it('edits and saves global OAuth request-scoped error rules for Copilot in OAuthModelRulesDrawer', async () => {
+  const api = installOmcApi({});
+  serveProviderCatalog(api);
+  let storedErrorRules: Record<string, unknown[]> = {
+    copilot: [{ status: 400, match: ['context_length'], action: 'stop' }],
+  };
+  api.on('GET', '/management/auth-files/model-aliases', () => ({ aliases: {} }));
+  api.on('GET', '/management/auth-files/excluded-models', () => ({ excluded_models: {} }));
+  api.on('GET', '/management/auth-files/request-scoped-errors', () => ({
+    request_scoped_errors: storedErrorRules,
+  }));
+  api.on('PATCH', '/management/auth-files/request-scoped-errors', (request) => {
+    const body = request.body as { provider: string; rules: unknown[] };
+    storedErrorRules = { ...storedErrorRules, [body.provider]: body.rules };
+    return { status: 'ok', provider: body.provider, rules: body.rules };
+  });
+  const pendingSave = api.hold('PATCH', '/management/auth-files/request-scoped-errors');
+
+  const onSaved = vi.fn();
+  const view = renderWithOmc(
+    <OAuthModelRulesDrawer
+      open
+      onClose={vi.fn()}
+      onSaved={onSaved}
+      providerOptions={['claude', 'codex', 'copilot']}
+      initialProvider="copilot"
+    />,
+  );
+  try {
+    const errorsTab = await screen.findByTestId('oauth-model-rules-tab-errors');
+    expect(errorsTab.textContent).toContain('1');
+    fireEvent.click(errorsTab);
+
+    const summary = await screen.findByTestId('oauth-error-rules-summary');
+    expect(summary.textContent).toContain('1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
+    const statusInput = await screen.findByLabelText('Rule 2: Status code') as HTMLInputElement;
+    const matchInput = screen.getByLabelText('Rule 2: Pattern') as HTMLInputElement;
+    fireEvent.change(statusInput, { target: { value: '429' } });
+    // Whitespace-only pattern must surface inline OAuth validation without sending a request.
+    fireEvent.change(matchInput, { target: { value: '   ' } });
+    const saveButton = screen.getByTestId('oauth-model-rules-save') as HTMLButtonElement;
+    await waitFor(() => expect(saveButton.disabled).toBe(false));
+    fireEvent.click(saveButton);
+    expect(await screen.findByText('A pattern cannot be empty')).toBeTruthy();
+    expect(api.writes('/management/auth-files/request-scoped-errors')).toHaveLength(0);
+
+    // Fix the pattern, submit, wait for the request to arrive, verify editor disables while saving, then release.
+    fireEvent.change(matchInput, { target: { value: '  rate_limit_exceeded  ' } });
+    fireEvent.click(saveButton);
+    await pendingSave.arrived;
+    await waitFor(() => expect(statusInput.disabled).toBe(true));
+    expect(matchInput.disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Add rule' }) as HTMLButtonElement).disabled).toBe(true);
+    pendingSave.release();
+
+    await waitFor(() => expect(api.writes('/management/auth-files/request-scoped-errors')).toHaveLength(1));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(api.writes('/management/auth-files/request-scoped-errors')[0].body).toEqual({
+      provider: 'copilot',
+      rules: [
+        { status: 400, match: ['context_length'], action: 'stop' },
+        { status: 429, match: ['rate_limit_exceeded'], action: 'continue' },
+      ],
+    });
+    await waitFor(() => expect(saveButton.disabled).toBe(true));
+    await waitFor(() => expect((screen.getByLabelText('Rule 2: Status code') as HTMLInputElement).disabled).toBe(false));
+  } finally {
+    view.unmount();
   }
 });

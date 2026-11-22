@@ -25,6 +25,7 @@ const CREDENTIAL_PROVIDER_LABELS: Record<string, Omit<ProviderMetadata, 'iconId'
   'kimi-ai': { id: 'kimi', label: 'Kimi' },
   devin: { id: 'devin', label: 'Devin' },
   meta: { id: 'meta', label: 'Meta' },
+  copilot: { id: 'copilot', label: 'GitHub Copilot' },
   // The CodeBuddy plugin registers `codebuddy` as its provider key; a store build
   // that keeps the plugin's own id instead still has to reach the same mark.
   codebuddy: { id: 'codebuddy', label: 'Codebuddy' },
