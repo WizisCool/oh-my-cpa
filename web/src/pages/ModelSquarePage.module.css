@@ -61,9 +61,8 @@
 .model-caption { color: var(--muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
 .model-price { min-width: 0; color: var(--fg-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .set-price { display: inline-flex; align-items: center; padding: 0; border-radius: var(--radius-sm); color: inherit; }
-.set-price :global(.status-label) { transition: background-color var(--motion-fast) var(--ease-standard); }
 .set-price :global(.status-label-trailing) { transition: transform var(--motion-fast) var(--ease-out); }
-.set-price:hover :global(.status-label) { background: color-mix(in srgb, var(--status-tone) 18%, transparent); }
+.set-price:hover :global(.status-label-text) { text-decoration: underline; text-underline-offset: 3px; }
 .set-price:hover :global(.status-label-trailing) { transform: translateX(1px); }
 :global(:root[data-reduced-motion='true']) .set-price :global(.status-label-trailing) { transition: none; }
 .model-sources { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 12px; min-width: 0; margin-left: auto; }

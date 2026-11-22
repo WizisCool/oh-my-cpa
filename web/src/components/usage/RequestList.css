@@ -901,7 +901,7 @@
      metadata line stays tight while every verdict keeps one consistent look. */
   .req-result-pill {
     height: 20px;
-    padding: 0 7px;
+    padding: calc((20px - 1.25em) / 2) 7px;
     gap: 5px;
     font-size: var(--text-xs);
   }

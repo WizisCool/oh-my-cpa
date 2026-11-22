@@ -803,7 +803,7 @@ function WarmupWorkspace({ state }: { state: WarmupStateView }) {
                 return (
                   <li key={run.id} className={styles['run-row']}>
                     <div className={styles['run-head']}>
-                      <StatusLabel tone={OUTCOME_TONES[run.outcome] ?? 'warn'}>
+                      <StatusLabel variant="chip" tone={OUTCOME_TONES[run.outcome] ?? 'warn'}>
                         {t(OUTCOME_KEYS[run.outcome] ?? 'warmup.outcome_unknown')}
                       </StatusLabel>
                       <span className={styles['run-task']}>{runTitle(run)}</span>

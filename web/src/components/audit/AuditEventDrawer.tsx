@@ -145,7 +145,7 @@ export const AuditEventDrawer: React.FC<AuditEventDrawerProps> = ({ event, newer
       {event && (
         <div className={styles['drawer-body']} data-testid="audit-detail">
           <div className={styles['drawer-verdict']}>
-            <StatusLabel tone={resultTone(event.result)}>{auditResultLabel(event.result, t)}</StatusLabel>
+            <StatusLabel variant="chip" tone={resultTone(event.result)}>{auditResultLabel(event.result, t)}</StatusLabel>
           </div>
           <section className={styles['drawer-section']}>
             <FactList facts={facts} emphasis="quiet" />
