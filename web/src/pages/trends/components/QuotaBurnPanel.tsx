@@ -24,6 +24,7 @@ import { LazyQuotaBurnChart as QuotaBurnChart, LazyQuotaCyclesChart as QuotaCycl
 import {
   QUOTA_VIEWS,
   buildQuotaBurnSeries,
+  canRefreshTrendsQuotaCredential,
   chartableWindows,
   countdownParts,
   formatPercent,
@@ -156,7 +157,8 @@ export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
     const isPhysicalUnavailable = Boolean(window.is_physical_unavailable);
     const eventsHref = isPhysicalUnavailable ? null : quotaEventsHref(credential.auth_index, window, nowMs);
     const notice = quotaNoticeState(credential, window, isMembershipUnknown, nowMs);
-    const isRefreshingCredential = Boolean(refreshingQuotaIndexes?.has(credential.auth_index));
+    const canRefreshCredential = canRefreshTrendsQuotaCredential(credential, isMembershipUnknown);
+    const isRefreshingCredential = Boolean(refreshingQuotaIndexes?.has(credential.auth_index.trim()));
     const isExhausted = window.exhausted_at_ms !== undefined;
     // A projection past the reset is no exhaustion this cycle.
     const projectedExhaustAt = !isExhausted && window.projected_exhaust_at_ms !== undefined && window.projected_exhaust_at_ms < window.cycle_reset_ms
@@ -250,6 +252,23 @@ export const QuotaBurnPanel: React.FC<QuotaBurnPanelProps> = ({
               />
             )}
             <span className={styles['quota-links']}>
+              {onRefreshQuota && (
+                <ToolButton
+                  size="sm"
+                  variant="ghost"
+                  className={`row-action-btn ${styles['quota-refresh']}`}
+                  icon={<SyncOutlined spin={isRefreshingCredential} />}
+                  label={t('common.action_on', { action: t('quota.btn_refresh_quota'), target: credentialName(credential) })}
+                  tooltip={t('quota.btn_refresh_quota')}
+                  aria-busy={isRefreshingCredential || undefined}
+                  disabled={!canRefreshCredential}
+                  onClick={() => {
+                    if (!canRefreshCredential || isRefreshingCredential) return;
+                    onRefreshQuota(credential);
+                  }}
+                  data-testid="trends-quota-refresh"
+                />
+              )}
               <ToolButton
                 size="sm"
                 variant="ghost"

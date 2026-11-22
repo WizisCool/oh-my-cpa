@@ -356,6 +356,22 @@ export interface TrendsQuotaNoticeState {
 }
 
 /**
+ * Whether the operator can ask CPA for a live upstream quota reading of this credential.
+ * Unreachable CPA, disabled credentials, unsupported providers and empty indexes cannot be probed.
+ */
+export function canRefreshTrendsQuotaCredential(
+  credential: TrendsQuotaCredential,
+  isMembershipUnknown: boolean,
+): boolean {
+  return (
+    !isMembershipUnknown
+    && credential.status !== 'disabled'
+    && credential.status !== 'unsupported'
+    && credential.auth_index.trim() !== ''
+  );
+}
+
+/**
  * Classifies why the selected quota cycle cannot project forward: CPA itself could not be
  * reached to verify live credentials (retry the read) or the observation is stale, failed, or
  * past its reset (trigger a live upstream quota refresh).
@@ -372,7 +388,7 @@ export function quotaNoticeState(
   if (STALE_CREDENTIAL_STATUSES.has(credential.status) || window.cycle_reset_ms <= nowMs) {
     return {
       kind: 'stale',
-      canRefreshQuota: credential.status !== 'disabled' && credential.auth_index.trim() !== '',
+      canRefreshQuota: canRefreshTrendsQuotaCredential(credential, isMembershipUnknown),
     };
   }
   return null;

@@ -5,6 +5,7 @@ import {
   HOUR_LIMIT_MS,
   availablePerfGroups,
   buildQuotaBurnSeries,
+  canRefreshTrendsQuotaCredential,
   countdownParts,
   filterGroupByForKey,
   filterKeyForGroupBy,
@@ -727,9 +728,17 @@ test('stability failure attribution rolls up model, provider, credential and lan
   assert.equal(resolveTrendsManagementTarget('provider', 'codex', credentials, multiFamilyProviders), null);
 });
 
-test('quotaNoticeState distinguishes CPA unreachability from stale or expired observations', () => {
+test('canRefreshTrendsQuotaCredential and quotaNoticeState distinguish refresh eligibility from CPA unreachability', () => {
   const activeWin = quotaWindow({ cycle_start_ms: 0, cycle_reset_ms: 5 * HOUR });
   const activeCred = credential('cred-1', [activeWin]);
+
+  assert.equal(canRefreshTrendsQuotaCredential(activeCred, false), true);
+  assert.equal(canRefreshTrendsQuotaCredential({ ...activeCred, status: 'stale' }, false), true);
+  assert.equal(canRefreshTrendsQuotaCredential({ ...activeCred, status: 'error' }, false), true);
+  assert.equal(canRefreshTrendsQuotaCredential(activeCred, true), false);
+  assert.equal(canRefreshTrendsQuotaCredential({ ...activeCred, status: 'disabled' }, false), false);
+  assert.equal(canRefreshTrendsQuotaCredential({ ...activeCred, status: 'unsupported' }, false), false);
+  assert.equal(canRefreshTrendsQuotaCredential({ ...activeCred, auth_index: '  ' }, false), false);
 
   assert.equal(quotaNoticeState(activeCred, activeWin, false, 2 * HOUR), null);
   assert.deepEqual(
@@ -750,6 +759,10 @@ test('quotaNoticeState distinguishes CPA unreachability from stale or expired ob
   );
   assert.deepEqual(
     quotaNoticeState({ ...activeCred, status: 'disabled' }, activeWin, false, 2 * HOUR),
+    { kind: 'stale', canRefreshQuota: false },
+  );
+  assert.deepEqual(
+    quotaNoticeState({ ...activeCred, status: 'unsupported' }, activeWin, false, 5 * HOUR),
     { kind: 'stale', canRefreshQuota: false },
   );
   assert.deepEqual(

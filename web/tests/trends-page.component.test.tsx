@@ -1238,11 +1238,116 @@ describe('trends page', () => {
     await waitFor(() => expect(screen.getByTestId('trends-quota-stale-notice').textContent).toContain('Showing the reading observed at'));
     expect(screen.getByTestId('trends-tile-quota').textContent).toContain('—');
     expect(screen.queryByTestId('trends-quota-notice-refresh')).toBeNull();
+    expect((screen.getByTestId('trends-quota-refresh') as HTMLButtonElement).disabled).toBe(true);
 
     phase = 'online';
     fireEvent.click(screen.getByTestId('trends-quota-notice-retry'));
     await waitFor(() => expect(screen.queryByTestId('trends-quota-stale-notice')).toBeNull());
     expect(screen.getByTestId('trends-tile-quota').textContent).toContain('1');
+    expect((screen.getByTestId('trends-quota-refresh') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('manually refreshes a healthy quota credential from the toolbar and updates to the latest forecast', async () => {
+    const sseFrame = (event: string, data: unknown) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    const secondCred = {
+      auth_index: 'c2',
+      provider: 'claude',
+      display_name: 'Team Claude',
+      account_label: 'cl…@x.com',
+      status: 'active',
+      observed_at_ms: NOW,
+      windows: [quotaWindow('5h', { used_percent: 20, remaining_percent: 80, status: 'normal', projected_exhaust_at_ms: 9 * HOUR, projected_end_percent: 50, burn_rate_per_hour: 10 })],
+    };
+    const disabledCred = {
+      auth_index: 'c3',
+      provider: 'codex',
+      display_name: 'Paused Codex',
+      account_label: 'pa…@x.com',
+      status: 'disabled',
+      observed_at_ms: NOW,
+      windows: [quotaWindow('5h', { used_percent: 15, remaining_percent: 85, status: 'normal', projected_exhaust_at_ms: undefined, projected_end_percent: undefined, burn_rate_per_hour: undefined })],
+    };
+    const initialQuota: TrendsQuotaResponse = {
+      ...QUOTA,
+      items: [QUOTA.items[0]!, secondCred, disabledCred],
+    };
+    const updatedQuota: TrendsQuotaResponse = {
+      ...QUOTA,
+      as_of_ms: NOW + 30 * 60_000,
+      items: [
+        {
+          ...QUOTA.items[0]!,
+          observed_at_ms: NOW + 30 * 60_000,
+          windows: [
+            quotaWindow('5h', {
+              used_percent: 72,
+              remaining_percent: 28,
+              status: 'projected_exhaust',
+              projected_exhaust_at_ms: 2 * HOUR + 45 * 60_000,
+              projected_end_percent: 150,
+              burn_rate_per_hour: 36,
+            }),
+            QUOTA.items[0]!.windows[1]!,
+          ],
+        },
+        secondCred,
+        disabledCred,
+      ],
+    };
+    api.on('GET', '/management/trends/quota', () => initialQuota);
+
+    const { client } = mount();
+    client.setQueryData(['management-quota'], { quotas: [] });
+    await waitFor(() => expect(screen.getByTestId('trends-quota-used').textContent).toBe('60.0%'));
+    expect(screen.queryByTestId('trends-quota-stale-notice')).toBeNull();
+
+    const toolbarRefresh = screen.getByTestId('trends-quota-refresh') as HTMLButtonElement;
+    expect(toolbarRefresh.disabled).toBe(false);
+    expect(toolbarRefresh.getAttribute('aria-label')).toBe('Refresh quota: Team Codex');
+
+    const heldRefresh = api.hold('POST', '/management/quota/refresh');
+    fireEvent.click(toolbarRefresh);
+    fireEvent.click(toolbarRefresh);
+    const refreshReq = await heldRefresh.arrived;
+    expect(refreshReq.body).toEqual({ auth_indexes: ['c1'] });
+    expect(api.writes('/management/quota/refresh')).toHaveLength(1);
+    expect(screen.getByTestId('trends-quota-refresh').getAttribute('aria-busy')).toBe('true');
+
+    // Switching to another credential keeps its refresh control independent while c1 is still refreshing.
+    fireEvent.mouseDown(screen.getByTestId('trends-quota-credential'));
+    fireEvent.click(await screen.findByRole('option', { name: 'Team Claude' }));
+    await waitFor(() => expect(screen.getByTestId('trends-quota-used').textContent).toBe('20.0%'));
+    expect(screen.getByTestId('trends-quota-refresh').getAttribute('aria-busy')).toBeNull();
+
+    // Disabled credentials keep the toolbar button visible in place, but disabled.
+    fireEvent.mouseDown(screen.getByTestId('trends-quota-credential'));
+    fireEvent.click(await screen.findByRole('option', { name: 'Paused Codex' }));
+    await waitFor(() => expect(screen.getByTestId('trends-quota-used').textContent).toBe('15.0%'));
+    expect((screen.getByTestId('trends-quota-refresh') as HTMLButtonElement).disabled).toBe(true);
+
+    // Switching back to c1 still reflects its in-flight refresh until the recomputed forecast lands.
+    fireEvent.mouseDown(screen.getByTestId('trends-quota-credential'));
+    fireEvent.click(await screen.findByRole('option', { name: /^Team Codex/ }));
+    await waitFor(() => expect(screen.getByTestId('trends-quota-refresh').getAttribute('aria-busy')).toBe('true'));
+
+    const heldQuotaRead = api.hold('GET', '/management/trends/quota');
+    heldRefresh.release(new Response(
+      sseFrame('quota', { auth_index: 'c1', name: 'c1.json', status: 'healthy' }) +
+      sseFrame('done', { status: 'ok', total: 1 }),
+      { status: 200, headers: { 'Content-Type': 'text/event-stream; charset=utf-8' } },
+    ));
+    await heldQuotaRead.arrived;
+    expect(screen.getByTestId('trends-quota-refresh').getAttribute('aria-busy')).toBe('true');
+
+    api.on('GET', '/management/trends/quota', () => updatedQuota);
+    heldQuotaRead.release(updatedQuota);
+
+    await waitFor(() => expect(screen.getByTestId('trends-quota-used').textContent).toBe('72.0%'));
+    const quotaPanel = screen.getByTestId('trends-quota');
+    expect(within(quotaPanel).getByText('36.00%/h')).toBeTruthy();
+    expect(within(quotaPanel).getByText('Hits limit').nextElementSibling?.textContent).toBe('02:45');
+    await waitFor(() => expect(screen.getByTestId('trends-quota-refresh').getAttribute('aria-busy')).toBeNull());
+    expect(client.getQueryState(['management-quota'])?.isInvalidated).toBe(true);
   });
 
   it('refreshes a stale quota credential directly from the notice, links management-quota cache, and reports failures', async () => {

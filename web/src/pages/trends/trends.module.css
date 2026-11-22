@@ -144,6 +144,7 @@
   margin-inline-start: auto;
 }
 .quota-links { display: inline-flex; align-items: center; flex: none; gap: 2px; }
+.quota-refresh[data-slot='button'][aria-busy='true'] { color: var(--fg); }
 /* A credential or window heading for or at its limit carries a dot after its name, even when
    selected, so every window's risk remains visible while switching between tabs. */
 .flagged-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
