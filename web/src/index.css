@@ -2623,7 +2623,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 @container placeholder-products (min-width: 1040px) {
   .placeholder-system-product { flex-basis: 0; padding-block: 4px; }
   .placeholder-system-product:first-child { padding-inline-end: 40px; }
-  .placeholder-system-product + .placeholder-system-product { border-top: 0; border-inline-start: 1px solid var(--border-soft); padding-inline-start: 40px; }
+  .placeholder-system-product + .placeholder-system-product { border-top: 0; border-inline-start: 1px solid var(--border-soft); padding-block: 4px; padding-inline-start: 40px; }
 }
 .placeholder-system-product-head { display: flex; flex-direction: column; gap: 6px; }
 .placeholder-system-versions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
