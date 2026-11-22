@@ -69,7 +69,7 @@ export function useRequestColumnLayout(isSelecting: boolean) {
   const [isColumnFading, setIsColumnFading] = React.useState(false);
   const hiddenColumnsRef = React.useRef(hiddenColumns);
   hiddenColumnsRef.current = hiddenColumns;
-  const fadeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeTimerRef = React.useRef<number | null>(null);
   const fadeFrameRef = React.useRef<number | null>(null);
   const cancelFade = React.useCallback(() => {
     if (fadeTimerRef.current !== null) {
