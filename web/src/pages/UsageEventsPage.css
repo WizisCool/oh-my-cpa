@@ -147,15 +147,14 @@
   overflow-y: hidden;
   position: relative;
 }
-/* Fade only the table in its own stacking context. A short fade-out
-   conceals the discrete grid-track change, and the regular transition reveals
-   the updated table. The separate column popover remains fully interactive. */
-:root:not([data-reduced-motion='true']) .request-events-page .request-table-scroll-area {
-  transition: opacity var(--motion-base) var(--ease-standard);
+/* During a column glide the grid's new track list is laid out immediately.
+   Header and cell transforms handle the visual continuity independently,
+   leaving the toolbar and the column chooser at their normal paint layers. */
+.request-stream[data-column-glide] .request-table-header {
+  transition: none;
 }
-:root:not([data-reduced-motion='true']) .request-events-page .request-table-scroll-area[data-column-fading] {
-  opacity: 0.08;
-  transition-duration: 100ms;
+.request-stream[data-column-glide] .request-row {
+  transition: background-color var(--motion-fast) var(--ease-standard);
 }
 
 .req-reset-columns-btn {

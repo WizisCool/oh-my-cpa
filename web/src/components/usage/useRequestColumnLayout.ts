@@ -1,6 +1,7 @@
 import React from 'react';
 import { flushSync } from 'react-dom';
 import { isMotionReduced } from '../../utils/motionPreference';
+import { captureColumnPositions, fadeDepartingColumns, animateColumnArrival, COLUMN_EXIT_DURATION } from './requestColumnTransition';
 
 import { usePreference } from '../../hooks/usePreference';
 import {
@@ -62,36 +63,38 @@ export function useRequestColumnLayout(isSelecting: boolean) {
   // preference cache notifies subscribers asynchronously, which otherwise lets
   // React restore the previous checked value before the write reaches the cache.
   const [hiddenColumns, setHiddenColumns] = React.useState<RequestColumnId[]>(DEFAULT_HIDDEN_COLUMNS);
-  // The checkbox state updates immediately, while the request grid stages the
-  // layout change during a short opacity transition. The popover is a separate
-  // portal and never participates in the table's paint transition.
+  // Checkbox feedback is immediate; the painted grid can briefly retain
+  // a departing field until its own cells have faded out.
   const [renderedHiddenColumns, setRenderedHiddenColumns] = React.useState<RequestColumnId[]>(DEFAULT_HIDDEN_COLUMNS);
-  const [isColumnFading, setIsColumnFading] = React.useState(false);
   const hiddenColumnsRef = React.useRef(hiddenColumns);
   hiddenColumnsRef.current = hiddenColumns;
-  const fadeTimerRef = React.useRef<number | null>(null);
-  const fadeFrameRef = React.useRef<number | null>(null);
-  const cancelFade = React.useCallback(() => {
-    if (fadeTimerRef.current !== null) {
-      clearTimeout(fadeTimerRef.current);
-      fadeTimerRef.current = null;
+  const renderedHiddenRef = React.useRef(renderedHiddenColumns);
+  renderedHiddenRef.current = renderedHiddenColumns;
+  const streamNodeRef = React.useRef<HTMLElement | null>(null);
+  const motionTimerRef = React.useRef<number | null>(null);
+  const motionAnimationsRef = React.useRef<Animation[]>([]);
+  const motionRevisionRef = React.useRef(0);
+
+  const cancelColumnMotion = React.useCallback(() => {
+    motionRevisionRef.current += 1;
+    if (motionTimerRef.current !== null) {
+      clearTimeout(motionTimerRef.current);
+      motionTimerRef.current = null;
     }
-    if (fadeFrameRef.current !== null) {
-      cancelAnimationFrame(fadeFrameRef.current);
-      fadeFrameRef.current = null;
-    }
+    for (const animation of motionAnimationsRef.current) animation.cancel();
+    motionAnimationsRef.current = [];
+    if (streamNodeRef.current) delete streamNodeRef.current.dataset.columnGlide;
   }, []);
-  React.useEffect(() => cancelFade, [cancelFade]);
+  React.useEffect(() => cancelColumnMotion, [cancelColumnMotion]);
   React.useEffect(() => {
     if (!hiddenColumnsReady || sameHiddenColumns(hiddenColumnsRef.current, hiddenColumnsPref)) return;
-    // External preference updates and a failed-save rollback take precedence
-    // over a pending visual update.
-    cancelFade();
+    // External changes and save rollbacks take precedence over local gestures.
+    cancelColumnMotion();
     hiddenColumnsRef.current = hiddenColumnsPref;
+    renderedHiddenRef.current = hiddenColumnsPref;
     setHiddenColumns(hiddenColumnsPref);
     setRenderedHiddenColumns(hiddenColumnsPref);
-    setIsColumnFading(false);
-  }, [hiddenColumnsReady, hiddenColumnsPref, cancelFade]);
+  }, [hiddenColumnsReady, hiddenColumnsPref, cancelColumnMotion]);
   const hiddenSet = React.useMemo(() => new Set(renderedHiddenColumns), [renderedHiddenColumns]);
 
   const [colWidths, setColWidths] = React.useState<RequestColumnWidths>({});
@@ -119,6 +122,7 @@ export function useRequestColumnLayout(isSelecting: boolean) {
   const streamRef = React.useCallback((node: HTMLElement | null) => {
     observer.current?.disconnect();
     observer.current = null;
+    streamNodeRef.current = node;
     if (!node) return;
     observer.current = new ResizeObserver(([entry]) => {
       // The list also changes height on every frame of the header's fold, and
@@ -132,12 +136,14 @@ export function useRequestColumnLayout(isSelecting: boolean) {
   // A dragged width changes what fits without the list itself resizing.
   React.useEffect(refold, [colWidths, hiddenSet, refold]);
 
+  // Derive the responsive folds in the same render as a visibility change.
+  // A delayed refold would move the tracks a second time mid-glide.
   const folded = React.useMemo(
     () => new Set<RequestColumnId>([
       ...hiddenSet,
-      ...(foldedKey ? (foldedKey.split(' ') as RequestColumnId[]) : []),
+      ...foldRequestColumns(streamWidth.current, colWidths, hiddenSet),
     ]),
-    [hiddenSet, foldedKey],
+    [hiddenSet, foldedKey, colWidths],
   );
   const foldedColumns = React.useMemo(() => [...folded].join(' '), [folded]);
   const firstVisibleColumn = REQUEST_COLUMNS.find((column) => !folded.has(column.id))?.id ?? 'time';
@@ -152,27 +158,57 @@ export function useRequestColumnLayout(isSelecting: boolean) {
     [colWidths, chrome, folded],
   );
 
-  // Hide the changing grid briefly, update the shared header/row tracks, then
-  // reveal it. No viewport snapshot or root-level animation is created, so
-  // the column chooser remains above the request table throughout.
+  // The same FLIP-style technique as SSE record arrival, applied horizontally:
+  // departing cells fade out, surviving cells glide to their new X positions,
+  // and returning cells fade in. Only painted cells are animated. The column
+  // chooser stays outside this grid and is never copied or composited.
   const showHiddenColumns = React.useCallback((next: RequestColumnId[]) => {
     setHiddenColumns(next);
-    cancelFade();
-    if (typeof window === 'undefined' || isMotionReduced()) {
+    cancelColumnMotion();
+    const stream = streamNodeRef.current;
+    const painted = renderedHiddenRef.current;
+    if (sameHiddenColumns(painted, next)) return;
+    const header = stream?.querySelector<HTMLElement>('.request-table-header');
+    if (!stream || !header || typeof window === 'undefined' || isMotionReduced()
+      || getComputedStyle(header).display !== 'grid') {
+      renderedHiddenRef.current = next;
       setRenderedHiddenColumns(next);
-      setIsColumnFading(false);
       return;
     }
-    setIsColumnFading(true);
-    fadeTimerRef.current = window.setTimeout(() => {
-      fadeTimerRef.current = null;
-      flushSync(() => setRenderedHiddenColumns(hiddenColumnsRef.current));
-      fadeFrameRef.current = window.requestAnimationFrame(() => {
-        fadeFrameRef.current = null;
-        setIsColumnFading(false);
+
+    const revision = motionRevisionRef.current;
+    const applyLayout = () => {
+      if (motionRevisionRef.current !== revision) return;
+      const previous = captureColumnPositions(stream);
+      stream.dataset.columnGlide = '';
+      renderedHiddenRef.current = next;
+      flushSync(() => setRenderedHiddenColumns(next));
+      const animations = animateColumnArrival(stream, previous);
+      motionAnimationsRef.current = animations;
+      if (!animations.length) {
+        delete stream.dataset.columnGlide;
+        return;
+      }
+      void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
+        if (motionRevisionRef.current !== revision) return;
+        motionAnimationsRef.current = [];
+        delete stream.dataset.columnGlide;
       });
-    }, 110);
-  }, [cancelFade]);
+    };
+
+    const leaving = new Set(next.filter((id) => !painted.includes(id)));
+    const exits = fadeDepartingColumns(stream, leaving);
+    if (!exits.length) {
+      applyLayout();
+      return;
+    }
+    motionAnimationsRef.current = exits;
+    motionTimerRef.current = window.setTimeout(() => {
+      motionTimerRef.current = null;
+      applyLayout();
+      for (const animation of exits) animation.cancel();
+    }, COLUMN_EXIT_DURATION);
+  }, [cancelColumnMotion]);
 
   const setColumnVisible = React.useCallback((id: RequestColumnId, visible: boolean) => {
     if (!hiddenColumnsLoaded) return;
@@ -290,7 +326,6 @@ export function useRequestColumnLayout(isSelecting: boolean) {
     foldedColumns,
     firstVisibleColumn,
     hiddenColumns,
-    isColumnFading,
     hiddenColumnsLoaded,
     setColumnVisible,
     restoreColumnVisibility,

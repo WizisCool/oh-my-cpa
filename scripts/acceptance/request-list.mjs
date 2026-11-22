@@ -31,10 +31,32 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
       await menu.evaluate((element) =>
         element.classList.contains('omc-float-surface') &&
         getComputedStyle(element).transitionProperty.includes('clip-path')));
-    check('table opacity transition stays inside the request list',
+    check('column animation keeps the request table continuously visible',
       await page.locator('.request-table-scroll-area').evaluate((element) =>
-        getComputedStyle(element).transitionProperty.includes('opacity') &&
+        getComputedStyle(element).opacity === '1' &&
         getComputedStyle(element).viewTransitionName === 'none'));
+
+    // Observe the actual Web Animations API calls, not only the final positions:
+    // the leaving column fades, persistent cells glide, newly shown cells fade in.
+    await page.evaluate(() => {
+      const original = Element.prototype.animate;
+      const evidence = { enter: 0, exit: 0, glide: 0, movingHeader: 0, movingRows: 0, duration: [] };
+      window.__columnMotionEvidence = evidence;
+      Element.prototype.animate = function (frames, options) {
+        if (Array.isArray(frames) &&
+            (this.classList.contains('req-th') || this.classList.contains('req-col'))) {
+          if (frames[0]?.opacity === 1 && frames[1]?.opacity === 0) evidence.exit++;
+          if (frames[0]?.opacity === 0 && frames[1]?.opacity === 1) evidence.enter++;
+          if (typeof frames[0]?.transform === 'string' && frames[0].transform.startsWith('translateX(')) {
+            evidence.glide++;
+            if (this.classList.contains('req-th')) evidence.movingHeader++;
+            if (this.classList.contains('req-col')) evidence.movingRows++;
+            evidence.duration.push(options?.duration);
+          }
+        }
+        return original.call(this, frames, options);
+      };
+    });
     const buttons = await page.locator('.request-actions .req-toolbar-action').evaluateAll((elements) =>
       elements.map((element) => {
         const box = element.getBoundingClientRect();
@@ -82,7 +104,19 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
       (await modelToggle.getAttribute('aria-checked')) === 'false');
     check('column chooser remains on top while the table updates',
       await isChooserOnTop());
-    await page.waitForFunction(() => !document.querySelector('.request-table-scroll-area')?.hasAttribute('data-column-fading'));
+    await page.waitForFunction(() =>
+      window.__columnMotionEvidence?.glide > 0 &&
+      document.querySelector('.request-stream')?.getAttribute('data-folded-columns')?.split(' ').includes('model'));
+    check('the departing column fades and the existing columns glide into position',
+      await page.evaluate(() => {
+        const evidence = window.__columnMotionEvidence;
+        return evidence.exit > 0 && evidence.glide > 0 &&
+          evidence.movingHeader > 0 && evidence.movingRows > 0 &&
+          evidence.duration.every((duration) => duration === 320);
+      }));
+    check('table remains fully opaque while columns glide',
+      await page.locator('.request-table-scroll-area').evaluate((element) =>
+        getComputedStyle(element).opacity === '1'));
     check('column chooser stays interactive after layout settles',
       await isChooserOnTop());
     // Reversing the gesture before a transition finishes must preserve state.
@@ -95,6 +129,11 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
     await savedAgain;
     check('rapid re-toggle restores checked state',
       (await modelToggle.getAttribute('aria-checked')) === 'true');
+    await page.waitForFunction(() => window.__columnMotionEvidence?.enter > 0);
+    check('returning column fades in while neighbors make room',
+      await page.evaluate(() =>
+        window.__columnMotionEvidence.enter > 0 &&
+        window.__columnMotionEvidence.glide > 0));
     const savedHiddenAgain = page.waitForResponse((response) =>
       response.request().method() === 'PUT' &&
       new URL(response.url()).pathname.endsWith('/api/v1/preferences/usage_events_hidden_columns') &&

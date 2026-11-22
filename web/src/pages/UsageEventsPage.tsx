@@ -112,7 +112,6 @@ export const UsageEventsPage: React.FC = () => {
     foldedColumns,
     firstVisibleColumn,
     hiddenColumns,
-    isColumnFading,
     hiddenColumnsLoaded,
     setColumnVisible,
     restoreColumnVisibility,
@@ -810,11 +809,7 @@ export const UsageEventsPage: React.FC = () => {
           aria-busy={isVisibleFetching}
           style={streamStyle}
         >
-          <div
-            ref={scrollAreaRef}
-            className="request-table-scroll-area"
-            data-column-fading={isColumnFading ? '' : undefined}
-          >
+          <div ref={scrollAreaRef} className="request-table-scroll-area">
             <RequestStreamHeader
               colWidths={colWidths}
               handleResizeStart={handleResizeStart}
