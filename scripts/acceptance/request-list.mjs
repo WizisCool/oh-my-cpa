@@ -124,6 +124,7 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
     );
     await page.getByRole('button', { name: /Show all columns|显示全部列|顯示全部欄位|Tunjukkan semua lajur/ }).click();
     await saveRestored;
+    await page.locator('.req-th-model').waitFor({ state: 'visible', timeout: 5_000 });
     check('restoring visible columns returns the Model header',
       await page.locator('.req-th-model').isVisible());
   } finally {
