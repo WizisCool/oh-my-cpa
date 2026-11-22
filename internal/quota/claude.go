@@ -78,6 +78,7 @@ type RawClaudeProfileAccount struct {
 
 type RawClaudeProfileOrg struct {
 	OrganizationType     string `json:"organization_type"`
+	PlanDisplayName      string `json:"plan_display_name"`
 	RateLimitTier        string `json:"rate_limit_tier"`
 	SeatTier             string `json:"seat_tier"`
 	HasExtraUsageEnabled bool   `json:"has_extra_usage_enabled"`
@@ -439,57 +440,43 @@ func ParseClaudeBalances(raw []byte) []QuotaBalance {
 // ParseClaudeProfile derives the subscription plan from the /api/oauth/profile
 // response (ClaudeProfileURL), not from a billing endpoint.
 //
-// Active organization plans (claude_enterprise, claude_team — with Premium
-// seats distinguished by default_claude_max_5x/20x or team_premium seat_tier)
-// take precedence over account-level consumer flags (has_claude_pro /
-// has_claude_max): Team and Enterprise tokens either leave consumer flags
-// false or carry personal flags from another org, and report opaque
-// rate_limit_tier values such as default_raven or shared seat tiers such as
-// default_claude_max_5x. For consumer plans, default_claude_max_20x /
-// default_claude_ultra resolves to Claude Ultra, while Max ($100 / 5x) keeps
-// Claude Max.
+// Resolution follows four stages:
+//  1. Active organization plans (Enterprise, then Team with Premium seats
+//     distinguished by shared 5x/20x/ultra tiers or team_tier_1/team_premium
+//     seat tiers) outrank consumer account flags because org tokens often leave
+//     consumer flags false or carry personal flags from another org. Enterprise
+//     signals take precedence over Team seat tiers because Enterprise
+//     memberships can share team_* seat_tier values.
+//  2. Consumer plans resolve Ultra > Max > Pro from active consumer org fields
+//     and account flags (default_claude_max_20x / default_claude_ultra /
+//     plan_display_name "Ultra" -> Claude Ultra; Max 5x -> Claude Max).
+//  3. Active orgs with any remaining unknown non-empty rate_limit_tier (other
+//     than default_claude_ai) preserve the raw tier label as standard.
+//  4. Everything else (malformed JSON, inactive orgs without personal flags,
+//     or free tiers) falls back to Free.
 func ParseClaudeProfile(raw []byte) *QuotaPlan {
 	var profile RawClaudeProfileResponse
 	if err := json.Unmarshal(raw, &profile); err != nil {
 		return claudeFreePlan()
 	}
 
-	isOrgActive := profile.Organization != nil && !isClaudeOrgSubscriptionInactive(profile.Organization.SubscriptionStatus)
-	hasNoAccountFlags := profile.Account == nil
-	hasClaudeMax := profile.Account != nil && profile.Account.HasClaudeMax
+	var activeOrg *RawClaudeProfileOrg
+	if profile.Organization != nil && !isClaudeOrgSubscriptionInactive(profile.Organization.SubscriptionStatus) {
+		activeOrg = profile.Organization
+	}
 
-	if isOrgActive {
-		if plan := claudeOrgPlan(profile.Organization); plan != nil {
+	if activeOrg != nil {
+		if plan := resolveClaudeOrgPlan(activeOrg); plan != nil {
 			return plan
 		}
-		if isClaudeUltraOrg(profile.Organization, hasNoAccountFlags, hasClaudeMax) {
-			return &QuotaPlan{
-				PlanType:  "ultra",
-				PlanLabel: "Claude Ultra",
-				Tier:      "elite",
-			}
-		}
 	}
 
-	if profile.Account != nil {
-		if profile.Account.HasClaudeMax {
-			return &QuotaPlan{
-				PlanType:  "max",
-				PlanLabel: "Claude Max",
-				Tier:      "elite",
-			}
-		}
-		if profile.Account.HasClaudePro {
-			return &QuotaPlan{
-				PlanType:  "pro",
-				PlanLabel: "Claude Pro",
-				Tier:      "premium",
-			}
-		}
+	if plan := resolveClaudeConsumerPlan(profile.Account, activeOrg); plan != nil {
+		return plan
 	}
 
-	if isOrgActive {
-		if plan := claudePlanFromOrgFallback(profile.Organization, hasNoAccountFlags); plan != nil {
+	if activeOrg != nil {
+		if plan := resolveClaudeUnknownTierFallback(activeOrg); plan != nil {
 			return plan
 		}
 	}
@@ -507,33 +494,33 @@ func claudeFreePlan() *QuotaPlan {
 
 func isClaudeOrgSubscriptionInactive(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "inactive", "canceled", "cancelled", "expired", "unpaid":
+	case "inactive", "canceled", "cancelled", "expired", "unpaid", "incomplete_expired":
 		return true
 	default:
 		return false
 	}
 }
 
-func hasClaudeTierPrefix(norm, prefix string) bool {
-	return norm == prefix || strings.HasPrefix(norm, prefix+"_")
+func hasClaudeTierPrefix(normalized, prefix string) bool {
+	return normalized == prefix || strings.HasPrefix(normalized, prefix+"_")
 }
 
-func isClaudeUltraTier(normTier string) bool {
-	return hasClaudeTierPrefix(normTier, "default_claude_max_20x") ||
-		hasClaudeTierPrefix(normTier, "default_claude_ultra")
+func isClaudeUltraTier(normalizedTier string) bool {
+	return hasClaudeTierPrefix(normalizedTier, "default_claude_max_20x") ||
+		hasClaudeTierPrefix(normalizedTier, "default_claude_ultra")
 }
 
-func isClaudeMax5xTier(normTier string) bool {
-	return hasClaudeTierPrefix(normTier, "default_claude_max_5x")
+func isClaudeMax5xTier(normalizedTier string) bool {
+	return hasClaudeTierPrefix(normalizedTier, "default_claude_max_5x")
 }
 
 func isClaudeTeamPremiumSeat(org *RawClaudeProfileOrg) bool {
-	normTier := strings.ToLower(strings.TrimSpace(org.RateLimitTier))
-	if isClaudeMax5xTier(normTier) || isClaudeUltraTier(normTier) {
+	normalizedTier := strings.ToLower(strings.TrimSpace(org.RateLimitTier))
+	if isClaudeMax5xTier(normalizedTier) || isClaudeUltraTier(normalizedTier) {
 		return true
 	}
-	normSeat := strings.ToLower(strings.TrimSpace(org.SeatTier))
-	return hasClaudeTierPrefix(normSeat, "team_premium")
+	normalizedSeat := strings.ToLower(strings.TrimSpace(org.SeatTier))
+	return normalizedSeat == "team_tier_1" || hasClaudeTierPrefix(normalizedSeat, "team_premium")
 }
 
 func claudeTeamPlan(org *RawClaudeProfileOrg) *QuotaPlan {
@@ -551,89 +538,92 @@ func claudeTeamPlan(org *RawClaudeProfileOrg) *QuotaPlan {
 	}
 }
 
-func claudeOrgPlan(org *RawClaudeProfileOrg) *QuotaPlan {
+func claudeEnterprisePlan() *QuotaPlan {
+	return &QuotaPlan{
+		PlanType:  "enterprise",
+		PlanLabel: "Claude Enterprise",
+		Tier:      "elite",
+	}
+}
+
+func resolveClaudeOrgPlan(org *RawClaudeProfileOrg) *QuotaPlan {
 	switch strings.ToLower(strings.TrimSpace(org.OrganizationType)) {
 	case "claude_enterprise":
-		return &QuotaPlan{
-			PlanType:  "enterprise",
-			PlanLabel: "Claude Enterprise",
-			Tier:      "elite",
-		}
+		return claudeEnterprisePlan()
 	case "claude_team":
 		return claudeTeamPlan(org)
 	}
 
-	normSeat := strings.ToLower(strings.TrimSpace(org.SeatTier))
-	switch {
-	case hasClaudeTierPrefix(normSeat, "enterprise"):
+	normalizedSeat := strings.ToLower(strings.TrimSpace(org.SeatTier))
+	normalizedTier := strings.ToLower(strings.TrimSpace(org.RateLimitTier))
+
+	// Check Enterprise signals before Team signals: Enterprise memberships can
+	// share team_* seat_tier values alongside an Enterprise rate-limit tier.
+	if hasClaudeTierPrefix(normalizedSeat, "enterprise") ||
+		hasClaudeTierPrefix(normalizedTier, "default_raven_enterprise") ||
+		normalizedTier == "enterprise_usage_based" {
+		return claudeEnterprisePlan()
+	}
+
+	if hasClaudeTierPrefix(normalizedSeat, "team") ||
+		hasClaudeTierPrefix(normalizedTier, "default_raven") {
+		return claudeTeamPlan(org)
+	}
+
+	return nil
+}
+
+func resolveClaudeConsumerPlan(account *RawClaudeProfileAccount, activeOrg *RawClaudeProfileOrg) *QuotaPlan {
+	var orgType, normalizedTier, displayName string
+	if activeOrg != nil {
+		orgType = strings.ToLower(strings.TrimSpace(activeOrg.OrganizationType))
+		normalizedTier = strings.ToLower(strings.TrimSpace(activeOrg.RateLimitTier))
+		displayName = strings.TrimSpace(activeOrg.PlanDisplayName)
+	}
+
+	if activeOrg != nil && (isClaudeUltraTier(normalizedTier) ||
+		orgType == "claude_ultra" ||
+		strings.EqualFold(displayName, "ultra")) {
 		return &QuotaPlan{
-			PlanType:  "enterprise",
-			PlanLabel: "Claude Enterprise",
+			PlanType:  "ultra",
+			PlanLabel: "Claude Ultra",
 			Tier:      "elite",
 		}
-	case hasClaudeTierPrefix(normSeat, "team"):
-		return claudeTeamPlan(org)
-	default:
-		return nil
-	}
-}
-
-func isClaudeUltraOrg(org *RawClaudeProfileOrg, hasNoAccountFlags, hasClaudeMax bool) bool {
-	if isClaudeUltraTier(strings.ToLower(strings.TrimSpace(org.RateLimitTier))) {
-		return true
-	}
-	return strings.ToLower(strings.TrimSpace(org.OrganizationType)) == "claude_ultra" && (hasNoAccountFlags || hasClaudeMax)
-}
-
-func claudePlanFromOrgFallback(org *RawClaudeProfileOrg, hasNoAccountFlags bool) *QuotaPlan {
-	if hasNoAccountFlags {
-		switch strings.ToLower(strings.TrimSpace(org.OrganizationType)) {
-		case "claude_max":
-			return &QuotaPlan{
-				PlanType:  "max",
-				PlanLabel: "Claude Max",
-				Tier:      "elite",
-			}
-		case "claude_pro":
-			return &QuotaPlan{
-				PlanType:  "pro",
-				PlanLabel: "Claude Pro",
-				Tier:      "premium",
-			}
-		}
 	}
 
-	rawTier := strings.TrimSpace(org.RateLimitTier)
-	if rawTier == "" {
-		return nil
-	}
-	normTier := strings.ToLower(rawTier)
-	switch {
-	case normTier == "default_claude_ai":
-		return nil
-	case isClaudeMax5xTier(normTier):
+	if (account != nil && account.HasClaudeMax) ||
+		(activeOrg != nil && (orgType == "claude_max" || isClaudeMax5xTier(normalizedTier))) {
 		return &QuotaPlan{
 			PlanType:  "max",
 			PlanLabel: "Claude Max",
 			Tier:      "elite",
 		}
-	case hasClaudeTierPrefix(normTier, "default_raven_enterprise") || normTier == "enterprise_usage_based":
+	}
+
+	if (account != nil && account.HasClaudePro) ||
+		(activeOrg != nil && (orgType == "claude_pro" || hasClaudeTierPrefix(normalizedTier, "default_claude_pro"))) {
 		return &QuotaPlan{
-			PlanType:  "enterprise",
-			PlanLabel: "Claude Enterprise",
-			Tier:      "elite",
+			PlanType:  "pro",
+			PlanLabel: "Claude Pro",
+			Tier:      "premium",
 		}
-	case hasClaudeTierPrefix(normTier, "default_raven"):
-		return &QuotaPlan{
-			PlanType:  "team",
-			PlanLabel: "Claude Team",
-			Tier:      "standard",
-		}
-	default:
-		return &QuotaPlan{
-			PlanType:  normTier,
-			PlanLabel: rawTier,
-			Tier:      "standard",
-		}
+	}
+
+	return nil
+}
+
+func resolveClaudeUnknownTierFallback(org *RawClaudeProfileOrg) *QuotaPlan {
+	rawTier := strings.TrimSpace(org.RateLimitTier)
+	if rawTier == "" {
+		return nil
+	}
+	normalizedTier := strings.ToLower(rawTier)
+	if normalizedTier == "default_claude_ai" {
+		return nil
+	}
+	return &QuotaPlan{
+		PlanType:  normalizedTier,
+		PlanLabel: rawTier,
+		Tier:      "standard",
 	}
 }
