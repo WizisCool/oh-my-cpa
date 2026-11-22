@@ -19,6 +19,9 @@ import { UsageEventDrawer } from '../src/components/usage/UsageEventDrawer';
 import { CostBreakdownView } from '../src/components/pricing/CostBreakdownView';
 import type { RequestCostBreakdown } from '../src/types/pricing';
 import { RequestRow } from '../src/components/usage/RequestRow';
+import { REQUEST_COLUMNS } from '../src/components/usage/requestColumns';
+
+const DEFAULT_COLUMN_ORDER = REQUEST_COLUMNS.map((column) => column.id);
 import { TokenDisplayProvider } from '../src/types/tokenDisplayContext';
 import { USAGE_FACET_KEYS, type UsageEvent } from '../src/types/usageEvents';
 import { installOmcApi } from './support/omcApi';
@@ -40,7 +43,7 @@ function renderTier(overrides: Partial<UsageEvent>, renderContent?: (event: Usag
   client.setQueryData(['usage-event', event.id], { event, related_errors: [] });
   client.setQueryData(['preferences'], preferences);
   return renderWithOmc(<TokenDisplayProvider>
-    {renderContent ? renderContent(event) : <RequestRow event={event} credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />}
+    {renderContent ? renderContent(event) : <RequestRow event={event} columnOrder={DEFAULT_COLUMN_ORDER} credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />}
   </TokenDisplayProvider>, { client });
 }
 
@@ -75,7 +78,7 @@ it('shows the client, outbound and response tiers separately in request details 
 
 it('paints the duration from its ramp in the row and drawer, and leaves TTFT in the secondary ink', async () => {
   const { container } = renderTier({ latency_ms: 65_000, ttft_ms: 3_000 }, event => <>
-    <RequestRow event={event} credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />
+    <RequestRow event={event} columnOrder={DEFAULT_COLUMN_ORDER} credentials={new Map()} onOpen={() => undefined} onToggleSelect={() => undefined} />
     <UsageEventDrawer eventId={event.id} credentials={new Map()} onClose={() => undefined} />
   </>);
   // The row, the drawer's headline and its timing card read the same duration on the same ramp.
