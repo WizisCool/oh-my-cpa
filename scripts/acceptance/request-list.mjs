@@ -191,9 +191,21 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
       new URL(response.url()).pathname.endsWith('/api/v1/preferences/usage_events_column_order') &&
       response.ok(),
     );
-    await menu.locator('[data-reorder-key="model"] [data-reorder-handle]').dragTo(
-      menu.locator('[data-reorder-key="time"]'),
-    );
+    // dnd-kit measures the live collision after pointer movement. Moving the
+    // pointer through the list (rather than teleporting with dragTo) gives the
+    // sensor a rendered frame with its destination before the release.
+    const handleBounds = await menu.locator('[data-reorder-key="model"] [data-reorder-handle]').boundingBox();
+    const targetBounds = await menu.locator('[data-reorder-key="time"]').boundingBox();
+    if (!handleBounds || !targetBounds) throw new Error('Column drag bounds unavailable');
+    const fromX = handleBounds.x + handleBounds.width / 2;
+    const fromY = handleBounds.y + handleBounds.height / 2;
+    const toY = targetBounds.y + targetBounds.height * 0.3;
+    await page.mouse.move(fromX, fromY);
+    await page.mouse.down();
+    await page.mouse.move(fromX, fromY - 12, { steps: 5 });
+    await page.mouse.move(fromX, toY, { steps: 18 });
+    await page.waitForTimeout(130);
+    await page.mouse.up();
     const orderResponse = await saveOrder;
     const storedOrder = await orderResponse.json();
     check('dragging persists the full column order',
