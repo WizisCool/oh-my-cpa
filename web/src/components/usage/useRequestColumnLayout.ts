@@ -45,7 +45,8 @@ export function useRequestColumnLayout(isSelecting: boolean) {
   );
 
   const {
-    value: hiddenColumns,
+    value: hiddenColumnsPref,
+    ready: hiddenColumnsReady,
     loaded: hiddenColumnsLoaded,
     set: setHiddenColumnsPref,
   } = usePreference<RequestColumnId[]>(
@@ -53,6 +54,17 @@ export function useRequestColumnLayout(isSelecting: boolean) {
     DEFAULT_HIDDEN_COLUMNS,
     parseUsageEventsHiddenColumns,
   );
+  // React-controlled checkboxes need a synchronous local state update. Query's
+  // preference cache notifies subscribers asynchronously, which otherwise lets
+  // React restore the previous checked value before the write reaches the cache.
+  const [hiddenColumns, setHiddenColumns] = React.useState<RequestColumnId[]>(DEFAULT_HIDDEN_COLUMNS);
+  const hiddenColumnsRef = React.useRef(hiddenColumns);
+  hiddenColumnsRef.current = hiddenColumns;
+  React.useEffect(() => {
+    if (!hiddenColumnsReady) return;
+    hiddenColumnsRef.current = hiddenColumnsPref;
+    setHiddenColumns(hiddenColumnsPref);
+  }, [hiddenColumnsReady, hiddenColumnsPref]);
   const hiddenSet = React.useMemo(() => new Set(hiddenColumns), [hiddenColumns]);
 
   const [colWidths, setColWidths] = React.useState<RequestColumnWidths>({});
@@ -115,14 +127,20 @@ export function useRequestColumnLayout(isSelecting: boolean) {
 
   const setColumnVisible = React.useCallback((id: RequestColumnId, visible: boolean) => {
     if (!hiddenColumnsLoaded) return;
-    const next = toggleRequestColumnVisibility(hiddenColumns, id, visible);
-    if (next.length === hiddenColumns.length && next.every((column, index) => column === hiddenColumns[index])) return;
+    const previous = hiddenColumnsRef.current;
+    const next = toggleRequestColumnVisibility(previous, id, visible);
+    if (next.length === previous.length && next.every((column, index) => column === previous[index])) return;
+    hiddenColumnsRef.current = next;
+    setHiddenColumns(next);
     void setHiddenColumnsPref(next);
-  }, [hiddenColumns, hiddenColumnsLoaded, setHiddenColumnsPref]);
+  }, [hiddenColumnsLoaded, setHiddenColumnsPref]);
 
   const restoreColumnVisibility = React.useCallback(() => {
-    if (hiddenColumnsLoaded && hiddenColumns.length > 0) void setHiddenColumnsPref([]);
-  }, [hiddenColumns, hiddenColumnsLoaded, setHiddenColumnsPref]);
+    if (!hiddenColumnsLoaded || hiddenColumnsRef.current.length === 0) return;
+    hiddenColumnsRef.current = DEFAULT_HIDDEN_COLUMNS;
+    setHiddenColumns(DEFAULT_HIDDEN_COLUMNS);
+    void setHiddenColumnsPref(DEFAULT_HIDDEN_COLUMNS);
+  }, [hiddenColumnsLoaded, setHiddenColumnsPref]);
 
   const handleResizeStart = React.useCallback(
     (colId: RequestColumnId, e: React.PointerEvent<HTMLSpanElement>) => {

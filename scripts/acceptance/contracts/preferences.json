@@ -12,6 +12,7 @@
     "provider_order",
     "usage_events_view",
     "usage_events_columns",
+    "usage_events_hidden_columns",
     "oauth_management_view_v1",
     "omc_credential_order",
     "omc_oauth_section_order",
