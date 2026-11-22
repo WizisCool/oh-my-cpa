@@ -16,6 +16,7 @@ import {
   ClearOutlined,
   BellOutlined,
   BellOffOutlined,
+  ArrowRightOutlined,
 } from '../components/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from '../utils/time';
@@ -33,6 +34,7 @@ import type {
 import { PageHeader } from '../components/common/PageHeader';
 import { PanelTitle } from '../components/common/PanelTitle';
 import { FactList } from '../components/common/FactList';
+import { MetaLine } from '../components/common/MetaLine';
 import { ParagraphPlaceholder } from '../components/common/ContentPlaceholder';
 import { SuspenseFallback, SystemSkeleton } from '../components/common/PageLoading';
 import { LoadingRegion } from '../components/common/Placeholder';
@@ -121,34 +123,24 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
   // Offered for a known newer release only: there is nothing to dismiss about a build that
   // is current, ahead, or not comparable, nor about the one being installed right now.
   const canDismiss = version.state === 'update_available' && version.latest_version !== '' && !isUpdating;
-  const hasActions = canDismiss || presentation.hasChangelog || updateOffer.kind === 'available' || isUpdating;
+  const running = version.running_version || t('sys.version_unknown');
+  const latest = version.latest_version;
+  // The arrow is the verdict: a newer release reads as the move from the running build to it.
+  // Any other state shows the running build alone, with the release beside the verdict when it
+  // differs from what runs.
+  const isTransition = version.state === 'update_available' && latest !== '';
+  const hasLatestFact = !isTransition && latest !== '' && latest !== version.running_version;
 
   return (
     <section className={styles['product-block']} aria-label={productTitle} data-testid={`sys-product-${version.product}`}>
-      {/* Name, verdict and what to do about it read as one line: the update action sits beside the
-          product it replaces rather than at the far end of the version readings. */}
-      <div className={styles['product-header']} data-testid="sys-product-header">
+      <div className={styles['product-head']} data-testid="sys-product-header">
         <div className={styles['product-identity']}>
-          <div className={styles['product-title']}>
-            <span>{productTitle}</span>
-            <span className={styles['product-badge']} role="status">
-              {isUpdating ? (
-                <StatusLabel tone="accent" size="small">{t('sys.update_running')}</StatusLabel>
-              ) : (
-                <StatusLabel tone={presentation.tone} size="small">{t(presentation.statusKey)}</StatusLabel>
-              )}
-            </span>
-          </div>
-          <a
-            href={version.repository_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles['repo-link']}
-          >
+          <h3 className={styles['product-title']}>{productTitle}</h3>
+          <a href={version.repository_url} target="_blank" rel="noopener noreferrer" className={styles['repo-link']}>
             {version.repository} <LinkOutlined />
           </a>
         </div>
-        {hasActions && (
+        {(canDismiss || presentation.hasChangelog) && (
           <div className={styles['version-actions']}>
             {canDismiss && (
               <Button
@@ -161,7 +153,7 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
                 icon={isDismissed ? <BellOffOutlined /> : <BellOutlined />}
                 aria-pressed={isDismissed}
                 disabled={!canChangeDismissal}
-                aria-label={t('sys.dismiss_update_named', { product: productTitle, version: version.latest_version })}
+                aria-label={t('sys.dismiss_update_named', { product: productTitle, version: latest })}
                 data-testid="sys-dismiss-update"
                 onClick={isDismissed ? onRestore : onDismiss}
               >
@@ -181,28 +173,42 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
                 <span className={styles['changelog-count']} aria-hidden="true">{version.merge_count}</span>
               </Button>
             )}
-            {/* The primary action is drawn last so it sits at the row's right edge, the same
-                edge the page's own primary action takes. */}
-            <UpdateAction version={version} productTitle={productTitle} offer={updateOffer} isSubmitting={isSubmittingUpdate} onUpdate={onUpdate} />
           </div>
         )}
       </div>
 
-      <div className={styles['version-comparison']} data-testid="sys-version-comparison">
-        <div className={styles['version-pair']}>
-          <span className={styles['version-label']}>{t('sys.current_version')}</span>
-          <span className={styles['version-value']}>{version.running_version || t('sys.version_unknown')}</span>
+      {/* The version is the card's figure, and the update that changes it stands on its line. */}
+      <div className={styles['version-hero']}>
+        <div
+          className={styles['version-line']}
+          role="img"
+          aria-label={isTransition ? t('sys.version_transition', { from: running, to: latest }) : `${t('sys.current_version')} ${running}`}
+          data-testid="sys-version-comparison"
+        >
+          <span className={styles['version-figure']}>{running}</span>
+          {isTransition && (
+            <>
+              <ArrowRightOutlined className={styles['version-arrow']} />
+              <span className={`${styles['version-figure']} ${styles['version-target']}`} data-testid="sys-latest-release">{latest}</span>
+            </>
+          )}
         </div>
-        <div className={styles['version-pair']} data-testid="sys-latest-release">
-          <span className={styles['version-label']}>{t('sys.latest_version')}</span>
-          <span className={`${styles['version-value']} ${version.state === 'update_available' ? styles['version-target'] : ''}`}>
-            {version.latest_version || '—'}
-          </span>
-        </div>
+        <UpdateAction version={version} productTitle={productTitle} offer={updateOffer} isSubmitting={isSubmittingUpdate} onUpdate={onUpdate} />
+      </div>
+
+      <div className={styles['version-status']} role="status">
+        {isUpdating ? (
+          <StatusLabel tone="accent">{t('sys.update_running')}</StatusLabel>
+        ) : (
+          <StatusLabel tone={presentation.tone}>{t(presentation.statusKey)}</StatusLabel>
+        )}
+        <MetaLine>
+          {hasLatestFact && <span data-testid="sys-latest-release">{t('sys.latest_release_value', { version: latest })}</span>}
+          {presentation.detailKey && t(presentation.detailKey)}
+        </MetaLine>
       </div>
 
       <UpdateStatusLine offer={updateOffer} />
-      {presentation.detailKey && <div className={styles['version-detail']}>{t(presentation.detailKey)}</div>}
       {presentation.shouldShowNotesNotice && (
         <div className={styles['version-detail']}>{t('sys.notes_not_held')}</div>
       )}
@@ -221,7 +227,6 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
           ) : undefined}
         />
       )}
-
     </section>
   );
 };
@@ -706,34 +711,38 @@ export const SystemPage: React.FC = () => {
           )}
           {sysInfo && (
             <>
-              <ProductBlock
-                productTitle={t('sys.omc_version')}
-                version={sysInfo.omc_version}
-                isChecking={isCheckingUpdates}
-                onOpenChangelog={() => setExpandedProduct('omc')}
-                isDismissed={isUpdateDismissed(sysInfo.omc_version, dismissals)}
-                canChangeDismissal={areDismissalsLoaded}
-                onDismiss={() => void changeDismissal(sysInfo.omc_version, true)}
-                onRestore={() => void changeDismissal(sysInfo.omc_version, false)}
-                updateOffer={deriveUpdateOffer(sysInfo.omc_version, updater, 'omc')}
-                isSubmittingUpdate={submittingProduct === 'omc'}
-                onUpdate={() => void handleApplyUpdate('omc')}
-                onConfigureGitHubToken={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}
-              />
-              <ProductBlock
-                productTitle={t('sys.cpa_version')}
-                version={sysInfo.cpa_version}
-                isChecking={isCheckingUpdates}
-                onOpenChangelog={() => setExpandedProduct('cpa')}
-                isDismissed={isUpdateDismissed(sysInfo.cpa_version, dismissals)}
-                canChangeDismissal={areDismissalsLoaded}
-                onDismiss={() => void changeDismissal(sysInfo.cpa_version, true)}
-                onRestore={() => void changeDismissal(sysInfo.cpa_version, false)}
-                updateOffer={deriveUpdateOffer(sysInfo.cpa_version, updater, 'cpa')}
-                isSubmittingUpdate={submittingProduct === 'cpa'}
-                onUpdate={() => void handleApplyUpdate('cpa')}
-                onConfigureGitHubToken={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}
-              />
+              <div className={styles['product-list']}>
+                <div className={styles['product-columns']}>
+                  <ProductBlock
+                    productTitle={t('sys.omc_version')}
+                    version={sysInfo.omc_version}
+                    isChecking={isCheckingUpdates}
+                    onOpenChangelog={() => setExpandedProduct('omc')}
+                    isDismissed={isUpdateDismissed(sysInfo.omc_version, dismissals)}
+                    canChangeDismissal={areDismissalsLoaded}
+                    onDismiss={() => void changeDismissal(sysInfo.omc_version, true)}
+                    onRestore={() => void changeDismissal(sysInfo.omc_version, false)}
+                    updateOffer={deriveUpdateOffer(sysInfo.omc_version, updater, 'omc')}
+                    isSubmittingUpdate={submittingProduct === 'omc'}
+                    onUpdate={() => void handleApplyUpdate('omc')}
+                    onConfigureGitHubToken={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}
+                  />
+                  <ProductBlock
+                    productTitle={t('sys.cpa_version')}
+                    version={sysInfo.cpa_version}
+                    isChecking={isCheckingUpdates}
+                    onOpenChangelog={() => setExpandedProduct('cpa')}
+                    isDismissed={isUpdateDismissed(sysInfo.cpa_version, dismissals)}
+                    canChangeDismissal={areDismissalsLoaded}
+                    onDismiss={() => void changeDismissal(sysInfo.cpa_version, true)}
+                    onRestore={() => void changeDismissal(sysInfo.cpa_version, false)}
+                    updateOffer={deriveUpdateOffer(sysInfo.cpa_version, updater, 'cpa')}
+                    isSubmittingUpdate={submittingProduct === 'cpa'}
+                    onUpdate={() => void handleApplyUpdate('cpa')}
+                    onConfigureGitHubToken={() => navigate(GITHUB_TOKEN_SETTINGS_PATH)}
+                  />
+                </div>
+              </div>
               <UpdaterSetup updater={updater} />
             </>
           )}

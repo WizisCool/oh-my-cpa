@@ -35,17 +35,30 @@
   flex-direction: column;
 }
 
-/* The two products are rows of one list rather than boxes inside the card: a card of cards
-   spent a border and 32px of padding per product on framing the card already provides. */
+/* The two products are peers inside one card rather than boxes of their own: a card of cards
+   spent a border and 32px of padding per product on framing the card already provides. Where the
+   card is wide they stand side by side, each half carrying its name, versions and actions, so the
+   card's width holds the second product instead of a gap between one product's readings and its
+   actions; a narrower card stacks them. */
+.product-list {
+  container: product-list / inline-size;
+}
+
+.product-columns {
+  display: flex;
+  flex-direction: column;
+}
+
 .product-block {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 0 0 20px;
+  gap: 12px;
+  min-width: 0;
+  padding: 4px 0 24px;
 }
 
 .product-block + .product-block {
-  padding-top: 20px;
+  padding-top: 24px;
   border-top: 1px solid var(--border-soft);
 }
 
@@ -53,10 +66,31 @@
   padding-bottom: 0;
 }
 
-/* Identity on the left, the row's actions on the right edge of the same line, so the update
-   button sits beside the product it replaces and its verdict instead of at the far end of the
-   version readings. */
-.product-header {
+@container product-list (min-width: 1040px) {
+  .product-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .product-block {
+    padding: 4px 0;
+  }
+
+  .product-block:first-child {
+    padding-inline-end: 40px;
+  }
+
+  .product-block + .product-block {
+    padding-top: 4px;
+    padding-inline-start: 40px;
+    border-top: 0;
+    border-inline-start: 1px solid var(--border-soft);
+  }
+}
+
+/* A product's head: its name and repository, with the ways to read about a release (its change
+   log) or set it aside on the trailing edge of the same line. */
+.product-head {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -67,25 +101,16 @@
 .product-identity {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 .product-title {
-  font-size: var(--text-base);
-  font-weight: 600;
+  margin: 0;
   color: var(--fg);
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  white-space: nowrap;
-}
-
-.product-badge {
-  display: inline-flex;
-  max-width: 100%;
-  font-weight: 400;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 .repo-link {
@@ -95,6 +120,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   text-decoration: none;
   transition: color var(--motion-fast) var(--ease-standard);
 }
@@ -103,41 +130,55 @@
   color: var(--accent);
 }
 
-/* Bound the comparison independently of the card width so the two readings stay close; the
-   progress of an update in flight takes the same width beneath it. */
-.version-comparison {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
-  max-width: 320px;
-  min-width: 0;
-}
-
-.version-pair {
+/* The version is the card's figure, on the console's stat size (`StatTiles`), so the question the
+   page exists for - is anything out of date - reads first without shouting over the cards below.
+   A newer release is the move from the running build to it, and the update that makes the move
+   stands at the end of the same line. */
+.version-hero {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
   min-width: 0;
 }
 
-.version-pair + .version-pair {
-  border-inline-start: 1px solid var(--border-soft);
-  padding-inline-start: 24px;
+.version-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
 }
 
-.version-value {
+.version-figure {
   color: var(--fg);
   font-family: var(--font-mono, monospace);
-  font-size: var(--text-lg);
+  font-size: 24px;
   font-weight: 600;
-  line-height: 1.5;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
-  max-width: 100%;
+  min-width: 0;
+}
+
+.version-arrow {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-lg);
 }
 
 .version-target {
   color: var(--accent);
+}
+
+/* The verdict and the facts that qualify it, read as one line under the figure. */
+.version-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  min-width: 0;
 }
 
 .version-detail {
@@ -147,9 +188,6 @@
   overflow-wrap: anywhere;
 }
 
-/* The row's actions share one group, so the identity keeps its place whether a release offers
-   one action, several or none. The primary action is drawn last so it sits at the row's right
-   edge, the same edge the page's own primary action takes. */
 .version-actions {
   display: flex;
   flex: 0 0 auto;
@@ -194,9 +232,9 @@
   max-width: 280px;
 }
 
-/* A replacement in flight, as wide as the comparison it is moving between. */
+/* A replacement in flight, under the versions it is moving between. */
 .update-progress {
-  max-width: 320px;
+  max-width: 360px;
 }
 
 /* Why a product is not updated from the page. A quiet mark beside a sentence: a pinned image or
@@ -256,42 +294,15 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Label/value rows preserve long build tags on phones. The action keeps a whole line of
-   its own instead of shrinking either readout or splitting its label to fit beside it. */
+/* A phone gives the update its own full line where the thumb reaches. */
 @media (max-width: 640px) {
-  .version-comparison {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-    max-width: none;
+  .update-action {
     width: 100%;
   }
 
   .update-progress {
     max-width: none;
   }
-
-  .version-pair {
-    flex-direction: row;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .version-pair + .version-pair {
-    border-inline-start: 0;
-    padding-inline-start: 0;
-  }
-
-  .version-label {
-    flex-shrink: 0;
-  }
-
-  /* The actions take a line of their own under the identity on a phone, the primary one at the
-     right edge where the thumb reaches. */
-  .version-actions {
-    width: 100%;
-  }
-
 }
 
 .changelog-panel {
@@ -891,10 +902,15 @@
     display: none;
   }
 
-  .product-header {
+  .product-head {
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
+    gap: 4px;
+  }
+
+  .version-actions {
+    margin-inline-start: -6px;
+    justify-content: flex-start;
   }
 }
 
@@ -922,11 +938,6 @@
 }
 
 /* ── shared readings ─────────────────────────────────────────────────────── */
-
-.version-label {
-  color: var(--fg-2);
-  font-size: var(--text-sm);
-}
 
 .check-alert {
   font-size: var(--text-sm);

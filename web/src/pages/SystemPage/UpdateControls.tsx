@@ -45,7 +45,6 @@ export const UpdateAction: React.FC<UpdateActionProps> = ({ version, productTitl
     >
       <Button
         variant="primary"
-        size="sm"
         className={styles['update-action']}
         icon={<CloudDownloadOutlined />}
         loading={isRunning || isSubmitting}
