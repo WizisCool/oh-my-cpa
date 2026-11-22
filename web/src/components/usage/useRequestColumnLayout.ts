@@ -4,12 +4,14 @@ import { isMotionReduced } from '../../utils/motionPreference';
 import { captureColumnPositions, fadeDepartingColumns, animateColumnArrival, COLUMN_EXIT_DURATION } from './requestColumnTransition';
 
 import { usePreference } from '../../hooks/usePreference';
+import { useSortableList } from '../../hooks/useSortableList';
 import {
   COLUMN_MAP,
   REQUEST_COLUMNS,
   LIST_GRID_CHROME,
   USAGE_EVENTS_COLUMNS_PREFERENCE,
   USAGE_EVENTS_HIDDEN_COLUMNS_PREFERENCE,
+  USAGE_EVENTS_COLUMN_ORDER_PREFERENCE,
   computeGridMinWidth,
   buildGridTemplateColumns,
   foldRequestColumns,
@@ -17,10 +19,12 @@ import {
   parseUsageEventsHiddenColumns,
   toggleRequestColumnVisibility,
   type RequestColumnId,
+  type RequestColumnDefinition,
   type RequestColumnWidths,
 } from './requestColumns';
 
 const DEFAULT_HIDDEN_COLUMNS: RequestColumnId[] = [];
+const columnKey = (column: RequestColumnDefinition) => column.id;
 const sameHiddenColumns = (a: readonly RequestColumnId[], b: readonly RequestColumnId[]) =>
   a.length === b.length && a.every((id, index) => id === b[index]);
 
@@ -38,6 +42,15 @@ const sameHiddenColumns = (a: readonly RequestColumnId[], b: readonly RequestCol
  * rather than from the preference document.
  */
 export function useRequestColumnLayout(isSelecting: boolean) {
+  // A display-only preference. Hidden columns keep their saved positions.
+  const { ordered: orderedColumns, reorder: columnReorder } = useSortableList(
+    USAGE_EVENTS_COLUMN_ORDER_PREFERENCE,
+    'columns',
+    REQUEST_COLUMNS,
+    columnKey,
+  );
+  const columnOrder = React.useMemo(() => orderedColumns.map(columnKey), [orderedColumns]);
+
 
   const {
     value: columnWidthsPref,
@@ -146,12 +159,12 @@ export function useRequestColumnLayout(isSelecting: boolean) {
     [hiddenSet, foldedKey, colWidths],
   );
   const foldedColumns = React.useMemo(() => [...folded].join(' '), [folded]);
-  const firstVisibleColumn = REQUEST_COLUMNS.find((column) => !folded.has(column.id))?.id ?? 'time';
+  const firstVisibleColumn = orderedColumns.find((column) => !folded.has(column.id))?.id ?? 'time';
   // The selection track opens only while a choice is under way; at rest its width goes to the data.
   const chrome = React.useMemo(() => ({ ...LIST_GRID_CHROME, isSelectionClosed: !isSelecting }), [isSelecting]);
   const gridTemplate = React.useMemo(
-    () => buildGridTemplateColumns(colWidths, chrome, folded),
-    [colWidths, chrome, folded],
+    () => buildGridTemplateColumns(colWidths, chrome, folded, orderedColumns),
+    [colWidths, chrome, folded, orderedColumns],
   );
   const gridMinWidth = React.useMemo(
     () => computeGridMinWidth(colWidths, undefined, undefined, chrome, folded),
@@ -321,6 +334,9 @@ export function useRequestColumnLayout(isSelecting: boolean) {
 
   return {
     colWidths,
+    orderedColumns,
+    columnOrder,
+    columnReorder,
     gridTemplate,
     gridMinWidth,
     foldedColumns,

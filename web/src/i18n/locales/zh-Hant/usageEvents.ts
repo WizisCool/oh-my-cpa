@@ -282,7 +282,7 @@ export default {
   "events.reset_columns": "恢復預設列寬",
   "events.manage_columns": "選擇欄位",
   "events.restore_visible_columns": "顯示全部欄位",
-  "events.column_visibility_hint": "至少保留一欄。設定會自動儲存。",
+  "events.column_visibility_hint": "至少選擇一欄",
   "events.select_row": "選擇請求 {id}",
   "events.select_all": "全選本頁",
   "events.select_requests": "選擇請求",

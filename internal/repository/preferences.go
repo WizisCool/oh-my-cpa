@@ -26,6 +26,7 @@ const (
 	PreferenceUsageEventsView          = "usage_events_view"
 	PreferenceUsageEventsColumns       = "usage_events_columns"
 	PreferenceUsageEventsHiddenColumns = "usage_events_hidden_columns"
+	PreferenceUsageEventsColumnOrder   = "usage_events_column_order"
 	PreferenceOAuthManagementView      = "oauth_management_view_v1"
 
 	// PreferenceProviderOrder is the AI providers list's display order: each provider's positional

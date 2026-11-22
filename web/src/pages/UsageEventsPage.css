@@ -196,42 +196,73 @@
     clip-path: inset(0 0 100% 0 round var(--radius-lg));
   }
 }
+.req-column-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.req-column-hint {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
 .req-column-choices {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 4px;
+  max-height: min(58vh, 492px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 4px 2px 0;
   margin-block: 12px;
 }
-.req-column-choice {
+.req-column-choice-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
-  padding: 8px;
   border-radius: var(--radius-sm);
   color: var(--fg-2);
-  cursor: pointer;
-  font-size: var(--text-sm);
   transition:
     background-color var(--motion-base) var(--ease-standard),
     color var(--motion-base) var(--ease-standard);
 }
-.req-column-choice:has([data-slot='checkbox'][data-checked]) {
+.req-column-choice-row:has([data-slot='checkbox'][data-checked]) {
   color: var(--fg);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
-.req-column-choice:hover:not(:has([data-slot='checkbox'][data-disabled])) {
+.req-column-choice-row:hover {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
-.req-column-choice:focus-within {
+.req-column-choice-row:focus-within {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
-.req-column-choice:has([data-slot='checkbox'][data-disabled]) {
-  opacity: 0.6;
-  cursor: default;
+.req-column-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+  padding: 10px;
+  cursor: pointer;
+  font-size: var(--text-sm);
 }
-:root[data-reduced-motion='true'] .req-column-choice {
+.req-column-choice-row .req-column-order-handle {
+  width: 32px;
+  height: 36px;
+  margin-inline-end: 4px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+.req-column-choice-row .req-column-order-handle:hover,
+.req-column-choice-row .req-column-order-handle:focus-visible {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+:root[data-reduced-motion='true'] .req-column-choice-row {
   transition: none;
 }
 /* A checkbox mark fades in and out instead of changing its size. Only the
@@ -249,11 +280,6 @@
   transition-timing-function: var(--ease-standard);
 }
 
-.req-column-hint {
-  margin: 0 0 10px;
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
 /* User-hidden and width-folded columns share the same desktop grid.
    Below the stacked-card threshold, the compact mobile summary remains unchanged. */
 @container reqstream (min-width: 921px) {
@@ -277,10 +303,10 @@
    model follows the provider, and two names one gap apart run together. Only the row of columns
    has these seams. */
 @container reqstream (min-width: 921px) {
-  .req-col-model,
-  .req-th-model,
-  .req-col-key,
-  .req-th-key {
+  .req-col-provider + .req-col-model,
+  .req-th-provider + .req-th-model,
+  .req-col-cache + .req-col-key,
+  .req-th-cache + .req-th-key {
     padding-inline-start: 16px;
   }
 }

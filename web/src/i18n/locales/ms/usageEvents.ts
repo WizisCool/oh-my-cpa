@@ -282,7 +282,7 @@ export default {
   "events.reset_columns": "Tetapkan Semula Lajur",
   "events.manage_columns": "Pilih lajur",
   "events.restore_visible_columns": "Tunjukkan semua lajur",
-  "events.column_visibility_hint": "Kekalkan sekurang-kurangnya satu lajur. Perubahan disimpan secara automatik.",
+  "events.column_visibility_hint": "Pilih sekurang-kurangnya satu lajur",
   "events.select_row": "Pilih permintaan {id}",
   "events.select_all": "Pilih semua di halaman ini",
   "events.select_requests": "Pilih permintaan",

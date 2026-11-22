@@ -3,7 +3,8 @@ import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
+import { RowReorder } from '../components/common/RowReorder';
+import { RequestColumnChoice } from '../components/usage/RequestColumnChoice';
 import { Columns3 } from 'lucide-react';
 import { StatusLabel, type StatusTone } from '../components/common/StatusLabel';
 import clsx from 'clsx';
@@ -108,6 +109,9 @@ export const UsageEventsPage: React.FC = () => {
   const {
     colWidths,
     gridTemplate,
+    orderedColumns,
+    columnOrder,
+    columnReorder,
     gridMinWidth,
     foldedColumns,
     firstVisibleColumn,
@@ -586,12 +590,14 @@ export const UsageEventsPage: React.FC = () => {
         isChecked={selection.has(event.id)}
         isSelecting={isSelecting}
         onToggleSelect={handleToggleSelect}
+        columnOrder={columnOrder}
       />
     ),
     [
       configuredProviders,
       credentials,
       handleToggleSelect,
+      columnOrder,
       isProviderCatalogUnproven,
       isSelecting,
       multiPortalKeys,
@@ -674,26 +680,34 @@ export const UsageEventsPage: React.FC = () => {
                   }
                 />
                 <PopoverContent placement="bottomRight" className="req-column-menu">
-                  <PopoverTitle className="text-base font-semibold text-foreground">
-                    {t('events.manage_columns')}
-                  </PopoverTitle>
-                  <div className="req-column-choices" role="group" aria-label={t('events.manage_columns')}>
-                    {REQUEST_COLUMNS.map((column) => {
-                      const checked = !hiddenColumns.includes(column.id);
-                      return (
-                        <Checkbox
-                          className="req-column-choice"
-                          key={column.id}
-                          checked={checked}
-                          disabled={!hiddenColumnsLoaded || (checked && hiddenColumns.length === REQUEST_COLUMNS.length - 1)}
-                          onCheckedChange={(next) => setColumnVisible(column.id, next)}
-                        >
-                          {t(column.labelKey)}
-                        </Checkbox>
-                      );
-                    })}
+                  <div className="req-column-heading">
+                    <PopoverTitle className="text-base font-semibold text-foreground">
+                      {t('events.manage_columns')}
+                    </PopoverTitle>
+                    <span className="req-column-hint">{t('events.column_visibility_hint')}</span>
                   </div>
-                  <p className="req-column-hint">{t('events.column_visibility_hint')}</p>
+                  <RowReorder
+                    items={columnOrder}
+                    isEnabled={columnReorder.isEnabled}
+                    onMove={columnReorder.onMove}
+                    onStep={columnReorder.onStep}
+                  >
+                    <div className="req-column-choices" role="group" aria-label={t('events.manage_columns')}>
+                      {orderedColumns.map((column) => {
+                        const checked = !hiddenColumns.includes(column.id);
+                        return (
+                          <RequestColumnChoice
+                            key={column.id}
+                            column={column}
+                            label={t(column.labelKey)}
+                            checked={checked}
+                            disabled={!hiddenColumnsLoaded || (checked && hiddenColumns.length === REQUEST_COLUMNS.length - 1)}
+                            onCheckedChange={(next) => setColumnVisible(column.id, next)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </RowReorder>
                   <Button
                     size="sm"
                     variant="ghost"
@@ -812,6 +826,7 @@ export const UsageEventsPage: React.FC = () => {
           <div ref={scrollAreaRef} className="request-table-scroll-area">
             <RequestStreamHeader
               colWidths={colWidths}
+              orderedColumns={orderedColumns}
               handleResizeStart={handleResizeStart}
               handleResetColumn={handleResetColumn}
               handleResizeKeyDown={handleResizeKeyDown}

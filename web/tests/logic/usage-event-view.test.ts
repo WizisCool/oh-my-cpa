@@ -71,6 +71,7 @@ import {
   foldRequestColumns,
   USAGE_EVENTS_COLUMNS_PREFERENCE,
   USAGE_EVENTS_HIDDEN_COLUMNS_PREFERENCE,
+  USAGE_EVENTS_COLUMN_ORDER_PREFERENCE,
   parseUsageEventsColumns,
   parseUsageEventsHiddenColumns,
   toggleRequestColumnVisibility,
@@ -1536,6 +1537,21 @@ test('usage event view', () => {
   // Request columns tests
   assert.equal(USAGE_EVENTS_COLUMNS_PREFERENCE, 'usage_events_columns');
   assert.equal(USAGE_EVENTS_HIDDEN_COLUMNS_PREFERENCE, 'usage_events_hidden_columns');
+  assert.equal(USAGE_EVENTS_COLUMN_ORDER_PREFERENCE, 'usage_events_column_order');
+  const reorderedCatalog = [
+    REQUEST_COLUMNS[3]!,
+    REQUEST_COLUMNS[0]!,
+    ...REQUEST_COLUMNS.filter((column) => column.id !== 'model' && column.id !== 'time'),
+  ];
+  const customOrderGrid = buildGridTemplateColumns({}, LIST_GRID_CHROME, new Set(), reorderedCatalog);
+  assert.ok(customOrderGrid.startsWith('20px minmax(126px, 1fr) 96px '),
+    'reordered columns share the same grid tracks as their header and row cells');
+  const manuallyHiddenModel = buildGridTemplateColumns(
+    {}, LIST_GRID_CHROME, new Set(['model']), reorderedCatalog,
+  );
+  assert.ok(manuallyHiddenModel.startsWith('20px 96px '),
+    'hidden columns preserve their assigned place when shown again');
+
   assert.equal(REQUEST_COLUMNS.length, 12);
 
   // Unknown and duplicate hidden ids are ignored; stored order follows the column catalog.

@@ -282,7 +282,7 @@ export default {
   'events.reset_columns': 'Reset Columns',
   'events.manage_columns': 'Choose columns',
   'events.restore_visible_columns': 'Show all columns',
-  'events.column_visibility_hint': 'Keep at least one column visible. Changes save automatically.',
+  'events.column_visibility_hint': 'Select at least one',
   'events.select_row': 'Select request {id}',
   'events.select_all': 'Select all on this page',
   'events.select_requests': 'Select requests',

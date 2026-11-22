@@ -33,6 +33,7 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceUsageEventsView:          true,
 	repository.PreferenceUsageEventsColumns:       true,
 	repository.PreferenceUsageEventsHiddenColumns: true,
+	repository.PreferenceUsageEventsColumnOrder:   true,
 	repository.PreferenceOAuthManagementView:      true,
 	repository.PreferenceProviderOrder:            true,
 	repository.PreferenceRoutingCardOrder:         true,

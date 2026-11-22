@@ -2,7 +2,7 @@ import React from 'react';
 
 import { useT } from '../../i18n';
 import {
-  REQUEST_COLUMNS,
+  type RequestColumnDefinition,
   requestColumnAlignClass,
   type RequestColumnId,
   type RequestColumnWidths,
@@ -11,6 +11,7 @@ import './RequestList.css';
 
 interface RequestStreamHeaderProps {
   colWidths: RequestColumnWidths;
+  orderedColumns: readonly RequestColumnDefinition[];
   handleResizeStart: (colId: RequestColumnId, event: React.PointerEvent<HTMLSpanElement>) => void;
   handleResetColumn: (colId: RequestColumnId) => void;
   handleResizeKeyDown: (colId: RequestColumnId, event: React.KeyboardEvent) => void;
@@ -33,6 +34,7 @@ interface RequestStreamHeaderProps {
 export const RequestStreamHeader = React.memo(function RequestStreamHeader({
   colWidths,
   handleResizeStart,
+  orderedColumns,
   handleResetColumn,
   handleResizeKeyDown,
   isSelecting,
@@ -62,7 +64,7 @@ export const RequestStreamHeader = React.memo(function RequestStreamHeader({
                 onChange={() => onToggleAll(selectionState !== 'all')}
               />
             </label>
-            {REQUEST_COLUMNS.map((col) => (
+            {orderedColumns.map((col) => (
               <div
                 key={col.id}
                 className={`req-th req-th-${col.id} ${requestColumnAlignClass(col.id)}`}

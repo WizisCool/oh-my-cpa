@@ -31,6 +31,20 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
       await menu.evaluate((element) =>
         element.classList.contains('omc-float-surface') &&
         getComputedStyle(element).transitionProperty.includes('clip-path')));
+    check('column chooser presents its minimum-selection note alongside the heading',
+      await menu.locator('.req-column-heading').evaluate((element) =>
+        element.children.length === 2 &&
+        element.lastElementChild?.classList.contains('req-column-hint') &&
+        element.firstElementChild?.textContent?.trim().length > 0 &&
+        !/automatically|自动保存|自動儲存/i.test(element.textContent ?? '')));
+    check('column options use one vertical scrollable list',
+      await menu.locator('.req-column-choices').evaluate((element) =>
+        getComputedStyle(element).flexDirection === 'column' &&
+        getComputedStyle(element).overflowY === 'auto') &&
+      (await menu.locator('.req-column-choice-row').count()) === 12);
+    await menu.locator('.req-column-choice-row [data-reorder-handle]').first().waitFor({ state: 'visible', timeout: 5_000 });
+    check('every column has a distinct draggable handle',
+      (await menu.locator('.req-column-choice-row [data-reorder-handle]').count()) === 12);
     check('column animation keeps the request table continuously visible',
       await page.locator('.request-table-scroll-area').evaluate((element) =>
         getComputedStyle(element).opacity === '1' &&
@@ -166,6 +180,80 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
     await page.locator('.req-th-model').waitFor({ state: 'visible', timeout: 5_000 });
     check('restoring visible columns returns the Model header',
       await page.locator('.req-th-model').isVisible());
+    // Reorder from the menu, verify table header and row DOM placement and the
+    // persisted preference, then check keyboard steps and reload restoration.
+    const beforeOrder = await menu.locator('.req-column-choice-row').evaluateAll((rows) =>
+      rows.map((element) => element.getAttribute('data-reorder-key')));
+    check('column picker initially follows the catalog order',
+      beforeOrder[0] === 'time' && beforeOrder[3] === 'model');
+    const saveOrder = page.waitForResponse((response) =>
+      response.request().method() === 'PUT' &&
+      new URL(response.url()).pathname.endsWith('/api/v1/preferences/usage_events_column_order') &&
+      response.ok(),
+    );
+    await menu.locator('[data-reorder-key="model"] [data-reorder-handle]').dragTo(
+      menu.locator('[data-reorder-key="time"]'),
+    );
+    const orderResponse = await saveOrder;
+    const storedOrder = await orderResponse.json();
+    check('dragging persists the full column order',
+      storedOrder?.value?.columns?.[0] === 'model' &&
+      storedOrder?.value?.columns?.length === 12);
+    await page.waitForFunction(() =>
+      document.querySelector('.req-column-choice-row')?.getAttribute('data-reorder-key') === 'model');
+    check('menu order and table DOM order agree after dragging',
+      await page.evaluate(() =>
+        document.querySelector('.req-column-choice-row')?.getAttribute('data-reorder-key') === 'model' &&
+        document.querySelector('.request-table-header .req-th:not(.req-th-select)')?.classList.contains('req-th-model') &&
+        document.querySelector('.request-row .req-col')?.classList.contains('req-col-model')));
+    check('reordered columns are placed left-to-right in the desktop grid',
+      await page.evaluate(() => {
+        const model = document.querySelector('.req-th-model')?.getBoundingClientRect();
+        const time = document.querySelector('.req-th-time')?.getBoundingClientRect();
+        return model && time && model.left < time.left;
+      }));
+    const saveKeyboardOrder = page.waitForResponse((response) =>
+      response.request().method() === 'PUT' &&
+      new URL(response.url()).pathname.endsWith('/api/v1/preferences/usage_events_column_order') &&
+      response.ok(),
+    );
+    await menu.locator('[data-reorder-key="model"] [data-reorder-handle]').focus();
+    await page.keyboard.press('ArrowDown');
+    await saveKeyboardOrder;
+    await page.waitForFunction(() =>
+      document.querySelectorAll('.req-column-choice-row')[1]?.getAttribute('data-reorder-key') === 'model');
+    check('keyboard down arrow reorders one item and table tracks together',
+      await page.locator('.request-table-header').evaluate((header) =>
+        header.children[1]?.classList.contains('req-th-time') &&
+        header.children[2]?.classList.contains('req-th-model')));
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15_000 });
+    await page.locator('.req-manage-columns-btn').click();
+    await page.waitForFunction(() =>
+      document.querySelectorAll('.req-column-choice-row')[1]?.getAttribute('data-reorder-key') === 'model');
+    check('custom order survives reload in both picker and request rows',
+      await page.evaluate(() =>
+        document.querySelectorAll('.req-column-choice-row')[1]?.getAttribute('data-reorder-key') === 'model' &&
+        document.querySelectorAll('.request-row .req-col')[1]?.classList.contains('req-col-model')));
+    // Leave shared browser fixtures in the default layout for later checks.
+    for (let step = 0; step < 2; step++) {
+      const restoreOrder = page.waitForResponse((response) =>
+        response.request().method() === 'PUT' &&
+        new URL(response.url()).pathname.endsWith('/api/v1/preferences/usage_events_column_order') &&
+        response.ok(),
+      );
+      await page.locator('[data-reorder-key="model"] [data-reorder-handle]').focus();
+      await page.keyboard.press('ArrowDown');
+      await restoreOrder;
+    }
+    check('keyboard moves restore the default layout',
+      await page.locator('.req-column-choice-row').evaluateAll((rows) =>
+        rows[0]?.getAttribute('data-reorder-key') === 'time' &&
+        rows[1]?.getAttribute('data-reorder-key') === 'result' &&
+        rows[2]?.getAttribute('data-reorder-key') === 'provider' &&
+        rows[3]?.getAttribute('data-reorder-key') === 'model'));
+
   } finally {
     if (viewportBeforeColumns) await page.setViewportSize(viewportBeforeColumns);
   }

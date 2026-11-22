@@ -225,6 +225,7 @@ export const REQUEST_STACK_WIDTH = 920;
 
 export const USAGE_EVENTS_COLUMNS_PREFERENCE = 'usage_events_columns';
 export const USAGE_EVENTS_HIDDEN_COLUMNS_PREFERENCE = 'usage_events_hidden_columns';
+export const USAGE_EVENTS_COLUMN_ORDER_PREFERENCE = 'usage_events_column_order';
 
 export type RequestColumnWidths = Partial<Record<RequestColumnId, number>>;
 
@@ -306,8 +307,9 @@ export function buildGridTemplateColumns(
   widths: RequestColumnWidths = {},
   chrome: RequestGridChrome = LIST_GRID_CHROME,
   folded: ReadonlySet<RequestColumnId> = NO_COLUMNS,
+  ordered: readonly RequestColumnDefinition[] = REQUEST_COLUMNS,
 ): string {
-  const tracks = REQUEST_COLUMNS.filter((col) => !folded.has(col.id)).map((col) => {
+  const tracks = ordered.filter((col) => !folded.has(col.id)).map((col) => {
     const manualWidth = widths[col.id];
     if (manualWidth !== undefined && Number.isFinite(manualWidth)) {
       const clamped = Math.min(col.maxWidth, Math.max(col.minWidth, manualWidth));
