@@ -137,7 +137,7 @@
   color: var(--accent);
 }
 .req-manage-columns-btn[data-popup-open] {
-  background: color-mix(in srgb, var(--accent) 10%, var(--secondary));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
 }
 .req-column-menu {
   width: min(336px, calc(100vw - 32px));
