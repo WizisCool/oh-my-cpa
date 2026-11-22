@@ -1,0 +1,15 @@
+{
+  "why": "A Claude Enterprise organization reports claude_enterprise with an opaque raven enterprise rate-limit tier.",
+  "now_ms": 1735689600000,
+  "body": {
+    "account": {
+      "has_claude_pro": false,
+      "has_claude_max": false
+    },
+    "organization": {
+      "organization_type": "claude_enterprise",
+      "rate_limit_tier": "default_raven_enterprise",
+      "subscription_status": "active"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "why": "A Claude Team Premium seat reports claude_team with the shared default_claude_max_5x rate-limit tier.",
+  "now_ms": 1735689600000,
+  "body": {
+    "account": {
+      "has_claude_pro": false,
+      "has_claude_max": false
+    },
+    "organization": {
+      "organization_type": "claude_team",
+      "seat_tier": "team_tier_1",
+      "rate_limit_tier": "default_claude_max_5x",
+      "subscription_status": "active"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "why": "A Claude Team account reports claude_team with an opaque default_raven rate-limit tier and false consumer flags.",
+  "now_ms": 1735689600000,
+  "body": {
+    "account": {
+      "has_claude_pro": false,
+      "has_claude_max": false
+    },
+    "organization": {
+      "organization_type": "claude_team",
+      "seat_tier": "team_standard",
+      "rate_limit_tier": "default_raven",
+      "subscription_status": "active"
+    }
+  }
+}

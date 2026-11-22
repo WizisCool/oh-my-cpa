@@ -1,0 +1,13 @@
+{
+  "why": "When organization_type is absent, the opaque default_raven rate-limit tier still identifies Claude Team.",
+  "now_ms": 1735689600000,
+  "body": {
+    "account": {
+      "has_claude_pro": false,
+      "has_claude_max": false
+    },
+    "organization": {
+      "rate_limit_tier": "default_raven"
+    }
+  }
+}
