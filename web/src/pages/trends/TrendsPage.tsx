@@ -123,6 +123,10 @@ export const TrendsPage: React.FC = () => {
     const displayName = quotaCredentialName(credential);
     try {
       const outcome = await refreshCredentialQuotas([authIndex]);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trendsQuota }),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.quota }),
+      ]);
       const failed = outcome.failures.length;
       const unknown = outcome.unknownIndexes.length;
       if (quotaRefreshOutcomeKind({ failed, unknown }) === 'report') {
@@ -151,10 +155,6 @@ export const TrendsPage: React.FC = () => {
           { key: QUOTA_REFRESH_TOAST_KEY },
         );
       }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trendsQuota }),
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.quota }),
-      ]);
     } finally {
       refreshingQuotaRef.current.delete(authIndex);
       setRefreshingQuotaIndexes(new Set(refreshingQuotaRef.current));
