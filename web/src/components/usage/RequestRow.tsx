@@ -271,6 +271,7 @@ export const RequestRow = React.memo<RequestRowProps>(
             // The status is what the list knows; the popup reads the upstream's
             // error body for this record when the pill is hovered or focused.
             <StatusLabel
+              variant="chip"
               tone="danger"
               className="req-result-pill has-detail"
               data-request-failure={event.id}
@@ -280,6 +281,7 @@ export const RequestRow = React.memo<RequestRowProps>(
             </StatusLabel>
           ) : (
             <StatusLabel
+              variant="chip"
               tone={event.failed ? 'danger' : 'success'}
               className="req-result-pill"
               data-request-tooltip={resultLabel}

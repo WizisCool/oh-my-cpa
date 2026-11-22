@@ -65,7 +65,7 @@ export type SheetSegment =
   | { kind: 'tag'; text: string; tone: SheetTone; effortStep?: number }
   /**
    * A reading led by a round dot: the result (`StatusLabel`), and the cache rate. A washed reading
-   * is drawn as a tinted chip on its own tone (matching `.status-label`); an unwashed reading
+   * is drawn as a tinted chip on its own tone (matching `.status-label.is-chip`); an unwashed reading
    * draws the dot and label directly.
    */
   | { kind: 'dot'; text: string; tone: SheetTone; textTone?: SheetTone; isWashed?: boolean; cacheRate?: number }

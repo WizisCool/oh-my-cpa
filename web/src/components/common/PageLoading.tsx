@@ -761,18 +761,18 @@ export function SystemSkeleton({
           title={<Placeholder width={116} row={0} className="placeholder-line" />}
           extra={<Placeholder width={92} height={28} row={0} className="is-control" />}
         >
-          <div className="placeholder-panel-rows">
+          <div className="placeholder-system-products">
             {[0, 1].map((product) => (
               <div key={product} className="placeholder-system-product">
                 <div className="placeholder-system-product-head">
-                  <Placeholder width={108 + product * 16} row={product} className="placeholder-line" />
+                  <Placeholder width={108 + product * 16} height={18} row={product} className="placeholder-line" />
                   <Placeholder width={164} row={product} className="placeholder-line is-meta" />
                 </div>
                 <div className="placeholder-system-versions">
-                  <Placeholder width={96} height={20} row={product + 1} />
-                  <Placeholder width={96} height={20} row={product + 1} />
-                  <Placeholder width={88} height={28} row={product + 1} className="is-control placeholder-system-action" />
+                  <Placeholder width={product ? 200 : 144} height={30} row={product + 1} />
+                  {product === 1 && <Placeholder width={96} height={32} row={product + 1} className="is-control placeholder-system-action" />}
                 </div>
+                <Placeholder width={132} row={product + 2} className="placeholder-line is-meta" />
               </div>
             ))}
           </div>

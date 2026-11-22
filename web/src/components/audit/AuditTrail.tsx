@@ -121,7 +121,7 @@ const AuditPhoneEntry: React.FC<AuditPhoneEntryProps> = ({ event, isOpen, onOpen
         <span className={styles['phone-entry-body']}>
           <span className={styles['phone-entry-line']}>
             <span className={styles['audit-action']}>{action}</span>
-            <StatusLabel tone={resultTone(event.result)} className={styles['phone-entry-result']}>{auditResultLabel(event.result, t)}</StatusLabel>
+            <StatusLabel variant="chip" tone={resultTone(event.result)} className={styles['phone-entry-result']}>{auditResultLabel(event.result, t)}</StatusLabel>
           </span>
           <span className={styles['phone-entry-meta']}>
             <span className={styles['audit-time']}>{dayjs(event.occurred_at_ms).format('HH:mm:ss')}</span>
@@ -300,7 +300,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
       key: 'result',
       title: t('audit.field_result'),
       width: 120,
-      render: (_, event) => <StatusLabel tone={resultTone(event.result)}>{auditResultLabel(event.result, t)}</StatusLabel>,
+      render: (_, event) => <StatusLabel variant="chip" tone={resultTone(event.result)}>{auditResultLabel(event.result, t)}</StatusLabel>,
     },
     {
       key: 'actions',

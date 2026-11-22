@@ -170,7 +170,7 @@ function JobCard({
         <div className={styles['location-text']}>
           <span className={styles['location-name']}>
             <strong>{t(KIND_KEYS[job.kind])}</strong>
-            <StatusLabel tone={tone(job.state)}>
+            <StatusLabel variant="chip" tone={tone(job.state)}>
               <span role="status">{t(STATE_KEYS[job.state])}</span>
             </StatusLabel>
           </span>

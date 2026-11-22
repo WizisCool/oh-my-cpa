@@ -6,28 +6,39 @@ export type StatusTone = 'success' | 'warn' | 'danger' | 'accent' | 'neutral';
 
 export interface StatusLabelProps extends React.HTMLAttributes<HTMLSpanElement> {
   tone: StatusTone;
-  /** `small` matches `Tag size="small"` (20px) for compact inline rows and annotations. */
+  /**
+   * `text` (the default) is a pip and a word on the surface's own ground. `chip` sets the same
+   * pip and word on a tinted chip and is reserved for the outcome of an event (a request, an
+   * audit event, a backup job, a warmup run) in its list's result column and in that event's own
+   * drawer head, where a reader scans a column of verdicts for the exceptions.
+   */
+  variant?: 'text' | 'chip';
+  /** `small` is the 20px line for compact rows; `default` is 22px. Both variants keep the height. */
   size?: 'default' | 'small';
-  /** Optional trailing cue inside the chip (for example a chevron on an interactive status trigger). */
+  /** Optional trailing cue (for example a chevron on an interactive status trigger). */
   trailing?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }
 
 /**
- * A state as a tinted chip led by a 6px pip: soft semantic wash, tone ink and matching pip, on the
- * console's shared chip geometry (22px high, 20px small, `--radius-sm`, weight 500).
+ * A state led by a round pip in its tone. A thing that lives on (a component, a credential, a
+ * plugin, a key, a configuration, a quota) reports its state as text: a healthy or neutral state
+ * reads in the secondary ink and only the pip carries the colour, while a warning, a failure or a
+ * pending action takes the tone's ink as well, so the exception is what a page shows.
  *
- * Every status in the console - request verdicts, credential health, quota states, config sync,
- * system topology, audit results and agent/playground turn states - renders through this component
- * so a state reads the same way in lists, drawers, cards and toolbars.
+ * Both variants keep one height, so a row's other parts never move between them.
  */
 // Tooltip's trigger owns the DOM ref and pointer handlers; forwarding both keeps it on the label.
 export const StatusLabel = React.forwardRef<HTMLSpanElement, StatusLabelProps>(function StatusLabel(
-  { tone, size = 'default', trailing, children, className, ...attributes }, ref,
+  { tone, variant = 'text', size = 'default', trailing, children, className, ...attributes }, ref,
 ) {
   return (
-    <span {...attributes} ref={ref} className={clsx('status-label', `is-${tone}`, size === 'small' && 'is-small', className)}>
+    <span
+      {...attributes}
+      ref={ref}
+      className={clsx('status-label', `is-${tone}`, variant === 'chip' && 'is-chip', size === 'small' && 'is-small', className)}
+    >
       <span className="status-label-pip" aria-hidden="true" />
       <span className="status-label-text">{children}</span>
       {trailing !== undefined && trailing !== null && (

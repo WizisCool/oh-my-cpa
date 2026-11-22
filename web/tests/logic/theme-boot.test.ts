@@ -636,12 +636,13 @@ test('chip primitives keep unified breathing room, centered icons, and unclipped
 
   // Small chips share a 20px box with 7px inline padding so 12px UI/CJK text and icons have room.
   assert.match(indexCss, /\.tag\.is-small\s*\{[^}]*height:\s*20px;[^}]*padding:\s*0 7px;/);
-  assert.match(indexCss, /\.status-label\.is-small\s*\{[^}]*height:\s*20px;[^}]*padding:\s*0 7px;/);
+  assert.match(indexCss, /\.status-label\.is-small\s*\{[^}]*height:\s*20px;/);
+  assert.match(indexCss, /\.status-label\.is-chip\.is-small\s*\{[^}]*padding-inline:\s*7px;/);
   assert.match(indexCss, /\.omc-notice-label\s*\{[^}]*height:\s*20px;[^}]*padding:\s*0 7px;/);
   assert.match(indexCss, /\.demo-chip\s*\{[^}]*height:\s*20px;[^}]*padding:\s*0 7px;/);
   assert.match(glyphCss, /\.badge\s*\{[^}]*height:\s*20px;[^}]*padding:\s*0 7px;/);
   assert.match(prefixCss, /\.prefix-chip\s*\{[^}]*display:\s*inline-flex;[^}]*align-items:\s*center;[^}]*height:\s*20px;/);
-  assert.match(requestListCss, /\.req-result-pill\s*\{[^}]*height:\s*20px;[^}]*padding:\s*0 7px;/);
+  assert.match(requestListCss, /\.req-result-pill\s*\{[^}]*height:\s*20px;[^}]*padding:\s*calc\(\(20px - 1\.25em\) \/ 2\) 7px;/);
 
   // Chip icons center inside the flex container and stay capped inside the chip's inner height.
   assert.match(indexCss, /\.tag-icon\s*\{[^}]*align-items:\s*center;[^}]*justify-content:\s*center;/);

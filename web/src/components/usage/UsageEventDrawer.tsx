@@ -329,7 +329,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                   </Tooltip>
                 )}
               </div>
-              <StatusLabel tone={event.failed ? 'danger' : 'success'} className="request-result">
+              <StatusLabel variant="chip" tone={event.failed ? 'danger' : 'success'} className="request-result">
                 {t(event.failed ? 'events.filter_failed' : 'events.filter_success')}
               </StatusLabel>
             </div>
