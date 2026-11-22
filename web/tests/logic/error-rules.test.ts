@@ -20,6 +20,12 @@ import {
   readRuntimePolicyDraft,
   runtimePolicyProblem,
 } from '../../src/components/providers/runtimePolicy.ts';
+import {
+  OAUTH_ERROR_RULE_LIMIT,
+  oauthErrorRuleDraftsEqual,
+  oauthErrorRuleProblem,
+  validateOAuthErrorRuleDrafts,
+} from '../../src/components/authFiles/oauthRequestScopedErrorsLogic.ts';
 import type { ProviderErrorRule, ProviderItem } from '../../src/types/providers.ts';
 
 const storedRules: ProviderErrorRule[] = [
@@ -160,4 +166,44 @@ test('connection pool numeric validation accepts signed integers and rejects fra
   const draft = { ...readConnectionPoolDraft({}), idleConnTimeout: '-1s' };
   for (const maxIdleConnsPerHost of [null, 0, -1, 4]) assert.equal(isConnectionPoolValid({ ...draft, maxIdleConnsPerHost }), true);
   for (const maxIdleConnsPerHost of [1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) assert.equal(isConnectionPoolValid({ ...draft, maxIdleConnsPerHost }), false);
+});
+
+test('global OAuth error rule validation trims patterns, rejects whitespace-only patterns, and compares drafts cleanly', () => {
+  const ok = validateOAuthErrorRuleDrafts(' Copilot ', [
+    {
+      id: 'r1',
+      status: ' 429 ',
+      action: ' STOP-AND-COOLDOWN ',
+      matches: [
+        { id: 'm1', kind: 'text', value: '  rate_limit_exceeded  ' },
+        { id: 'm2', kind: 'regex', value: '  ^quota_.*$  ' },
+      ],
+    },
+  ]);
+  assert.deepEqual(ok, {
+    ok: true,
+    provider: 'copilot',
+    rules: [{
+      status: 429,
+      action: 'stop-and-cooldown',
+      match: ['rate_limit_exceeded'],
+      match_regex: ['^quota_.*$'],
+    }],
+  });
+
+  assert.deepEqual(validateOAuthErrorRuleDrafts('bad provider!', []), { ok: false, error: 'provider' });
+  assert.deepEqual(validateOAuthErrorRuleDrafts('grok', []), { ok: true, provider: 'grok', rules: [] });
+  assert.deepEqual(validateOAuthErrorRuleDrafts('xai', []), { ok: true, provider: 'xai', rules: [] });
+  assert.equal(oauthErrorRuleProblem(draftWith({ matches: [{ id: 'm', kind: 'text', value: '   ' }] })), 'empty_match');
+  assert.deepEqual(
+    validateOAuthErrorRuleDrafts('copilot', [draftWith({ matches: [{ id: 'm', kind: 'text', value: '   ' }] })]),
+    { ok: false, error: 'invalid_rule', position: 0, problem: 'empty_match' },
+  );
+  const tooMany = Array.from({ length: OAUTH_ERROR_RULE_LIMIT + 1 }, (_, i) => draftWith({ id: `r-${i}` }));
+  assert.deepEqual(validateOAuthErrorRuleDrafts('copilot', tooMany), { ok: false, error: 'too_many' });
+
+  const baseline = readErrorRuleDrafts(storedRules);
+  const sameDifferentIds = baseline.map((rule, i) => ({ ...rule, id: `other-${i}` }));
+  assert.equal(oauthErrorRuleDraftsEqual(baseline, sameDifferentIds), true);
+  assert.equal(oauthErrorRuleDraftsEqual(baseline, moveErrorRule(baseline, 'rule-0', 1)), false);
 });

@@ -26,6 +26,7 @@ export const QUERY_KEYS = {
   authFiles: ['management-auth-files'] as const,
   oauthModelAliases: ['management-oauth-model-aliases'] as const,
   oauthExcludedModels: ['management-oauth-excluded-models'] as const,
+  oauthRequestScopedErrors: ['management-oauth-request-scoped-errors'] as const,
   routing: ['management-routing'] as const,
   routingModels: ['management-routing-models'] as const,
   logsStatus: ['management-logs-status'] as const,
@@ -51,6 +52,7 @@ export const MUTATION_KEYS = {
   authFileStatus: ['mutation', 'management-auth-files', 'status'] as const,
   oauthModelAliases: ['mutation', 'management-oauth-model-aliases'] as const,
   oauthExcludedModels: ['mutation', 'management-oauth-excluded-models'] as const,
+  oauthRequestScopedErrors: ['mutation', 'management-oauth-request-scoped-errors'] as const,
 } as const;
 
 /**
@@ -67,6 +69,7 @@ const SCOPE_TO_QUERY_KEYS = new Map<string, ReadonlyArray<QueryKey>>([
   ['management-logs-status', [QUERY_KEYS.logsStatus]],
   ['management-oauth-model-aliases', [QUERY_KEYS.oauthModelAliases, QUERY_KEYS.projectedState]],
   ['management-oauth-excluded-models', [QUERY_KEYS.oauthExcludedModels, QUERY_KEYS.projectedState]],
+  ['management-oauth-request-scoped-errors', [QUERY_KEYS.oauthRequestScopedErrors, QUERY_KEYS.projectedState]],
   ['management-auth-files', [QUERY_KEYS.authFiles, QUERY_KEYS.projectedState, QUERY_KEYS.identityDirectory]],
   ['management-quota', [QUERY_KEYS.quota, QUERY_KEYS.trendsQuota, QUERY_KEYS.overview]],
   ['management-plugins', [QUERY_KEYS.plugins, QUERY_KEYS.identityDirectory]],
@@ -85,6 +88,7 @@ const SCOPE_TO_MUTATION_KEYS = new Map<string, ReadonlyArray<QueryKey>>([
   ['management-client-keys', [MUTATION_KEYS.clientKeys]],
   ['management-oauth-model-aliases', [MUTATION_KEYS.oauthModelAliases]],
   ['management-oauth-excluded-models', [MUTATION_KEYS.oauthExcludedModels]],
+  ['management-oauth-request-scoped-errors', [MUTATION_KEYS.oauthRequestScopedErrors]],
   ['management-auth-files', [MUTATION_KEYS.authFileStatus]],
 ]);
 

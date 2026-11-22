@@ -27,6 +27,7 @@ const (
 	stateDomainProviderFamilyPrefix                       = "provider_family:"
 	stateDomainOAuthAliasesPrefix                         = "oauth_aliases:"
 	stateDomainOAuthExclusionsPrefix                      = "oauth_exclusions:"
+	stateDomainOAuthErrorRulesPrefix                      = "oauth_error_rules:"
 	stateDomainAuthFileStatusPrefix                       = "auth_file_status:"
 )
 
@@ -43,6 +44,7 @@ var stateConfigScopes = []string{
 	"management-config", "management-providers", "management-providers-sanitized",
 	"management-auth-files", "management-client-keys", "management-routing",
 	"management-oauth-model-aliases", "management-oauth-excluded-models",
+	"management-oauth-request-scoped-errors",
 	"management-logs-status", "management-quota", stateScopeIdentityDirectory,
 	"management-plugins", "management-plugin-settings", "management-plugin-store",
 }
@@ -55,36 +57,38 @@ type pendingScalarEntry struct {
 // projectedConfigState holds the in-memory hot projection of CPA configuration slices.
 // Instances stored inside statecoord.Coordinator are never mutated in place outside Coordinator.Mutate.
 type projectedConfigState struct {
-	Scalars                  management.ConfigScalarsDTO                                     `json:"scalars"`
-	PendingScalars           map[string]pendingScalarEntry                                   `json:"pending_scalars,omitempty"`
-	ScalarSeq                uint64                                                          `json:"scalar_seq"`
-	ViewYAML                 string                                                          `json:"view_yaml"`
-	SafeYAML                 string                                                          `json:"safe_yaml"`
-	RuntimeRevision          string                                                          `json:"-"`
-	StoredETag               string                                                          `json:"-"`
-	CommittedETag            string                                                          `json:"-"`
-	IsBaselineUnknown        bool                                                            `json:"-"`
-	Revision                 string                                                          `json:"revision"`
-	StoredLayout             string                                                          `json:"stored_layout"`
-	ClientKeys               []string                                                        `json:"client_keys"`
-	ConfigFamilies           map[management.ConfigKeyFamily][]management.ConfigAPIKey        `json:"config_families"`
-	RuntimeOnlyFam           map[management.ConfigKeyFamily]bool                             `json:"runtime_only_fam,omitempty"`
-	FailedProviderFamilies   map[management.ConfigKeyFamily]bool                             `json:"failed_provider_families,omitempty"`
-	ProviderSliceFailed      bool                                                            `json:"provider_slice_failed,omitempty"`
-	OpenAICompat             []management.OpenAICompatibility                                `json:"openai_compat"`
-	OpenAIRuntime            bool                                                            `json:"openai_runtime,omitempty"`
-	OpenAISliceFailed        bool                                                            `json:"openai_slice_failed,omitempty"`
-	OAuthAliases             map[string][]managementOAuthModelAlias                          `json:"oauth_aliases"`
-	OAuthAliasesUnavailable  bool                                                            `json:"oauth_aliases_unavailable,omitempty"`
-	OAuthExcluded            map[string][]string                                             `json:"oauth_excluded"`
-	OAuthExcludedUnavailable bool                                                            `json:"oauth_excluded_unavailable,omitempty"`
-	AuthFiles                []management.AuthFile                                           `json:"auth_files"`
-	AuthFilesUnavailable     bool                                                            `json:"auth_files_unavailable,omitempty"`
-	PendingAuthStatus        map[string]pendingAuthFileStatus                                `json:"pending_auth_status,omitempty"`
-	AuthStatusSeq            uint64                                                          `json:"auth_status_seq"`
-	PendingOpenAIToggles     map[string]pendingProviderToggle                                `json:"pending_openai_toggles,omitempty"`
-	PendingFamilyToggles     map[management.ConfigKeyFamily]map[string]pendingProviderToggle `json:"pending_family_toggles,omitempty"`
-	ProviderToggleSeq        uint64                                                          `json:"provider_toggle_seq"`
+	Scalars                    management.ConfigScalarsDTO                                     `json:"scalars"`
+	PendingScalars             map[string]pendingScalarEntry                                   `json:"pending_scalars,omitempty"`
+	ScalarSeq                  uint64                                                          `json:"scalar_seq"`
+	ViewYAML                   string                                                          `json:"view_yaml"`
+	SafeYAML                   string                                                          `json:"safe_yaml"`
+	RuntimeRevision            string                                                          `json:"-"`
+	StoredETag                 string                                                          `json:"-"`
+	CommittedETag              string                                                          `json:"-"`
+	IsBaselineUnknown          bool                                                            `json:"-"`
+	Revision                   string                                                          `json:"revision"`
+	StoredLayout               string                                                          `json:"stored_layout"`
+	ClientKeys                 []string                                                        `json:"client_keys"`
+	ConfigFamilies             map[management.ConfigKeyFamily][]management.ConfigAPIKey        `json:"config_families"`
+	RuntimeOnlyFam             map[management.ConfigKeyFamily]bool                             `json:"runtime_only_fam,omitempty"`
+	FailedProviderFamilies     map[management.ConfigKeyFamily]bool                             `json:"failed_provider_families,omitempty"`
+	ProviderSliceFailed        bool                                                            `json:"provider_slice_failed,omitempty"`
+	OpenAICompat               []management.OpenAICompatibility                                `json:"openai_compat"`
+	OpenAIRuntime              bool                                                            `json:"openai_runtime,omitempty"`
+	OpenAISliceFailed          bool                                                            `json:"openai_slice_failed,omitempty"`
+	OAuthAliases               map[string][]managementOAuthModelAlias                          `json:"oauth_aliases"`
+	OAuthAliasesUnavailable    bool                                                            `json:"oauth_aliases_unavailable,omitempty"`
+	OAuthExcluded              map[string][]string                                             `json:"oauth_excluded"`
+	OAuthExcludedUnavailable   bool                                                            `json:"oauth_excluded_unavailable,omitempty"`
+	OAuthErrorRules            map[string][]ProviderErrorRuleDTO                               `json:"oauth_error_rules"`
+	OAuthErrorRulesUnavailable bool                                                            `json:"oauth_error_rules_unavailable,omitempty"`
+	AuthFiles                  []management.AuthFile                                           `json:"auth_files"`
+	AuthFilesUnavailable       bool                                                            `json:"auth_files_unavailable,omitempty"`
+	PendingAuthStatus          map[string]pendingAuthFileStatus                                `json:"pending_auth_status,omitempty"`
+	AuthStatusSeq              uint64                                                          `json:"auth_status_seq"`
+	PendingOpenAIToggles       map[string]pendingProviderToggle                                `json:"pending_openai_toggles,omitempty"`
+	PendingFamilyToggles       map[management.ConfigKeyFamily]map[string]pendingProviderToggle `json:"pending_family_toggles,omitempty"`
+	ProviderToggleSeq          uint64                                                          `json:"provider_toggle_seq"`
 }
 
 type pendingProviderToggle struct {
@@ -122,15 +126,16 @@ type SafeAuthFileStatusDTO struct {
 // SafeProjectedStateDTO is the secret-free state projection returned by GET /api/v1/management/state
 // and embedded inside SSE sync_error events for immediate authoritative reconciliation.
 type SafeProjectedStateDTO struct {
-	Revision            string                                 `json:"revision"`
-	StoredLayout        string                                 `json:"stored_layout"`
-	Scalars             management.ConfigScalarsDTO            `json:"scalars"`
-	SupportedKeys       []string                               `json:"supported_keys"`
-	ClientKeysTotal     int                                    `json:"client_keys_total"`
-	ProviderStatuses    []SafeProviderStatusDTO                `json:"provider_statuses"`
-	AuthFileStatuses    []SafeAuthFileStatusDTO                `json:"auth_file_statuses"`
-	OAuthModelAliases   map[string][]managementOAuthModelAlias `json:"oauth_model_aliases"`
-	OAuthExcludedModels map[string][]string                    `json:"oauth_excluded_models"`
+	Revision                 string                                 `json:"revision"`
+	StoredLayout             string                                 `json:"stored_layout"`
+	Scalars                  management.ConfigScalarsDTO            `json:"scalars"`
+	SupportedKeys            []string                               `json:"supported_keys"`
+	ClientKeysTotal          int                                    `json:"client_keys_total"`
+	ProviderStatuses         []SafeProviderStatusDTO                `json:"provider_statuses"`
+	AuthFileStatuses         []SafeAuthFileStatusDTO                `json:"auth_file_statuses"`
+	OAuthModelAliases        map[string][]managementOAuthModelAlias `json:"oauth_model_aliases"`
+	OAuthExcludedModels      map[string][]string                    `json:"oauth_excluded_models"`
+	OAuthRequestScopedErrors map[string][]ProviderErrorRuleDTO      `json:"oauth_request_scoped_errors"`
 }
 
 // cloneViaJSON preserves unexported wireExtras on management.ConfigAPIKey and
@@ -188,41 +193,44 @@ func cloneProjectedConfigState(src projectedConfigState) projectedConfigState {
 	for provider, rules := range src.OAuthExcluded {
 		excluded[provider] = slices.Clone(rules)
 	}
+	errorRules := cloneOAuthErrorRulesMap(src.OAuthErrorRules)
 	familyToggles := make(map[management.ConfigKeyFamily]map[string]pendingProviderToggle, len(src.PendingFamilyToggles))
 	for fam, m := range src.PendingFamilyToggles {
 		familyToggles[fam] = maps.Clone(m)
 	}
 	return projectedConfigState{
-		Scalars:                  src.Scalars,
-		PendingScalars:           maps.Clone(src.PendingScalars),
-		ScalarSeq:                src.ScalarSeq,
-		ViewYAML:                 src.ViewYAML,
-		SafeYAML:                 src.SafeYAML,
-		Revision:                 src.Revision,
-		RuntimeRevision:          src.RuntimeRevision,
-		StoredETag:               src.StoredETag,
-		CommittedETag:            src.CommittedETag,
-		IsBaselineUnknown:        src.IsBaselineUnknown,
-		StoredLayout:             src.StoredLayout,
-		ClientKeys:               slices.Clone(src.ClientKeys),
-		ConfigFamilies:           families,
-		RuntimeOnlyFam:           maps.Clone(src.RuntimeOnlyFam),
-		FailedProviderFamilies:   maps.Clone(src.FailedProviderFamilies),
-		ProviderSliceFailed:      src.ProviderSliceFailed,
-		OpenAICompat:             cloneOpenAICompatEntries(src.OpenAICompat),
-		OpenAIRuntime:            src.OpenAIRuntime,
-		OpenAISliceFailed:        src.OpenAISliceFailed,
-		OAuthAliases:             aliases,
-		OAuthAliasesUnavailable:  src.OAuthAliasesUnavailable,
-		OAuthExcluded:            excluded,
-		OAuthExcludedUnavailable: src.OAuthExcludedUnavailable,
-		AuthFiles:                cloneViaJSON(src.AuthFiles),
-		AuthFilesUnavailable:     src.AuthFilesUnavailable,
-		PendingAuthStatus:        maps.Clone(src.PendingAuthStatus),
-		AuthStatusSeq:            src.AuthStatusSeq,
-		PendingOpenAIToggles:     maps.Clone(src.PendingOpenAIToggles),
-		PendingFamilyToggles:     familyToggles,
-		ProviderToggleSeq:        src.ProviderToggleSeq,
+		Scalars:                    src.Scalars,
+		PendingScalars:             maps.Clone(src.PendingScalars),
+		ScalarSeq:                  src.ScalarSeq,
+		ViewYAML:                   src.ViewYAML,
+		SafeYAML:                   src.SafeYAML,
+		Revision:                   src.Revision,
+		RuntimeRevision:            src.RuntimeRevision,
+		StoredETag:                 src.StoredETag,
+		CommittedETag:              src.CommittedETag,
+		IsBaselineUnknown:          src.IsBaselineUnknown,
+		StoredLayout:               src.StoredLayout,
+		ClientKeys:                 slices.Clone(src.ClientKeys),
+		ConfigFamilies:             families,
+		RuntimeOnlyFam:             maps.Clone(src.RuntimeOnlyFam),
+		FailedProviderFamilies:     maps.Clone(src.FailedProviderFamilies),
+		ProviderSliceFailed:        src.ProviderSliceFailed,
+		OpenAICompat:               cloneOpenAICompatEntries(src.OpenAICompat),
+		OpenAIRuntime:              src.OpenAIRuntime,
+		OpenAISliceFailed:          src.OpenAISliceFailed,
+		OAuthAliases:               aliases,
+		OAuthAliasesUnavailable:    src.OAuthAliasesUnavailable,
+		OAuthExcluded:              excluded,
+		OAuthExcludedUnavailable:   src.OAuthExcludedUnavailable,
+		OAuthErrorRules:            errorRules,
+		OAuthErrorRulesUnavailable: src.OAuthErrorRulesUnavailable,
+		AuthFiles:                  cloneViaJSON(src.AuthFiles),
+		AuthFilesUnavailable:       src.AuthFilesUnavailable,
+		PendingAuthStatus:          maps.Clone(src.PendingAuthStatus),
+		AuthStatusSeq:              src.AuthStatusSeq,
+		PendingOpenAIToggles:       maps.Clone(src.PendingOpenAIToggles),
+		PendingFamilyToggles:       familyToggles,
+		ProviderToggleSeq:          src.ProviderToggleSeq,
 	}
 }
 
@@ -272,16 +280,21 @@ func buildSafeProjectedStateDTO(state projectedConfigState) SafeProjectedStateDT
 			Disabled:  file.Disabled,
 		})
 	}
+	var errorRules map[string][]ProviderErrorRuleDTO
+	if !state.OAuthErrorRulesUnavailable {
+		errorRules = cloneOAuthErrorRulesMap(state.OAuthErrorRules)
+	}
 	return SafeProjectedStateDTO{
-		Revision:            state.Revision,
-		StoredLayout:        state.StoredLayout,
-		Scalars:             state.Scalars,
-		SupportedKeys:       management.KnownScalarKeys(),
-		ClientKeysTotal:     len(state.ClientKeys),
-		ProviderStatuses:    statuses,
-		AuthFileStatuses:    authStatuses,
-		OAuthModelAliases:   aliases,
-		OAuthExcludedModels: excluded,
+		Revision:                 state.Revision,
+		StoredLayout:             state.StoredLayout,
+		Scalars:                  state.Scalars,
+		SupportedKeys:            management.KnownScalarKeys(),
+		ClientKeysTotal:          len(state.ClientKeys),
+		ProviderStatuses:         statuses,
+		AuthFileStatuses:         authStatuses,
+		OAuthModelAliases:        aliases,
+		OAuthExcludedModels:      excluded,
+		OAuthRequestScopedErrors: errorRules,
 	}
 }
 
@@ -449,7 +462,8 @@ func (h *Handler) EnableStateCoordinator(ctx context.Context, opts StateCoordina
 			}
 			return configyaml.ComputeRevision(yaml) != snapshot.Revision || runtimeRevision != snapshot.RuntimeRevision ||
 				runtimeRevision == "" || snapshot.ProviderSliceFailed ||
-				snapshot.OAuthAliasesUnavailable || snapshot.OAuthExcludedUnavailable || snapshot.AuthFilesUnavailable, nil
+				snapshot.OAuthAliasesUnavailable || snapshot.OAuthExcludedUnavailable ||
+				snapshot.OAuthErrorRulesUnavailable || snapshot.AuthFilesUnavailable, nil
 		},
 		AfterRefresh: h.afterConfigWriteSideEffects,
 	})
@@ -700,6 +714,36 @@ func (h *Handler) registerCoordinatorDomains(coord *statecoord.Coordinator[proje
 		},
 	})
 
+	// 6b. Global OAuth request-scoped error rules per provider.
+	coord.RegisterDomainPrefix(stateDomainOAuthErrorRulesPrefix, statecoord.DomainSpec[projectedConfigState]{
+		Order:  46,
+		Scopes: []string{"management-oauth-request-scoped-errors", "management-config"},
+		Flush: func(ctx context.Context, key statecoord.DomainKey, snapshot projectedConfigState) error {
+			provider := strings.TrimPrefix(string(key), stateDomainOAuthErrorRulesPrefix)
+			client, err := h.capabilityClient(ctx)
+			if err != nil {
+				return err
+			}
+			rules := snapshot.OAuthErrorRules[provider]
+			if err := client.PatchOAuthRequestScopedErrors(ctx, provider, providerErrorRulesToManagement(rules)); err != nil {
+				return err
+			}
+			stored, err := client.OAuthRequestScopedErrors(ctx)
+			if err != nil {
+				return err
+			}
+			projected, err := projectManagementOAuthRequestScopedErrors(stored)
+			if err != nil {
+				return err
+			}
+			current := projected[provider]
+			if !equalErrorRules(current, rules) {
+				return errOAuthRequestScopedErrorsMismatch
+			}
+			return nil
+		},
+	})
+
 	// 7. OAuth / credential auth-file enablement toggles: coalesces rapid per-credential
 	// and multi-credential switches inside 250ms under a single write-gate acquisition.
 	coord.RegisterDomainPrefix(stateDomainAuthFileStatusPrefix, statecoord.DomainSpec[projectedConfigState]{
@@ -832,6 +876,13 @@ func rebaseProjectedConfigState(fresh, pending projectedConfigState, dirty []sta
 			} else {
 				delete(fresh.OAuthExcluded, provider)
 			}
+		case strings.HasPrefix(string(domain), stateDomainOAuthErrorRulesPrefix):
+			provider := strings.TrimPrefix(string(domain), stateDomainOAuthErrorRulesPrefix)
+			if rules, exists := pending.OAuthErrorRules[provider]; exists {
+				fresh.OAuthErrorRules[provider] = cloneErrorRuleDTOs(rules)
+			} else {
+				delete(fresh.OAuthErrorRules, provider)
+			}
 		case strings.HasPrefix(string(domain), stateDomainAuthFileStatusPrefix):
 			selector := strings.TrimPrefix(string(domain), stateDomainAuthFileStatusPrefix)
 			entry, ok := pending.PendingAuthStatus[selector]
@@ -870,23 +921,25 @@ func (h *Handler) loadUpstreamProjectedState(ctx context.Context) (projectedConf
 	}
 
 	var (
-		wg                       sync.WaitGroup
-		viewYAML                 = baselineYAML
-		storedLayout             = storedConfigLayoutUnknown
-		clientKeys               []string
-		keysErr                  error
-		openAICompat             []management.OpenAICompatibility
-		openAIRuntime            bool
-		openAIFailed             bool
-		oauthAliases             = map[string][]managementOAuthModelAlias{}
-		oauthAliasesUnavailable  bool
-		oauthExcluded            = map[string][]string{}
-		oauthExcludedUnavailable bool
-		authFiles                []management.AuthFile
-		authFilesUnavailable     bool
-		familyEntries            = make([][]management.ConfigAPIKey, len(providerConfigFamilies))
-		familyFallback           = make([]bool, len(providerConfigFamilies))
-		familyFailed             = make([]bool, len(providerConfigFamilies))
+		wg                         sync.WaitGroup
+		viewYAML                   = baselineYAML
+		storedLayout               = storedConfigLayoutUnknown
+		clientKeys                 []string
+		keysErr                    error
+		openAICompat               []management.OpenAICompatibility
+		openAIRuntime              bool
+		openAIFailed               bool
+		oauthAliases               = map[string][]managementOAuthModelAlias{}
+		oauthAliasesUnavailable    bool
+		oauthExcluded              = map[string][]string{}
+		oauthExcludedUnavailable   bool
+		oauthErrorRules            = map[string][]ProviderErrorRuleDTO{}
+		oauthErrorRulesUnavailable bool
+		authFiles                  []management.AuthFile
+		authFilesUnavailable       bool
+		familyEntries              = make([][]management.ConfigAPIKey, len(providerConfigFamilies))
+		familyFallback             = make([]bool, len(providerConfigFamilies))
+		familyFailed               = make([]bool, len(providerConfigFamilies))
 	)
 
 	wg.Go(func() {
@@ -978,6 +1031,22 @@ func (h *Handler) loadUpstreamProjectedState(ctx context.Context) (projectedConf
 	})
 
 	wg.Go(func() {
+		rawRules, errRules := client.OAuthRequestScopedErrors(ctx)
+		if errRules != nil {
+			if !management.IsMissingCapability(errRules) {
+				oauthErrorRulesUnavailable = true
+			}
+			return
+		}
+		projected, projErr := projectManagementOAuthRequestScopedErrors(rawRules)
+		if projErr != nil {
+			oauthErrorRulesUnavailable = true
+			return
+		}
+		oauthErrorRules = projected
+	})
+
+	wg.Go(func() {
 		filesResp, errFiles := client.AuthFiles(ctx)
 		if errFiles != nil {
 			authFilesUnavailable = true
@@ -1042,29 +1111,31 @@ func (h *Handler) loadUpstreamProjectedState(ctx context.Context) (projectedConf
 		authFiles = []management.AuthFile{}
 	}
 	return projectedConfigState{
-		Scalars:                  scalars,
-		PendingScalars:           make(map[string]pendingScalarEntry),
-		ViewYAML:                 viewYAML,
-		SafeYAML:                 safeYAML,
-		Revision:                 configyaml.ComputeRevision(viewYAML),
-		RuntimeRevision:          runtimeRevision,
-		StoredETag:               meta.Header.Get("ETag"),
-		StoredLayout:             storedLayout,
-		ClientKeys:               clientKeys,
-		ConfigFamilies:           configFamilies,
-		RuntimeOnlyFam:           runtimeOnlyFam,
-		FailedProviderFamilies:   failedFamilies,
-		ProviderSliceFailed:      anyProviderSliceFailed,
-		OpenAICompat:             openAICompat,
-		OpenAIRuntime:            openAIRuntime,
-		OpenAISliceFailed:        openAIFailed,
-		OAuthAliases:             oauthAliases,
-		OAuthAliasesUnavailable:  oauthAliasesUnavailable,
-		OAuthExcluded:            oauthExcluded,
-		OAuthExcludedUnavailable: oauthExcludedUnavailable,
-		AuthFiles:                authFiles,
-		AuthFilesUnavailable:     authFilesUnavailable,
-		PendingAuthStatus:        make(map[string]pendingAuthFileStatus),
+		Scalars:                    scalars,
+		PendingScalars:             make(map[string]pendingScalarEntry),
+		ViewYAML:                   viewYAML,
+		SafeYAML:                   safeYAML,
+		Revision:                   configyaml.ComputeRevision(viewYAML),
+		RuntimeRevision:            runtimeRevision,
+		StoredETag:                 meta.Header.Get("ETag"),
+		StoredLayout:               storedLayout,
+		ClientKeys:                 clientKeys,
+		ConfigFamilies:             configFamilies,
+		RuntimeOnlyFam:             runtimeOnlyFam,
+		FailedProviderFamilies:     failedFamilies,
+		ProviderSliceFailed:        anyProviderSliceFailed,
+		OpenAICompat:               openAICompat,
+		OpenAIRuntime:              openAIRuntime,
+		OpenAISliceFailed:          openAIFailed,
+		OAuthAliases:               oauthAliases,
+		OAuthAliasesUnavailable:    oauthAliasesUnavailable,
+		OAuthExcluded:              oauthExcluded,
+		OAuthExcludedUnavailable:   oauthExcludedUnavailable,
+		OAuthErrorRules:            oauthErrorRules,
+		OAuthErrorRulesUnavailable: oauthErrorRulesUnavailable,
+		AuthFiles:                  authFiles,
+		AuthFilesUnavailable:       authFilesUnavailable,
+		PendingAuthStatus:          make(map[string]pendingAuthFileStatus),
 	}, nil
 }
 

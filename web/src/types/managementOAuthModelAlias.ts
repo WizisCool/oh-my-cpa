@@ -1,3 +1,5 @@
+import type { ProviderErrorRule } from './providers';
+
 export interface ManagementOAuthModelAlias {
  openapi?: boolean | null;
   name: string;
@@ -26,6 +28,17 @@ export interface ManagementOAuthExcludedModelsMutationResponse {
   status: string;
   provider: string;
   models: string[];
+}
+
+/** CPA's global per-provider OAuth request-scoped error rules, as the gateway applies them. */
+export interface ManagementOAuthRequestScopedErrorsResponse {
+  request_scoped_errors: Record<string, ProviderErrorRule[]>;
+}
+
+export interface ManagementOAuthRequestScopedErrorsMutationResponse {
+  status: string;
+  provider: string;
+  rules: ProviderErrorRule[];
 }
 
 export interface ManagementOAuthProviderModel {

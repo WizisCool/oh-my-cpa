@@ -3340,6 +3340,104 @@
         }
       }
     },
+    "/v1/management/auth-files/request-scoped-errors": {
+      "get": {
+        "security": [
+          {
+            "CookieAuth": []
+          }
+        ],
+        "description": "Return per-provider global request-scoped error rules configured in CPA for OAuth credentials.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "AuthFiles"
+        ],
+        "summary": "List OAuth request-scoped error rules",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/api.OAuthRequestScopedErrorsResponseDTO"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          }
+        }
+      },
+      "patch": {
+        "security": [
+          {
+            "CookieAuth": []
+          }
+        ],
+        "description": "Replace global request-scoped error rules for one OAuth provider channel and verify persistence.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "AuthFiles"
+        ],
+        "summary": "Update OAuth request-scoped error rules for a provider",
+        "parameters": [
+          {
+            "description": "Provider request-scoped error rules payload",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/api.OAuthRequestScopedErrorsPatchRequestDTO"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/api.OAuthRequestScopedErrorsPatchResponseDTO"
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          }
+        }
+      }
+    },
     "/v1/management/auth-files/safe-fields": {
       "get": {
         "security": [
@@ -15495,6 +15593,61 @@
         }
       }
     },
+    "api.OAuthRequestScopedErrorsPatchRequestDTO": {
+      "type": "object",
+      "required": [
+        "provider",
+        "rules"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/api.ProviderErrorRuleDTO"
+          }
+        }
+      }
+    },
+    "api.OAuthRequestScopedErrorsPatchResponseDTO": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/api.ProviderErrorRuleDTO"
+          }
+        },
+        "status": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      }
+    },
+    "api.OAuthRequestScopedErrorsResponseDTO": {
+      "type": "object",
+      "properties": {
+        "request_scoped_errors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/api.ProviderErrorRuleDTO"
+            }
+          }
+        },
+        "version": {
+          "type": "integer"
+        }
+      }
+    },
     "api.OAuthStatusResponseDTO": {
       "type": "object",
       "properties": {
@@ -16883,6 +17036,15 @@
             "type": "array",
             "items": {
               "$ref": "#/definitions/api.managementOAuthModelAlias"
+            }
+          }
+        },
+        "oauth_request_scoped_errors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/api.ProviderErrorRuleDTO"
             }
           }
         },

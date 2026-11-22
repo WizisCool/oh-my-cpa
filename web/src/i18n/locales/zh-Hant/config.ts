@@ -377,6 +377,7 @@ export default {
   "cfg.backups_reason_client_keys": "修改用戶端金鑰",
   "cfg.backups_reason_oauth_aliases": "修改模型別名",
   "cfg.backups_reason_oauth_excluded_models": "修改模型停用規則",
+  "cfg.backups_reason_oauth_request_scoped_errors": "修改錯誤處理規則",
   "cfg.backups_reason_plugin_settings": "修改外掛設定",
   "cfg.backups_reason_plugin_install": "安裝外掛",
   "cfg.backups_reason_plugin_delete": "移除外掛",

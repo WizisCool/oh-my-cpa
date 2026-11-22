@@ -19,6 +19,7 @@ export const PRIMARY_CREDENTIAL_PROVIDERS = [
   'kimi',
   'devin',
   'meta',
+  'copilot',
 ];
 
 /**

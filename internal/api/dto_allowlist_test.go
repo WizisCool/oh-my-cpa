@@ -170,6 +170,8 @@ func TestBrowserDTOAllowlistAndSecretExclusion(t *testing.T) {
 		"/api/v1/management/auth-files",
 		"/api/v1/management/identity-directory",
 		"/api/v1/management/auth-files/model-aliases",
+		"/api/v1/management/auth-files/excluded-models",
+		"/api/v1/management/auth-files/request-scoped-errors",
 		"/api/v1/management/config",
 		"/api/v1/usage/events",
 		fmt.Sprintf("/api/v1/usage/events/%d", eventID),

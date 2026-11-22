@@ -21,6 +21,8 @@ export const PROVIDER_ICON_IDS: Record<string, string> = {
   moonshot: 'Kimi',
   devin: 'Devin',
   meta: 'Meta',
+  copilot: 'GithubCopilot',
+  'github-copilot': 'GithubCopilot',
   codebuddy: 'CodeBuddy',
   workbuddy: 'CodeBuddy',
   openai: 'OpenAI',
@@ -133,6 +135,8 @@ const COMMON_ALIASES: Record<string, string> = {
   'xai': 'XAI',
   'grok': 'XAI',
   'codex': 'Codex',
+  'copilot': 'GithubCopilot',
+  'github-copilot': 'GithubCopilot',
   'vertex': 'Google',
 };
 
@@ -231,6 +235,7 @@ function computeProviderIcon(f: string, n: string, url: string): string | undefi
   if (f.includes('deepseek')) return 'DeepSeek';
   if (f.includes('meta')) return 'Meta';
   if (f.includes('devin')) return 'Devin';
+  if (f.includes('copilot')) return 'GithubCopilot';
   return undefined;
 }
 

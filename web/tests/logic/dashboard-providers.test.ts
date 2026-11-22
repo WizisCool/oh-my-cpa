@@ -29,12 +29,14 @@ test('dashboard providers', () => {
   assert.equal(isOAuthChannel('codex'), true);
   assert.equal(isOAuthChannel('meta'), true);
   assert.equal(isOAuthChannel('devin'), true);
+  assert.equal(isOAuthChannel('copilot'), true);
   assert.equal(isOAuthChannel('antigravity'), true);
   assert.equal(isOAuthChannel('codebuddy'), true);
   assert.equal(isOAuthChannel('cline'), false);
   assert.equal(resolveChannelName('codex'), 'Codex');
   assert.equal(resolveChannelName('meta'), 'Meta');
   assert.equal(resolveChannelName('devin'), 'Devin');
+  assert.equal(resolveChannelName('copilot'), 'GitHub Copilot');
   assert.equal(resolveChannelName('codebuddy'), 'Codebuddy');
   assert.equal(normalizeProviderKey('openai-compatible-cline'), 'cline');
   assert.equal(normalizeProviderKey('DeepSeek V3'), 'deepseekv3');
@@ -1089,4 +1091,15 @@ test('dashboard cost tile caption across estimated, partial and placeholder wind
     ),
     { kind: 'placeholder', showUnpricedLink: false },
   );
+
+  // GitHub Copilot overview traffic aggregates as a first-party OAuth channel with GithubCopilot mark.
+  const copilotAgg = aggregateProviders({
+    overviewProviders: [{ id: 'copilot', credentials: 1, success: 18, failure: 2, total: 20, success_rate: 90 }],
+    configuredProviders: [],
+  });
+  assert.equal(copilotAgg.length, 1);
+  assert.equal(copilotAgg[0].kind, 'oauth');
+  assert.equal(copilotAgg[0].name, 'GitHub Copilot');
+  assert.equal(copilotAgg[0].iconId, 'GithubCopilot');
+  assert.equal(copilotAgg[0].protocol, 'GitHub Copilot (OAuth)');
 });

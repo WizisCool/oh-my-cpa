@@ -208,7 +208,7 @@ export function pluginPortalTitles(plugin: PluginItem, providerIds: readonly str
  * `ConfigKeyFamilies` in `internal/cpa/management/config_keys.go`.
  */
 const RESERVED_PROVIDER_KEYS: ReadonlySet<string> = new Set([
-  'claude', 'codex', 'xai', 'kimi', 'antigravity', 'devin', 'meta', 'gemini', 'vertex', 'interactions',
+  'claude', 'codex', 'xai', 'kimi', 'antigravity', 'devin', 'meta', 'copilot', 'gemini', 'vertex', 'interactions',
 ]);
 
 /**

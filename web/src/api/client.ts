@@ -35,6 +35,8 @@ import {
   ManagementOAuthModelAliasesResponse,
   ManagementOAuthModelAliasMutationResponse,
   ManagementOAuthProviderModelsResponse,
+  ManagementOAuthRequestScopedErrorsMutationResponse,
+  ManagementOAuthRequestScopedErrorsResponse,
 } from '../types/managementOAuthModelAlias';
 import { DashboardResponse, DashboardTailResponse, DashboardWindow, type WindowCredentialTraffic, type WindowProviderTraffic } from '../types/dashboard';
 import { DashboardTokenHeatmap } from '../types/tokenHeatmap';
@@ -51,7 +53,7 @@ import {
   ConfigSourceResponse,
   ConfigSourceSaveResponse,
 } from '../types/configManagement';
-import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderItem, SaveProviderPayload } from '../types/providers';
+import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderErrorRule, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { GatewayModelItem } from '../types/gatewayModels';
 import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse, OAuthCancelResponse, SIWCBindingStart, SIWCBindingStatus } from '../types/oauth';
 import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem, QuotaCapacityHistory } from '../types/quota';
@@ -1202,6 +1204,20 @@ export const api = {
     return request<ManagementOAuthExcludedModelsMutationResponse>('/management/auth-files/excluded-models', {
       method: 'PATCH',
       body: JSON.stringify({ provider, models }),
+    });
+  },
+
+  async getManagementOAuthRequestScopedErrors(): Promise<ManagementOAuthRequestScopedErrorsResponse> {
+    return request<ManagementOAuthRequestScopedErrorsResponse>('/management/auth-files/request-scoped-errors', { method: 'GET' });
+  },
+
+  async patchManagementOAuthRequestScopedErrors(
+    provider: string,
+    rules: ProviderErrorRule[],
+  ): Promise<ManagementOAuthRequestScopedErrorsMutationResponse> {
+    return request<ManagementOAuthRequestScopedErrorsMutationResponse>('/management/auth-files/request-scoped-errors', {
+      method: 'PATCH',
+      body: JSON.stringify({ provider, rules }),
     });
   },
 

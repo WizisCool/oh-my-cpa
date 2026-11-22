@@ -19,6 +19,7 @@ import {
   workspaceProviderOptions,
 } from '../../src/pages/oauthManagement/oauthWorkspaceLogic.ts';
 import { canonicalDisplayProviderKey } from '../../src/types/credentialIdentity.ts';
+import { PRIMARY_CREDENTIAL_PROVIDERS } from '../../src/types/credentialProviders.ts';
 import { pluginOAuthProviderChoices, type OAuthProviderChoice } from '../../src/pages/oauthProviderLogic.ts';
 import { pluginMultiPortalKeys, pluginOAuthProviderTitles } from '../../src/types/pluginOAuthProviders.ts';
 import { providerDisplayName } from '../../src/types/providerMetadata.ts';
@@ -1138,4 +1139,20 @@ test('detail window helpers and unknown-plan sentinel localize consistently in E
   assert.equal(resolveCredentialQuotaStatusDetail(lowCredits, en), 'Quota is running low');
   assert.equal(resolveCredentialQuotaStatusDetail(staleWarning, en), 'This reading is past its own window reset; refresh for the current quota');
   assert.equal(resolveCredentialQuotaStatusDetail(errorReading, en), 'The reading could not be fetched');
+});
+
+test('workspaceProviderOptions uses PRIMARY_CREDENTIAL_PROVIDERS including copilot and projects Copilot credentials cleanly', () => {
+  assert.deepEqual(workspaceProviderOptions([], []), [...PRIMARY_CREDENTIAL_PROVIDERS]);
+  assert.ok(PRIMARY_CREDENTIAL_PROVIDERS.includes('copilot'));
+  assert.equal(providerDisplayName('copilot'), 'GitHub Copilot');
+
+  const projection = buildOAuthWorkspaceProjection(
+    [file({ name: 'copilot-work.json', auth_index: 'idx-copilot', type: 'copilot', provider: 'copilot', email: 'dev@example.test' })],
+    [],
+    choices,
+  );
+  assert.equal(projection.records.length, 1);
+  assert.equal(projection.records[0].displayProvider, 'copilot');
+  assert.equal(providerDisplayName(projection.records[0].displayProvider), 'GitHub Copilot');
+  assert.equal(projection.records[0].authorizationProviderId, undefined);
 });

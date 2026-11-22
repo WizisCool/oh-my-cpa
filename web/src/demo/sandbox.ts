@@ -26,6 +26,7 @@ import type {
   ManagementOAuthExcludedModelsResponse,
   ManagementOAuthModelAlias,
   ManagementOAuthModelAliasesResponse,
+  ManagementOAuthRequestScopedErrorsResponse,
 } from '../types/managementOAuthModelAlias';
 import type { ModelSquareDirectory, ModelSquareRoute } from '../types/modelSquare';
 import type { OutboundProxyInput, OutboundProxySettings } from '../types/outboundProxy';
@@ -49,6 +50,7 @@ import type {
 } from '../types/pricing';
 import type {
   ClientAPIKeyItem,
+  ProviderErrorRule,
   ProviderItem,
   ProviderKeyEntry,
   SaveProviderModelItem,
@@ -159,6 +161,7 @@ export interface DemoSandboxState {
     siwcOverrides: Record<string, { use_siwc?: boolean; siwc_bound?: boolean; siwc_status?: 'off' | 'valid' | 'invalid'; siwc_expires_at?: string }>;
     modelAliases?: Record<string, ManagementOAuthModelAlias[]>;
     excludedModels?: Record<string, string[]>;
+    requestScopedErrors?: Record<string, ProviderErrorRule[]>;
     archivedByIndex?: Record<string, ArchivedCredentialItem>;
   };
   routing: {
@@ -352,6 +355,7 @@ export function countDemoSandboxChanges(state = loadState()): number {
   count += Object.keys(state.authFiles.recoveredNames).length;
   if (state.authFiles.modelAliases) count += Object.keys(state.authFiles.modelAliases).length;
   if (state.authFiles.excludedModels) count += Object.keys(state.authFiles.excludedModels).length;
+  if (state.authFiles.requestScopedErrors) count += Object.keys(state.authFiles.requestScopedErrors).length;
   count += Object.keys(state.routing.settingsOverrides).length;
   count += Object.keys(state.routing.memberOverrides).length;
   count += Object.keys(state.plugins.enabledOverrides).length;
@@ -1987,6 +1991,18 @@ export async function interceptDemoRequest(
       });
     }
 
+    if (pathname === '/management/auth-files/request-scoped-errors') {
+      const res = await fetchBaseline(pathWithQuery, options);
+      if (!res.ok) return res;
+      const base = await readBaselineJson<ManagementOAuthRequestScopedErrorsResponse>('auth-files-request-scoped-errors', res);
+      return jsonResponse({
+        request_scoped_errors: {
+          ...base.request_scoped_errors,
+          ...(state.authFiles.requestScopedErrors ?? {}),
+        },
+      });
+    }
+
     if (pathname === '/management/oauth/status') {
       const id = parsedUrl.searchParams.get('state') || parsedUrl.searchParams.get('session_id') || '';
       const session = oauthSessions.get(id);
@@ -2727,6 +2743,9 @@ export async function interceptDemoRequest(
           oauth_excluded_models: state.authFiles.excludedModels
             ? { ...base.data.oauth_excluded_models, ...state.authFiles.excludedModels }
             : base.data.oauth_excluded_models,
+          oauth_request_scoped_errors: state.authFiles.requestScopedErrors
+            ? { ...base.data.oauth_request_scoped_errors, ...state.authFiles.requestScopedErrors }
+            : base.data.oauth_request_scoped_errors,
         },
       });
     }
@@ -3301,6 +3320,22 @@ export async function interceptDemoRequest(
     recordSandboxAudit(state, 'oauth_excluded.update', 'oauth_provider', body.provider);
     saveState(state);
     return jsonResponse({ status: 'ok', provider: body.provider, models: merged[body.provider] });
+  }
+
+  if (pathname === '/management/auth-files/request-scoped-errors' && method === 'PATCH') {
+    const body = parseJsonBody<{ provider?: string; rules?: ProviderErrorRule[] }>(options);
+    if (!body?.provider) return errorResponse('Missing provider', 'invalid_request', 400);
+    const base = await ensureBaseline<ManagementOAuthRequestScopedErrorsResponse>(
+      'auth-files-request-scoped-errors',
+      '/management/auth-files/request-scoped-errors',
+      fetchBaseline,
+    );
+    const merged = { ...(base?.request_scoped_errors ?? {}), ...(state.authFiles.requestScopedErrors ?? {}) };
+    merged[body.provider] = body.rules ?? [];
+    state.authFiles.requestScopedErrors = merged;
+    recordSandboxAudit(state, 'oauth_request_scoped_errors.update', 'oauth_provider', body.provider);
+    saveState(state);
+    return jsonResponse({ status: 'ok', provider: body.provider, rules: merged[body.provider] });
   }
 
   // Sandbox OAuth / SIWC interactive flows

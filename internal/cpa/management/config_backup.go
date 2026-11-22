@@ -38,6 +38,7 @@ const (
 	BackupReasonClientKeys       = "client_keys"
 	BackupReasonOAuthAliases     = "oauth_aliases"
 	BackupReasonOAuthExclusions  = "oauth_excluded_models"
+	BackupReasonOAuthErrorRules  = "oauth_request_scoped_errors"
 	BackupReasonPluginSettings   = "plugin_settings"
 	BackupReasonPluginInstall    = "plugin_install"
 	BackupReasonPluginDelete     = "plugin_delete"

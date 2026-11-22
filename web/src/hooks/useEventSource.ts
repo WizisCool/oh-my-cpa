@@ -16,6 +16,7 @@ import type { ManagementAuthFilesResponse } from '../types/managementAuthFile';
 import type {
   ManagementOAuthExcludedModelsResponse,
   ManagementOAuthModelAliasesResponse,
+  ManagementOAuthRequestScopedErrorsResponse,
 } from '../types/managementOAuthModelAlias';
 import type { ProviderItem } from '../types/providers';
 import { useToast } from '../components/feedback';
@@ -121,6 +122,14 @@ export function applyAuthoritativeSafeSnapshot(
     (current) =>
       current ? { ...current, excluded_models: snapshot.oauth_excluded_models } : current,
   );
+
+  if (snapshot.oauth_request_scoped_errors !== undefined) {
+    const nextErrorRules = snapshot.oauth_request_scoped_errors;
+    queryClient.setQueryData<ManagementOAuthRequestScopedErrorsResponse>(
+      QUERY_KEYS.oauthRequestScopedErrors,
+      (current) => (current ? { ...current, request_scoped_errors: nextErrorRules } : current),
+    );
+  }
 }
 
 /**
