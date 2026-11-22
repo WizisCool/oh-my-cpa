@@ -322,11 +322,14 @@ describe('console motion preference', () => {
     });
 
     mount(<GitHubTokenSettings />);
+    const card = await screen.findByTestId('omc-github-token-settings');
     expect(await screen.findByText('Not configured')).toBeTruthy();
 
-    // Test anonymous quota before setting a token.
+    // Test anonymous quota before setting a token; outcome surfaces in a toast rather than an inline notice.
     fireEvent.click(screen.getByRole('button', { name: 'Test quota' }));
-    expect(await screen.findByText('Using anonymous access')).toBeTruthy();
+    const anonToastTitle = await screen.findByText('Using anonymous access');
+    expect(anonToastTitle.closest('.omc-toast-info')).not.toBeNull();
+    expect(card.querySelector('.settings-inline-notice')).toBeNull();
 
     // Type and save a token.
     const input = screen.getByLabelText('Personal access token');
@@ -335,11 +338,15 @@ describe('console motion preference', () => {
     expect(await screen.findByText('Configured')).toBeTruthy();
     expect(screen.getByText('ghp_1234••••••••abcd')).toBeTruthy();
 
-    // Test saved token quota.
+    // Test saved token quota and verify the quota readout renders inside the success toast.
     fireEvent.click(screen.getByRole('button', { name: 'Test quota' }));
-    expect(await screen.findByText('Token is valid')).toBeTruthy();
+    const validToastTitle = await screen.findByText('Token is valid');
+    const validToast = validToastTitle.closest('.omc-toast-success');
+    expect(validToast).not.toBeNull();
+    expect(validToast?.textContent).toContain('4,991 / 5,000');
+    expect(card.querySelector('.settings-inline-notice')).toBeNull();
 
-    // Typing a new draft immediately discards the previous quota-test notice.
+    // Typing a new draft immediately dismisses the previous quota-test toast.
     fireEvent.change(input, { target: { value: 'ghp_replacement_draft_1234567890' } });
     await waitFor(() => expect(screen.queryByText('Token is valid')).toBeNull());
 
@@ -352,7 +359,25 @@ describe('console motion preference', () => {
       slowTest.resolve(jsonResponse({ status: 'valid', authenticated: true, limit: 5000, remaining: 4990, used: 10 }));
       await slowTest.promise;
     });
+    const testButton = screen.getByRole('button', { name: 'Test quota' }) as HTMLButtonElement;
+    await waitFor(() => expect(testButton.disabled).toBe(false));
     expect(screen.queryByText('Token is valid')).toBeNull();
+
+    // An invalid candidate token surfaces an error toast without rendering an inline notice.
+    api.on('POST', '/management/github-token/test', () => jsonResponse({ status: 'invalid', authenticated: false }));
+    fireEvent.click(testButton);
+    const invalidToastTitle = await screen.findByText('Token is invalid or revoked');
+    expect(invalidToastTitle.closest('.omc-toast-error')).not.toBeNull();
+    expect(card.querySelector('.settings-inline-notice')).toBeNull();
+
+    // Upstream probe errors surface a warning toast carrying the diagnostic message.
+    api.on('POST', '/management/github-token/test', () => jsonResponse({ status: 'error', authenticated: false, message: 'HTTP 502' }));
+    await waitFor(() => expect(testButton.disabled).toBe(false));
+    fireEvent.click(testButton);
+    const warnToastTitle = await screen.findByText('Could not complete GitHub API check');
+    const warnToast = warnToastTitle.closest('.omc-toast-warning');
+    expect(warnToast).not.toBeNull();
+    expect(warnToast?.textContent).toContain('HTTP 502');
 
     // Clear token through confirmation popover.
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }));

@@ -652,5 +652,39 @@ test('chip primitives keep unified breathing room, centered icons, and unclipped
   assert.match(indexCss, /\.status-label-text\s*\{[^}]*overflow:\s*hidden;[^}]*line-height:\s*1\.25;/);
   const comboboxTsx = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/ui/combobox.tsx'), 'utf8'));
   assert.equal((comboboxTsx.match(/<LineSlot className="leading-\[1\.25\]">\{renderChipLabel\(val\)\}<\/LineSlot>/g) ?? []).length, 2);
+
+  // Secondary destructive buttons share the calm `--shadow-control` secondary material at rest and
+  // reveal the WCAG-AA danger wash/ink when approached or open, never a bespoke red outline ring.
+  const buttonTsx = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/ui/button.tsx'), 'utf8'));
+  const destructiveSecondary = buttonTsx.match(/'destructive-secondary':\s*\n?\s*'([^']+)'/)?.[1] ?? '';
+  assert.ok(destructiveSecondary.length > 0);
+  assert.match(destructiveSecondary, /\bbg-secondary\b/);
+  assert.match(destructiveSecondary, /\bshadow-control\b/);
+  assert.match(destructiveSecondary, /\bhover:enabled:bg-danger-wash\b/);
+  assert.match(destructiveSecondary, /\bhover:enabled:text-danger-ink\b/);
+  assert.match(destructiveSecondary, /\bdata-\[popup-open\]:bg-danger-wash\b/);
+  assert.doesNotMatch(destructiveSecondary, /shadow-\[/);
+
+  // `--color-danger-ink` over `--color-danger-wash` and `--color-danger-wash-active` clears WCAG AA
+  // (>= 4.5:1) on bg, surface, and elevated grounds across every built-in palette.
+  const dangerInkShare = Number(/--color-danger-ink:\s*color-mix\(in srgb,\s*var\(--danger\)\s*(\d+)%,\s*var\(--fg\)\);/.exec(indexCss)?.[1]);
+  const dangerWashPct = Number(/--color-danger-wash:\s*color-mix\(in srgb,\s*var\(--danger\)\s*(\d+)%,\s*transparent\);/.exec(indexCss)?.[1]);
+  const dangerActivePct = Number(/--color-danger-wash-active:\s*color-mix\(in srgb,\s*var\(--danger\)\s*(\d+)%,\s*transparent\);/.exec(indexCss)?.[1]);
+  assert.ok(dangerInkShare > 0 && dangerWashPct > 0 && dangerActivePct > 0);
+  const contrastFloor = CONTRAST_FLOORS.text ?? 4.5;
+  for (const definition of BUILT_IN_PALETTES) {
+    const { palette } = resolvedBuiltInPalette(definition.id);
+    const ink = mixSrgb(palette.danger, palette.fg, (100 - dangerInkShare) / 100);
+    for (const [groundName, ground] of [['bg', palette.bg], ['surface', palette.surface], ['elevated', palette.elevated]] as const) {
+      for (const pct of [dangerWashPct, dangerActivePct]) {
+        const wash = mixSrgb(ground, palette.danger, pct / 100);
+        const ratio = contrastRatio(ink, wash);
+        assert.ok(ratio >= contrastFloor, `${definition.id} danger button on ${groundName} @${pct}% (${ratio.toFixed(2)}) < ${contrastFloor}`);
+      }
+    }
+  }
+
+  // Code elements follow the operator-configured `--font-mono` role rather than the browser UA fallback.
+  assert.match(indexCss, /code,\s*kbd,\s*samp,\s*pre\s*\{\s*font-family:\s*var\(--font-mono\);\s*\}/);
 });
 

@@ -56,7 +56,7 @@ export default {
   'omc.github_token_configured': 'Configured',
   'omc.github_token_not_configured': 'Not configured',
   'omc.github_token_input': 'Personal access token',
-  'omc.github_token_desc': 'Raises GitHub API rate limits for OMC version checks and the CPA plugin store. Writes to server.github-token in CPA configuration and stays in sync with the Configuration page and config.yaml.',
+  'omc.github_token_desc': 'Raises GitHub API rate limits for OMC version checks and the CPA plugin store.',
   'omc.github_token_replace_placeholder': 'Enter a new token to replace the saved one',
   'omc.github_token_test': 'Test quota',
   'omc.github_token_clear': 'Clear',
