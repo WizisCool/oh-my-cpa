@@ -20,6 +20,8 @@ import {
 } from './requestColumns';
 
 const DEFAULT_HIDDEN_COLUMNS: RequestColumnId[] = [];
+const sameHiddenColumns = (a: readonly RequestColumnId[], b: readonly RequestColumnId[]) =>
+  a.length === b.length && a.every((id, index) => id === b[index]);
 
 /**
  * The request list's column layout: the widths the operator dragged or nudged,
@@ -60,14 +62,37 @@ export function useRequestColumnLayout(isSelecting: boolean) {
   // preference cache notifies subscribers asynchronously, which otherwise lets
   // React restore the previous checked value before the write reaches the cache.
   const [hiddenColumns, setHiddenColumns] = React.useState<RequestColumnId[]>(DEFAULT_HIDDEN_COLUMNS);
+  // The checkbox state updates immediately, while the request grid stages the
+  // layout change during a short opacity transition. The popover is a separate
+  // portal and never participates in the table's paint transition.
+  const [renderedHiddenColumns, setRenderedHiddenColumns] = React.useState<RequestColumnId[]>(DEFAULT_HIDDEN_COLUMNS);
+  const [isColumnFading, setIsColumnFading] = React.useState(false);
   const hiddenColumnsRef = React.useRef(hiddenColumns);
   hiddenColumnsRef.current = hiddenColumns;
+  const fadeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeFrameRef = React.useRef<number | null>(null);
+  const cancelFade = React.useCallback(() => {
+    if (fadeTimerRef.current !== null) {
+      clearTimeout(fadeTimerRef.current);
+      fadeTimerRef.current = null;
+    }
+    if (fadeFrameRef.current !== null) {
+      cancelAnimationFrame(fadeFrameRef.current);
+      fadeFrameRef.current = null;
+    }
+  }, []);
+  React.useEffect(() => cancelFade, [cancelFade]);
   React.useEffect(() => {
-    if (!hiddenColumnsReady) return;
+    if (!hiddenColumnsReady || sameHiddenColumns(hiddenColumnsRef.current, hiddenColumnsPref)) return;
+    // External preference updates and a failed-save rollback take precedence
+    // over a pending visual update.
+    cancelFade();
     hiddenColumnsRef.current = hiddenColumnsPref;
     setHiddenColumns(hiddenColumnsPref);
-  }, [hiddenColumnsReady, hiddenColumnsPref]);
-  const hiddenSet = React.useMemo(() => new Set(hiddenColumns), [hiddenColumns]);
+    setRenderedHiddenColumns(hiddenColumnsPref);
+    setIsColumnFading(false);
+  }, [hiddenColumnsReady, hiddenColumnsPref, cancelFade]);
+  const hiddenSet = React.useMemo(() => new Set(renderedHiddenColumns), [renderedHiddenColumns]);
 
   const [colWidths, setColWidths] = React.useState<RequestColumnWidths>({});
 
@@ -127,22 +152,27 @@ export function useRequestColumnLayout(isSelecting: boolean) {
     [colWidths, chrome, folded],
   );
 
-  // The request grid removes an entire CSS track when a column is hidden.
-  // A regular grid-template-columns transition cannot interpolate lists of
-  // different lengths, so cross-fade the table's before/after layouts instead.
-  // Flush the update into the snapshot callback; the chooser remains interactive,
-  // including when another selection interrupts an in-progress fade.
+  // Hide the changing grid briefly, update the shared header/row tracks, then
+  // reveal it. No viewport snapshot or root-level animation is created, so
+  // the column chooser remains above the request table throughout.
   const showHiddenColumns = React.useCallback((next: RequestColumnId[]) => {
-    if (typeof document === 'undefined' || isMotionReduced() || typeof document.startViewTransition !== 'function') {
-      setHiddenColumns(next);
+    setHiddenColumns(next);
+    cancelFade();
+    if (typeof window === 'undefined' || isMotionReduced()) {
+      setRenderedHiddenColumns(next);
+      setIsColumnFading(false);
       return;
     }
-    const transition = document.startViewTransition(() => {
-      flushSync(() => setHiddenColumns(next));
-    });
-    // Rapid re-toggles can cancel an earlier transition, which is expected.
-    void transition.finished.catch(() => {});
-  }, []);
+    setIsColumnFading(true);
+    fadeTimerRef.current = window.setTimeout(() => {
+      fadeTimerRef.current = null;
+      flushSync(() => setRenderedHiddenColumns(hiddenColumnsRef.current));
+      fadeFrameRef.current = window.requestAnimationFrame(() => {
+        fadeFrameRef.current = null;
+        setIsColumnFading(false);
+      });
+    }, 110);
+  }, [cancelFade]);
 
   const setColumnVisible = React.useCallback((id: RequestColumnId, visible: boolean) => {
     if (!hiddenColumnsLoaded) return;
@@ -260,6 +290,7 @@ export function useRequestColumnLayout(isSelecting: boolean) {
     foldedColumns,
     firstVisibleColumn,
     hiddenColumns,
+    isColumnFading,
     hiddenColumnsLoaded,
     setColumnVisible,
     restoreColumnVisibility,

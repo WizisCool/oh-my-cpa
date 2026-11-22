@@ -112,6 +112,7 @@ export const UsageEventsPage: React.FC = () => {
     foldedColumns,
     firstVisibleColumn,
     hiddenColumns,
+    isColumnFading,
     hiddenColumnsLoaded,
     setColumnVisible,
     restoreColumnVisibility,
@@ -664,9 +665,9 @@ export const UsageEventsPage: React.FC = () => {
                 <PopoverTrigger
                   render={
                     <Button
-                      size="sm"
+                      size="default"
                       variant="secondary"
-                      className="req-manage-columns-btn"
+                      className="req-manage-columns-btn req-toolbar-action"
                       icon={<Columns3 className="size-4 req-column-trigger-icon" strokeWidth={1.9} aria-hidden="true" />}
                     >
                       {t('events.manage_columns')}
@@ -715,6 +716,7 @@ export const UsageEventsPage: React.FC = () => {
                 </Button>
               )}
               <ToolButton
+                className="req-toolbar-action"
                 icon={<CheckSquareOutlined />}
                 label={t('events.select_requests')}
                 variant={isSelecting ? 'active' : 'secondary'}
@@ -723,6 +725,7 @@ export const UsageEventsPage: React.FC = () => {
               />
               <RequestFoldToggle collapse={collapse} onToggle={handleToggleExpand} />
               <RefreshButton
+                className="req-toolbar-action"
                 isRefreshing={isSyncing || isVisibleFetching}
                 disabled={isSyncing}
                 onRefresh={handleManualRefresh}
@@ -807,7 +810,11 @@ export const UsageEventsPage: React.FC = () => {
           aria-busy={isVisibleFetching}
           style={streamStyle}
         >
-          <div ref={scrollAreaRef} className="request-table-scroll-area">
+          <div
+            ref={scrollAreaRef}
+            className="request-table-scroll-area"
+            data-column-fading={isColumnFading ? '' : undefined}
+          >
             <RequestStreamHeader
               colWidths={colWidths}
               handleResizeStart={handleResizeStart}

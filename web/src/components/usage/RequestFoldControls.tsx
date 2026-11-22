@@ -371,7 +371,7 @@ export function RequestFoldToggle({ collapse, onToggle }: { collapse: ViewFlag; 
       <Button
         ref={buttonRef}
         data-fold-control="expand"
-        className="req-expand-toggle-btn"
+        className="req-expand-toggle-btn req-toolbar-action"
         tabIndex={isCollapsed ? -1 : undefined}
         aria-label={label}
         icon={<FullscreenOutlined />}

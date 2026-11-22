@@ -26,6 +26,28 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+/* The chooser and adjacent icon-only tools use one consistent control box.
+   Text controls grow horizontally; icon-only controls remain square. */
+.request-events-page .terminal-page-head .request-actions .req-toolbar-action {
+  height: 32px;
+  min-height: 32px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+.request-events-page .terminal-page-head .request-actions .req-toolbar-action[data-icon-only] {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+}
+.request-events-page .terminal-page-head .request-actions .req-toolbar-action [data-slot='button-icon'] {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
+.request-events-page .terminal-page-head .request-actions .req-toolbar-action [data-slot='button-icon'] svg {
+  width: 18px;
+  height: 18px;
+}
 .request-ingest-trigger {
   padding-inline: 6px;
 }
@@ -125,25 +147,15 @@
   overflow-y: hidden;
   position: relative;
 }
-/* The table and header share one view-transition snapshot: a column changes
-   the number of grid tracks, which cannot be interpolated with grid-template-columns.
-   Cross-fading the two layouts avoids a visible horizontal jump. */
-@supports (view-transition-name: omc-request-columns) {
-  .request-events-page .request-table-scroll-area {
-    view-transition-name: omc-request-columns;
-  }
+/* Fade only the table in its own stacking context. A short fade-out
+   conceals the discrete grid-track change, and the regular transition reveals
+   the updated table. The separate column popover remains fully interactive. */
+:root:not([data-reduced-motion='true']) .request-events-page .request-table-scroll-area {
+  transition: opacity var(--motion-base) var(--ease-standard);
 }
-:root:not([data-reduced-motion='true'])::view-transition-old(omc-request-columns) {
-  animation: var(--motion-base) var(--ease-standard) both omc-column-fade-out;
-}
-:root:not([data-reduced-motion='true'])::view-transition-new(omc-request-columns) {
-  animation: var(--motion-base) var(--ease-standard) both omc-column-fade-in;
-}
-@keyframes omc-column-fade-out {
-  to { opacity: 0; }
-}
-@keyframes omc-column-fade-in {
-  from { opacity: 0; }
+:root:not([data-reduced-motion='true']) .request-events-page .request-table-scroll-area[data-column-fading] {
+  opacity: 0.08;
+  transition-duration: 100ms;
 }
 
 .req-reset-columns-btn {

@@ -31,9 +31,34 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
       await menu.evaluate((element) =>
         element.classList.contains('omc-float-surface') &&
         getComputedStyle(element).transitionProperty.includes('clip-path')));
-    check('table layout uses one cross-fade surface for header and rows',
+    check('table opacity transition stays inside the request list',
       await page.locator('.request-table-scroll-area').evaluate((element) =>
-        getComputedStyle(element).viewTransitionName === 'omc-request-columns'));
+        getComputedStyle(element).transitionProperty.includes('opacity') &&
+        getComputedStyle(element).viewTransitionName === 'none'));
+    const buttons = await page.locator('.request-actions .req-toolbar-action').evaluateAll((elements) =>
+      elements.map((element) => {
+        const box = element.getBoundingClientRect();
+        return {
+          height: box.height,
+          width: box.width,
+          radius: getComputedStyle(element).borderRadius,
+          iconOnly: element.hasAttribute('data-icon-only'),
+        };
+      }));
+    check('column chooser and three tool icons share equal heights and corner radii',
+      buttons.length === 4 &&
+      buttons.every((button) => Math.abs(button.height - 32) < 0.6 &&
+        button.radius === buttons[0].radius) &&
+      buttons.slice(1).every((button) => button.iconOnly &&
+        Math.abs(button.width - 32) < 0.6) &&
+      buttons[0].width > 32);
+    const isChooserOnTop = async () => menu.evaluate((element) => {
+      const checkbox = element.querySelectorAll('[data-slot="checkbox"]')[3];
+      if (!checkbox) return false;
+      const box = checkbox.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return hit instanceof Element && element.contains(hit);
+    });
     const columnChecks = page.locator('.req-column-choice [data-slot="checkbox"]');
     check('column chooser uses 12 accessible project checkboxes',
       (await columnChecks.count()) === 12 &&
@@ -55,6 +80,11 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
     await saveHidden;
     check('model checkbox responds immediately to an uncheck',
       (await modelToggle.getAttribute('aria-checked')) === 'false');
+    check('column chooser remains on top while the table updates',
+      await isChooserOnTop());
+    await page.waitForFunction(() => !document.querySelector('.request-table-scroll-area')?.hasAttribute('data-column-fading'));
+    check('column chooser stays interactive after layout settles',
+      await isChooserOnTop());
     // Reversing the gesture before a transition finishes must preserve state.
     const savedAgain = page.waitForResponse((response) =>
       response.request().method() === 'PUT' &&
@@ -74,6 +104,8 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
     await savedHiddenAgain;
     check('second rapid toggle hides the column again',
       (await modelToggle.getAttribute('aria-checked')) === 'false');
+    check('column chooser retains the top interaction layer after repeated toggles',
+      await isChooserOnTop());
     await page.waitForFunction(() =>
       document.querySelector('.request-stream')?.getAttribute('data-folded-columns')?.split(' ').includes('model'));
     check('hiding Model removes its header and row cell from the desktop grid',
