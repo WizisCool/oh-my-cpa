@@ -192,6 +192,8 @@ test('global OAuth error rule validation trims patterns, rejects whitespace-only
   });
 
   assert.deepEqual(validateOAuthErrorRuleDrafts('bad provider!', []), { ok: false, error: 'provider' });
+  assert.deepEqual(validateOAuthErrorRuleDrafts('grok', []), { ok: true, provider: 'grok', rules: [] });
+  assert.deepEqual(validateOAuthErrorRuleDrafts('xai', []), { ok: true, provider: 'xai', rules: [] });
   assert.equal(oauthErrorRuleProblem(draftWith({ matches: [{ id: 'm', kind: 'text', value: '   ' }] })), 'empty_match');
   assert.deepEqual(
     validateOAuthErrorRuleDrafts('copilot', [draftWith({ matches: [{ id: 'm', kind: 'text', value: '   ' }] })]),

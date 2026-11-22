@@ -179,14 +179,14 @@ func TestManagementOAuthRequestScopedErrorsGuardrails(t *testing.T) {
 	encodedTooMany, _ := json.Marshal(map[string]any{"provider": "copilot", "rules": tooMany})
 
 	cases := map[string]string{
-		"missing rules":      `{"provider":"copilot"}`,
-		"invalid provider":   `{"provider":"bad provider","rules":[]}`,
-		"bad status":         `{"provider":"copilot","rules":[{"status":99,"match":["err"],"action":"stop"}]}`,
-		"unknown action":     `{"provider":"copilot","rules":[{"status":400,"match":["err"],"action":"retry"}]}`,
-		"missing matches":    `{"provider":"copilot","rules":[{"status":400,"action":"stop"}]}`,
-		"whitespace match":   `{"provider":"copilot","rules":[{"status":400,"match":["   "],"action":"stop"}]}`,
-		"invalid regex":      `{"provider":"copilot","rules":[{"status":400,"match_regex":["[unclosed"],"action":"stop"}]}`,
-		"too many rules":     string(encodedTooMany),
+		"missing rules":    `{"provider":"copilot"}`,
+		"invalid provider": `{"provider":"bad provider","rules":[]}`,
+		"bad status":       `{"provider":"copilot","rules":[{"status":99,"match":["err"],"action":"stop"}]}`,
+		"unknown action":   `{"provider":"copilot","rules":[{"status":400,"match":["err"],"action":"retry"}]}`,
+		"missing matches":  `{"provider":"copilot","rules":[{"status":400,"action":"stop"}]}`,
+		"whitespace match": `{"provider":"copilot","rules":[{"status":400,"match":["   "],"action":"stop"}]}`,
+		"invalid regex":    `{"provider":"copilot","rules":[{"status":400,"match_regex":["[unclosed"],"action":"stop"}]}`,
+		"too many rules":   string(encodedTooMany),
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -220,9 +220,20 @@ func TestManagementOAuthRequestScopedErrorsAuditFailure(t *testing.T) {
 				}
 				upstream(writer, request)
 			})
-			_, err := repo.SQL().Exec(`CREATE TRIGGER reject_oauth_error_rules_audit BEFORE INSERT ON audit_events
-				WHEN NEW.action = 'oauth_request_scoped_errors.update' AND NEW.result = '` + outcome + `'
-				BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`)
+			var triggerSQL string
+			switch outcome {
+			case "attempt":
+				triggerSQL = `CREATE TRIGGER reject_oauth_error_rules_audit BEFORE INSERT ON audit_events
+					WHEN NEW.action = 'oauth_request_scoped_errors.update' AND NEW.result = 'attempt'
+					BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`
+			case "success":
+				triggerSQL = `CREATE TRIGGER reject_oauth_error_rules_audit BEFORE INSERT ON audit_events
+					WHEN NEW.action = 'oauth_request_scoped_errors.update' AND NEW.result = 'success'
+					BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`
+			default:
+				t.Fatalf("unexpected outcome %q", outcome)
+			}
+			_, err := repo.SQL().Exec(triggerSQL)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -324,4 +335,84 @@ func TestManagementOAuthRequestScopedErrorsStateCoordinatorRoundTrip(t *testing.
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for StateCoordinator to flush copilot error rules to CPA; state=%#v", state)
+}
+
+func TestManagementOAuthRequestScopedErrorsPreserveDistinctProviderKeys(t *testing.T) {
+	state := map[string][]management.RequestScopedErrorRule{
+		"grok": {{Status: 400, Match: []string{"grok_only"}, Action: "stop"}},
+		"xai":  {{Status: 429, Match: []string{"xai_only"}, Action: "continue"}},
+	}
+	client, baseURL, _ := startAuthFilesTestServer(t, "management-secret-value", oauthRequestScopedErrorsUpstream(t, state))
+	base := baseURL + "/omc/api/v1/management/auth-files/request-scoped-errors"
+
+	resp, raw := doJSON(t, client, http.MethodGet, base, "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET = %d body = %s", resp.StatusCode, raw)
+	}
+	var listed OAuthRequestScopedErrorsResponseDTO
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.RequestScopedErrors["grok"]) != 1 || listed.RequestScopedErrors["grok"][0].Match[0] != "grok_only" {
+		t.Fatalf("grok rules = %#v, want distinct grok entry", listed.RequestScopedErrors["grok"])
+	}
+	if len(listed.RequestScopedErrors["xai"]) != 1 || listed.RequestScopedErrors["xai"][0].Match[0] != "xai_only" {
+		t.Fatalf("xai rules = %#v, want distinct xai entry", listed.RequestScopedErrors["xai"])
+	}
+
+	// Clearing xai must leave grok intact and succeed readback.
+	resp, raw = doJSON(t, client, http.MethodPatch, base, `{"provider":"xai","rules":[]}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PATCH clear xai = %d body = %s", resp.StatusCode, raw)
+	}
+	if _, exists := state["xai"]; exists {
+		t.Fatalf("xai should be removed: %#v", state)
+	}
+	if len(state["grok"]) != 1 {
+		t.Fatalf("grok should remain untouched: %#v", state)
+	}
+}
+
+func TestManagementOAuthRequestScopedErrorsWriteGateBusyReturns503(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	fixture.handler.providerWrites = providerWriteGate{
+		permits:        make(chan struct{}, 1),
+		acquireTimeout: 10 * time.Millisecond,
+	}
+	fixture.handler.providerWrites.permits <- struct{}{}
+	t.Cleanup(func() { <-fixture.handler.providerWrites.permits })
+
+	resp, raw := doJSON(t, fixture.client, http.MethodPatch, fixture.baseURL+"/omc/api/v1/management/auth-files/request-scoped-errors", `{"provider":"copilot","rules":[{"status":429,"match":["rate_limit"],"action":"stop"}]}`)
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("busy write gate = %d body = %s, want 503", resp.StatusCode, raw)
+	}
+	if !strings.Contains(string(raw), `"code":"write_busy"`) {
+		t.Fatalf("expected write_busy code, got %s", raw)
+	}
+}
+
+func TestBuildSafeProjectedStateDTOPreservesUnavailableOAuthErrorRules(t *testing.T) {
+	unavailable := buildSafeProjectedStateDTO(projectedConfigState{
+		OAuthErrorRules:            map[string][]ProviderErrorRuleDTO{},
+		OAuthErrorRulesUnavailable: true,
+	})
+	encodedUnavailable, err := json.Marshal(unavailable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encodedUnavailable), `"oauth_request_scoped_errors":null`) {
+		t.Fatalf("expected null for unavailable rules, got %s", encodedUnavailable)
+	}
+
+	availableEmpty := buildSafeProjectedStateDTO(projectedConfigState{
+		OAuthErrorRules:            map[string][]ProviderErrorRuleDTO{},
+		OAuthErrorRulesUnavailable: false,
+	})
+	encodedAvailable, err := json.Marshal(availableEmpty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encodedAvailable), `"oauth_request_scoped_errors":{}`) {
+		t.Fatalf("expected empty object for loaded empty rules, got %s", encodedAvailable)
+	}
 }

@@ -8,6 +8,7 @@ import { ApiError } from '../../src/api/client.ts';
 import { MUTATION_KEYS, QUERY_KEYS } from '../../src/api/queryKeys.ts';
 import {
   createStateLiveChannel,
+  parseStateSyncEvent,
   resolveStateEventsURL,
   type MinimalEventSource,
   type StateSyncEvent,
@@ -808,6 +809,44 @@ test('state SSE channel suspends when hidden and reconcileStateSyncEvent applies
   assert.deepEqual(syncErrors, ['CPA rejected codex update']);
   assert.equal(queryClient.getQueryState(QUERY_KEYS.providers(false))?.isInvalidated, true);
   assert.equal(queryClient.getQueryState(QUERY_KEYS.oauthRequestScopedErrors)?.isInvalidated, true);
+
+  // When a snapshot reports oauth_request_scoped_errors as unavailable (omitted / null),
+  // existing cached error rules must be retained; a loaded empty object clears them.
+  const unavailableEvent = parseStateSyncEvent('sync_error', JSON.stringify({
+    type: 'sync_error',
+    version: 4,
+    scopes: ['management-oauth-request-scoped-errors'],
+    data: {
+      ...syncErrorEvent.data,
+      oauth_request_scoped_errors: null,
+    },
+  }));
+  assert.ok(unavailableEvent && unavailableEvent.data?.oauth_request_scoped_errors === undefined);
+  await reconcileStateSyncEvent(queryClient, unavailableEvent!, tracker);
+  assert.equal(
+    queryClient.getQueryData<{ request_scoped_errors: Record<string, Array<{ status: number }>> }>(
+      QUERY_KEYS.oauthRequestScopedErrors,
+    )?.request_scoped_errors.copilot?.[0]?.status,
+    400,
+    'unavailable snapshot retains cached error rules instead of wiping them',
+  );
+  const emptyLoadedEvent = parseStateSyncEvent('sync_error', JSON.stringify({
+    type: 'sync_error',
+    version: 5,
+    scopes: ['management-oauth-request-scoped-errors'],
+    data: {
+      ...syncErrorEvent.data,
+      oauth_request_scoped_errors: {},
+    },
+  }));
+  await reconcileStateSyncEvent(queryClient, emptyLoadedEvent!, tracker);
+  assert.deepEqual(
+    queryClient.getQueryData<{ request_scoped_errors: Record<string, unknown[]> }>(
+      QUERY_KEYS.oauthRequestScopedErrors,
+    )?.request_scoped_errors,
+    {},
+    'loaded empty object clears cached error rules',
+  );
 
   // Simulate an OMC process restart: tracker held version 3, reconnected stream emits ready at version 1.
   // The lower ready version must start a fresh epoch, invalidate cached state, and allow version 2 through!

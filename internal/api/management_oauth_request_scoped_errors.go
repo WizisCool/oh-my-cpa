@@ -92,7 +92,7 @@ func (h *Handler) applyManagementOAuthRequestScopedErrors(
 	beforeWrite func(context.Context) error,
 ) ([]ProviderErrorRuleDTO, error) {
 	if err := h.providerWrites.acquire(ctx); err != nil {
-		return nil, errors.New("write_busy")
+		return nil, err
 	}
 	defer h.providerWrites.release()
 	if err := h.flushCoordinatorUnderProviderGate(ctx); err != nil {
@@ -150,7 +150,7 @@ func (h *Handler) patchManagementOAuthRequestScopedErrors(writer http.ResponseWr
 		writeError(writer, http.StatusBadRequest, "rules is required")
 		return
 	}
-	provider, err := normalizeManagementOAuthModelAliasProvider(payload.Provider)
+	provider, err := normalizeManagementOAuthErrorRulesProvider(payload.Provider)
 	if err != nil {
 		writeError(writer, http.StatusBadRequest, err.Error())
 		return
@@ -217,7 +217,7 @@ func (h *Handler) patchManagementOAuthRequestScopedErrors(writer http.ResponseWr
 			writeError(writer, http.StatusBadGateway, err.Error())
 			return
 		}
-		writeCPAFacadeError(writer, err)
+		writeProviderWriteError(writer, err)
 		return
 	}
 	// CPA has already persisted and verified the rules; an audit failure cannot undo that write.
@@ -240,7 +240,7 @@ func projectManagementOAuthRequestScopedErrors(source map[string][]management.Re
 	sort.Strings(rawProviders)
 	result := make(map[string][]ProviderErrorRuleDTO, len(source))
 	for _, rawProvider := range rawProviders {
-		provider, err := normalizeManagementOAuthModelAliasProvider(rawProvider)
+		provider, err := normalizeManagementOAuthErrorRulesProvider(rawProvider)
 		if err != nil {
 			continue
 		}
@@ -268,6 +268,25 @@ func projectManagementOAuthRequestScopedErrors(source map[string][]management.Re
 		}
 	}
 	return result, nil
+}
+
+// normalizeManagementOAuthErrorRulesProvider validates a CPA storage channel key
+// for oauth.request-scoped-errors without rewriting aliases such as grok -> xai,
+// so projection, persistence, and readback agree on distinct stored channel keys.
+func normalizeManagementOAuthErrorRulesProvider(raw string) (string, error) {
+	provider := strings.ToLower(strings.TrimSpace(raw))
+	if provider == "" {
+		return "", errors.New("provider must be a non-empty provider key")
+	}
+	if len([]rune(provider)) > 64 {
+		return "", errors.New("provider key must be at most 64 characters")
+	}
+	for _, char := range provider {
+		if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '-' {
+			return "", errors.New("provider may contain only lowercase letters, digits, and hyphens")
+		}
+	}
+	return provider, nil
 }
 
 // normalizeManagementOAuthRequestScopedErrors validates and normalizes submitted

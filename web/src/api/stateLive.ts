@@ -28,7 +28,7 @@ export interface SafeProjectedStateSnapshot {
   auth_file_statuses: SafeAuthFileStatusItem[];
   oauth_model_aliases: Record<string, ManagementOAuthModelAlias[]>;
   oauth_excluded_models: Record<string, string[]>;
-  oauth_request_scoped_errors: Record<string, ProviderErrorRule[]>;
+  oauth_request_scoped_errors?: Record<string, ProviderErrorRule[]>;
 }
 
 export interface StateEnvelope<T> {
@@ -105,8 +105,9 @@ function parseSafeSnapshot(raw: unknown): SafeProjectedStateSnapshot | undefined
       }
     }
   }
-  const oauthErrorRules: Record<string, ProviderErrorRule[]> = {};
+  let oauthErrorRules: Record<string, ProviderErrorRule[]> | undefined;
   if (isRecord(raw.oauth_request_scoped_errors)) {
+    oauthErrorRules = {};
     for (const [provider, rules] of Object.entries(raw.oauth_request_scoped_errors)) {
       if (!Array.isArray(rules)) continue;
       const parsed: ProviderErrorRule[] = [];
@@ -146,7 +147,7 @@ function parseSafeSnapshot(raw: unknown): SafeProjectedStateSnapshot | undefined
     auth_file_statuses: authStatuses,
     oauth_model_aliases: oauthAliases,
     oauth_excluded_models: oauthExcluded,
-    oauth_request_scoped_errors: oauthErrorRules,
+    ...(oauthErrorRules !== undefined ? { oauth_request_scoped_errors: oauthErrorRules } : {}),
   };
 }
 

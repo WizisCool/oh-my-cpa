@@ -1,9 +1,6 @@
 import { PROVIDER_ERROR_RULE_ACTIONS, type ProviderErrorRule } from '../../types/providers';
 import type { ErrorRuleDraft, ErrorRuleProblem } from '../policy/errorRules';
-import {
-  isValidOAuthModelAliasProvider,
-  normalizeOAuthModelAliasProvider,
-} from './oauthModelAliasLogic';
+import { isValidOAuthModelAliasProvider } from './oauthModelAliasLogic';
 
 export const OAUTH_ERROR_RULE_LIMIT = 64;
 
@@ -50,7 +47,7 @@ export function validateOAuthErrorRuleDrafts(
   rawProvider: string,
   drafts: ErrorRuleDraft[],
 ): OAuthErrorRulesValidationResult {
-  const provider = normalizeOAuthModelAliasProvider(rawProvider);
+  const provider = rawProvider.trim().toLowerCase();
   if (!provider || !isValidOAuthModelAliasProvider(provider)) {
     return { ok: false, error: 'provider' };
   }
