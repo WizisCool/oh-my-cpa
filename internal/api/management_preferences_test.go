@@ -76,6 +76,9 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 	if response, payload = doJSON(t, client, http.MethodPut, base+"/usage_events_columns", `{"time":120,"provider":220,"tps":90}`); response.StatusCode != http.StatusOK {
 		t.Fatalf("usage events columns status = %d body %s", response.StatusCode, payload)
 	}
+	if response, payload = doJSON(t, client, http.MethodPut, base+"/"+repository.PreferenceUsageEventsHiddenColumns, `["client","tps"]`); response.StatusCode != http.StatusOK {
+		t.Fatalf("usage events visibility status = %d body %s", response.StatusCode, payload)
+	}
 
 	// The unified OAuth workspace persists only its reading density and page size;
 	// filters and task identity remain URL or memory state.
@@ -122,6 +125,7 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 		!strings.Contains(string(payload), `"model_icons":{"claude-3-7-sonnet-20250219":"Claude","team/fast":"OpenAI"}`) ||
 		!strings.Contains(string(payload), `"usage_events_view":{"preset":"24h","result":"failed","grouping":"provider","advanced":true}`) ||
 		!strings.Contains(string(payload), `"usage_events_columns":{"time":120,"provider":220,"tps":90}`) ||
+		!strings.Contains(string(payload), `"usage_events_hidden_columns":["client","tps"]`) ||
 		!strings.Contains(string(payload), `"oauth_management_view_v1":{"density":"compact","pageSize":24}`) ||
 		!strings.Contains(string(payload), `"omc_plugin_order":{"installed":["omc-qoder-oauth","omc-zcode-oauth"]}`) ||
 		!strings.Contains(string(payload), `"omc_warmup_task_order":{"claude":["t_2","t_1"]}`) ||

@@ -66,10 +66,14 @@ import {
 } from '../../src/types/usageEventFilters.ts';
 import {
   REQUEST_COLUMNS,
+  type RequestColumnId,
   REQUEST_STACK_WIDTH,
   foldRequestColumns,
   USAGE_EVENTS_COLUMNS_PREFERENCE,
+  USAGE_EVENTS_HIDDEN_COLUMNS_PREFERENCE,
   parseUsageEventsColumns,
+  parseUsageEventsHiddenColumns,
+  toggleRequestColumnVisibility,
   SHEET_GRID_CHROME,
   buildGridTemplateColumns,
   LIST_GRID_CHROME,
@@ -1531,7 +1535,27 @@ test('usage event view', () => {
 
   // Request columns tests
   assert.equal(USAGE_EVENTS_COLUMNS_PREFERENCE, 'usage_events_columns');
+  assert.equal(USAGE_EVENTS_HIDDEN_COLUMNS_PREFERENCE, 'usage_events_hidden_columns');
   assert.equal(REQUEST_COLUMNS.length, 12);
+
+  // Unknown and duplicate hidden ids are ignored; stored order follows the column catalog.
+  assert.deepEqual(parseUsageEventsHiddenColumns(null), []);
+  assert.deepEqual(parseUsageEventsHiddenColumns(['client', 'model', 'client', 'unknown', 7]), ['model', 'client']);
+  assert.deepEqual(parseUsageEventsHiddenColumns(REQUEST_COLUMNS.map((column) => column.id)), [],
+    'an externally invalid all-hidden setting restores the default visible layout');
+  assert.deepEqual(toggleRequestColumnVisibility([], 'client', false), ['client']);
+  assert.deepEqual(toggleRequestColumnVisibility(['client'], 'client', true), []);
+  const lastVisible = REQUEST_COLUMNS.slice(1).map((column) => column.id);
+  assert.deepEqual(toggleRequestColumnVisibility(lastVisible, 'time', false), lastVisible,
+    'a user cannot hide the last remaining visible column');
+  const manuallyHidden = new Set<RequestColumnId>(['client', 'key']);
+  assert.deepEqual([...foldRequestColumns(1140, {}, manuallyHidden)], ['cache'],
+    'automatic folding excludes the columns already hidden by the operator');
+  assert.equal(
+    buildGridTemplateColumns({}, undefined, new Set([...manuallyHidden, ...foldRequestColumns(1140, {}, manuallyHidden)]))
+      .split(' ').length,
+    buildGridTemplateColumns({}, undefined, foldRequestColumns(1140)).split(' ').length,
+    'manual hiding and responsive folding share the same compact track count');
 
   // Sanitization & clamping
   assert.deepEqual(parseUsageEventsColumns(null), {});

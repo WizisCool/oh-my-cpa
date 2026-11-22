@@ -224,12 +224,39 @@ export const SHEET_GRID_CHROME: RequestGridChrome = { hasSelection: false, hasCh
 export const REQUEST_STACK_WIDTH = 920;
 
 export const USAGE_EVENTS_COLUMNS_PREFERENCE = 'usage_events_columns';
+export const USAGE_EVENTS_HIDDEN_COLUMNS_PREFERENCE = 'usage_events_hidden_columns';
 
 export type RequestColumnWidths = Partial<Record<RequestColumnId, number>>;
 
 export const COLUMN_MAP = new Map<RequestColumnId, RequestColumnDefinition>(
   REQUEST_COLUMNS.map((c) => [c.id, c]),
 );
+
+/** Store only hidden ids so columns introduced later remain visible by default. */
+export function parseUsageEventsHiddenColumns(raw: unknown): RequestColumnId[] {
+  if (!Array.isArray(raw)) return [];
+  const hidden = new Set<RequestColumnId>();
+  for (const value of raw) {
+    if (typeof value === 'string' && COLUMN_MAP.has(value as RequestColumnId)) {
+      hidden.add(value as RequestColumnId);
+    }
+  }
+  // Never allow an empty request list, even if a saved preference was edited manually.
+  if (hidden.size === REQUEST_COLUMNS.length) return [];
+  return REQUEST_COLUMNS.filter((column) => hidden.has(column.id)).map((column) => column.id);
+}
+
+/** Changing visibility never alters the width saved for a column. */
+export function toggleRequestColumnVisibility(
+  rawHidden: readonly RequestColumnId[],
+  id: RequestColumnId,
+  visible: boolean,
+): RequestColumnId[] {
+  const hidden = new Set(parseUsageEventsHiddenColumns(rawHidden));
+  if (visible) hidden.delete(id);
+  else if (hidden.size < REQUEST_COLUMNS.length - 1) hidden.add(id);
+  return REQUEST_COLUMNS.filter((column) => hidden.has(column.id)).map((column) => column.id);
+}
 
 /**
  * requestColumnAlignClass returns the alignment class for one column.
@@ -355,14 +382,17 @@ const FOLD_SEQUENCE: readonly RequestColumnId[] = REQUEST_COLUMNS.filter((col) =
 export function foldRequestColumns(
   availableWidth: number | null,
   widths: RequestColumnWidths = {},
+  userHidden: ReadonlySet<RequestColumnId> = NO_COLUMNS,
 ): ReadonlySet<RequestColumnId> {
   const folded = new Set<RequestColumnId>();
   if (availableWidth === null || availableWidth <= REQUEST_STACK_WIDTH) return folded;
-  // Room is kept for the selection track even while it is hidden, so starting a choice never folds a column.
+  const excluded = new Set(userHidden);
+  // Room is kept for the selection track. Columns the user hid need no space.
   for (const id of FOLD_SEQUENCE) {
-    if (computeGridMinWidth(widths, REQUEST_GRID_GAP, REQUEST_PAD_INLINE, LIST_GRID_CHROME, folded) <= availableWidth) break;
+    if (computeGridMinWidth(widths, REQUEST_GRID_GAP, REQUEST_PAD_INLINE, LIST_GRID_CHROME, excluded) <= availableWidth) break;
+    if (excluded.has(id)) continue;
     folded.add(id);
+    excluded.add(id);
   }
   return folded;
 }
-

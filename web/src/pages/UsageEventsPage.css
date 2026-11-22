@@ -133,17 +133,59 @@
 .req-reset-columns-btn:hover {
   color: var(--accent);
 }
-/* A list too narrow for every column folds the least-scanned ones away instead of
-   scrolling sideways. `foldRequestColumns` (requestColumns.ts) decides which, from
-   the list's measured width, and names them here; the grid template it sends
-   alongside has no track for them. Matching on the container keeps a fold off
-   the rows' render path: no row re-renders when a column goes or returns. */
-.request-stream[data-folded-columns~='client'] :is(.req-th-client, .req-col-client),
-.request-stream[data-folded-columns~='key'] :is(.req-th-key, .req-col-key),
-.request-stream[data-folded-columns~='tps'] :is(.req-th-tps, .req-col-tps),
-.request-stream[data-folded-columns~='cache'] :is(.req-th-cache, .req-col-cache),
-.request-stream[data-folded-columns~='mode'] :is(.req-th-mode, .req-col-mode) {
-  display: none;
+.req-column-menu {
+  width: min(336px, calc(100vw - 32px));
+}
+.req-column-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-block: 12px;
+}
+.req-column-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+.req-column-choice:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.req-column-choice:has(input:disabled) {
+  opacity: 0.6;
+  cursor: default;
+}
+.req-column-choice input {
+  flex: none;
+  accent-color: var(--accent);
+}
+.req-column-hint {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+/* User-hidden and width-folded columns share the same desktop grid.
+   Below the stacked-card threshold, the compact mobile summary remains unchanged. */
+@container reqstream (min-width: 921px) {
+  .request-stream[data-folded-columns~='time'] :is(.req-th-time, .req-col-time),
+  .request-stream[data-folded-columns~='result'] :is(.req-th-result, .req-col-result),
+  .request-stream[data-folded-columns~='provider'] :is(.req-th-provider, .req-col-provider),
+  .request-stream[data-folded-columns~='model'] :is(.req-th-model, .req-col-model),
+  .request-stream[data-folded-columns~='mode'] :is(.req-th-mode, .req-col-mode),
+  .request-stream[data-folded-columns~='tps'] :is(.req-th-tps, .req-col-tps),
+  .request-stream[data-folded-columns~='latency'] :is(.req-th-latency, .req-col-latency),
+  .request-stream[data-folded-columns~='tokens'] :is(.req-th-tokens, .req-col-tokens),
+  .request-stream[data-folded-columns~='cost'] :is(.req-th-cost, .req-col-cost),
+  .request-stream[data-folded-columns~='cache'] :is(.req-th-cache, .req-col-cache),
+  .request-stream[data-folded-columns~='key'] :is(.req-th-key, .req-col-key),
+  .request-stream[data-folded-columns~='client'] :is(.req-th-client, .req-col-client) {
+    display: none;
+  }
 }
 /* Two seams open with a space of their own, inside the column's track. The caller key starts where
    the right-aligned cache rate ends, and a short alias there reads as part of the figure. The

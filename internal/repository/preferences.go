@@ -16,16 +16,17 @@ const (
 	PreferenceDashboardRange = "dashboard_range"
 	// PreferenceInsightsRange is the Insights page's window, kept apart from the
 	// dashboard's: the two pages answer different questions over different spans.
-	PreferenceInsightsRange       = "insights_range"
-	PreferenceLogFilters          = "log_filters"
-	PreferenceProviderIcons       = "provider_icons"
-	PreferenceModelIcons          = "model_icons"
-	PreferenceProviderNames       = "provider_names"
-	PreferenceProviderWebsites    = "provider_websites"
-	PreferenceProviderTestModels  = "provider_test_models"
-	PreferenceUsageEventsView     = "usage_events_view"
-	PreferenceUsageEventsColumns  = "usage_events_columns"
-	PreferenceOAuthManagementView = "oauth_management_view_v1"
+	PreferenceInsightsRange            = "insights_range"
+	PreferenceLogFilters               = "log_filters"
+	PreferenceProviderIcons            = "provider_icons"
+	PreferenceModelIcons               = "model_icons"
+	PreferenceProviderNames            = "provider_names"
+	PreferenceProviderWebsites         = "provider_websites"
+	PreferenceProviderTestModels       = "provider_test_models"
+	PreferenceUsageEventsView          = "usage_events_view"
+	PreferenceUsageEventsColumns       = "usage_events_columns"
+	PreferenceUsageEventsHiddenColumns = "usage_events_hidden_columns"
+	PreferenceOAuthManagementView      = "oauth_management_view_v1"
 
 	// PreferenceProviderOrder is the AI providers list's display order: each provider's positional
 	// id mapped to a rank, as a decimal string so it shares the names', websites' and icons' shape

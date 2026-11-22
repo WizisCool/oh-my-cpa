@@ -115,11 +115,22 @@
 }
 /* The selection column opens from no width: while it is shut, the first column pulls back over the
    gap after it, so the time starts at the row's edge; as it opens, both glide on one motion. */
-.req-col-time,
-.req-th-time {
+.req-col,
+.req-th {
   transition: margin-inline-start var(--select-reveal);
 }
-.request-stream:not(.is-selecting) :is(.req-col-time, .req-th-time) {
+.request-stream:not(.is-selecting)[data-first-visible-column='time'] :is(.req-col-time, .req-th-time),
+.request-stream:not(.is-selecting)[data-first-visible-column='result'] :is(.req-col-result, .req-th-result),
+.request-stream:not(.is-selecting)[data-first-visible-column='provider'] :is(.req-col-provider, .req-th-provider),
+.request-stream:not(.is-selecting)[data-first-visible-column='model'] :is(.req-col-model, .req-th-model),
+.request-stream:not(.is-selecting)[data-first-visible-column='mode'] :is(.req-col-mode, .req-th-mode),
+.request-stream:not(.is-selecting)[data-first-visible-column='tps'] :is(.req-col-tps, .req-th-tps),
+.request-stream:not(.is-selecting)[data-first-visible-column='latency'] :is(.req-col-latency, .req-th-latency),
+.request-stream:not(.is-selecting)[data-first-visible-column='tokens'] :is(.req-col-tokens, .req-th-tokens),
+.request-stream:not(.is-selecting)[data-first-visible-column='cost'] :is(.req-col-cost, .req-th-cost),
+.request-stream:not(.is-selecting)[data-first-visible-column='cache'] :is(.req-col-cache, .req-th-cache),
+.request-stream:not(.is-selecting)[data-first-visible-column='key'] :is(.req-col-key, .req-th-key),
+.request-stream:not(.is-selecting)[data-first-visible-column='client'] :is(.req-col-client, .req-th-client) {
   margin-inline-start: calc(-1 * var(--req-grid-gap));
 }
 /* Rows are kept apart by their rhythm, not by rules: a stream of hundreds of ruled rows read as a

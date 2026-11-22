@@ -32,6 +32,7 @@ import {
   providersWithMultipleAuthSources,
 } from '../types/usageEventGrouping';
 import { useRequestColumnLayout } from '../components/usage/useRequestColumnLayout';
+import { REQUEST_COLUMNS } from '../components/usage/requestColumns';
 import { useUsageEventViewState } from '../components/usage/useUsageEventViewState';
 import { RequestBackToTop, RequestCollapsibleHeader, RequestFoldToggle } from '../components/usage/RequestFoldControls';
 import { RequestVirtualList, type RequestGroupConfig } from '../components/usage/RequestVirtualList';
@@ -107,6 +108,11 @@ export const UsageEventsPage: React.FC = () => {
     gridTemplate,
     gridMinWidth,
     foldedColumns,
+    firstVisibleColumn,
+    hiddenColumns,
+    hiddenColumnsLoaded,
+    setColumnVisible,
+    restoreColumnVisibility,
     streamRef,
     hasCustomWidths,
     handleResizeStart,
@@ -652,6 +658,45 @@ export const UsageEventsPage: React.FC = () => {
                   </div>
                 </PopoverContent>
               </Popover>
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <Button size="sm" variant="ghost" className="req-manage-columns-btn">
+                      {t('events.manage_columns')}
+                    </Button>
+                  }
+                />
+                <PopoverContent placement="bottomRight" className="req-column-menu">
+                  <PopoverTitle className="text-base font-semibold text-foreground">
+                    {t('events.manage_columns')}
+                  </PopoverTitle>
+                  <div className="req-column-choices" role="group" aria-label={t('events.manage_columns')}>
+                    {REQUEST_COLUMNS.map((column) => {
+                      const checked = !hiddenColumns.includes(column.id);
+                      return (
+                        <label className="req-column-choice" key={column.id}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={!hiddenColumnsLoaded || (checked && hiddenColumns.length === REQUEST_COLUMNS.length - 1)}
+                            onChange={(event) => setColumnVisible(column.id, event.target.checked)}
+                          />
+                          <span>{t(column.labelKey)}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="req-column-hint">{t('events.column_visibility_hint')}</p>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={!hiddenColumnsLoaded || hiddenColumns.length === 0}
+                    onClick={restoreColumnVisibility}
+                  >
+                    {t('events.restore_visible_columns')}
+                  </Button>
+                </PopoverContent>
+              </Popover>
               {hasCustomWidths && (
                 <Button
                   size="sm"
@@ -750,6 +795,7 @@ export const UsageEventsPage: React.FC = () => {
           ref={streamRef}
           className={clsx('request-stream', isSelecting && 'is-selecting')}
           data-folded-columns={foldedColumns}
+          data-first-visible-column={firstVisibleColumn}
           aria-label={t('events.title')}
           aria-busy={isVisibleFetching}
           style={streamStyle}

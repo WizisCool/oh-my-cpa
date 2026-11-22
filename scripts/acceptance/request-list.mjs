@@ -17,6 +17,45 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
   check('request list renders seeded records', visibleRows >= 2, `visibleRows=${visibleRows}`);
   check('the whole seeded page is loaded', /50/.test(footerText), `footer="${footerText}"`);
 
+  // Column visibility is a saved presentation preference, not responsive folding.
+  // Hide Model at a wide viewport, reload the compiled app, and restore it.
+  const viewportBeforeColumns = page.viewportSize();
+  await page.setViewportSize({ width: 1750, height: 900 });
+  try {
+    await page.locator('.req-manage-columns-btn').click();
+    const modelToggle = page.locator('.req-column-choice input').nth(3);
+    check('the model column is visible by default', await modelToggle.isChecked());
+    const saveHidden = page.waitForResponse((response) =>
+      response.request().method() === 'PUT' &&
+      new URL(response.url()).pathname.endsWith('/api/v1/preferences/usage_events_hidden_columns') &&
+      response.ok(),
+    );
+    await modelToggle.uncheck();
+    await saveHidden;
+    await page.waitForFunction(() =>
+      document.querySelector('.request-stream')?.getAttribute('data-folded-columns')?.split(' ').includes('model'));
+    check('hiding Model removes its header and row cell from the desktop grid',
+      await page.locator('.req-th-model').isHidden() &&
+      await page.locator('.request-row .req-col-model').first().isHidden());
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15_000 });
+    await page.locator('.req-manage-columns-btn').click();
+    check('column visibility survives page reload',
+      !(await page.locator('.req-column-choice input').nth(3).isChecked()));
+    const saveRestored = page.waitForResponse((response) =>
+      response.request().method() === 'PUT' &&
+      new URL(response.url()).pathname.endsWith('/api/v1/preferences/usage_events_hidden_columns') &&
+      response.ok(),
+    );
+    await page.getByRole('button', { name: /Show all columns|显示全部列|顯示全部欄位|Tunjukkan semua lajur/ }).click();
+    await saveRestored;
+    check('restoring visible columns returns the Model header',
+      await page.locator('.req-th-model').isVisible());
+  } finally {
+    if (viewportBeforeColumns) await page.setViewportSize(viewportBeforeColumns);
+  }
+
   // A browser whose clock runs behind the server's must still see the newest
   // records. The list used to resolve its window's end on the browser's clock, so
   // every record newer than that clock was filtered out and stayed out through any

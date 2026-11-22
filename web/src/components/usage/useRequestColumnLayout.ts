@@ -3,15 +3,21 @@ import React from 'react';
 import { usePreference } from '../../hooks/usePreference';
 import {
   COLUMN_MAP,
+  REQUEST_COLUMNS,
   LIST_GRID_CHROME,
   USAGE_EVENTS_COLUMNS_PREFERENCE,
+  USAGE_EVENTS_HIDDEN_COLUMNS_PREFERENCE,
   computeGridMinWidth,
   buildGridTemplateColumns,
   foldRequestColumns,
   parseUsageEventsColumns,
+  parseUsageEventsHiddenColumns,
+  toggleRequestColumnVisibility,
   type RequestColumnId,
   type RequestColumnWidths,
 } from './requestColumns';
+
+const DEFAULT_HIDDEN_COLUMNS: RequestColumnId[] = [];
 
 /**
  * The request list's column layout: the widths the operator dragged or nudged,
@@ -38,6 +44,17 @@ export function useRequestColumnLayout(isSelecting: boolean) {
     parseUsageEventsColumns,
   );
 
+  const {
+    value: hiddenColumns,
+    loaded: hiddenColumnsLoaded,
+    set: setHiddenColumnsPref,
+  } = usePreference<RequestColumnId[]>(
+    USAGE_EVENTS_HIDDEN_COLUMNS_PREFERENCE,
+    DEFAULT_HIDDEN_COLUMNS,
+    parseUsageEventsHiddenColumns,
+  );
+  const hiddenSet = React.useMemo(() => new Set(hiddenColumns), [hiddenColumns]);
+
   const [colWidths, setColWidths] = React.useState<RequestColumnWidths>({});
 
   React.useEffect(() => {
@@ -54,8 +71,10 @@ export function useRequestColumnLayout(isSelecting: boolean) {
   const streamWidth = React.useRef<number | null>(null);
   const widthsRef = React.useRef(colWidths);
   widthsRef.current = colWidths;
+  const hiddenRef = React.useRef(hiddenSet);
+  hiddenRef.current = hiddenSet;
   const refold = React.useCallback(() => {
-    setFoldedKey([...foldRequestColumns(streamWidth.current, widthsRef.current)].join(' '));
+    setFoldedKey([...foldRequestColumns(streamWidth.current, widthsRef.current, hiddenRef.current)].join(' '));
   }, []);
   const observer = React.useRef<ResizeObserver | null>(null);
   const streamRef = React.useCallback((node: HTMLElement | null) => {
@@ -72,12 +91,17 @@ export function useRequestColumnLayout(isSelecting: boolean) {
     observer.current.observe(node);
   }, [refold]);
   // A dragged width changes what fits without the list itself resizing.
-  React.useEffect(refold, [colWidths, refold]);
+  React.useEffect(refold, [colWidths, hiddenSet, refold]);
 
   const folded = React.useMemo(
-    () => new Set(foldedKey ? (foldedKey.split(' ') as RequestColumnId[]) : []),
-    [foldedKey],
+    () => new Set<RequestColumnId>([
+      ...hiddenSet,
+      ...(foldedKey ? (foldedKey.split(' ') as RequestColumnId[]) : []),
+    ]),
+    [hiddenSet, foldedKey],
   );
+  const foldedColumns = React.useMemo(() => [...folded].join(' '), [folded]);
+  const firstVisibleColumn = REQUEST_COLUMNS.find((column) => !folded.has(column.id))?.id ?? 'time';
   // The selection track opens only while a choice is under way; at rest its width goes to the data.
   const chrome = React.useMemo(() => ({ ...LIST_GRID_CHROME, isSelectionClosed: !isSelecting }), [isSelecting]);
   const gridTemplate = React.useMemo(
@@ -88,6 +112,17 @@ export function useRequestColumnLayout(isSelecting: boolean) {
     () => computeGridMinWidth(colWidths, undefined, undefined, chrome, folded),
     [colWidths, chrome, folded],
   );
+
+  const setColumnVisible = React.useCallback((id: RequestColumnId, visible: boolean) => {
+    if (!hiddenColumnsLoaded) return;
+    const next = toggleRequestColumnVisibility(hiddenColumns, id, visible);
+    if (next.length === hiddenColumns.length && next.every((column, index) => column === hiddenColumns[index])) return;
+    void setHiddenColumnsPref(next);
+  }, [hiddenColumns, hiddenColumnsLoaded, setHiddenColumnsPref]);
+
+  const restoreColumnVisibility = React.useCallback(() => {
+    if (hiddenColumnsLoaded && hiddenColumns.length > 0) void setHiddenColumnsPref([]);
+  }, [hiddenColumns, hiddenColumnsLoaded, setHiddenColumnsPref]);
 
   const handleResizeStart = React.useCallback(
     (colId: RequestColumnId, e: React.PointerEvent<HTMLSpanElement>) => {
@@ -185,7 +220,12 @@ export function useRequestColumnLayout(isSelecting: boolean) {
     colWidths,
     gridTemplate,
     gridMinWidth,
-    foldedColumns: foldedKey,
+    foldedColumns,
+    firstVisibleColumn,
+    hiddenColumns,
+    hiddenColumnsLoaded,
+    setColumnVisible,
+    restoreColumnVisibility,
     streamRef,
     hasCustomWidths: Object.keys(colWidths).length > 0,
     handleResizeStart,
