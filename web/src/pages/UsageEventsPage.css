@@ -133,8 +133,36 @@
 .req-reset-columns-btn:hover {
   color: var(--accent);
 }
+.req-column-trigger-icon {
+  color: var(--accent);
+}
+.req-manage-columns-btn[data-popup-open] {
+  background: color-mix(in srgb, var(--accent) 10%, var(--secondary));
+}
 .req-column-menu {
   width: min(336px, calc(100vw - 32px));
+}
+/* The shared floating-surface transition supplies the entrance and exit spring.
+   Reveal the list from the trigger edge on the same motion tokens, without
+   moving or reflowing the virtualized request rows. */
+:root:not([data-reduced-motion='true']) .req-column-menu {
+  clip-path: inset(0 0 0 0 round var(--radius-lg));
+  transition:
+    opacity var(--motion-float) var(--ease-out),
+    transform var(--motion-float) var(--ease-out),
+    clip-path var(--motion-slow) var(--ease-out);
+}
+:root:not([data-reduced-motion='true']) .req-column-menu:is([data-starting-style], [data-ending-style]) {
+  clip-path: inset(0 0 100% 0 round var(--radius-lg));
+}
+:root:not([data-reduced-motion='true']) .req-column-menu[data-ending-style] {
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--ease-standard);
+}
+@starting-style {
+  :root:not([data-reduced-motion='true']) .req-column-menu[data-open] {
+    clip-path: inset(0 0 100% 0 round var(--radius-lg));
+  }
 }
 .req-column-choices {
   display: grid;
@@ -149,20 +177,31 @@
   min-width: 0;
   padding: 8px;
   border-radius: var(--radius-sm);
+  color: var(--fg-2);
   cursor: pointer;
   font-size: var(--text-sm);
+  transition: var(--select-transition), color var(--motion-base) var(--ease-out);
+}
+.req-column-choice:has([data-slot='checkbox'][data-checked]) {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.req-column-choice:hover:not(:has([data-slot='checkbox'][data-disabled])) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.req-column-choice:active:not(:has([data-slot='checkbox'][data-disabled])) {
+  transform: scale(var(--press-scale));
 }
 .req-column-choice:focus-within {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
-.req-column-choice:has(input:disabled) {
+.req-column-choice:has([data-slot='checkbox'][data-disabled]) {
   opacity: 0.6;
   cursor: default;
 }
-.req-column-choice input {
-  flex: none;
-  accent-color: var(--accent);
+:root[data-reduced-motion='true'] .req-column-choice {
+  transition: none;
 }
 .req-column-hint {
   margin: 0 0 10px;

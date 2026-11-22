@@ -3,6 +3,8 @@ import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Columns3 } from 'lucide-react';
 import { StatusLabel, type StatusTone } from '../components/common/StatusLabel';
 import clsx from 'clsx';
 import { TablePlaceholder } from '../components/common/ContentPlaceholder';
@@ -661,7 +663,12 @@ export const UsageEventsPage: React.FC = () => {
               <Popover>
                 <PopoverTrigger
                   render={
-                    <Button size="sm" variant="ghost" className="req-manage-columns-btn">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="req-manage-columns-btn"
+                      icon={<Columns3 className="size-4 req-column-trigger-icon" strokeWidth={1.9} aria-hidden="true" />}
+                    >
                       {t('events.manage_columns')}
                     </Button>
                   }
@@ -674,15 +681,15 @@ export const UsageEventsPage: React.FC = () => {
                     {REQUEST_COLUMNS.map((column) => {
                       const checked = !hiddenColumns.includes(column.id);
                       return (
-                        <label className="req-column-choice" key={column.id}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={!hiddenColumnsLoaded || (checked && hiddenColumns.length === REQUEST_COLUMNS.length - 1)}
-                            onChange={(event) => setColumnVisible(column.id, event.target.checked)}
-                          />
-                          <span>{t(column.labelKey)}</span>
-                        </label>
+                        <Checkbox
+                          className="req-column-choice"
+                          key={column.id}
+                          checked={checked}
+                          disabled={!hiddenColumnsLoaded || (checked && hiddenColumns.length === REQUEST_COLUMNS.length - 1)}
+                          onCheckedChange={(next) => setColumnVisible(column.id, next)}
+                        >
+                          {t(column.labelKey)}
+                        </Checkbox>
                       );
                     })}
                   </div>

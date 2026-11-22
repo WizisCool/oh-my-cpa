@@ -280,7 +280,7 @@ export default {
   'events.col_ua': 'UA',
   'events.col_resizer': 'Resize column (double-click to reset)',
   'events.reset_columns': 'Reset Columns',
-  'events.manage_columns': 'Visible columns',
+  'events.manage_columns': 'Choose columns',
   'events.restore_visible_columns': 'Show all columns',
   'events.column_visibility_hint': 'Keep at least one column visible. Changes save automatically.',
   'events.select_row': 'Select request {id}',

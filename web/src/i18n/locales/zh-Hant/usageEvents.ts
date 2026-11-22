@@ -280,7 +280,7 @@ export default {
   "events.col_ua": "UA",
   "events.col_resizer": "調整列寬 (可雙擊重置)",
   "events.reset_columns": "恢復預設列寬",
-  "events.manage_columns": "顯示欄位",
+  "events.manage_columns": "選擇欄位",
   "events.restore_visible_columns": "顯示全部欄位",
   "events.column_visibility_hint": "至少保留一欄。設定會自動儲存。",
   "events.select_row": "選擇請求 {id}",

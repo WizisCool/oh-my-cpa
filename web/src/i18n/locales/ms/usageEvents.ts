@@ -280,7 +280,7 @@ export default {
   "events.col_ua": "UA",
   "events.col_resizer": "Ubah saiz lajur (klik dua kali untuk menetapkan semula)",
   "events.reset_columns": "Tetapkan Semula Lajur",
-  "events.manage_columns": "Lajur yang dipaparkan",
+  "events.manage_columns": "Pilih lajur",
   "events.restore_visible_columns": "Tunjukkan semua lajur",
   "events.column_visibility_hint": "Kekalkan sekurang-kurangnya satu lajur. Perubahan disimpan secara automatik.",
   "events.select_row": "Pilih permintaan {id}",

@@ -22,16 +22,33 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
   const viewportBeforeColumns = page.viewportSize();
   await page.setViewportSize({ width: 1750, height: 900 });
   try {
-    await page.locator('.req-manage-columns-btn').click();
-    const modelToggle = page.locator('.req-column-choice input').nth(3);
-    check('the model column is visible by default', await modelToggle.isChecked());
+    const chooser = page.locator('.req-manage-columns-btn');
+    check('column chooser trigger carries the outlined columns icon',
+      (await chooser.locator('svg').count()) === 1);
+    await chooser.click();
+    const menu = page.locator('.req-column-menu');
+    check('column chooser reuses the project floating-panel transition',
+      await menu.evaluate((element) =>
+        element.classList.contains('omc-float-surface') &&
+        getComputedStyle(element).transitionProperty.includes('clip-path')));
+    const columnChecks = page.locator('.req-column-choice [data-slot="checkbox"]');
+    check('column chooser uses 12 accessible project checkboxes',
+      (await columnChecks.count()) === 12 &&
+      (await columnChecks.nth(3).getAttribute('role')) === 'checkbox');
+    const modelToggle = columnChecks.nth(3);
+    check('the model column is visible by default',
+      (await modelToggle.getAttribute('aria-checked')) === 'true');
+    check('column checkmarks reuse the project spring animation',
+      (await modelToggle.locator('.omc-mark-pop').count()) === 1);
     const saveHidden = page.waitForResponse((response) =>
       response.request().method() === 'PUT' &&
       new URL(response.url()).pathname.endsWith('/api/v1/preferences/usage_events_hidden_columns') &&
       response.ok(),
     );
-    await modelToggle.uncheck();
+    await modelToggle.click();
     await saveHidden;
+    check('model checkbox responds immediately to an uncheck',
+      (await modelToggle.getAttribute('aria-checked')) === 'false');
     await page.waitForFunction(() =>
       document.querySelector('.request-stream')?.getAttribute('data-folded-columns')?.split(' ').includes('model'));
     check('hiding Model removes its header and row cell from the desktop grid',
@@ -42,7 +59,7 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
     await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15_000 });
     await page.locator('.req-manage-columns-btn').click();
     check('column visibility survives page reload',
-      !(await page.locator('.req-column-choice input').nth(3).isChecked()));
+      (await page.locator('.req-column-choice [data-slot="checkbox"]').nth(3).getAttribute('aria-checked')) === 'false');
     const saveRestored = page.waitForResponse((response) =>
       response.request().method() === 'PUT' &&
       new URL(response.url()).pathname.endsWith('/api/v1/preferences/usage_events_hidden_columns') &&
