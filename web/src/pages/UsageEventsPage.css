@@ -128,9 +128,9 @@
 /* Columns hidden by the operator or folded for narrow desktop widths leave the
    table grid together via `data-hidden-columns`, and dynamic seams open between
    right-aligned figures and left-aligned text (or adjacent name columns) via
-   `data-seam-columns`. Both rules stay inside `min-width: 921px` so the stacked
-   card layout below 920px keeps every cell and its line-break pseudo-elements intact. */
-@container reqstream (min-width: 921px) {
+   `data-seam-columns`. Both rules stay inside `width > 920px` so the stacked
+   card layout at or below 920px keeps every cell and its line-break pseudo-elements intact. */
+@container reqstream (width > 920px) {
   .request-stream[data-hidden-columns~='time'] :is(.req-th-time, .req-col-time),
   .request-stream[data-hidden-columns~='result'] :is(.req-th-result, .req-col-result),
   .request-stream[data-hidden-columns~='provider'] :is(.req-th-provider, .req-col-provider),

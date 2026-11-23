@@ -3,6 +3,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { installOmcApi, json, type OmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
+import { usePreference } from '../src/hooks/usePreference';
 import { useUsageEventViewState } from '../src/components/usage/useUsageEventViewState';
 import { useRequestColumnLayout } from '../src/components/usage/useRequestColumnLayout';
 import { RequestColumnsPopover } from '../src/components/usage/RequestColumnsPopover';
@@ -209,6 +210,13 @@ function RequestColumnsHarness() {
   );
 }
 
+const parseThemePref = (raw: unknown): string | undefined => (typeof raw === 'string' ? raw : undefined);
+
+function UnrelatedThemeWriter() {
+  const { set } = usePreference('omc_theme', 'system', parseThemePref);
+  return <button type="button" onClick={() => void set('dark')}>Set dark theme</button>;
+}
+
 describe('request column visibility and ordering preferences', () => {
   it('persists column visibility and order, aligns headers with rows, preserves custom widths, and separates resets', async () => {
     api.state.preferences.usage_events_columns = { provider: 240, client: 180 };
@@ -353,7 +361,7 @@ describe('request column visibility and ordering preferences', () => {
     const unread = { provider: 260, hidden: ['mode'] };
     api.state.preferences.usage_events_columns = unread;
     const read = api.hold('GET', '/preferences');
-    const failedReadView = mount(<RequestColumnsHarness />);
+    const failedReadView = mount(<><RequestColumnsHarness /><UnrelatedThemeWriter /></>);
     const trigger = screen.getByTestId('request-columns-trigger') as HTMLButtonElement;
     expect(trigger.disabled).toBe(true);
     await act(async () => { read.release(json({ error: 'read_unavailable' }, 503)); });
@@ -363,6 +371,16 @@ describe('request column visibility and ordering preferences', () => {
     fireEvent.click(within(popover).getByRole('checkbox', { name: 'Client' }));
     expect(screen.getByTestId('request-stream').getAttribute('data-hidden-columns')).toBe('client');
     expect(writes()).toHaveLength(0);
+
+    // An unrelated optimistic preference write must not flip `loaded` true or discard session-local edits.
+    fireEvent.click(screen.getByRole('button', { name: 'Set dark theme' }));
+    await waitFor(() => expect(writes().filter((req) => req.key === 'omc_theme')).toHaveLength(1));
+    expect(screen.getByTestId('request-stream').getAttribute('data-hidden-columns')).toBe('client');
+    fireEvent.click(trigger);
+    const reopenedPopover = await screen.findByTestId('request-columns-popover');
+    fireEvent.click(within(reopenedPopover).getByRole('checkbox', { name: 'Key' }));
+    expect(screen.getByTestId('request-stream').getAttribute('data-hidden-columns')).toBe('key client');
+    expect(writes().filter((req) => req.key === 'usage_events_columns')).toHaveLength(0);
     expect(api.state.preferences.usage_events_columns).toEqual(unread);
     failedReadView.unmount();
 

@@ -118,7 +118,7 @@
 /* The selection track opens from 0px: while it is shut, trimming the grid's leading padding by one
    inter-column gap keeps whichever data column sits first flush with `--req-pad-inline` without
    relying on a hardcoded column class or widening the first column's hit box. */
-@container reqstream (min-width: 921px) {
+@container reqstream (width > 920px) {
   .request-stream:not(.is-selecting) :is(.request-table-header, .request-row) {
     padding-inline-start: calc(var(--req-pad-inline) - var(--req-grid-gap));
   }
