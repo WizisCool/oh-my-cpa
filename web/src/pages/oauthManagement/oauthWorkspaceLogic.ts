@@ -165,6 +165,7 @@ const BUILTIN_SIGN_IN_IDS: Record<string, string> = {
   kimi: 'kimi',
   devin: 'devin',
   meta: 'meta',
+  copilot: 'copilot',
 };
 
 const NO_PORTAL_KEYS: ReadonlySet<string> = new Set();

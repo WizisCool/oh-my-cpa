@@ -17,9 +17,9 @@ type OAuthAuthURLResponse struct {
 	URL          string `json:"url"`
 	State        string `json:"state,omitempty"`
 	// Flow is CPA's own label for the authorization shape: "device" for the
-	// RFC 8628 device-code providers (Kimi, Meta Muse), absent for flows the
-	// browser completes through a redirect. The console uses it to decide
-	// whether a pasted callback belongs on the card at all.
+	// RFC 8628 device-code providers (Kimi, Meta Muse, GitHub Copilot), absent
+	// for flows the browser completes through a redirect. The console uses it to
+	// decide whether a pasted callback belongs on the card at all.
 	Flow string `json:"flow,omitempty"`
 	// UserCode is the short code the operator types on the vendor's device
 	// page. It is presented to the operator only, never persisted.

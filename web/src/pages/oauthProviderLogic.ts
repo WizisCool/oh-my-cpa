@@ -54,7 +54,7 @@ export interface OAuthCallbackRules {
  * They are written out rather than composed from `keyBase` so that renaming a provider's copy is a
  * compile error in this table instead of a card that renders an id.
  */
-export type BuiltinOAuthKeyBase = 'kimi' | 'kimi_ai' | 'codex' | 'anthropic' | 'antigravity' | 'xai' | 'devin' | 'meta';
+export type BuiltinOAuthKeyBase = 'kimi' | 'kimi_ai' | 'codex' | 'anthropic' | 'antigravity' | 'xai' | 'devin' | 'meta' | 'copilot';
 
 const OAUTH_COPY: Record<BuiltinOAuthKeyBase, { title: MessageKey; hint: MessageKey; login: MessageKey }> = {
   kimi: { title: 'oauth.kimi_title', hint: 'oauth.kimi_hint', login: 'oauth.kimi_login' },
@@ -65,6 +65,7 @@ const OAUTH_COPY: Record<BuiltinOAuthKeyBase, { title: MessageKey; hint: Message
   xai: { title: 'oauth.xai_title', hint: 'oauth.xai_hint', login: 'oauth.xai_login' },
   devin: { title: 'oauth.devin_title', hint: 'oauth.devin_hint', login: 'oauth.devin_login' },
   meta: { title: 'oauth.meta_title', hint: 'oauth.meta_hint', login: 'oauth.meta_login' },
+  copilot: { title: 'oauth.copilot_title', hint: 'oauth.copilot_hint', login: 'oauth.copilot_login' },
 };
 
 export interface OAuthProviderDefinition {
@@ -226,8 +227,8 @@ export function validateDevinCallback(input: string, expectedState?: string): OA
 /**
  * The built-in authorizations, in the order the cards are rendered.
  *
- * The device flows (Kimi, Kimi International, Meta Muse) confirm a short code on the vendor's own
- * page and are polled; the redirect flows land on a callback the operator may
+ * The device flows (Kimi, Kimi International, Meta Muse, GitHub Copilot) confirm a short code on
+ * the vendor's own page and are polled; the redirect flows land on a callback the operator may
  * have to submit by hand.
  */
 export const BUILTIN_OAUTH_PROVIDERS: OAuthProviderDefinition[] = [
@@ -316,6 +317,12 @@ export const BUILTIN_OAUTH_PROVIDERS: OAuthProviderDefinition[] = [
     id: 'meta',
     iconId: 'Meta',
     keyBase: 'meta',
+    flow: 'device',
+  },
+  {
+    id: 'copilot',
+    iconId: 'GithubCopilot',
+    keyBase: 'copilot',
     flow: 'device',
   },
 ];

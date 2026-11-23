@@ -43,7 +43,7 @@ test('Registry: provider ids are unique, routable and consistent with the lookup
   assert.deepEqual([...BUILTIN_OAUTH_IDS].sort(), BUILTIN_OAUTH_PROVIDERS.map((provider) => provider.id).sort(), 'registry ids are unique and match the leaf list every surface reads');
 });
 
-test('Registry: the Devin and Meta Muse adapters are registered', () => {
+test('Registry: the Devin, Meta Muse and GitHub Copilot adapters are registered', () => {
   const devin = lookupOAuthProvider('DEViN');
   assert.equal(devin?.flow, 'manual-callback');
   assert.equal(devin?.keyBase, 'devin');
@@ -54,6 +54,14 @@ test('Registry: the Devin and Meta Muse adapters are registered', () => {
   assert.equal(meta?.flow, 'device');
   assert.equal(meta?.keyBase, 'meta');
   assert.equal(meta?.requiresExplicitCancel, undefined, 'a device flow is restartable by design');
+
+  const copilot = lookupOAuthProvider('COPILOT');
+  assert.equal(copilot?.id, 'copilot');
+  assert.equal(copilot?.iconId, 'GithubCopilot');
+  assert.equal(copilot?.flow, 'device');
+  assert.equal(copilot?.keyBase, 'copilot');
+  assert.equal(copilot?.requiresExplicitCancel, undefined, 'a device flow is restartable by design');
+  assert.equal(copilot?.callback, undefined);
 
   assert.equal(lookupOAuthProvider('not-a-provider'), undefined);
 });
@@ -177,6 +185,14 @@ test('provider choices keep built-ins, plugin ids and disabled discovery separat
   const builtins = builtinOAuthProviderChoices(t);
   assert.equal(builtins.find((provider) => provider.id === 'anthropic')?.title, 'oauth.anthropic_title');
   assert.equal(builtins.some((provider) => provider.id === 'codex'), true);
+  assert.deepEqual(
+    {
+      flow: builtins.find((provider) => provider.id === 'copilot')?.flow,
+      iconId: builtins.find((provider) => provider.id === 'copilot')?.iconId,
+      title: builtins.find((provider) => provider.id === 'copilot')?.title,
+    },
+    { flow: 'device', iconId: 'GithubCopilot', title: 'oauth.copilot_title' },
+  );
 
   const choices = pluginOAuthProviderChoices([
     {
@@ -224,6 +240,20 @@ test('provider choices keep built-ins, plugin ids and disabled discovery separat
       registered: true,
       supports_oauth: true,
       oauth_provider: 'codex',
+      permissions: [],
+    },
+    {
+      id: 'copilot-plugin',
+      name: 'Duplicate Copilot',
+      description: '',
+      version: '',
+      author: '',
+      enabled: true,
+      effective_enabled: true,
+      registered: true,
+      supports_oauth: true,
+      oauth_provider: 'copilot',
+      oauth_providers: ['copilot'],
       permissions: [],
     },
     {

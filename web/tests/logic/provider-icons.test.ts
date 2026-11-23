@@ -84,12 +84,16 @@ test('GitHub Copilot resolves strictly to GithubCopilot rather than Microsoft Co
     resolveMarkArtworks({ iconId: 'GithubCopilot' }, { baseURL: '/omc/', customIconURL: () => '', customIcons: [] }),
     [{ url: '/omc/lobe-icons/githubcopilot.svg', isMono: true }],
   );
-  // A community plugin may register a Copilot login portal, but cannot rename the built-in GitHub Copilot brand.
+  // A community plugin declaring a Copilot portal cannot rename the built-in GitHub Copilot brand,
+  // and Copilot itself is registered as a built-in device sign-in flow.
   const customPlugin: PluginItem = { id: 'custom-copilot', name: 'Custom', enabled: true, supports_oauth: true, oauth_provider: 'copilot' };
   assert.deepEqual(pluginOAuthProviderIds(customPlugin), ['copilot']);
   assert.equal(pluginOAuthProviderTitles([customPlugin]).has('copilot'), false);
-  // Copilot has no built-in OAuth HTTP sign-in flow in CPA v8.1.0, so it must not appear in BUILTIN_OAUTH_PROVIDERS.
-  assert.equal(BUILTIN_OAUTH_PROVIDERS.some((provider) => provider.id === 'copilot'), false);
+  const copilotBuiltin = BUILTIN_OAUTH_PROVIDERS.find((provider) => provider.id === 'copilot');
+  assert.deepEqual(
+    copilotBuiltin ? { id: copilotBuiltin.id, iconId: copilotBuiltin.iconId, flow: copilotBuiltin.flow } : undefined,
+    { id: 'copilot', iconId: 'GithubCopilot', flow: 'device' },
+  );
 });
 
 test('a provider the table has not named still resolves through the icon catalog', () => {
