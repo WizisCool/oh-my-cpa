@@ -249,9 +249,8 @@ func (h *Handler) handlePluginRoute(writer http.ResponseWriter, request *http.Re
 		data, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, management.PLUGIN_HOST_BODY_LIMIT))
 		if err != nil {
 			// Only an overflow is the body's size; a dropped connection is not.
-			var tooLarge *http.MaxBytesError
-			if errors.As(err, &tooLarge) {
-				writeError(writer, http.StatusRequestEntityTooLarge, "request body is too large")
+			if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+				writeRequestBodyTooLarge(writer, maxBytes)
 			} else {
 				writeError(writer, http.StatusBadRequest, "invalid request body")
 			}

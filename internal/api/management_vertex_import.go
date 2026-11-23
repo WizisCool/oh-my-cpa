@@ -70,9 +70,8 @@ func (h *Handler) importVertexServiceAccount(writer http.ResponseWriter, request
 	}
 	data, err := io.ReadAll(request.Body)
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			writeError(writer, http.StatusRequestEntityTooLarge, "upload is too large")
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
 			return
 		}
 		writeError(writer, http.StatusBadRequest, "cannot read upload")

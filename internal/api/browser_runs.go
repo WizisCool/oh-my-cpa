@@ -188,7 +188,11 @@ func (h *Handler) prepareBrowserRun(kind, id string, next http.HandlerFunc, writ
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, limit))
 	if err != nil {
-		writePlaygroundError(writer, 413, "request_too_large")
+		if _, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writePlaygroundError(writer, http.StatusRequestEntityTooLarge, requestTooLargeCode)
+		} else {
+			writePlaygroundError(writer, http.StatusBadRequest, "invalid_request")
+		}
 		return nil
 	}
 	if !json.Valid(body) {

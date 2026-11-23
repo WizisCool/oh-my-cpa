@@ -92,6 +92,7 @@ export default {
   'toast.group_unknown': '结果未知',
   'toast.group_skipped': '已跳过',
   'common.save_failed': '保存失败：{msg}',
+  'common.request_too_large': '请求内容超出允许大小限制',
   'common.sync_reverted': '后台配置同步失败，已恢复为网关当前状态：{msg}',
   'common.save': '保存',
   'common.loading': '加载中…',

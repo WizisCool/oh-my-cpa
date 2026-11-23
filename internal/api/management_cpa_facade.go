@@ -81,6 +81,10 @@ func classifyCPAFacadeError(err error) (status int, code string, message string,
 		status = http.StatusConflict
 		code = "config_conflict"
 		message = "the CPA configuration was changed by another writer while saving; nothing was changed, reload and try again"
+	} else if errors.Is(err, management.ErrConfigYAMLTooLarge) {
+		status = http.StatusRequestEntityTooLarge
+		code = requestTooLargeCode
+		message = fmt.Sprintf("configuration YAML exceeds maximum size of %d bytes", management.CONFIG_YAML_LIMIT)
 	} else if cpaReason, rejected := management.IsConfigRejected(err); rejected {
 		status = http.StatusUnprocessableEntity
 		code = "config_rejected"
@@ -168,6 +172,9 @@ func publicCPAErrorMessage(err error) string {
 	if errors.Is(err, management.ErrConfigPartiallyApplied) {
 		return "CPA applied only part of the configuration change"
 	}
+	if errors.Is(err, management.ErrConfigYAMLTooLarge) {
+		return "configuration YAML exceeds maximum size"
+	}
 	if _, rejected := management.IsConfigRejected(err); rejected {
 		return "CPA rejected the configuration"
 	}
@@ -181,16 +188,45 @@ func publicCPAErrorMessage(err error) string {
 	return "CPA management request failed"
 }
 
+const requestTooLargeCode = "request_too_large"
+
+// isRequestBodyTooLarge extracts the active byte cap when http.MaxBytesReader
+// refused the body, so callers distinguish an oversized payload from malformed input.
+func isRequestBodyTooLarge(err error) (int64, bool) {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		return tooLarge.Limit, true
+	}
+	return 0, false
+}
+
+func writeRequestBodyTooLarge(writer http.ResponseWriter, limit int64) {
+	writeErrorCode(
+		writer,
+		http.StatusRequestEntityTooLarge,
+		requestTooLargeCode,
+		fmt.Sprintf("request body exceeds maximum size of %d bytes", limit),
+	)
+}
+
 func decodeManagementJSON(writer http.ResponseWriter, request *http.Request, limit int64, output any) error {
 	request.Body = http.MaxBytesReader(writer, request.Body, limit)
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(output); err != nil {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return err
+		}
 		writeError(writer, http.StatusBadRequest, "invalid request body")
 		return err
 	}
 	var extra any
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return err
+		}
 		writeError(writer, http.StatusBadRequest, "invalid request body")
 		return errors.New("multiple JSON values")
 	}

@@ -2,9 +2,7 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"time"
 
@@ -207,6 +205,7 @@ func (h *Handler) getSystemUpdater(writer http.ResponseWriter, request *http.Req
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 403 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
@@ -215,8 +214,7 @@ func (h *Handler) postSystemUpdaterApply(writer http.ResponseWriter, request *ht
 	writer.Header().Set("Cache-Control", "no-store")
 	ctx := request.Context()
 	var body SystemUpdaterApplyRequestDTO
-	if err := json.NewDecoder(io.LimitReader(request.Body, 4<<10)).Decode(&body); err != nil {
-		writeError(writer, http.StatusBadRequest, "invalid request body")
+	if err := decodeManagementJSON(writer, request, 4*1024, &body); err != nil {
 		return
 	}
 	if body.Product != release.ProductOMC && body.Product != release.ProductCPA {

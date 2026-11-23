@@ -187,6 +187,7 @@ type configBackupSettingsRequest struct {
 // @Success 200 {object} ConfigBackupSettingsResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/config/backups/settings [put]

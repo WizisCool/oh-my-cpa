@@ -98,6 +98,7 @@ func (h *Handler) getDatabaseAutomation(w http.ResponseWriter, r *http.Request) 
 // @Success 200 {object} DatabaseBackupAutomationDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 422 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/system/database-backup-automation [put]
@@ -267,6 +268,7 @@ func (h *Handler) downloadDatabaseArchive(w http.ResponseWriter, r *http.Request
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 422 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO

@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -116,5 +118,93 @@ func TestManagementProviderCreateUpdateDelete(t *testing.T) {
 	}
 	if !foundReasoning {
 		t.Fatalf("Reasoning Provider not found in list")
+	}
+}
+
+func TestManagementProviderLargeKeyPoolAndBodyLimit(t *testing.T) {
+	client, baseURL, state := startProviderTestServer(t)
+
+	// Issue #740: a provider with 700 keys (~75 KiB JSON) must create and update
+	// cleanly instead of tripping the old 32 KiB body cap.
+	keys := make([]SaveProviderKeyEntry, 700)
+	for i := range keys {
+		keys[i] = SaveProviderKeyEntry{
+			APIKey:   fmt.Sprintf("sk-large-pool-key-%04d-%s", i, strings.Repeat("a", 48)),
+			ProxyURL: "http://127.0.0.1:7890",
+		}
+	}
+	createPayload, err := json.Marshal(SaveProviderRequest{
+		Family:  openAICompatibilityFamily,
+		Name:    "Kenari Cloud",
+		BaseURL: "https://api.kenari.example/v1",
+		Keys:    keys,
+		Models:  []string{"gpt-4o"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(createPayload) <= 64*1024 {
+		t.Fatalf("expected regression payload > 64 KiB, got %d bytes", len(createPayload))
+	}
+
+	resp, body := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers", string(createPayload))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create large-pool provider status = %d body %s", resp.StatusCode, body)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &created); err != nil || created.ID == "" {
+		t.Fatalf("unexpected create response: %s", body)
+	}
+
+	updatePayload, err := json.Marshal(SaveProviderRequest{
+		Family:       openAICompatibilityFamily,
+		ExpectedName: "Kenari Cloud",
+		Name:         "Kenari Cloud Updated",
+		BaseURL:      "https://api.kenari.example/v2",
+		Keys:         keys,
+		Models:       []string{"gpt-4o", "gpt-4.1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, body = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/providers/"+created.ID, string(updatePayload))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("update large-pool provider status = %d body %s", resp.StatusCode, body)
+	}
+
+	state.mu.Lock()
+	saved := state.oaiProviders[len(state.oaiProviders)-1]
+	state.mu.Unlock()
+	if saved["name"] != "Kenari Cloud Updated" {
+		t.Fatalf("saved provider name = %v, want Kenari Cloud Updated", saved["name"])
+	}
+	savedKeys, _ := saved["api-key-entries"].([]any)
+	if len(savedKeys) != len(keys) {
+		t.Fatalf("saved key count = %d, want %d", len(savedKeys), len(keys))
+	}
+
+	// Exceeding managementProviderBodyLimit must return 413 request_too_large
+	// rather than 400 "invalid request body".
+	oversized := `{"family":"openai-compatibility","name":"` + strings.Repeat("x", managementProviderBodyLimit+64) + `"}`
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/omc/api/v1/management/providers"},
+		{http.MethodPut, "/omc/api/v1/management/providers/" + created.ID},
+	} {
+		resp, body = doJSON(t, client, tc.method, baseURL+tc.path, oversized)
+		if resp.StatusCode != http.StatusRequestEntityTooLarge {
+			t.Fatalf("%s %s oversized status = %d body %s, want 413", tc.method, tc.path, resp.StatusCode, body)
+		}
+		var errBody ErrorResponseDTO
+		if err := json.Unmarshal(body, &errBody); err != nil {
+			t.Fatalf("unmarshal 413 body: %v (%s)", err, body)
+		}
+		if errBody.Code != requestTooLargeCode || !strings.Contains(errBody.Error, fmt.Sprintf("%d", managementProviderBodyLimit)) {
+			t.Fatalf("%s %s 413 payload = %+v", tc.method, tc.path, errBody)
+		}
 	}
 }

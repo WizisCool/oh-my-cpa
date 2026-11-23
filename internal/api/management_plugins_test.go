@@ -1055,3 +1055,26 @@ func TestPluginUpdateReminderUsesTheObservedStore(t *testing.T) {
 		readReminder(false)
 	}
 }
+
+func TestSetPluginConfigAcceptsLargeDocumentAndReturns413WhenOversized(t *testing.T) {
+	client, baseURL, _, _ := startPluginTestServer(t)
+
+	// A 128 KiB plugin config exceeds the old 64 KiB cap and must now succeed.
+	largePayload, err := json.Marshal(map[string]any{
+		"config": map[string]any{"blob": strings.Repeat("x", 128*1024)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, body := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/plugins/logger/config", string(largePayload))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("large plugin config status = %d body %s, want 200", resp.StatusCode, body)
+	}
+
+	// A payload past pluginConfigBodyLimit returns 413 request_too_large.
+	oversized := `{"config":{"blob":"` + strings.Repeat("x", pluginConfigBodyLimit+64) + `"}}`
+	resp, body = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/plugins/logger/config", oversized)
+	if resp.StatusCode != http.StatusRequestEntityTooLarge || !strings.Contains(string(body), requestTooLargeCode) {
+		t.Fatalf("oversized plugin config status = %d body %s, want 413 request_too_large", resp.StatusCode, body)
+	}
+}

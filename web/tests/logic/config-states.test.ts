@@ -7,6 +7,9 @@ import {
 } from '../../src/components/config/configDirty.ts';
 import { ALL_CONFIG_FIELDS, type ConfigFieldDefinition } from '../../src/types/configSchema.ts';
 import { readOutline } from '../../src/components/config/outlineReading.ts';
+import { describeConfigSaveError } from '../../src/components/config/configSaveErrors.ts';
+import { ApiError } from '../../src/api/client.ts';
+import type { TFunc } from '../../src/i18n/catalog.ts';
 
 function schemaField(id: string): ConfigFieldDefinition {
   const found = ALL_CONFIG_FIELDS.find((item) => item.id === id);
@@ -211,4 +214,16 @@ test('Card nav: the current card follows the view, and the reading spans what is
   assert.equal(readOutline(end, view, 0.3).current, 2);
   assert.equal(readOutline(end, view, 1).current, 3);
   assert.deepEqual(readOutline([null, { top: 950, bottom: 1200 }], view, 0), { current: 0, visible: null });
+});
+
+test('describeConfigSaveError distinguishes OMC and CPA request size refusals', () => {
+  const t = ((key: string) => key) as TFunc;
+  assert.equal(
+    describeConfigSaveError(new ApiError('request body exceeds maximum size', 413, { code: 'request_too_large' }), t),
+    'common.request_too_large',
+  );
+  assert.equal(
+    describeConfigSaveError(new ApiError('CPA refused the request body', 413, { code: 'cpa_request_too_large' }), t),
+    'cfg.save_too_large',
+  );
 });

@@ -506,6 +506,8 @@ export function useProviderManagement({
       case 'write_busy': return t('pro.status_update_busy');
       case 'provider_commit_partial': return t('pro.error_partial_commit');
       case 'provider_archive_failed': return t('pro.error_archive_failed');
+      case 'request_too_large': return t('common.request_too_large');
+      case 'cpa_request_too_large': return t('cfg.save_too_large');
       default: return describeError(err);
     }
   };

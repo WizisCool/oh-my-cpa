@@ -61,7 +61,22 @@ func (s *Service) Handler(version string) http.Handler {
 	}))
 	mux.Handle("POST /v1/update", s.authenticated(func(writer http.ResponseWriter, request *http.Request) {
 		var body UpdateRequest
-		if err := json.NewDecoder(io.LimitReader(request.Body, MAX_REQUEST_BYTES)).Decode(&body); err != nil {
+		decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, MAX_REQUEST_BYTES))
+		if err := decoder.Decode(&body); err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				writeError(writer, http.StatusRequestEntityTooLarge, "request_too_large", "the request body exceeds the maximum allowed size")
+				return
+			}
+			writeError(writer, http.StatusBadRequest, "invalid_request", "the request body is not valid JSON")
+			return
+		}
+		if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				writeError(writer, http.StatusRequestEntityTooLarge, "request_too_large", "the request body exceeds the maximum allowed size")
+				return
+			}
 			writeError(writer, http.StatusBadRequest, "invalid_request", "the request body is not valid JSON")
 			return
 		}

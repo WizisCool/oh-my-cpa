@@ -251,6 +251,9 @@ func (h *Handler) getRouting(writer http.ResponseWriter, request *http.Request) 
 	writeJSON(writer, http.StatusOK, projectRoutingBoard(board))
 }
 
+// managementRoutingBodyLimit bounds one routing rearrangement plan.
+const managementRoutingBodyLimit = 2 * 1024 * 1024
+
 // @Summary Apply routing plan
 // @Description Apply updated routing settings, provider weights/priorities, and credential priorities under revision guard.
 // @Tags Routing
@@ -262,13 +265,14 @@ func (h *Handler) getRouting(writer http.ResponseWriter, request *http.Request) 
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/routing [patch]
 func (h *Handler) patchRouting(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var submitted operations.RoutingPlan
-	if err := decodeManagementJSON(writer, request, 1024*1024, &submitted); err != nil {
+	if err := decodeManagementJSON(writer, request, managementRoutingBodyLimit, &submitted); err != nil {
 		return
 	}
 	plan, err := operations.NormalizeRoutingPlan(submitted)

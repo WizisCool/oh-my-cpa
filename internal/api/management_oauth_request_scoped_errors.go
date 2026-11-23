@@ -138,6 +138,7 @@ func (h *Handler) applyManagementOAuthRequestScopedErrors(
 // @Success 200 {object} OAuthRequestScopedErrorsPatchResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Router /v1/management/auth-files/request-scoped-errors [patch]

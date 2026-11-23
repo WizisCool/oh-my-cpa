@@ -133,6 +133,7 @@ func (h *Handler) listPreferences(writer http.ResponseWriter, request *http.Requ
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/preferences/{key} [put]
 func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Request) {
@@ -149,6 +150,10 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 
 	body, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, repository.MaxPreferenceValueBytes))
 	if err != nil {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return
+		}
 		writeError(writer, http.StatusBadRequest, "unreadable preference body")
 		return
 	}

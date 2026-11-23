@@ -110,6 +110,10 @@ type outboundProxyInput struct {
 	CPARevision string  `json:"cpa_revision"`
 }
 
+// managementOutboundProxyBodyLimit covers outbound.Validate's 2048-byte URL and
+// 4096-byte no_proxy ceilings plus JSON escaping and framing.
+const managementOutboundProxyBodyLimit = 16 * 1024
+
 // @Summary Update outbound proxy settings
 // @Description Update OMC outbound proxy mode/URL and apply matching requests.proxy-url changes to CPA under revision check.
 // @Tags Config
@@ -121,6 +125,7 @@ type outboundProxyInput struct {
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
@@ -128,7 +133,7 @@ type outboundProxyInput struct {
 func (h *Handler) putOutboundProxy(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var input outboundProxyInput
-	if err := decodeManagementJSON(writer, request, 8192, &input); err != nil {
+	if err := decodeManagementJSON(writer, request, managementOutboundProxyBodyLimit, &input); err != nil {
 		return
 	}
 	store := repository.OutboundProxyStore{Repo: h.repo, Cipher: h.cipher}

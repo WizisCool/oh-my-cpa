@@ -778,6 +778,10 @@ func pricingErrorResponse(writer http.ResponseWriter, err error) {
 	writeInternalError(writer, err)
 }
 
+// managementPricingModelBodyLimit bounds one model pricing rule update, leaving
+// room for the full tier table and JSON escaping.
+const managementPricingModelBodyLimit = 64 * 1024
+
 // updatePricingModel applies one operator decision for a current CPA model:
 // custom rates, a pin to an OpenRouter model, or automatic matching. It takes
 // effect for requests stamped from now on; recorded costs never move.
@@ -794,6 +798,7 @@ func pricingErrorResponse(writer http.ResponseWriter, err error) {
 // @Success 200 {object} PricingModelUpdateResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/pricing/models/{model} [put]
 func (h *Handler) updatePricingModel(writer http.ResponseWriter, request *http.Request) {
@@ -806,7 +811,7 @@ func (h *Handler) updatePricingModel(writer http.ResponseWriter, request *http.R
 		return
 	}
 	var body pricingModelRequest
-	if err := decodeManagementJSON(writer, request, 16*1024, &body); err != nil {
+	if err := decodeManagementJSON(writer, request, managementPricingModelBodyLimit, &body); err != nil {
 		return
 	}
 	change := body.ModeChange(model)
@@ -855,6 +860,7 @@ func (h *Handler) updatePricingModel(writer http.ResponseWriter, request *http.R
 // @Success 200 {object} PricingDismissedResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/pricing/models/{model}/dismiss-candidate [post]
 func (h *Handler) dismissPricingCandidate(writer http.ResponseWriter, request *http.Request) {
@@ -1013,6 +1019,7 @@ type pricingChannelRequest struct {
 // @Success 200 {object} PricingChannelUpdateResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/pricing/channels/{channel} [put]
 func (h *Handler) updatePricingChannel(writer http.ResponseWriter, request *http.Request) {
@@ -1151,6 +1158,7 @@ func (h *Handler) getPricingSyncSchedule(writer http.ResponseWriter, request *ht
 // @Success 200 {object} PricingSyncScheduleResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/pricing/sync-schedule [put]
 func (h *Handler) updatePricingSyncSchedule(writer http.ResponseWriter, request *http.Request) {

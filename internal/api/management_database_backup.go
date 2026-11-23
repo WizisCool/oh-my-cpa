@@ -40,6 +40,10 @@ func (h *Handler) databaseBackupsReady(writer http.ResponseWriter) bool {
 	return true
 }
 func (h *Handler) databaseBackupError(writer http.ResponseWriter, err error) {
+	if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+		writeRequestBodyTooLarge(writer, maxBytes)
+		return
+	}
 	status, code := http.StatusInternalServerError, "database_backup_failed"
 	switch {
 	case errors.Is(err, backup.ErrOAuth):
@@ -124,6 +128,7 @@ func (h *Handler) listDatabaseBackups(writer http.ResponseWriter, request *http.
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Failure 507 {object} ErrorResponseDTO
 // @Router /v1/management/system/database-backups [post]
@@ -211,6 +216,7 @@ func (h *Handler) downloadDatabaseBackup(writer http.ResponseWriter, request *ht
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 422 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Failure 507 {object} ErrorResponseDTO
@@ -231,21 +237,37 @@ func (h *Handler) uploadDatabaseRestore(writer http.ResponseWriter, request *htt
 	request.Body = http.MaxBytesReader(writer, request.Body, backup.MaxUploadBytes+(1<<20))
 	reader, err := request.MultipartReader()
 	if err != nil {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return
+		}
 		writeDatabaseBackupError(writer, 400, "invalid backup upload", "database_backup_invalid")
 		return
 	}
 	part, err := reader.NextPart()
 	if err != nil || part.FormName() != "passphrase" {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return
+		}
 		writeDatabaseBackupError(writer, 400, "backup passphrase must precede the file", "database_backup_invalid")
 		return
 	}
 	passphrase, err := io.ReadAll(io.LimitReader(part, 1025))
 	if err != nil || len(passphrase) > 1024 {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return
+		}
 		writeDatabaseBackupError(writer, 400, "invalid backup passphrase", "database_backup_passphrase")
 		return
 	}
 	part, err = reader.NextPart()
 	if err != nil || part.FormName() != "file" {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return
+		}
 		writeDatabaseBackupError(writer, 400, "backup file is required", "database_backup_invalid")
 		return
 	}
@@ -270,6 +292,7 @@ func (h *Handler) uploadDatabaseRestore(writer http.ResponseWriter, request *htt
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 422 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/system/database-restores/{id}/apply [post]

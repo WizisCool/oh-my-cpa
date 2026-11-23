@@ -110,6 +110,7 @@ func (h *Handler) getWarmupSettings(writer http.ResponseWriter, request *http.Re
 // @Success 201 {object} warmup.StateView
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/quota/warmup/tasks [post]
 func (h *Handler) createWarmupTask(writer http.ResponseWriter, request *http.Request) {
@@ -138,6 +139,7 @@ func (h *Handler) createWarmupTask(writer http.ResponseWriter, request *http.Req
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/quota/warmup/tasks/{id} [put]
 func (h *Handler) updateWarmupTask(writer http.ResponseWriter, request *http.Request) {

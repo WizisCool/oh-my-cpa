@@ -21,6 +21,12 @@ func (h *Handler) notifyPricingAfterPartialCommit(err error) {
 	}
 }
 
+// managementProviderBodyLimit bounds a single provider create or update JSON
+// payload. Providers can hold thousands of API keys and hundreds of model
+// entries, so this aligns with the whole-config YAML ceiling rather than a
+// small single-object cap.
+const managementProviderBodyLimit = 2 * 1024 * 1024
+
 // ProviderMutationResponseDTO reports the outcome of creating, updating, or deleting a provider entry.
 type ProviderMutationResponseDTO struct {
 	Status string   `json:"status"`
@@ -40,6 +46,7 @@ type ProviderMutationResponseDTO struct {
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
@@ -47,7 +54,7 @@ type ProviderMutationResponseDTO struct {
 func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var req SaveProviderRequest
-	if err := decodeManagementJSON(writer, request, 32*1024, &req); err != nil {
+	if err := decodeManagementJSON(writer, request, managementProviderBodyLimit, &req); err != nil {
 		return
 	}
 	client, ok := h.managementClientOrError(writer, request)
@@ -77,6 +84,7 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
@@ -90,7 +98,7 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 		return
 	}
 	var req SaveProviderRequest
-	if err := decodeManagementJSON(writer, request, 32*1024, &req); err != nil {
+	if err := decodeManagementJSON(writer, request, managementProviderBodyLimit, &req); err != nil {
 		return
 	}
 	client, ok := h.managementClientOrError(writer, request)

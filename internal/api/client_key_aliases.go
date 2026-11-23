@@ -151,6 +151,7 @@ func (h *Handler) listClientKeyAliases(writer http.ResponseWriter, request *http
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 409 {object} ClientKeyAliasConflictResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/client-key-aliases [put]

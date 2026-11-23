@@ -816,12 +816,30 @@ func TestManagementConfigFirstSaveKeepsTheLegacyFile(t *testing.T) {
 func TestManagementConfigSourcePutRejectsOversizedBody(t *testing.T) {
 	fixture := &configFixtureCPA{}
 	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
-	oversized := strings.Repeat("a", 2*1024*1024+1)
-	resp, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source",
-		`{"yaml":"`+oversized+`","revision":"some-revision"}`)
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("oversized source body must be refused, got %d body %s", resp.StatusCode, payload)
+	for _, tc := range []struct {
+		name string
+		size int
+	}{
+		{name: "exceeds yaml limit", size: management.CONFIG_YAML_LIMIT + 1},
+		{name: "exceeds request body limit", size: managementConfigSourceBodyLimit + 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			oversized := strings.Repeat("a", tc.size)
+			resp, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source",
+				`{"yaml":"`+oversized+`","revision":"some-revision"}`)
+			if resp.StatusCode != http.StatusRequestEntityTooLarge || !strings.Contains(string(payload), requestTooLargeCode) {
+				t.Fatalf("oversized source body must be refused with 413 request_too_large, got %d body %s", resp.StatusCode, payload)
+			}
+		})
 	}
+
+	t.Run("config patch enforces CONFIG_YAML_LIMIT", func(t *testing.T) {
+		oversizedPatch := `{"revision":"some-revision","changes":[{"path":["access","api-keys"],"value":["` + strings.Repeat("k", management.CONFIG_YAML_LIMIT+64) + `"]}]}`
+		resp, payload := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/config", oversizedPatch)
+		if resp.StatusCode != http.StatusRequestEntityTooLarge || !strings.Contains(string(payload), requestTooLargeCode) {
+			t.Fatalf("oversized patch body must be refused with 413 request_too_large, got %d body %s", resp.StatusCode, payload)
+		}
+	})
 }
 
 // A restore that cannot prove which stored entry a hidden value belongs to must
@@ -1309,5 +1327,83 @@ func TestManagementConfigPatchValidatesServerIDAndReturnsCPAReadback(t *testing.
 	}
 	if !strings.Contains(saved.SafeYAML, validLower) || strings.Contains(saved.SafeYAML, validUpper) {
 		t.Fatalf("safe_yaml must carry CPA's lowercased readback, got:\n%s", saved.SafeYAML)
+	}
+}
+
+func TestManagementConfigSourceJSONEscapingHeadroomAndYAMLSizeLimit(t *testing.T) {
+	initialYAML := "config-version: 8\nserver:\n  port: 8317\n" + configFixtureManagedPlugins
+	var currentYAML = initialYAML
+
+	cpaHandler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		path := strings.TrimPrefix(request.URL.Path, "/v8/management")
+		switch {
+		case request.Method == http.MethodGet && path == "/config.yaml":
+			writer.Header().Set("Content-Type", "application/yaml")
+			_, _ = writer.Write([]byte(currentYAML))
+		case request.Method == http.MethodGet && path == "/config":
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"config-version":8,"server":{"port":8317}}`))
+		case request.Method == http.MethodPut && path == "/config.yaml":
+			raw, _ := io.ReadAll(request.Body)
+			currentYAML = string(raw)
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"status":"ok","config-version":8}`))
+		default:
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"status":"ok"}`))
+		}
+	})
+
+	client, baseURL, _ := startDashboardTestServerStoring(t, currentYAML, cpaHandler)
+
+	_, srcPayload := getJSON(t, client, baseURL+"/omc/api/v1/management/config/source")
+	var src struct {
+		Revision string `json:"revision"`
+	}
+	if err := json.Unmarshal(srcPayload, &src); err != nil {
+		t.Fatal(err)
+	}
+
+	// Construct a valid YAML document slightly under CONFIG_YAML_LIMIT (~1.85 MiB)
+	// whose JSON-escaped request body exceeds 2 MiB because every "\n" and "\""
+	// expands to two bytes in JSON.
+	line := "  - \"k\"\n" // 8 bytes in YAML, 11 bytes in JSON
+	linesNeeded := (1850 * 1024) / len(line)
+	var yamlBuilder strings.Builder
+	yamlBuilder.WriteString("config-version: 8\nserver:\n  port: 8317\naccess:\n  api-keys:\n")
+	for range linesNeeded {
+		yamlBuilder.WriteString(line)
+	}
+	yamlBuilder.WriteString(configFixtureManagedPlugins)
+	largeYAML := yamlBuilder.String()
+	if len(largeYAML) >= management.CONFIG_YAML_LIMIT {
+		t.Fatalf("expected test YAML < CONFIG_YAML_LIMIT, got %d", len(largeYAML))
+	}
+	putBody, err := json.Marshal(map[string]string{"yaml": largeYAML, "revision": src.Revision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(putBody) <= management.CONFIG_YAML_LIMIT {
+		t.Fatalf("expected JSON-escaped request body > CONFIG_YAML_LIMIT, got %d", len(putBody))
+	}
+
+	resp, body := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(putBody))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("JSON-escaped valid YAML status = %d body %s, want 200", resp.StatusCode, body)
+	}
+
+	// Refresh revision and submit a YAML exceeding CONFIG_YAML_LIMIT (but within
+	// managementConfigSourceBodyLimit): must return 413 request_too_large instead of 502.
+	var saved struct {
+		Revision string `json:"revision"`
+	}
+	if err := json.Unmarshal(body, &saved); err != nil {
+		t.Fatal(err)
+	}
+	tooLargeYAML := "config-version: 8\nserver:\n  port: 8317\n  note: \"" + strings.Repeat("a", management.CONFIG_YAML_LIMIT+128) + "\"\n"
+	tooLargeBody, _ := json.Marshal(map[string]string{"yaml": tooLargeYAML, "revision": saved.Revision})
+	resp, body = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(tooLargeBody))
+	if resp.StatusCode != http.StatusRequestEntityTooLarge || !strings.Contains(string(body), requestTooLargeCode) {
+		t.Fatalf("oversized YAML status = %d body %s, want 413 request_too_large", resp.StatusCode, body)
 	}
 }

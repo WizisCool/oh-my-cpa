@@ -19,7 +19,9 @@ import (
 )
 
 const (
-	managementAuthFileRequestLimit = 256 * 1024
+	// managementAuthFileRequestLimit bounds auth-file metadata, alias, exclusion,
+	// and error-rule mutation bodies (up to 512 aliases or 64 multi-pattern rules).
+	managementAuthFileRequestLimit = 2 * 1024 * 1024
 	managementAuthFileUploadLimit  = 16 * 1024 * 1024
 	managementAuthFileNameLimit    = 255
 	managementAuthFileListLimit    = 2000
@@ -296,6 +298,7 @@ func (h *Handler) listManagementAuthFiles(writer http.ResponseWriter, request *h
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Router /v1/management/auth-files/status [patch]
@@ -448,6 +451,7 @@ func (h *Handler) patchManagementAuthFileStatus(writer http.ResponseWriter, requ
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Router /v1/management/auth-files/refresh [post]

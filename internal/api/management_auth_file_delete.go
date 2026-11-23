@@ -34,6 +34,7 @@ type AuthFileDeleteResponseDTO struct {
 // @Success 207 {object} AuthFileDeleteResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
@@ -57,8 +58,21 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 		decoder := json.NewDecoder(request.Body)
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&payload); err != nil && !errors.Is(err, io.EOF) {
+			if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+				writeRequestBodyTooLarge(writer, maxBytes)
+				return
+			}
 			writeError(writer, http.StatusBadRequest, "invalid request body")
 			return
+		} else if err == nil {
+			if extraErr := decoder.Decode(new(any)); !errors.Is(extraErr, io.EOF) {
+				if maxBytes, tooLarge := isRequestBodyTooLarge(extraErr); tooLarge {
+					writeRequestBodyTooLarge(writer, maxBytes)
+					return
+				}
+				writeError(writer, http.StatusBadRequest, "invalid request body")
+				return
+			}
 		}
 		if strings.TrimSpace(payload.Name) != "" {
 			names = append(names, payload.Name)
