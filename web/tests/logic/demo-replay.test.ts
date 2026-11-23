@@ -22,6 +22,7 @@ import {
   countDemoSandboxChanges,
   interceptDemoRequest,
   resetDemoSandbox,
+  subscribeDemoSandbox,
   type DemoSandboxState,
 } from '../../src/demo/sandbox.ts';
 import { readDemoConversation, resetDemoConversation, writeDemoQuestion } from '../../src/demo/session.ts';
@@ -394,6 +395,34 @@ test('demo sandbox isolates provider, api key, routing, and reset state', async 
   );
   assert.ok(cbDuplicate && cbDuplicate.status === 409);
 
+  // Device-flow targeted recovery (e.g. Copilot) persists recovered state and audit trail
+  const realDateNow = Date.now;
+  let sandboxSavedCount = 0;
+  const unsubscribe = subscribeDemoSandbox(() => { sandboxSavedCount += 1; });
+  try {
+    const startTime = realDateNow();
+    Date.now = () => startTime;
+    const copilotStart = await interceptDemoRequest(
+      '/management/oauth/start',
+      { method: 'POST', body: JSON.stringify({ provider: 'copilot', name: 'copilot-work.json', auth_index: 'auth-copilot-01', verify: true }) },
+      fetchBaseline,
+    );
+    const copilotStarted = (await copilotStart!.json()) as { state: string; flow?: string; user_code?: string };
+    assert.equal(copilotStarted.flow, 'device');
+    assert.ok(copilotStarted.user_code);
+    Date.now = () => startTime + 2500;
+    const copilotStatus = await interceptDemoRequest(
+      `/management/oauth/status?state=${encodeURIComponent(copilotStarted.state)}`,
+      { method: 'GET' },
+      fetchBaseline,
+    );
+    assert.equal(((await copilotStatus!.json()) as { status: string }).status, 'success');
+    assert.equal(sandboxSavedCount, 1, 'device recovery completion must persist sandbox state via saveState');
+  } finally {
+    Date.now = realDateNow;
+    unsubscribe();
+  }
+
   // Auth JSON upload & Vertex import are intercepted locally with zero secret retention
   const authUploadRes = await interceptDemoRequest(
     '/management/auth-files?name=custom-oauth.json',
@@ -455,6 +484,7 @@ test('demo sandbox isolates provider, api key, routing, and reset state', async 
   const auditRes = await interceptDemoRequest('/management/audit/events', { method: 'GET' }, fetchBaseline);
   const audit = (await auditRes!.json()) as { events: Array<{ action: string }> };
   assert.ok(audit.events.some((e) => e.action === 'provider.create'));
+  assert.ok(audit.events.some((e) => e.action === 'oauth.recover_sandbox'));
   assert.ok(countDemoSandboxChanges() >= 2);
 
     // Reset restores baseline cleanly

@@ -2010,10 +2010,13 @@ export async function interceptDemoRequest(
         if (session.status === 'waiting' && session.flow === 'device' && Date.now() - session.createdAtMs > 1800) {
           session.status = 'success';
           if (session.recoveryTarget) {
-            state.authFiles.recoveredNames[session.recoveryTarget.name] = {
+            const targetName = session.recoveryTarget.name;
+            state.authFiles.recoveredNames[targetName] = {
               refreshedAt: new Date().toISOString(),
               verified: session.recoveryTarget.verify === true,
             };
+            recordSandboxAudit(state, 'oauth.recover_sandbox', 'auth_file', targetName);
+            saveState(state);
           } else {
             const idx = state.authFiles.created.length + 1;
             const name = `${session.provider}-sandbox-${idx}.json`;
