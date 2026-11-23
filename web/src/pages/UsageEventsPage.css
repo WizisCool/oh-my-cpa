@@ -125,35 +125,38 @@
   overflow-y: hidden;
   position: relative;
 }
-.req-reset-columns-btn {
-  font-size: var(--text-xs);
-  padding: 0 8px;
-  color: var(--muted);
-}
-.req-reset-columns-btn:hover {
-  color: var(--accent);
-}
-/* A list too narrow for every column folds the least-scanned ones away instead of
-   scrolling sideways. `foldRequestColumns` (requestColumns.ts) decides which, from
-   the list's measured width, and names them here; the grid template it sends
-   alongside has no track for them. Matching on the container keeps a fold off
-   the rows' render path: no row re-renders when a column goes or returns. */
-.request-stream[data-folded-columns~='client'] :is(.req-th-client, .req-col-client),
-.request-stream[data-folded-columns~='key'] :is(.req-th-key, .req-col-key),
-.request-stream[data-folded-columns~='tps'] :is(.req-th-tps, .req-col-tps),
-.request-stream[data-folded-columns~='cache'] :is(.req-th-cache, .req-col-cache),
-.request-stream[data-folded-columns~='mode'] :is(.req-th-mode, .req-col-mode) {
-  display: none;
-}
-/* Two seams open with a space of their own, inside the column's track. The caller key starts where
-   the right-aligned cache rate ends, and a short alias there reads as part of the figure. The
-   model follows the provider, and two names one gap apart run together. Only the row of columns
-   has these seams. */
-@container reqstream (min-width: 921px) {
-  .req-col-model,
-  .req-th-model,
-  .req-col-key,
-  .req-th-key {
+/* Columns hidden by the operator or folded for narrow desktop widths leave the
+   table grid together via `data-hidden-columns`, and dynamic seams open between
+   right-aligned figures and left-aligned text (or adjacent name columns) via
+   `data-seam-columns`. Both rules stay inside `width > 920px` so the stacked
+   card layout at or below 920px keeps every cell and its line-break pseudo-elements intact. */
+@container reqstream (width > 920px) {
+  .request-stream[data-hidden-columns~='time'] :is(.req-th-time, .req-col-time),
+  .request-stream[data-hidden-columns~='result'] :is(.req-th-result, .req-col-result),
+  .request-stream[data-hidden-columns~='provider'] :is(.req-th-provider, .req-col-provider),
+  .request-stream[data-hidden-columns~='model'] :is(.req-th-model, .req-col-model),
+  .request-stream[data-hidden-columns~='mode'] :is(.req-th-mode, .req-col-mode),
+  .request-stream[data-hidden-columns~='tps'] :is(.req-th-tps, .req-col-tps),
+  .request-stream[data-hidden-columns~='latency'] :is(.req-th-latency, .req-col-latency),
+  .request-stream[data-hidden-columns~='tokens'] :is(.req-th-tokens, .req-col-tokens),
+  .request-stream[data-hidden-columns~='cost'] :is(.req-th-cost, .req-col-cost),
+  .request-stream[data-hidden-columns~='cache'] :is(.req-th-cache, .req-col-cache),
+  .request-stream[data-hidden-columns~='key'] :is(.req-th-key, .req-col-key),
+  .request-stream[data-hidden-columns~='client'] :is(.req-th-client, .req-col-client) {
+    display: none;
+  }
+  .request-stream[data-seam-columns~='time'] :is(.req-th-time, .req-col-time),
+  .request-stream[data-seam-columns~='result'] :is(.req-th-result, .req-col-result),
+  .request-stream[data-seam-columns~='provider'] :is(.req-th-provider, .req-col-provider),
+  .request-stream[data-seam-columns~='model'] :is(.req-th-model, .req-col-model),
+  .request-stream[data-seam-columns~='mode'] :is(.req-th-mode, .req-col-mode),
+  .request-stream[data-seam-columns~='tps'] :is(.req-th-tps, .req-col-tps),
+  .request-stream[data-seam-columns~='latency'] :is(.req-th-latency, .req-col-latency),
+  .request-stream[data-seam-columns~='tokens'] :is(.req-th-tokens, .req-col-tokens),
+  .request-stream[data-seam-columns~='cost'] :is(.req-th-cost, .req-col-cost),
+  .request-stream[data-seam-columns~='cache'] :is(.req-th-cache, .req-col-cache),
+  .request-stream[data-seam-columns~='key'] :is(.req-th-key, .req-col-key),
+  .request-stream[data-seam-columns~='client'] :is(.req-th-client, .req-col-client) {
     padding-inline-start: 16px;
   }
 }

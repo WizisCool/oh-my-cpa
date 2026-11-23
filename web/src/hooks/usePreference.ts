@@ -34,6 +34,37 @@ const deferredReconcileKeys = new WeakMap<QueryClient, Set<string>>();
 const pendingReconcileKeys = new WeakMap<QueryClient, Set<string>>();
 const reconcileGeneration = new WeakMap<QueryClient, number>();
 
+/**
+ * Sentinel `dataUpdatedAt` value stored on `['preferences']` when the cache entry was created
+ * only by optimistic local writes before any server preference read succeeded. Any real server
+ * fetch or test seed writes a real wall-clock timestamp (`Date.now()`), flipping `loaded` true.
+ */
+const UNLOADED_PREFERENCES_TIMESTAMP = 1;
+
+function isPreferencesCacheUnloaded(queryClient: QueryClient): boolean {
+  const state = queryClient.getQueryState(QUERY_KEYS.preferences);
+  return !state?.data || state.dataUpdatedAt === UNLOADED_PREFERENCES_TIMESTAMP;
+}
+
+function readPreferencesLoaded(queryClient: QueryClient): boolean {
+  const state = queryClient.getQueryState(QUERY_KEYS.preferences);
+  return state?.status === 'success' && state.dataUpdatedAt !== UNLOADED_PREFERENCES_TIMESTAMP;
+}
+
+function useIsPreferencesLoaded(queryClient: QueryClient): boolean {
+  const subscribe = React.useCallback(
+    (onStoreChange: () => void) =>
+      queryClient.getQueryCache().subscribe((event) => {
+        if (event.query.queryKey.length === 1 && event.query.queryKey[0] === 'preferences') {
+          onStoreChange();
+        }
+      }),
+    [queryClient],
+  );
+  const getSnapshot = React.useCallback(() => readPreferencesLoaded(queryClient), [queryClient]);
+  return React.useSyncExternalStore(subscribe, getSnapshot, () => false);
+}
+
 function queueDeferredReconcile(queryClient: QueryClient, key: string): void {
   let keys = deferredReconcileKeys.get(queryClient);
   if (!keys) {
@@ -120,34 +151,39 @@ export async function reconcilePreferenceKeys(
   activeSet.clear();
 
   const retryLater: string[] = [];
-  queryClient.setQueryData<Record<string, unknown>>(QUERY_KEYS.preferences, (cached) => {
-    if (!cached) return cached;
-    let next: Record<string, unknown> | undefined;
-    for (const key of idleKeys) {
-      const localWriteStarted =
-        writeQueues.has(key) ||
-        (writeSeq.get(key) ?? 0) !== seqBefore.get(key) ||
-        !arePreferenceValuesEqual(cached[key], snapshotBefore.get(key));
-      if (localWriteStarted) {
-        if (writeQueues.has(key)) {
-          queueDeferredReconcile(queryClient, key);
-        } else {
-          retryLater.push(key);
+  const preserveUnloaded = isPreferencesCacheUnloaded(queryClient);
+  queryClient.setQueryData<Record<string, unknown>>(
+    QUERY_KEYS.preferences,
+    (cached) => {
+      if (!cached) return cached;
+      let next: Record<string, unknown> | undefined;
+      for (const key of idleKeys) {
+        const localWriteStarted =
+          writeQueues.has(key) ||
+          (writeSeq.get(key) ?? 0) !== seqBefore.get(key) ||
+          !arePreferenceValuesEqual(cached[key], snapshotBefore.get(key));
+        if (localWriteStarted) {
+          if (writeQueues.has(key)) {
+            queueDeferredReconcile(queryClient, key);
+          } else {
+            retryLater.push(key);
+          }
+          continue;
         }
-        continue;
-      }
-      const freshValue = fresh[key];
-      if (!arePreferenceValuesEqual(cached[key], freshValue)) {
-        next ??= { ...cached };
-        if (freshValue === undefined) {
-          delete next[key];
-        } else {
-          next[key] = freshValue;
+        const freshValue = fresh[key];
+        if (!arePreferenceValuesEqual(cached[key], freshValue)) {
+          next ??= { ...cached };
+          if (freshValue === undefined) {
+            delete next[key];
+          } else {
+            next[key] = freshValue;
+          }
         }
       }
-    }
-    return next ?? cached;
-  });
+      return next ?? cached;
+    },
+    preserveUnloaded ? { updatedAt: UNLOADED_PREFERENCES_TIMESTAMP } : undefined,
+  );
 
   if (retryLater.length > 0 && depth < 1) {
     await reconcilePreferenceKeys(queryClient, retryLater, depth + 1);
@@ -173,13 +209,14 @@ export function usePreference<T>(
   const t = useT();
   const queryClient = useQueryClient();
   const selectPreference = React.useCallback((preferences: Record<string, unknown>) => preferences[key], [key]);
-  const { data: raw, isPending, isError, isSuccess } = useQuery({
+  const { data: raw, isPending, isError } = useQuery({
     queryKey: ['preferences'],
     queryFn: api.getPreferences,
     select: selectPreference,
     staleTime: Infinity,
     meta: { silent: true },
   });
+  const loaded = useIsPreferencesLoaded(queryClient);
 
   // The parsed value must be reference-stable across renders. Callers feed it
   // straight into effect deps (e.g. the request-events column widths sync
@@ -199,10 +236,15 @@ export function usePreference<T>(
     // which is exactly what the control must fall back to when the server
     // refuses this one.
     const previous = queryClient.getQueryData<Record<string, unknown>>(QUERY_KEYS.preferences)?.[key];
-    queryClient.setQueryData<Record<string, unknown>>(QUERY_KEYS.preferences, (cached) => ({
-      ...(cached ?? {}),
-      [key]: next,
-    }));
+    const preserveUnloaded = isPreferencesCacheUnloaded(queryClient);
+    queryClient.setQueryData<Record<string, unknown>>(
+      QUERY_KEYS.preferences,
+      (cached) => ({
+        ...(cached ?? {}),
+        [key]: next,
+      }),
+      preserveUnloaded ? { updatedAt: UNLOADED_PREFERENCES_TIMESTAMP } : undefined,
+    );
     writeSeq.set(key, (writeSeq.get(key) ?? 0) + 1);
     const previousPromise = writeQueues.get(key) ?? Promise.resolve();
     let ok = true;
@@ -243,10 +285,15 @@ export function usePreference<T>(
         // server's older value - trading this control's honesty for a flicker in
         // controls this write never touched.
         if (writeQueues.get(key) === nextPromise) {
-          queryClient.setQueryData<Record<string, unknown>>(QUERY_KEYS.preferences, (cached) => ({
-            ...(cached ?? {}),
-            [key]: previous,
-          }));
+          const rollbackUnloaded = isPreferencesCacheUnloaded(queryClient);
+          queryClient.setQueryData<Record<string, unknown>>(
+            QUERY_KEYS.preferences,
+            (cached) => ({
+              ...(cached ?? {}),
+              [key]: previous,
+            }),
+            rollbackUnloaded ? { updatedAt: UNLOADED_PREFERENCES_TIMESTAMP } : undefined,
+          );
         }
       })
       .finally(() => {
@@ -264,5 +311,5 @@ export function usePreference<T>(
     return nextPromise.then(() => ({ ok }));
   }, [key, toast, queryClient, t]);
 
-  return { value, ready: !isPending || isError, loaded: isSuccess, set };
+  return { value, ready: !isPending || isError, loaded, set };
 }

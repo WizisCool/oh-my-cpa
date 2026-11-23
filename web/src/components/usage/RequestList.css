@@ -1,7 +1,9 @@
 .request-table-header {
   display: grid;
   grid-template-columns: var(--req-grid-columns);
-  transition: grid-template-columns var(--select-reveal);
+  transition:
+    grid-template-columns var(--select-reveal),
+    padding-inline-start var(--select-reveal);
   align-items: center;
   gap: var(--req-grid-gap);
   padding: 0 var(--req-pad-inline);
@@ -111,16 +113,15 @@
   transition:
     background-color var(--motion-fast) var(--ease-standard),
     grid-template-columns var(--select-reveal),
-    padding-left var(--select-reveal);
+    padding-inline-start var(--select-reveal);
 }
-/* The selection column opens from no width: while it is shut, the first column pulls back over the
-   gap after it, so the time starts at the row's edge; as it opens, both glide on one motion. */
-.req-col-time,
-.req-th-time {
-  transition: margin-inline-start var(--select-reveal);
-}
-.request-stream:not(.is-selecting) :is(.req-col-time, .req-th-time) {
-  margin-inline-start: calc(-1 * var(--req-grid-gap));
+/* The selection track opens from 0px: while it is shut, trimming the grid's leading padding by one
+   inter-column gap keeps whichever data column sits first flush with `--req-pad-inline` without
+   relying on a hardcoded column class or widening the first column's hit box. */
+@container reqstream (width > 920px) {
+  .request-stream:not(.is-selecting) :is(.request-table-header, .request-row) {
+    padding-inline-start: calc(var(--req-pad-inline) - var(--req-grid-gap));
+  }
 }
 /* Rows are kept apart by their rhythm, not by rules: a stream of hundreds of ruled rows read as a
    ledger of hairlines. Every other row lies on a band that runs edge to edge, so the eye can follow
@@ -677,6 +678,7 @@
   margin-bottom: 2px;
 }
 .request-chevron {
+  justify-self: end;
   color: var(--muted);
   font-size: var(--text-xs);
   transition: color var(--motion-fast) var(--ease-standard), transform var(--motion-base) var(--ease-out);

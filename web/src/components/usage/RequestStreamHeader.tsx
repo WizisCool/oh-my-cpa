@@ -4,12 +4,14 @@ import { useT } from '../../i18n';
 import {
   REQUEST_COLUMNS,
   requestColumnAlignClass,
+  type RequestColumnDefinition,
   type RequestColumnId,
   type RequestColumnWidths,
 } from './requestColumns';
 import './RequestList.css';
 
 interface RequestStreamHeaderProps {
+  columns?: readonly RequestColumnDefinition[];
   colWidths: RequestColumnWidths;
   handleResizeStart: (colId: RequestColumnId, event: React.PointerEvent<HTMLSpanElement>) => void;
   handleResetColumn: (colId: RequestColumnId) => void;
@@ -31,6 +33,7 @@ interface RequestStreamHeaderProps {
  * one of them is operable from the keyboard as well as by pointer.
  */
 export const RequestStreamHeader = React.memo(function RequestStreamHeader({
+  columns = REQUEST_COLUMNS,
   colWidths,
   handleResizeStart,
   handleResetColumn,
@@ -62,7 +65,7 @@ export const RequestStreamHeader = React.memo(function RequestStreamHeader({
                 onChange={() => onToggleAll(selectionState !== 'all')}
               />
             </label>
-            {REQUEST_COLUMNS.map((col) => (
+            {columns.map((col) => (
               <div
                 key={col.id}
                 className={`req-th req-th-${col.id} ${requestColumnAlignClass(col.id)}`}
