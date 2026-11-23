@@ -40,7 +40,7 @@ export function checkGofmt(root = ROOT, execute = execFileSync) {
   const chunkSize = 200;
   for (let index = 0; index < files.length; index += chunkSize) {
     const chunk = files.slice(index, index + chunkSize);
-    const out = execute(GOFMT_BIN, ['-l', ...chunk], {
+    const out = execute(GOFMT_BIN, ['-l', '--', ...chunk], {
       cwd: root,
       encoding: 'utf8',
       maxBuffer: 16 * 1024 * 1024,
@@ -189,11 +189,13 @@ export async function runParallelTasks(tasks, { log = console.log, error = conso
   let receivedSignal = null;
 
   const onProcessSignal = (sig) => {
-    receivedSignal = sig;
-    controller.abort();
+    if (!receivedSignal) {
+      receivedSignal = sig;
+      controller.abort();
+    }
   };
-  process.once('SIGINT', onProcessSignal);
-  process.once('SIGTERM', onProcessSignal);
+  process.on('SIGINT', onProcessSignal);
+  process.on('SIGTERM', onProcessSignal);
 
   try {
     const wrapped = tasks.map(async (task) => {
@@ -227,35 +229,6 @@ export async function runParallelTasks(tasks, { log = console.log, error = conso
     process.removeListener('SIGINT', onProcessSignal);
     process.removeListener('SIGTERM', onProcessSignal);
   }
-}
-
-function runGofmtTask(root = ROOT) {
-  return async () => {
-    const startedAt = performance.now();
-    try {
-      const unformatted = checkGofmt(root);
-      const durationMs = Math.round(performance.now() - startedAt);
-      if (unformatted.length > 0) {
-        return {
-          label: 'gofmt',
-          ok: false,
-          aborted: false,
-          durationMs,
-          output: `Unformatted Go files (run gofmt -w):\n  ${unformatted.join('\n  ')}`,
-        };
-      }
-      return { label: 'gofmt', ok: true, aborted: false, durationMs, output: '' };
-    } catch (err) {
-      const durationMs = Math.round(performance.now() - startedAt);
-      return {
-        label: 'gofmt',
-        ok: false,
-        aborted: false,
-        durationMs,
-        output: err instanceof Error ? err.message : String(err),
-      };
-    }
-  };
 }
 
 async function runStreamingStep(command, args, { cwd = ROOT, env = process.env } = {}) {
@@ -304,7 +277,7 @@ export async function runGateMode(mode, { root = ROOT } = {}) {
 
     case 'fast': {
       return runParallelTasks([
-        runGofmtTask(root),
+        (signal) => runBufferedCommand('gofmt', process.execPath, [path.join('scripts', 'run-gates.mjs'), 'gofmt'], { cwd: root, signal }),
         (signal) => runBufferedCommand('web-type-check', PNPM_BIN, ['--dir', 'web', 'type-check'], { cwd: root, signal }),
         (signal) => runBufferedCommand('tooling-type-check', PNPM_BIN, ['type-check:tooling'], { cwd: root, signal }),
         (signal) => runBufferedCommand('logic-tests', PNPM_BIN, ['test:logic'], { cwd: root, signal }),
@@ -345,8 +318,27 @@ export async function runGateMode(mode, { root = ROOT } = {}) {
           ),
         ]);
         const durationMs = Math.round(performance.now() - startedAt);
-        if (!selfTests.ok) return { ...selfTests, durationMs };
-        if (!demoContract.ok) return { ...demoContract, durationMs };
+        const completedFailures = [selfTests, demoContract].filter((item) => !item.ok && !item.aborted);
+        if (completedFailures.length > 0) {
+          return {
+            label: completedFailures.map((item) => item.label).join(' + '),
+            ok: false,
+            aborted: false,
+            durationMs,
+            output: completedFailures
+              .map((item) => (item.output ? `[${item.label}]\n${item.output}` : `[${item.label}] failed`))
+              .join('\n\n'),
+          };
+        }
+        if (selfTests.aborted || demoContract.aborted) {
+          return {
+            label: 'demo-and-self-tests',
+            ok: false,
+            aborted: true,
+            durationMs,
+            output: '',
+          };
+        }
         return {
           label: 'demo-and-self-tests',
           ok: true,

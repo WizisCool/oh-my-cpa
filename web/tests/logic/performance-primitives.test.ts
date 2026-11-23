@@ -1323,3 +1323,52 @@ test('trendsQuotaParamsFromSearch matches readTrendsView + trendsQuotaParams and
   assert.equal(retryTrendsQuery(2, new Error('transient 500')), false);
   assert.equal(retryTrendsQuery(0, new ApiError('uncaptured', 404, { code: 'demo_uncaptured' })), false);
 });
+
+test('settlePendingRouteLoaders stays pending until in-flight imports settle and drains handled rejections cleanly', async () => {
+  const { createNamedLoader, createRouteLoader, settlePendingRouteLoaders } = await import('../../src/utils/routeLoader.ts');
+  let release!: (mod: { Widget: () => null }) => void;
+  const loadWidget = createNamedLoader(
+    () =>
+      new Promise<{ Widget: () => null }>((resolve) => {
+        release = resolve;
+      }),
+    'Widget',
+  );
+  const pending = loadWidget();
+  let waitCompleted = false;
+  const wait = settlePendingRouteLoaders().then(() => {
+    waitCompleted = true;
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(waitCompleted, false, 'settlement must remain pending until the import resolves');
+  release({ Widget: () => null });
+  await wait;
+  assert.equal(waitCompleted, true);
+  assert.equal(typeof (await pending).default, 'function');
+
+  // A rejected import whose caller handles the rejection still resolves settlement and allows retry.
+  let failLoad!: (reason: Error) => void;
+  let attempts = 0;
+  const loadFlaky = createRouteLoader(() => {
+    attempts += 1;
+    if (attempts === 1) {
+      return new Promise<{ default: () => null }>((_, reject) => {
+        failLoad = reject;
+      });
+    }
+    return Promise.resolve({ default: () => null });
+  });
+  const firstAttempt = loadFlaky().catch((err: unknown) => err);
+  let rejectSettled = false;
+  const drainRejected = settlePendingRouteLoaders().then(() => {
+    rejectSettled = true;
+  });
+  await Promise.resolve();
+  assert.equal(rejectSettled, false);
+  failLoad(new Error('chunk network error'));
+  await drainRejected;
+  assert.equal(rejectSettled, true);
+  assert.equal((await firstAttempt) instanceof Error, true);
+  assert.equal(typeof (await loadFlaky()).default, 'function');
+});
