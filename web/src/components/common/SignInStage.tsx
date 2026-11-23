@@ -1,64 +1,66 @@
 import React from 'react';
+import clsx from 'clsx';
 import { BrandArtwork } from './BrandArtwork';
 import { LobeIcon } from '../LobeIcon';
-import { useT } from '../../i18n';
 import { isMotionReduced } from '../../utils/motionPreference';
+import { GATEWAY_NODE, createPacketPlayer, edgeKey, laneKey, type PacketRoute } from '../dashboard/routing/routingPackets';
+import routeStyles from '../dashboard/routing/RoutingPanel.module.css';
 import styles from './SignInStage.module.css';
 
 /**
  * The sign-in page's showcase: what the console is, drawn rather than described. Coding clients
- * on the left send requests into the gateway, which routes each one on to a model provider. The
- * glows follow the dashboard's routing map: opacity-animated overlays and moving strokes, never an
- * animated shadow, and every lane carries its pulse from client to provider without a gap.
+ * on the left send requests into the gateway, which routes each one on to a model provider. It is
+ * the dashboard's live routing map with a scripted minute: the same tiles, gateway, lanes and
+ * travelling requests (its stylesheet and packet player), only without labels or real traffic.
+ * It carries no caption: the form beside it names the product, and the drawing shows what it does.
  *
  * It is decorative and desktop-only: the parent does not mount it on a narrow viewport, where a
  * reduced copy would only be a crude one, and it is hidden from assistive technology.
  */
 
-// One drawing space shared by the strokes and the nodes laid over them, so the two stay aligned
-// at every width: nodes are positioned in percentages of this box.
-const VIEW = { width: 640, height: 400 };
-const GATEWAY = { x: 320, y: 200, half: 46 };
-const NODE_HALF = 22;
+// One drawing space shared by the lanes and the nodes laid over them, so the two stay aligned at
+// every width: nodes are positioned in percentages of this box. Its width is the scene's widest,
+// so at full size a unit is a pixel and the tiles take the live map's sizes; narrower, the whole
+// scene scales down together (see `.scene`).
+const VIEW = { width: 600, height: 376 };
+const GATEWAY = { x: 300, y: 188, half: 40 };
+const NODE_HALF = 20;
+const CLIENT_X = 72;
+const PROVIDER_X = 528;
 
 const CLIENTS = [
-  { iconId: 'ClaudeCode', y: 110 },
-  { iconId: 'Codex', y: 200 },
-  { iconId: 'Antigravity', y: 290 },
+  { iconId: 'ClaudeCode', y: 104 },
+  { iconId: 'Codex', y: 188 },
+  { iconId: 'Antigravity', y: 272 },
 ];
 const PROVIDERS = [
-  { iconId: 'Claude', y: 76 },
-  { iconId: 'OpenAI', y: 160 },
-  { iconId: 'Gemini', y: 240 },
-  { iconId: 'DeepSeek', y: 324 },
+  { iconId: 'Claude', y: 72 },
+  { iconId: 'OpenAI', y: 150 },
+  { iconId: 'Gemini', y: 226 },
+  { iconId: 'DeepSeek', y: 304 },
 ];
-const CLIENT_X = 76;
-const PROVIDER_X = 564;
 
-function inboundPath(y: number): string {
-  const startX = CLIENT_X + NODE_HALF;
-  const endX = GATEWAY.x - GATEWAY.half;
-  const bend = (endX - startX) * 0.55;
-  return `M${startX} ${y} C${startX + bend} ${y}, ${endX - bend} ${GATEWAY.y}, ${endX} ${GATEWAY.y}`;
+// The live map's lane: a horizontal-tangent S-curve from a tile's gateway-facing edge.
+function curve(fromX: number, fromY: number, toX: number, toY: number): string {
+  const dx = (toX - fromX) * 0.55;
+  return `M${fromX} ${fromY} C${fromX + dx} ${fromY}, ${toX - dx} ${toY}, ${toX} ${toY}`;
 }
 
-function outboundPath(y: number): string {
-  const startX = GATEWAY.x + GATEWAY.half;
-  const endX = PROVIDER_X - NODE_HALF;
-  const bend = (endX - startX) * 0.55;
-  return `M${startX} ${GATEWAY.y} C${startX + bend} ${GATEWAY.y}, ${endX - bend} ${y}, ${endX} ${y}`;
-}
+const inboundPath = (y: number) => curve(CLIENT_X + NODE_HALF, y, GATEWAY.x - GATEWAY.half, GATEWAY.y);
+const outboundPath = (y: number) => curve(GATEWAY.x + GATEWAY.half, GATEWAY.y, PROVIDER_X - NODE_HALF, y);
 
-// A route is one request's journey: in from a client, out to a provider. Both halves share one
-// period and one delay; the inbound stroke travels in the first half and the outbound one in the
-// second, so the pulse reads as a single request passing through the gateway.
-const ROUTES = [
-  { client: 0, provider: 0 },
-  { client: 1, provider: 2 },
-  { client: 2, provider: 1 },
-  { client: 0, provider: 3 },
-  { client: 1, provider: 0 },
+const answered = (targetId: string, latencyMs: number) => ({ targetId, event: { latency_ms: latencyMs, failed: false } });
+
+// The scripted traffic, replayed in turn: every request is answered, so the only red on the page
+// stays the sign-in's own.
+const ROUTES: PacketRoute[] = [
+  { modelId: 'ClaudeCode', attempts: [answered('Claude', 4200)] },
+  { modelId: 'Codex', attempts: [answered('Gemini', 2600)] },
+  { modelId: 'Antigravity', attempts: [answered('OpenAI', 3400)] },
+  { modelId: 'ClaudeCode', attempts: [answered('DeepSeek', 1800)] },
+  { modelId: 'Codex', attempts: [answered('Claude', 5200)] },
 ];
+const ROUTE_INTERVAL_MS = 1100;
 
 export type SignInStageState = 'idle' | 'submitting' | 'failed';
 
@@ -68,10 +70,67 @@ function percent(value: number, total: number): string {
 
 const gatewayPosition = { left: percent(GATEWAY.x, VIEW.width), top: percent(GATEWAY.y, VIEW.height) };
 
+/** Elements by key, for the packet player; the showcase's nodes never change, so neither do these. */
+function useElements<T extends Element>() {
+  return React.useMemo(() => {
+    const elements = new Map<string, T>();
+    return {
+      get: (key: string) => elements.get(key) ?? null,
+      ref: (key: string) => (element: T | null) => {
+        if (element) elements.set(key, element);
+        else elements.delete(key);
+      },
+    };
+  }, []);
+}
+
+function TileLight({ id, washes, halos }: { id: string; washes: ReturnType<typeof useElements<HTMLElement>>; halos: ReturnType<typeof useElements<HTMLElement>> }) {
+  return (
+    <>
+      <span ref={halos.ref(id)} className={routeStyles['halo']} />
+      <span ref={washes.ref(id)} className={routeStyles['wash']} />
+    </>
+  );
+}
+
 export const SignInStage: React.FC<{ state: SignInStageState; failures: number }> = ({ state, failures }) => {
-  const t = useT();
   const stageRef = React.useRef<HTMLElement>(null);
   const frameRef = React.useRef<number>(0);
+  const layerRef = React.useRef<SVGGElement>(null);
+  const hubRef = React.useRef<HTMLDivElement>(null);
+  const paths = useElements<SVGPathElement>();
+  const washes = useElements<HTMLElement>();
+  const halos = useElements<HTMLElement>();
+
+  React.useEffect(() => {
+    const player = createPacketPlayer({
+      layer: () => layerRef.current,
+      path: paths.get,
+      wash: washes.get,
+      halo: halos.get,
+      gateway: () => hubRef.current,
+      classNames: {
+        packet: routeStyles['packet'],
+        packetHead: routeStyles['packet-head'],
+        packetTail: routeStyles['packet-tail'],
+        gatewayBusy: routeStyles['hub-busy'],
+        washRequest: routeStyles['wash-request'],
+        washSuccess: routeStyles['wash-success'],
+        washFailure: routeStyles['wash-failure'],
+      },
+    });
+    let next = 0;
+    const send = () => {
+      player.play([ROUTES[next]]);
+      next = (next + 1) % ROUTES.length;
+    };
+    send();
+    const timer = window.setInterval(send, ROUTE_INTERVAL_MS);
+    return () => {
+      window.clearInterval(timer);
+      player.dispose();
+    };
+  }, [paths, washes, halos]);
 
   // The scene leans a few pixels toward the pointer: a hand-driven move, so it eases after the
   // hand and settles back with the console's spring when the pointer leaves. Written straight to
@@ -105,56 +164,45 @@ export const SignInStage: React.FC<{ state: SignInStageState; failures: number }
       <div className={`${styles['aurora']} ${styles['aurora-b']}`} />
 
       <div className={styles['content']}>
-        <div className={styles['scene']} style={{ aspectRatio: `${VIEW.width} / ${VIEW.height}` }}>
+        <div className={clsx(routeStyles['wire'], styles['scene'])} style={{ aspectRatio: `${VIEW.width} / ${VIEW.height}` }}>
           <svg className={styles['wires']} viewBox={`0 0 ${VIEW.width} ${VIEW.height}`} preserveAspectRatio="xMidYMid meet">
-            <g className={styles['orbits']}>
-              <circle className={styles['orbit-outer']} cx={GATEWAY.x} cy={GATEWAY.y} r={112} />
-              <circle className={styles['orbit-inner']} cx={GATEWAY.x} cy={GATEWAY.y} r={78} />
-              {/* Spins only while a sign-in is in flight; paused rather than re-timed, so it
-                  starts and stops where it is instead of jumping to a new phase. */}
-              <circle className={styles['orbit-boost']} cx={GATEWAY.x} cy={GATEWAY.y} r={64} pathLength={100} />
-            </g>
-            {CLIENTS.map((client) => <path key={client.iconId} className={styles['track']} d={inboundPath(client.y)} />)}
-            {PROVIDERS.map((provider) => <path key={provider.iconId} className={styles['track']} d={outboundPath(provider.y)} />)}
-            <g className={styles['flows']}>
-              {ROUTES.map((route, index) => {
-                const style = { '--route': index } as React.CSSProperties;
-                return (
-                  <React.Fragment key={index}>
-                    <path className={`${styles['flow']} ${styles['flow-in']}`} style={style} pathLength={100} d={inboundPath(CLIENTS[route.client].y)} />
-                    <path className={`${styles['flow']} ${styles['flow-out']}`} style={style} pathLength={100} d={outboundPath(PROVIDERS[route.provider].y)} />
-                  </React.Fragment>
-                );
-              })}
-            </g>
+            {CLIENTS.map((client) => (
+              <path key={client.iconId} ref={paths.ref(laneKey(client.iconId))} className={routeStyles['edge']} d={inboundPath(client.y)} />
+            ))}
+            {PROVIDERS.map((provider) => (
+              <path key={provider.iconId} ref={paths.ref(edgeKey(provider.iconId))} className={routeStyles['edge']} d={outboundPath(provider.y)} />
+            ))}
+            <g ref={layerRef} />
           </svg>
 
-          {CLIENTS.map((client, index) => (
-            <span key={client.iconId} className={styles['node']} style={{ left: percent(CLIENT_X, VIEW.width), top: percent(client.y, VIEW.height), '--order': index } as React.CSSProperties}>
-              <LobeIcon iconId={client.iconId} size="50%" />
-            </span>
-          ))}
-          {PROVIDERS.map((provider, index) => (
-            <span key={provider.iconId} className={styles['node']} style={{ left: percent(PROVIDER_X, VIEW.width), top: percent(provider.y, VIEW.height), '--order': index + CLIENTS.length } as React.CSSProperties}>
-              <LobeIcon iconId={provider.iconId} size="50%" />
+          {[...CLIENTS.map((node) => ({ ...node, x: CLIENT_X })), ...PROVIDERS.map((node) => ({ ...node, x: PROVIDER_X }))].map((node, index) => (
+            <span
+              key={node.iconId}
+              className={styles['anchor']}
+              style={{ left: percent(node.x, VIEW.width), top: percent(node.y, VIEW.height), '--order': index } as React.CSSProperties}
+            >
+              <span className={routeStyles['tile']}>
+                <TileLight id={node.iconId} washes={washes} halos={halos} />
+                <LobeIcon iconId={node.iconId} size="50%" />
+              </span>
             </span>
           ))}
 
-          {/* The halo sits behind the gateway rather than inside it, so it lights the page
-              around the tile without tinting the tile itself. */}
-          <span className={styles['halo']} style={gatewayPosition}>
-            <span className={styles['halo-glow']} />
-            {/* A refused key flashes the gateway once; the key restarts the flash per attempt. */}
-            {state === 'failed' && <span key={failures} className={styles['halo-alarm']} />}
+          <span className={clsx(styles['anchor'], styles['hub-anchor'])} style={gatewayPosition}>
+            <div ref={hubRef} className={routeStyles['hub']}>
+              <svg className={clsx(routeStyles['orbits'], styles['orbits'])} viewBox="0 0 184 184">
+                <circle className={routeStyles['orbit-outer']} cx={92} cy={92} r={91} />
+                <circle className={routeStyles['orbit-inner']} cx={92} cy={92} r={66} />
+              </svg>
+              <span className={clsx(routeStyles['hub-glow'], styles['hub-glow'])} />
+              {/* A refused key flashes the gateway once; the key restarts the flash per attempt. */}
+              {state === 'failed' && <span key={failures} className={styles['hub-alarm']} />}
+              <span className={clsx(routeStyles['tile'], routeStyles['gateway'])}>
+                <TileLight id={GATEWAY_NODE} washes={washes} halos={halos} />
+                <BrandArtwork shape="mark" height={30} />
+              </span>
+            </div>
           </span>
-          <span className={styles['gateway']} style={gatewayPosition}>
-            <BrandArtwork shape="mark" height={42} />
-          </span>
-        </div>
-
-        <div className={styles['caption']}>
-          <p className={styles['headline']}>{t('auth.stage.title')}</p>
-          <p className={styles['body']}>{t('auth.stage.body')}</p>
         </div>
       </div>
     </aside>

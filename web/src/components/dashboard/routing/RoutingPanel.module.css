@@ -1,7 +1,4 @@
 .panel {
-  /* How long the gateway takes to settle once the last request on the map has gone home:
-     a slow fade, so the hub dims after the traffic rather than switching off. */
-  --motion-route-cool: 600ms;
   container: routingmap / inline-size;
   display: flex;
   flex-direction: column;
@@ -69,13 +66,29 @@
 
    The light differs by theme. Dark pages take the accent as it is; light pages darken the accent
    for legible text, and a glow of that navy only greys the page, so the light theme lifts the
-   map's light back to a vivid step of the same hue. Nothing that carries text uses it. */
-.map {
+   map's light back to a vivid step of the same hue. Nothing that carries text uses it.
+
+   `.wire` carries the drawing's tokens on their own, so the sign-in showcase draws with the
+   same tiles, gateway, lanes and requests as the live map without taking its layout. */
+.wire {
   --map-light: var(--accent);
   --map-glow: color-mix(in srgb, var(--map-light) 22%, transparent);
   --map-track: var(--fg);
   --map-track-rest: 0.16;
   --tile-size: 40px;
+  --hub-size: 80px;
+  /* How long the gateway takes to settle once the last request on the map has gone home:
+     a slow fade, so the hub dims after the traffic rather than switching off. */
+  --motion-route-cool: 600ms;
+}
+
+:global(:root[data-theme-mode='light']) .wire {
+  --map-light: oklch(from var(--accent) calc(l + 0.2) calc(c + 0.06) h);
+  --map-glow: color-mix(in srgb, var(--map-light) 30%, transparent);
+  --map-track-rest: 0.2;
+}
+
+.map {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 184px minmax(0, 1fr);
@@ -84,12 +97,6 @@
   min-height: 272px;
   padding: 6px 4px 10px;
   isolation: isolate;
-}
-
-:global(:root[data-theme-mode='light']) .map {
-  --map-light: oklch(from var(--accent) calc(l + 0.2) calc(c + 0.06) h);
-  --map-glow: color-mix(in srgb, var(--map-light) 30%, transparent);
-  --map-track-rest: 0.2;
 }
 
 .map-dense {
@@ -325,7 +332,6 @@
    orbits around it and a soft glow behind it that warms a little while requests are on the map.
    It carries no caption: the mark names it, and the rows say what matters. */
 .hub {
-  --hub-size: 80px;
   position: relative;
   display: grid;
   place-items: center;
