@@ -134,13 +134,13 @@ func TestOAuthAuthURLSendsTheLoopbackFlagOnlyWhereItApplies(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, provider := range []string{"codex", "anthropic", "antigravity", "xai", "devin", "kimi", "kimi-ai", "meta", "some-plugin"} {
+			for _, provider := range []string{"codex", "anthropic", "antigravity", "xai", "devin", "kimi", "kimi-ai", "meta", "copilot", "some-plugin"} {
 				if _, err := client.OAuthAuthURL(context.Background(), provider, OAuthStartOptions{ProxyURL: proxyURL}); err != nil {
 					t.Fatalf("%s: %v", provider, err)
 				}
 			}
 			actual, _ := json.Marshal(queries)
-			const expected = `{"antigravity":true,"claude":true,"codex":true,"devin":true,"kimi":false,"kimi-ai":false,"meta":false,"some-plugin":false,"xai":true}`
+			const expected = `{"antigravity":true,"claude":true,"codex":true,"copilot":false,"devin":true,"kimi":false,"kimi-ai":false,"meta":false,"some-plugin":false,"xai":true}`
 			if string(actual) != expected {
 				t.Fatalf("provider/loopback mapping = %s, want %s", actual, expected)
 			}
@@ -153,7 +153,7 @@ func TestOAuthProviderRegistryFlagsMatchTheConsoleFlow(t *testing.T) {
 	for _, provider := range OAuthProviders {
 		byID[provider.ID] = provider
 	}
-	for _, id := range []string{"kimi", "kimi-ai", "codex", "anthropic", "antigravity", "xai", "devin", "meta"} {
+	for _, id := range []string{"kimi", "kimi-ai", "codex", "anthropic", "antigravity", "xai", "devin", "meta", "copilot"} {
 		if _, ok := byID[id]; !ok {
 			t.Fatalf("provider %s is missing from the registry", id)
 		}
@@ -164,10 +164,10 @@ func TestOAuthProviderRegistryFlagsMatchTheConsoleFlow(t *testing.T) {
 	if !byID["devin"].UsesLoopbackCallback {
 		t.Fatal("devin's redirect lands on CPA's own callback route and needs the forwarder")
 	}
-	if byID["meta"].Flow != OAuthFlowDevice || byID["kimi"].Flow != OAuthFlowDevice {
+	if byID["meta"].Flow != OAuthFlowDevice || byID["kimi"].Flow != OAuthFlowDevice || byID["copilot"].Flow != OAuthFlowDevice {
 		t.Fatal("device-code providers must be declared as device flows")
 	}
-	if byID["meta"].UsesLoopbackCallback || byID["kimi"].UsesLoopbackCallback {
+	if byID["meta"].UsesLoopbackCallback || byID["kimi"].UsesLoopbackCallback || byID["copilot"].UsesLoopbackCallback {
 		t.Fatal("a device flow must not request the loopback callback")
 	}
 	// Plugin providers are not in the registry; the lookup has to say so rather

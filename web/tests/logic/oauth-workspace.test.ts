@@ -1145,6 +1145,11 @@ test('workspaceProviderOptions uses PRIMARY_CREDENTIAL_PROVIDERS including copil
   assert.deepEqual(workspaceProviderOptions([], []), [...PRIMARY_CREDENTIAL_PROVIDERS]);
   assert.ok(PRIMARY_CREDENTIAL_PROVIDERS.includes('copilot'));
   assert.equal(providerDisplayName('copilot'), 'GitHub Copilot');
+  assert.equal(resolveAuthorizationProviderId('copilot', []), 'copilot');
+  assert.equal(
+    legacyOAuthManagementRedirect('/oauth', new URLSearchParams('provider=copilot')),
+    '/oauth-management?provider=copilot&action=connect&connect_provider=copilot',
+  );
 
   const projection = buildOAuthWorkspaceProjection(
     [file({ name: 'copilot-work.json', auth_index: 'idx-copilot', type: 'copilot', provider: 'copilot', email: 'dev@example.test' })],
@@ -1154,5 +1159,5 @@ test('workspaceProviderOptions uses PRIMARY_CREDENTIAL_PROVIDERS including copil
   assert.equal(projection.records.length, 1);
   assert.equal(projection.records[0].displayProvider, 'copilot');
   assert.equal(providerDisplayName(projection.records[0].displayProvider), 'GitHub Copilot');
-  assert.equal(projection.records[0].authorizationProviderId, undefined);
+  assert.equal(projection.records[0].authorizationProviderId, 'copilot');
 });

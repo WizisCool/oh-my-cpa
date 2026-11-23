@@ -293,6 +293,8 @@
 
 .device-code {
   border: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
   font-size: var(--text-xl);
   font-weight: 700;
