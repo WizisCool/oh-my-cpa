@@ -449,3 +449,43 @@ func TestRoutingModelsRefusesUnreadableSources(t *testing.T) {
 		})
 	}
 }
+
+func TestPatchRoutingBodyLimitAcceptsBetween1MiBAnd2MiBAndRejectsAbove2MiB(t *testing.T) {
+	fixture := newRoutingFixtureCPA()
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+
+	board := readRoutingBoardReply(t, client, baseURL)
+	basePlan, err := json.Marshal(map[string]any{
+		"revision": board.Revision,
+		"settings": map[string]any{"strategy": "fill-first"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A valid PATCH body between 1 MiB and 2 MiB exceeds the old 1 MiB cap and
+	// must be decoded and applied under managementRoutingBodyLimit (2 MiB).
+	paddedPlan := string(basePlan[:len(basePlan)-1]) + strings.Repeat(" ", 1200*1024) + "}"
+	if len(paddedPlan) <= 1024*1024 || len(paddedPlan) >= managementRoutingBodyLimit {
+		t.Fatalf("expected padded plan between 1 MiB and 2 MiB, got %d bytes", len(paddedPlan))
+	}
+	response, payload := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/routing", paddedPlan)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("1.2 MiB routing plan status = %d body %s, want 200", response.StatusCode, payload)
+	}
+	var outcome routingOutcomeReply
+	if err := json.Unmarshal(payload, &outcome); err != nil {
+		t.Fatal(err)
+	}
+	if !outcome.IsComplete || outcome.Board == nil || outcome.Board.Settings.Strategy != "fill-first" {
+		t.Fatalf("routing plan was not applied: %s", payload)
+	}
+
+	// A body exceeding managementRoutingBodyLimit (2 MiB) returns 413 request_too_large.
+	response, payload = patchRoutingPlan(t, client, baseURL, map[string]any{
+		"revision": strings.Repeat("r", managementRoutingBodyLimit+64),
+	})
+	if response.StatusCode != http.StatusRequestEntityTooLarge || !strings.Contains(string(payload), requestTooLargeCode) {
+		t.Fatalf("oversized routing plan status = %d body %s, want 413 request_too_large", response.StatusCode, payload)
+	}
+}

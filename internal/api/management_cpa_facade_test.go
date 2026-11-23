@@ -211,13 +211,30 @@ func TestRequestBodyTooLargeAcrossAdHocHandlers(t *testing.T) {
 	})
 
 	t.Run("readAgentInput", func(t *testing.T) {
-		recorder := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/omc/api/v1/agent/session/reset", strings.NewReader(`{"revision":1}`+strings.Repeat(" ", 65*1024)))
-		var out ResetAgentRequestDTO
-		if readAgentInput(recorder, req, &out) {
-			t.Fatal("expected readAgentInput to refuse oversized body")
+		for _, tc := range []struct {
+			name string
+			body string
+		}{
+			{name: "primary decode overflow", body: `{"data_ref":"` + strings.Repeat("d", 65*1024) + `"}`},
+			{name: "trailing bytes overflow", body: `{"data_ref":"ok"}` + strings.Repeat(" ", 65*1024)},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				recorder := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodPost, "/omc/api/v1/agent/data-rows", strings.NewReader(tc.body))
+				var out AgentDataRowsRequestDTO
+				if readAgentInput(recorder, req, &out) {
+					t.Fatal("expected readAgentInput to refuse oversized body")
+				}
+				assertTooLarge(t, recorder)
+				var errBody ErrorResponseDTO
+				if err := json.Unmarshal(recorder.Body.Bytes(), &errBody); err != nil {
+					t.Fatalf("unmarshal 413 body: %v", err)
+				}
+				if !strings.Contains(errBody.Error, "65536") {
+					t.Fatalf("error = %q, want active 65536-byte limit", errBody.Error)
+				}
+			})
 		}
-		assertTooLarge(t, recorder)
 	})
 
 	t.Run("browserRun non-overflow read error returns 400", func(t *testing.T) {

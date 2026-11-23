@@ -76,16 +76,16 @@ func readAgentInput(writer http.ResponseWriter, request *http.Request, value any
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(value); err != nil {
-		if _, tooLarge := isRequestBodyTooLarge(err); tooLarge {
-			writePlaygroundError(writer, http.StatusRequestEntityTooLarge, requestTooLargeCode)
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
 			return false
 		}
 		writePlaygroundError(writer, 400, "invalid_parameters")
 		return false
 	}
 	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
-		if _, tooLarge := isRequestBodyTooLarge(err); tooLarge {
-			writePlaygroundError(writer, http.StatusRequestEntityTooLarge, requestTooLargeCode)
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
 			return false
 		}
 		writePlaygroundError(writer, 400, "invalid_parameters")
