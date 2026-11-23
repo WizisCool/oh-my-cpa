@@ -1,7 +1,7 @@
 import { isMotionReduced, subscribeMotionPreference } from '../../../utils/motionPreference';
 
 import { MOTION_ROUTE, MOTION_ROUTE_GLOW, MOTION_ROUTE_LAND } from '../../../theme/themeConfig';
-import type { RoutingRoute } from '../../../types/usageRouting';
+import type { UsageEvent } from '../../../types/usageEvents';
 
 /**
  * The routing map's travelling requests: a short stroke of light leaves the
@@ -40,6 +40,13 @@ const TAIL_PX = 56;
 
 export function holdFor(latencyMs: number): number {
   return Math.round(Math.min(480, Math.max(120, latencyMs / 20)));
+}
+
+/** What a replay reads of a request: the live map passes its `RoutingRoute`s, the sign-in
+ * showcase a scripted few. */
+export interface PacketRoute {
+  modelId: string;
+  attempts: ReadonlyArray<{ targetId: string; event: Pick<UsageEvent, 'latency_ms' | 'failed'> }>;
 }
 
 export type PacketTone = 'request' | 'success' | 'failure';
@@ -157,6 +164,7 @@ export function createPacketPlayer(stage: PacketStage) {
   const setBusy = () => stage.gateway()?.classList.toggle(stage.classNames.gatewayBusy, inFlight > 0 && !isDisposed);
 
   const glow = (element: HTMLElement, peak: number) => {
+    if (typeof element.animate !== 'function') return;
     const now = performance.now();
     const from = currentGlowOpacity(glowTracks.get(element), now);
     const targetPeak = Math.max(from, peak);
@@ -187,7 +195,7 @@ export function createPacketPlayer(stage: PacketStage) {
 
   const measurePath = (path: SVGPathElement): PathGeometryCache | null => {
     const d = path.getAttribute('d') ?? '';
-    if (!d) return null;
+    if (!d || typeof path.getTotalLength !== 'function') return null;
     const cached = pathGeometry.get(path);
     if (cached && cached.d === d) return cached;
     const length = path.getTotalLength();
@@ -271,7 +279,7 @@ export function createPacketPlayer(stage: PacketStage) {
     packets.delete(packet);
   };
 
-  const replay = async (route: RoutingRoute) => {
+  const replay = async (route: PacketRoute) => {
     const trip = generation;
     const packet = launch();
     if (!packet) return;
@@ -346,7 +354,7 @@ export function createPacketPlayer(stage: PacketStage) {
   });
 
   return {
-    play(routes: readonly RoutingRoute[]) {
+    play(routes: readonly PacketRoute[]) {
       if (isDisposed || isPageHidden() || isMotionReduced()) return;
       routes.slice(-MAX_REPLAYED_ROUTES).forEach((route, index) => {
         const timer = setTimeout(() => {

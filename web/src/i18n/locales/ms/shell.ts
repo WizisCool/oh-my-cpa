@@ -179,8 +179,6 @@ export default {
   "auth.submit": "Log masuk",
   "auth.subtitle": "Masukkan kunci pengurusan CPA untuk membuka konsol",
   "auth.keep_signed_in": "Kekal log masuk selama 30 hari",
-  "auth.stage.title": "Satu gerbang untuk setiap laluan model",
-  "auth.stage.body": "Kelayakan, penghalaan, penggunaan dan kos dalam satu paparan.",
   "time_range.title": "Julat masa",
   "time_range.quick": "Baru-baru ini",
   "time_range.custom": "Julat tersuai",

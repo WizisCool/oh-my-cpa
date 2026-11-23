@@ -339,7 +339,7 @@ export const RoutingMap = React.memo(function RoutingMap({
   return (
     <div
       ref={containerRef}
-      className={clsx(styles['map'], isDense && styles['map-dense'], isEmpty && styles['map-idle'])}
+      className={clsx(styles['wire'], styles['map'], isDense && styles['map-dense'], isEmpty && styles['map-idle'])}
       data-testid="routing-map"
       data-routing-map=""
     >
