@@ -9,7 +9,7 @@ import { expect, it, vi } from 'vitest';
 import { OAuthConnectPanel } from '../src/pages/oauthManagement/OAuthConnectPanel';
 import { OAuthSessionStrip } from '../src/pages/oauthManagement/OAuthSessionStrip';
 import { useOAuthSessions } from '../src/pages/oauthManagement/useOAuthSessions';
-import { pluginOAuthProviderChoices, type OAuthProviderChoice } from '../src/pages/oauthProviderLogic';
+import { builtinOAuthProviderChoices, pluginOAuthProviderChoices, type OAuthProviderChoice } from '../src/pages/oauthProviderLogic';
 import { installOmcApi, json } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 
@@ -252,4 +252,102 @@ it('shows the active Claude OAuth scope in the connect drawer without adding a t
     expect(scopeBox.textContent).not.toContain('org:create_api_key');
     expect(scopeBox.textContent).toContain('user:profile');
   } finally { optOutSurface.unmount(); }
+});
+
+function BuiltinConnectWorkspace({
+  initialProviderId = '',
+  recovery,
+}: {
+  initialProviderId?: string;
+  recovery?: OAuthRecoveryTarget;
+} = {}) {
+  const choices = builtinOAuthProviderChoices(useT());
+  const [isOpen, setIsOpen] = React.useState(true);
+  const [providerId, setProviderId] = React.useState(initialProviderId);
+  const sessions = useOAuthSessions(choices);
+  return <>
+    <output data-testid="sessions">{JSON.stringify(sessions.states)}</output>
+    <OAuthConnectPanel
+      recoveryTarget={recovery}
+      isRecoverySupported={Boolean(recovery)}
+      open={isOpen}
+      choices={choices}
+      selectedProviderId={providerId || undefined}
+      onSelectProvider={setProviderId}
+      onClose={() => setIsOpen(false)}
+      onViewCredentials={() => {}}
+      sessions={sessions}
+    />
+  </>;
+}
+
+it('runs GitHub Copilot device sign-in from the picker and supports targeted device recovery', async () => {
+  vi.useFakeTimers();
+  const server = installOmcApi();
+  let statusResult: { status: string } = { status: 'wait' };
+  server.on('POST', '/management/oauth/start', () => ({
+    url: 'https://github.com/login/device',
+    state: 'copilot-device-state',
+    session_id: 'copilot-device-state',
+    provider: 'copilot',
+    flow: 'device',
+    user_code: 'WDJB-MJHT',
+    expires_in: 900,
+  }));
+  server.on('GET', '/management/oauth/status', () => statusResult);
+  server.on('DELETE', '/management/oauth/session', () => ({ status: 'ok', cancelled: true }));
+
+  const surface = renderWithOmc(<BuiltinConnectWorkspace />, { route: '/omc/oauth-management', isStrict: true });
+  const session = () => JSON.parse(screen.getByTestId('sessions').textContent!).copilot;
+  try {
+    const tile = surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-card="copilot"]');
+    expect(tile).toBeTruthy();
+    expect(tile?.textContent).toContain('GitHub Copilot OAuth');
+    await act(async () => { fireEvent.click(tile!); });
+
+    const start = surface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-start="copilot"]');
+    expect(start).toBeTruthy();
+    expect(start?.textContent).toContain('Start GitHub Copilot Sign-in');
+    await act(async () => { fireEvent.click(start!); });
+
+    expect(server.writes('/management/oauth/start').map(request => request.body)).toEqual([{ provider: 'copilot' }]);
+    expect(session()).toMatchObject({ status: 'waiting', flow: 'device', userCode: 'WDJB-MJHT' });
+    expect(surface.baseElement.querySelector('[data-oauth-user-code]')?.textContent).toBe('WDJB-MJHT');
+    expect(surface.baseElement.querySelector('[data-oauth-callback-input]')).toBeNull();
+
+    statusResult = { status: 'ok' };
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(session().status).toBe('success');
+  } finally {
+    surface.unmount();
+  }
+
+  // Targeted recovery for an expired Copilot credential reuses the same device-code panel and cancel path.
+  statusResult = { status: 'wait' };
+  const recovery = { name: 'copilot-42.json', auth_index: 'idx-copilot' };
+  const recoverySurface = renderWithOmc(
+    <BuiltinConnectWorkspace initialProviderId="copilot" recovery={recovery} />,
+    { route: '/omc/oauth-management', isStrict: true },
+  );
+  const recoverySession = () => JSON.parse(screen.getByTestId('sessions').textContent!).copilot;
+  try {
+    const start = recoverySurface.baseElement.querySelector<HTMLButtonElement>('[data-oauth-start="copilot"]')!;
+    await act(async () => { fireEvent.click(start); });
+    expect(server.writes('/management/oauth/start').at(-1)?.body).toEqual({
+      provider: 'copilot',
+      name: 'copilot-42.json',
+      auth_index: 'idx-copilot',
+      verify: false,
+    });
+    expect(recoverySurface.baseElement.querySelector('[data-oauth-user-code]')?.textContent).toBe('WDJB-MJHT');
+    expect(recoverySurface.baseElement.querySelector('[data-oauth-callback-input]')).toBeNull();
+
+    const cancel = within(recoverySurface.baseElement).getByRole('button', { name: makeT('en')('oauth.cancel_session') });
+    await act(async () => { fireEvent.click(cancel); });
+    expect(server.writes('/management/oauth/session').map(request => request.method)).toEqual(['DELETE']);
+    expect(recoverySession().status).toBe('idle');
+  } finally {
+    recoverySurface.unmount();
+    vi.useRealTimers();
+  }
 });

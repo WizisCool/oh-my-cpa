@@ -8,7 +8,7 @@ export const OAUTH_PROVIDER_PATTERN = /^[a-z0-9-]+$/;
  * rename them. The sign-in registry in `pages/oauthProviderLogic.ts` defines each one; this
  * leaf copy lets every surface name providers without loading that page module.
  */
-export const BUILTIN_OAUTH_IDS: ReadonlySet<string> = new Set(['kimi', 'kimi-ai', 'codex', 'anthropic', 'antigravity', 'xai', 'devin', 'meta']);
+export const BUILTIN_OAUTH_IDS: ReadonlySet<string> = new Set(['kimi', 'kimi-ai', 'codex', 'anthropic', 'antigravity', 'xai', 'devin', 'meta', 'copilot']);
 
 function collectDeclaredPluginOAuthProviders(plugin: PluginItem): string[] {
   return [...new Set([...(plugin.oauth_providers ?? []), plugin.oauth_provider ?? '']

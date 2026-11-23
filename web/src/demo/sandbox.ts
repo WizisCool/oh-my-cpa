@@ -3343,7 +3343,7 @@ export async function interceptDemoRequest(
     const body = parseJsonBody<{ provider?: string; name?: string; auth_index?: string; verify?: boolean }>(options);
     const provider = body?.provider || 'codex';
     const id = `demo-oauth-${Date.now().toString(36)}`;
-    const isDevice = provider.startsWith('kimi') || provider.includes('qoder') || provider.includes('workbuddy');
+    const isDevice = provider.startsWith('kimi') || provider === 'meta' || provider === 'copilot' || provider.includes('qoder') || provider.includes('workbuddy');
     const session: DemoOAuthSessionState = {
       id,
       provider,
@@ -3359,6 +3359,7 @@ export async function interceptDemoRequest(
       status: 'waiting',
       state: id,
       session_id: id,
+      flow: session.flow,
       url: session.url,
       ...(session.userCode ? { user_code: session.userCode, verification_url: session.url } : {}),
     });

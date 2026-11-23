@@ -79,11 +79,16 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 			}
 			// A device grant answers with its flow label and the code the
 			// operator confirms on the vendor page, exactly as CPA does.
+			authURL := "https://auth.example.test/authorize?client_id=123"
 			extra := ""
-			if provider == "meta" {
+			switch provider {
+			case "meta":
 				extra = `,"flow":"device","user_code":"META-1234","expires_in":900`
+			case "copilot":
+				authURL = "https://github.com/login/device"
+				extra = `,"flow":"device","user_code":"WDJB-MJHT","expires_in":900,"access_token":"OPAQUE-COPILOT-TOKEN","refresh_token":"OPAQUE-COPILOT-REFRESH"`
 			}
-			_, _ = writer.Write([]byte(fmt.Sprintf(`{"url":"https://auth.example.test/authorize?client_id=123","state":"%s"%s}`, stateVal, extra)))
+			_, _ = writer.Write([]byte(fmt.Sprintf(`{"url":%q,"state":%q%s}`, authURL, stateVal, extra)))
 		case path == "/v8/management/oauth/status":
 			reqState := request.URL.Query().Get("state")
 			if reqState == "" {
@@ -536,14 +541,19 @@ func TestOAuthProviderRegistryWiring(t *testing.T) {
 		t.Fatal(err)
 	}
 	flows := make(map[string]string, len(listRes.Providers))
+	names := make(map[string]string, len(listRes.Providers))
 	for _, provider := range listRes.Providers {
 		flows[provider.ID] = provider.Flow
+		names[provider.ID] = provider.Name
 	}
 	if flows["devin"] != "redirect" {
 		t.Fatalf("devin flow = %q, want redirect", flows["devin"])
 	}
 	if flows["meta"] != "device" {
 		t.Fatalf("meta flow = %q, want device", flows["meta"])
+	}
+	if flows["copilot"] != "device" || names["copilot"] != "GitHub Copilot" {
+		t.Fatalf("copilot provider = (%q, %q), want (device, GitHub Copilot)", flows["copilot"], names["copilot"])
 	}
 	if flows["kimi"] != "device" || flows["codex"] != "redirect" {
 		t.Fatalf("existing providers changed flow: %#v", flows)
@@ -572,6 +582,9 @@ func TestOAuthProviderRegistryWiring(t *testing.T) {
 	if query := isWebUIFor("meta"); query != "" {
 		t.Fatalf("meta must not request the loopback callback, got is_webui=%q", query)
 	}
+	if query := isWebUIFor("copilot"); query != "" {
+		t.Fatalf("copilot must not request the loopback callback, got is_webui=%q", query)
+	}
 
 	// A device grant's code and flow reach the browser, which is what lets the
 	// card show the code the operator has to confirm.
@@ -586,6 +599,21 @@ func TestOAuthProviderRegistryWiring(t *testing.T) {
 	}
 	if metaStart.Flow != "device" || metaStart.UserCode != "META-1234" || metaStart.Expires != 900 {
 		t.Fatalf("device grant metadata was dropped: %s", payload)
+	}
+
+	// Copilot uses the same device-code projection and never forwards tokens across the facade.
+	_, payload = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/oauth/start", `{"provider":"copilot"}`)
+	var copilotStart StartOAuthResponseDTO
+	if err := json.Unmarshal(payload, &copilotStart); err != nil {
+		t.Fatal(err)
+	}
+	if copilotStart.Provider != "copilot" || copilotStart.URL != "https://github.com/login/device" || copilotStart.Flow != "device" || copilotStart.UserCode != "WDJB-MJHT" || copilotStart.ExpiresIn != 900 || copilotStart.State == "" || copilotStart.SessionID != copilotStart.State {
+		t.Fatalf("copilot device grant metadata was dropped: %s", payload)
+	}
+	for _, secret := range []string{"OPAQUE-COPILOT-TOKEN", "OPAQUE-COPILOT-REFRESH", "access_token", "refresh_token"} {
+		if strings.Contains(string(payload), secret) {
+			t.Fatalf("copilot start response leaked %q: %s", secret, payload)
+		}
 	}
 }
 

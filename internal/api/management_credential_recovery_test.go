@@ -18,6 +18,8 @@ const recoveryCredentialFixture = `{"id":"runtime-codex-id","name":"codex.json",
 // entry beside the family.
 const recoveryPluginCredentialFixture = `{"id":"runtime-zcode-id","name":"zcode-demo.json","auth_index":"idx-z","provider":"zcode","oauth_provider":"zcode-zai","requires_sign_in":true,"renewal_state":"sign_in_required"}`
 
+const recoveryCopilotCredentialFixture = `{"id":"runtime-copilot-id","name":"copilot-42.json","auth_index":"idx-copilot","type":"copilot","provider":"copilot","requires_sign_in":true,"renewal_state":"sign_in_required"}`
+
 func TestCredentialRecoveryProjectionAndVerification(t *testing.T) {
 	for _, test := range []struct{ code, wantCode string }{
 		{"invalid_grant", "invalid_grant"},
@@ -75,15 +77,18 @@ func TestCredentialRecoveryProjectionAndVerification(t *testing.T) {
 }
 
 func TestTargetedOAuthRecoveryNeverDowngrades(t *testing.T) {
-	for _, scenario := range []string{"targeted", "opt_in", "stale", "provider_mismatch", "old_cpa", "missing_endpoint", "missing_state", "missing_target", "different_target", "wrong_account", "plugin_entry", "plugin_family", "plugin_sibling_entry", "plugin_entry_unreported"} {
+	for _, scenario := range []string{"targeted", "opt_in", "stale", "provider_mismatch", "old_cpa", "missing_endpoint", "missing_state", "missing_target", "different_target", "wrong_account", "plugin_entry", "plugin_family", "plugin_sibling_entry", "plugin_entry_unreported", "copilot_device", "copilot_provider_mismatch"} {
 		t.Run(scenario, func(t *testing.T) {
 			isPlugin := strings.HasPrefix(scenario, "plugin_")
+			isCopilot := strings.HasPrefix(scenario, "copilot_")
 			fixture := recoveryCredentialFixture
 			if isPlugin {
 				fixture = recoveryPluginCredentialFixture
 				if scenario == "plugin_entry_unreported" {
 					fixture = strings.Replace(fixture, `,"oauth_provider":"zcode-zai"`, "", 1)
 				}
+			} else if isCopilot {
+				fixture = recoveryCopilotCredentialFixture
 			}
 			client, base, recorder := startAuthFilesTestServer(t, "management-secret-value", func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
@@ -111,11 +116,17 @@ func TestTargetedOAuthRecoveryNeverDowngrades(t *testing.T) {
 					targetID := "runtime-codex-id"
 					if isPlugin {
 						targetID = "runtime-zcode-id"
+					} else if isCopilot {
+						targetID = "runtime-copilot-id"
 					}
 					if scenario == "missing_target" {
 						targetID = ""
 					} else if scenario == "different_target" {
 						targetID = "other-account.json"
+					}
+					if isCopilot {
+						fmt.Fprintf(w, `{"url":"https://github.com/login/device","state":"private-state","flow":"device","user_code":"WDJB-MJHT","expires_in":900,"target_auth_id":%q}`, targetID)
+						return
 					}
 					fmt.Fprintf(w, `{"url":"https://auth.example.test/authorize","state":"private-state","target_auth_id":%q}`, targetID)
 				default:
@@ -125,9 +136,14 @@ func TestTargetedOAuthRecoveryNeverDowngrades(t *testing.T) {
 			body := `{"provider":"codex","name":"codex.json","auth_index":"idx-1"}`
 			if isPlugin {
 				body = `{"provider":"zcode-zai","name":"zcode-demo.json","auth_index":"idx-z"}`
+			} else if isCopilot {
+				body = `{"provider":"copilot","name":"copilot-42.json","auth_index":"idx-copilot"}`
 			}
 			wantStatus, wantCalls := 200, 1
 			switch scenario {
+			case "copilot_provider_mismatch":
+				body = `{"provider":"meta","name":"copilot-42.json","auth_index":"idx-copilot"}`
+				wantStatus, wantCalls = 400, 0
 			case "plugin_family":
 				body = `{"provider":"zcode","name":"zcode-demo.json","auth_index":"idx-z"}`
 			case "plugin_sibling_entry":
@@ -156,7 +172,7 @@ func TestTargetedOAuthRecoveryNeverDowngrades(t *testing.T) {
 			if response.StatusCode != wantStatus || recorder.count(http.MethodPost, "/v8/management/oauth/auth-url") != wantCalls || recorder.count(http.MethodGet, "/v8/management/oauth/auth-url") != 0 || strings.Contains(string(raw), "OPAQUE-SECRET") {
 				t.Fatalf("targeted recovery: %d %s, calls=%+v", response.StatusCode, raw, recorder.all())
 			}
-			if scenario == "targeted" || scenario == "opt_in" || scenario == "plugin_entry" || scenario == "plugin_family" {
+			if scenario == "targeted" || scenario == "opt_in" || scenario == "plugin_entry" || scenario == "plugin_family" || scenario == "copilot_device" {
 				wantName, wantIndex, wantProvider := "codex.json", "idx-1", "codex"
 				if isPlugin {
 					wantName, wantIndex = "zcode-demo.json", "idx-z"
@@ -164,11 +180,25 @@ func TestTargetedOAuthRecoveryNeverDowngrades(t *testing.T) {
 					if scenario == "plugin_family" {
 						wantProvider = "zcode"
 					}
+				} else if isCopilot {
+					wantName, wantIndex, wantProvider = "copilot-42.json", "idx-copilot", "copilot"
 				}
 				var forwarded map[string]any
 				json.Unmarshal([]byte(recorder.last(t, http.MethodPost, "/v8/management/oauth/auth-url").Body), &forwarded)
 				if forwarded["provider"] != wantProvider || forwarded["name"] != wantName || forwarded["auth_index"] != wantIndex || forwarded["verify"] != (scenario == "opt_in") {
 					t.Fatalf("target/opt-in lost: %+v", forwarded)
+				}
+				if isCopilot {
+					if forwarded["is_webui"] != nil {
+						t.Fatalf("copilot device recovery must not request loopback callback: %+v", forwarded)
+					}
+					var started StartOAuthResponseDTO
+					if err := json.Unmarshal(raw, &started); err != nil {
+						t.Fatal(err)
+					}
+					if started.Flow != "device" || started.UserCode != "WDJB-MJHT" || started.ExpiresIn != 900 || started.URL != "https://github.com/login/device" {
+						t.Fatalf("copilot recovery response missing device metadata: %s", raw)
+					}
 				}
 			}
 		})

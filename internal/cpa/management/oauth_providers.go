@@ -107,6 +107,12 @@ var OAuthProviders = []OAuthProvider{
 		Description: "Meta Muse (api.meta.ai) device code / OAuth flow",
 		Flow:        OAuthFlowDevice,
 	},
+	{
+		ID:          "copilot",
+		Name:        "GitHub Copilot",
+		Description: "GitHub Copilot device code / OAuth flow",
+		Flow:        OAuthFlowDevice,
+	},
 }
 
 // loginProviderFor is the `provider` query value CPA's shared login endpoint

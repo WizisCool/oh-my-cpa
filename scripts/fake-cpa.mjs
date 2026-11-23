@@ -862,7 +862,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       const provider = url.searchParams.get('provider') || '';
       // Device-code providers answer with their flow label and the short code
       // the operator confirms on the vendor page, as CPA does.
-      if (provider === 'meta' || provider === 'kimi' || provider === 'kimi-ai') {
+      if (provider === 'meta' || provider === 'kimi' || provider === 'kimi-ai' || provider === 'copilot') {
         json(response, 200, {
           url: 'https://auth.example.test/oauth?session=e2e',
           state: 'e2e-state',

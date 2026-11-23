@@ -132,3 +132,40 @@ func TestSIWCPolicyTargetRequiresBindingForActivation(t *testing.T) {
 		t.Fatal("missing material prevents deactivation")
 	}
 }
+
+func TestOAuthCapabilitiesExposeCopilot(t *testing.T) {
+	service := &Service{}
+	registry := capability.NewRegistry()
+	if err := service.registerOAuth(registry); err != nil {
+		t.Fatal(err)
+	}
+	principal := capability.Principal{Adapter: "agent", IsAdmin: true}
+
+	providersDef, err := registry.Lookup("oauth_providers", principal)
+	if err != nil {
+		t.Fatalf("lookup oauth_providers: %v", err)
+	}
+	listed, err := providersDef.Execute(context.Background(), json.RawMessage(`{}`), "", "")
+	if err != nil {
+		t.Fatalf("execute oauth_providers: %v", err)
+	}
+	encoded, err := json.Marshal(listed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"copilot"`) {
+		t.Fatalf("oauth_providers missing copilot: %s", encoded)
+	}
+
+	connectDef, err := registry.Lookup("oauth_connect", principal)
+	if err != nil {
+		t.Fatalf("lookup oauth_connect: %v", err)
+	}
+	preview, err := connectDef.Prepare(context.Background(), json.RawMessage(`{"provider":"copilot"}`))
+	if err != nil || preview.Target != "copilot" || preview.Revision != "copilot" {
+		t.Fatalf("oauth_connect prepare copilot = (%+v, %v)", preview, err)
+	}
+	if _, err := connectDef.Prepare(context.Background(), json.RawMessage(`{"provider":"not-a-provider"}`)); err == nil {
+		t.Fatal("oauth_connect must reject unregistered providers")
+	}
+}
