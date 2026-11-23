@@ -178,7 +178,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
       >
         {!choice ? (
           <>
-            <div className={styles['selector-wrap']}>
+            <div className={styles['field']}>
               <label className={styles['field-label']} htmlFor="oauth-connect-provider">
                 {t('omc.connect_provider')}
               </label>
@@ -237,7 +237,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
           </>
         ) : (
           <>
-            <div className={styles['selector-wrap']}>
+            <div className={styles['field']}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <label className={styles['field-label']} htmlFor="oauth-connect-provider">
                   {t('omc.connect_provider')}
@@ -304,7 +304,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
               </Checkbox>
             </>}
             {!isWaiting && !session?.starting && (
-              <div>
+              <div className={styles['field']}>
                 <label className={styles['field-label']} htmlFor="oauth-connect-proxy">{t('oauth.session_proxy')}</label>
                 <SecretInput
                   key={choice.id}
