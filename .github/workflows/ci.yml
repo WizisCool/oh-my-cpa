@@ -145,6 +145,13 @@ jobs:
         uses: ./.github/actions/setup-go
       - name: Set up JavaScript workspace
         uses: ./.github/actions/setup-node
+      - name: Cache exported demo dataset
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            deploy/cloudflare/data/responses.json
+            deploy/cloudflare/data/responses.stamp
+          key: demo-dataset-v1-${{ hashFiles('go.mod', 'go.sum', 'scripts/generate-demo-data.mjs', 'internal/**/*.go', 'internal/**/*.json', 'internal/**/*.yaml', 'internal/**/*.yml', 'internal/**/*.sql', 'migrations/**') }}
       - name: Type check and frontend tests
         run: pnpm verify:static:frontend
       - name: Repository contracts and demo dataset
@@ -175,6 +182,13 @@ jobs:
           key: docs-next-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'deploy/site/docs/package.json', 'deploy/site/docs/next.config.mjs') }}
           restore-keys: |
             docs-next-${{ runner.os }}-${{ runner.arch }}-
+      - name: Cache exported demo dataset
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            deploy/cloudflare/data/responses.json
+            deploy/cloudflare/data/responses.stamp
+          key: demo-dataset-v1-${{ hashFiles('go.mod', 'go.sum', 'scripts/generate-demo-data.mjs', 'internal/**/*.go', 'internal/**/*.json', 'internal/**/*.yaml', 'internal/**/*.yml', 'internal/**/*.sql', 'migrations/**') }}
       - name: Type check, build, and test bilingual Fumadocs site
         env:
           NEXT_TELEMETRY_DISABLED: '1'
@@ -263,14 +277,13 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/tools-versions.json') }}
-      - name: Cache Fumadocs Next.js build
-        if: needs.changes.outputs.docs == 'true'
+      - name: Cache exported demo dataset
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
-          path: deploy/site/docs/.next/cache
-          key: docs-next-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'deploy/site/docs/package.json', 'deploy/site/docs/next.config.mjs') }}
-          restore-keys: |
-            docs-next-${{ runner.os }}-${{ runner.arch }}-
+          path: |
+            deploy/cloudflare/data/responses.json
+            deploy/cloudflare/data/responses.stamp
+          key: demo-dataset-v1-${{ hashFiles('go.mod', 'go.sum', 'scripts/generate-demo-data.mjs', 'internal/**/*.go', 'internal/**/*.json', 'internal/**/*.yaml', 'internal/**/*.yml', 'internal/**/*.sql', 'migrations/**') }}
       - name: Prepare Chromium, embedded SPA, and browser fixtures
         id: prepare
         run: |
@@ -316,15 +329,8 @@ jobs:
           pnpm build:demo
           pnpm exec wrangler deploy --config deploy/cloudflare/wrangler.jsonc --dry-run
       - name: Stage public site and validate Worker config
-        env:
-          NEXT_TELEMETRY_DISABLED: '1'
-          NEED_DOCS: ${{ needs.changes.outputs.docs }}
         run: |
-          if [ "$NEED_DOCS" = "true" ]; then
-            pnpm build:site
-          else
-            node scripts/build-site.mjs --skip-docs
-          fi
+          node scripts/build-site.mjs --skip-docs
           pnpm exec wrangler deploy --config deploy/site/wrangler.jsonc --dry-run
       - name: Built-artifact browser acceptance
         env:

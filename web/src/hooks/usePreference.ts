@@ -55,7 +55,13 @@ function useIsPreferencesLoaded(queryClient: QueryClient): boolean {
   const subscribe = React.useCallback(
     (onStoreChange: () => void) =>
       queryClient.getQueryCache().subscribe((event) => {
-        if (event.query.queryKey.length === 1 && event.query.queryKey[0] === 'preferences') {
+        // Ignore observer-lifecycle events (`observerResultsUpdated`, `observerAdded`, etc.),
+        // which TanStack Query dispatches synchronously during child renders.
+        if (
+          (event.type === 'updated' || event.type === 'removed') &&
+          event.query.queryKey.length === 1 &&
+          event.query.queryKey[0] === 'preferences'
+        ) {
           onStoreChange();
         }
       }),

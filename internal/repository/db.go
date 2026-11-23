@@ -37,9 +37,10 @@ type BackupConfig struct {
 type OpenOption func(*openConfig) error
 
 type openConfig struct {
-	cipher       *appcrypto.Cipher
-	backup       BackupConfig
-	migrateUntil int
+	cipher               *appcrypto.Cipher
+	backup               BackupConfig
+	migrateUntil         int
+	disableFastBootstrap bool
 }
 
 // withMigrationsUntil stops Open's migration at a version, so an upgrade test
@@ -47,6 +48,15 @@ type openConfig struct {
 func withMigrationsUntil(version int) OpenOption {
 	return func(config *openConfig) error {
 		config.migrateUntil = version
+		return nil
+	}
+}
+
+// withoutFastBootstrap forces Open to apply every migration step by step, so
+// schema parity tests can compare full migration execution against freshBootstrapSQL.
+func withoutFastBootstrap() OpenOption {
+	return func(config *openConfig) error {
+		config.disableFastBootstrap = true
 		return nil
 	}
 }
@@ -102,7 +112,8 @@ type DB struct {
 	driver    string
 	writeGate *writeGate
 	// migrateUntil, when positive, is the last migration version Migrate applies.
-	migrateUntil int
+	migrateUntil         int
+	disableFastBootstrap bool
 
 	// The read-only pool operator queries run on, opened on first use (readonly_query.go).
 	readOnlyOnce sync.Once
@@ -167,7 +178,7 @@ func Open(ctx context.Context, databasePath string, options ...OpenOption) (*DB,
 		database.Close()
 		return nil, fmt.Errorf("ping sqlite: %w", err)
 	}
-	wrapped := &DB{SQL: database, cipher: config.backup.Cipher, backup: config.backup, path: databasePath, driver: gatedDriverName, writeGate: gate, migrateUntil: config.migrateUntil}
+	wrapped := &DB{SQL: database, cipher: config.backup.Cipher, backup: config.backup, path: databasePath, driver: gatedDriverName, writeGate: gate, migrateUntil: config.migrateUntil, disableFastBootstrap: config.disableFastBootstrap}
 	if wrapped.cipher == nil {
 		wrapped.cipher = config.cipher
 	}
@@ -292,7 +303,7 @@ func (db *DB) Migrate(ctx context.Context) error {
 		return nil
 	}
 
-	canFastBootstrap := db.migrateUntil == 0 && db.path != "file::memory:?cache=shared" && len(appliedVersions) == 0 && isFreshEmptyDatabase(ctx, db.SQL)
+	canFastBootstrap := !db.disableFastBootstrap && db.migrateUntil == 0 && len(appliedVersions) == 0 && isFreshEmptyDatabase(ctx, db.SQL)
 	if canFastBootstrap {
 		freshBootstrapMu.Lock()
 		bootstrapSQL := freshBootstrapSQL

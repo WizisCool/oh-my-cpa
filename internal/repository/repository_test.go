@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,9 +15,15 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 )
 
+var repoTestDBCounter atomic.Uint64
+
+func uniqueMemoryDSN() string {
+	return fmt.Sprintf("file:omc_repo_%d?mode=memory&cache=shared", repoTestDBCounter.Add(1))
+}
+
 func testRepository(t *testing.T) (*Repository, *crypto.Cipher) {
 	t.Helper()
-	db, err := Open(context.Background(), "file::memory:?cache=shared")
+	db, err := Open(context.Background(), uniqueMemoryDSN())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,6 +33,110 @@ func testRepository(t *testing.T) (*Repository, *crypto.Cipher) {
 		t.Fatal(err)
 	}
 	return New(db), cipher
+}
+
+func TestFreshBootstrapMatchesStepByStepMigrations(t *testing.T) {
+	ctx := context.Background()
+	stepped, err := Open(ctx, uniqueMemoryDSN(), withoutFastBootstrap())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stepped.Close()
+
+	// Prime and consume the cached post-migration bootstrap snapshot across two fresh DBs.
+	firstFast, err := Open(ctx, uniqueMemoryDSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer firstFast.Close()
+	secondFast, err := Open(ctx, uniqueMemoryDSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer secondFast.Close()
+
+	readSchemaAndCounts := func(sqlDB *sql.DB) ([]string, []int, map[string]int) {
+		t.Helper()
+		rows, err := sqlDB.QueryContext(ctx, `
+			SELECT type || ':' || name || ':' || tbl_name || ':' || COALESCE(sql, '')
+			FROM sqlite_master
+			WHERE name NOT LIKE 'sqlite_%'
+			ORDER BY type, name`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var objects []string
+		var tables []string
+		for rows.Next() {
+			var entry string
+			if err := rows.Scan(&entry); err != nil {
+				t.Fatal(err)
+			}
+			objects = append(objects, entry)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+
+		tableRows, err := sqlDB.QueryContext(ctx, `
+			SELECT name FROM sqlite_master
+			WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+			ORDER BY name`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tableRows.Close()
+		for tableRows.Next() {
+			var table string
+			if err := tableRows.Scan(&table); err != nil {
+				t.Fatal(err)
+			}
+			tables = append(tables, table)
+		}
+		if err := tableRows.Err(); err != nil {
+			t.Fatal(err)
+		}
+
+		counts := make(map[string]int, len(tables))
+		for _, table := range tables {
+			var count int
+			if err := sqlDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM "`+table+`"`).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+			counts[table] = count
+		}
+
+		verRows, err := sqlDB.QueryContext(ctx, `SELECT version FROM schema_migrations ORDER BY version`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer verRows.Close()
+		var versions []int
+		for verRows.Next() {
+			var v int
+			if err := verRows.Scan(&v); err != nil {
+				t.Fatal(err)
+			}
+			versions = append(versions, v)
+		}
+		if err := verRows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		return objects, versions, counts
+	}
+
+	wantObjects, wantVersions, wantCounts := readSchemaAndCounts(stepped.SQL)
+	gotObjects, gotVersions, gotCounts := readSchemaAndCounts(secondFast.SQL)
+	if !reflect.DeepEqual(gotObjects, wantObjects) {
+		t.Fatalf("bootstrap DDL drifted from step-by-step migrations:\ngot:  %v\nwant: %v", gotObjects, wantObjects)
+	}
+	if !reflect.DeepEqual(gotVersions, wantVersions) {
+		t.Fatalf("bootstrap versions = %v, want %v", gotVersions, wantVersions)
+	}
+	if !reflect.DeepEqual(gotCounts, wantCounts) {
+		t.Fatalf("bootstrap seed row counts = %v, want %v", gotCounts, wantCounts)
+	}
 }
 
 func TestMigrationsAndResourceOverride(t *testing.T) {

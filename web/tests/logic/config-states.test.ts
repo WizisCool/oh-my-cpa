@@ -114,11 +114,17 @@ test('State Machine: Loaded -> Dirty -> Validating', () => {
   // Edit field
   const currentDoc = parseDocument(sm.rawYaml);
   const serverDoc = parseDocument(sm.serverYaml);
-  updateFieldWithBaseline(currentDoc, serverDoc, { id: 'port', yamlPath: ['port'], type: 'number' }, 9000);
+  updateFieldWithBaseline(
+    currentDoc,
+    serverDoc,
+    { id: 'port', sectionId: 'network', labelKey: 'cfg.f_port', yamlPath: ['port'], type: 'number' },
+    9000,
+  );
 
   sm.rawYaml = currentDoc.toString();
   sm.isDirty = sm.rawYaml !== sm.serverYaml;
-  sm.canSave = sm.isDirty && sm.status !== 'error';
+  const status = sm.status as ConfigStateMachine['status'];
+  sm.canSave = sm.isDirty && status !== 'error';
 
   assert.equal(sm.isDirty, true);
   assert.equal(sm.canSave, true);

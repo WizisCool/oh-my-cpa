@@ -32,10 +32,10 @@ import { resolveApiDocsUrl } from '../../src/types/config.ts';
 import { test } from 'vitest';
 
 test('sidebar nav', () => {
-  const group = (key: string, labelKey: string, keys: string[]): NavGroup => ({
+  const group = (key: string, labelKey: NavGroup['labelKey'], keys: string[]): NavGroup => ({
     key,
     labelKey,
-    items: keys.map((itemKey) => ({ key: itemKey, labelKey: `nav.${itemKey}`, icon: null })),
+    items: keys.map((itemKey) => ({ key: itemKey, labelKey: `nav.${itemKey}`, isLiteralLabel: true as const, icon: null })),
   });
 
   const model = (): NavGroup[] => [

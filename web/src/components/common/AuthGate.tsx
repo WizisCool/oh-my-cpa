@@ -35,6 +35,9 @@ import {
 import styles from './AuthGate.module.css';
 
 const SESSION_RETRY_DELAYS_MS = [400, 1200] as const;
+// Speculative boot/stage preloads eliminate HTTP waterfalls in real browsers; under Vitest they
+// trigger unrendered full-app module transforms that contend with shared-worker suites.
+const shouldPreloadChunks = import.meta.env.MODE !== 'test';
 
 const loadSignInStage = createNamedLoader(() => import('./SignInStage'), 'SignInStage');
 const LazySignInStage = lazyRoute<{ state: SignInStageState; failures: number }>(loadSignInStage);
@@ -100,7 +103,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const warmAuthenticatedBootstrap = React.useCallback(() => {
     const pathname = currentConsolePathname();
     const search = typeof window !== 'undefined' ? window.location.search : '';
-    preloadBootChunks(pathname);
+    if (shouldPreloadChunks) preloadBootChunks(pathname);
     prefetchLandingRouteData(queryClient, pathname, search);
     void queryClient.fetchQuery({
       queryKey: ['preferences'],
@@ -134,7 +137,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
     clearReloadRecoveryState();
     forgetGatewayCredential();
     setError(message);
-    void loadSignInStage().catch(() => undefined);
+    if (shouldPreloadChunks) void loadSignInStage().catch(() => undefined);
     setStatus('unauthenticated');
   }, [clearPendingRetry, forgetGatewayCredential]);
 
@@ -197,7 +200,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   React.useEffect(() => {
     // Download static shell + landing-route code chunks in parallel with session check.
-    preloadBootChunks();
+    if (shouldPreloadChunks) preloadBootChunks();
     setUnauthorizedHandler(() => {
       enterUnauthenticated(undefined);
     });

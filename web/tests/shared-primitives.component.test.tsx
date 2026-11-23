@@ -678,6 +678,48 @@ describe('DeferredMount', () => {
 });
 
 describe('AuthGate mobile session continuity', () => {
+  it('settles in-flight route loaders cleanly without leaking detached imports past teardown', async () => {
+    const { createNamedLoader, createRouteLoader, settlePendingRouteLoaders } = await import('../src/utils/routeLoader');
+    let settled = false;
+    let release!: (mod: { Widget: () => null }) => void;
+    const loadWidget = createNamedLoader(
+      () =>
+        new Promise<{ Widget: () => null }>((resolve) => {
+          release = resolve;
+        }).then((mod) => {
+          settled = true;
+          return mod;
+        }),
+      'Widget',
+    );
+    const pending = loadWidget();
+    const wait = settlePendingRouteLoaders();
+    expect(settled).toBe(false);
+    release({ Widget: () => null });
+    await wait;
+    expect(settled).toBe(true);
+    expect((await pending).default).toBeTypeOf('function');
+
+    // A rejected import whose caller handles the rejection still resolves settlement and allows retry.
+    let failLoad!: (reason: Error) => void;
+    let attempts = 0;
+    const loadFlaky = createRouteLoader(() => {
+      attempts += 1;
+      if (attempts === 1) {
+        return new Promise<{ default: () => null }>((_, reject) => {
+          failLoad = reject;
+        });
+      }
+      return Promise.resolve({ default: () => null });
+    });
+    const firstAttempt = loadFlaky().catch((err: unknown) => err);
+    const drainRejected = settlePendingRouteLoaders();
+    failLoad(new Error('chunk network error'));
+    await expect(drainRejected).resolves.toBeUndefined();
+    expect(await firstAttempt).toBeInstanceOf(Error);
+    expect((await loadFlaky()).default).toBeTypeOf('function');
+  });
+
   it('shows shell loading with an auth hint, retries transient failures without kicking to sign-in, and preserves recovery state', async () => {
     clearReloadRecoveryState();
     writeAuthShellHint(true);

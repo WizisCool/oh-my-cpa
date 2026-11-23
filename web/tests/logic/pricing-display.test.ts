@@ -28,7 +28,7 @@ import {
   tiersFromDrafts,
   upstreamAuthor,
 } from '../../src/types/pricingDisplay.ts';
-import type { PriceTier, UpstreamModel } from '../../src/types/pricing.ts';
+import type { PriceTier } from '../../src/types/pricing.ts';
 import { test } from 'vitest';
 
 test('pricing display', () => {

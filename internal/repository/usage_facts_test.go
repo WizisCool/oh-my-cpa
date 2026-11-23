@@ -25,6 +25,20 @@ func seedFactEvents(t *testing.T, repo *Repository, baseMS, spanMS int64, count 
 	providers := []string{"codex", "", "claude"}
 	authTypes := []string{"oauth", "apikey"}
 	statuses := []string{"priced", "unpriced", "invalid_price"}
+	tx, err := repo.SQL().Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	stmt, err := tx.Prepare(`
+		INSERT INTO usage_events (instance_id, event_key, api_group_key, provider, auth_type, model, model_alias,
+			auth_index, timestamp_ms, failed, latency_ms, ttft_ms, input_tokens, output_tokens, reasoning_tokens,
+			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens, cost_nanos, pricing_status, created_at_ms)
+		VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stmt.Close()
 	for index := 0; index < count; index++ {
 		status := statuses[random.Intn(len(statuses))]
 		var cost any
@@ -35,11 +49,7 @@ func seedFactEvents(t *testing.T, repo *Repository, baseMS, spanMS int64, count 
 		if random.Intn(3) > 0 {
 			ttft = random.Int63n(900)
 		}
-		_, err := repo.SQL().Exec(`
-			INSERT INTO usage_events (instance_id, event_key, api_group_key, provider, auth_type, model, model_alias,
-				auth_index, timestamp_ms, failed, latency_ms, ttft_ms, input_tokens, output_tokens, reasoning_tokens,
-				cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens, cost_nanos, pricing_status, created_at_ms)
-			VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+		_, err := stmt.Exec(
 			fmt.Sprintf("event-%d-%d", seed, index), fmt.Sprintf("key-%d", random.Intn(2)),
 			providers[random.Intn(len(providers))], authTypes[random.Intn(len(authTypes))],
 			models[random.Intn(len(models))], aliases[random.Intn(len(aliases))], fmt.Sprintf("auth-%d", random.Intn(3)),
@@ -50,12 +60,18 @@ func seedFactEvents(t *testing.T, repo *Repository, baseMS, spanMS int64, count 
 			t.Fatal(err)
 		}
 	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
 }
 
-// recordFacts answers a usage query from request records alone, in Go, which is
-// the definition the facts have to reproduce. It shares nothing with the SQL the
-// read compiles to: dimensions, filters and civil buckets are all derived here.
-func recordFacts(t *testing.T, repo *Repository, query UsageFactQuery) []UsageFactRow {
+type factOracleEvent struct {
+	timestampMS int64
+	values      map[UsageDimension]string
+	measures    UsageMeasures
+}
+
+func loadFactOracleEvents(t *testing.T, repo *Repository, instanceID string) []factOracleEvent {
 	t.Helper()
 	rows, err := repo.SQL().Query(`
 		SELECT api_group_key, model, COALESCE(model_alias, ''), auth_index, provider, auth_type, timestamp_ms,
@@ -63,18 +79,16 @@ func recordFacts(t *testing.T, repo *Repository, query UsageFactQuery) []UsageFa
 		       cache_creation_tokens, total_tokens, latency_ms, ttft_ms, cost_nanos, pricing_status,
 		       executor_type, endpoint,
 		       (token_accounting IS NOT NULL AND json_extract(token_accounting, '$.status') = 'complete')
-		FROM usage_events WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`,
-		query.InstanceID, query.FromMS, query.ToMS)
+		FROM usage_events WHERE instance_id = ?`, instanceID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	grouped := map[string]*UsageFactRow{}
+	var events []factOracleEvent
 	for rows.Next() {
 		var key, model, alias, authIndex, provider, authType, status, executorType, endpoint string
 		var isCanonical bool
-		var timestampMS int64
-		var failed int64
+		var timestampMS, failed int64
 		var measures UsageMeasures
 		var ttft, cost *int64
 		if err := rows.Scan(&key, &model, &alias, &authIndex, &provider, &authType, &timestampMS, &failed,
@@ -110,15 +124,6 @@ func recordFacts(t *testing.T, repo *Repository, query UsageFactQuery) []UsageFa
 		if authType == "apikey" {
 			values[UsageDimensionServingKey] = strings.TrimSpace(authIndex)
 		}
-		isKept := true
-		for dimension, wanted := range query.Filters {
-			if len(wanted) > 0 && !slices.Contains(wanted, values[dimension]) {
-				isKept = false
-			}
-		}
-		if !isKept {
-			continue
-		}
 		measures.Requests, measures.Failures = 1, failed
 		if ttft != nil {
 			measures.TTFTSumMS, measures.TTFTCount = *ttft, 1
@@ -129,16 +134,47 @@ func recordFacts(t *testing.T, repo *Repository, query UsageFactQuery) []UsageFa
 		if status == "priced" {
 			measures.PricedRequests = 1
 		}
+		events = append(events, factOracleEvent{timestampMS: timestampMS, values: values, measures: measures})
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return events
+}
+
+// recordFacts answers a usage query from request records alone, in Go, which is
+// the definition the facts have to reproduce. It shares nothing with the SQL the
+// read compiles to: dimensions, filters and civil buckets are all derived here.
+func recordFacts(t *testing.T, repo *Repository, query UsageFactQuery) []UsageFactRow {
+	t.Helper()
+	return recordFactsFromEvents(loadFactOracleEvents(t, repo, query.InstanceID), query)
+}
+
+func recordFactsFromEvents(events []factOracleEvent, query UsageFactQuery) []UsageFactRow {
+	grouped := map[string]*UsageFactRow{}
+	for _, event := range events {
+		if event.timestampMS < query.FromMS || event.timestampMS > query.ToMS {
+			continue
+		}
+		isKept := true
+		for dimension, wanted := range query.Filters {
+			if len(wanted) > 0 && !slices.Contains(wanted, event.values[dimension]) {
+				isKept = false
+			}
+		}
+		if !isKept {
+			continue
+		}
 		var startMS int64
 		switch {
 		case query.Calendar != nil:
-			startMS = calendarBucketStart(timestampMS, *query.Calendar)
+			startMS = calendarBucketStart(event.timestampMS, *query.Calendar)
 		case query.BucketMS > 0:
-			startMS = timestampMS / query.BucketMS * query.BucketMS
+			startMS = event.timestampMS / query.BucketMS * query.BucketMS
 		}
 		keys := make([]string, len(query.Dimensions))
 		for index, dimension := range query.Dimensions {
-			keys[index] = values[dimension]
+			keys[index] = event.values[dimension]
 		}
 		id := fmt.Sprintf("%q/%d", keys, startMS)
 		row, ok := grouped[id]
@@ -146,10 +182,7 @@ func recordFacts(t *testing.T, repo *Repository, query UsageFactQuery) []UsageFa
 			row = &UsageFactRow{Keys: keys, StartMS: startMS}
 			grouped[id] = row
 		}
-		row.UsageMeasures.add(measures)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
+		row.UsageMeasures.add(event.measures)
 	}
 	result := make([]UsageFactRow, 0, len(grouped))
 	for _, row := range grouped {
@@ -221,12 +254,13 @@ func TestUsageFactsMatchRequestRecordsAtEveryFoldDepth(t *testing.T) {
 
 	compare := func(stage string) {
 		t.Helper()
+		oracleEvents := loadFactOracleEvents(t, repo, "default")
 		for _, query := range factTestQueries(baseMS) {
 			got, err := repo.QueryUsageFacts(ctx, query)
 			if err != nil {
 				t.Fatalf("%s %+v: %v", stage, query, err)
 			}
-			want := recordFacts(t, repo, query)
+			want := recordFactsFromEvents(oracleEvents, query)
 			if !reflect.DeepEqual(got.Rows, want) {
 				t.Fatalf("%s: facts disagree with request records for %+v\n got %d rows %+v\nwant %d rows %+v",
 					stage, query, len(got.Rows), got.Totals(), len(want), UsageFactResult{Rows: want}.Totals())
@@ -469,6 +503,7 @@ func TestCalendarBucketsFollowTheWallClock(t *testing.T) {
 	}
 	compare := func(stage string) {
 		t.Helper()
+		oracleEvents := loadFactOracleEvents(t, repo, "default")
 		for _, window := range windows {
 			for _, location := range []*time.Location{time.UTC, newYork, kathmandu} {
 				for _, unit := range []UsageCalendarUnit{UsageCalendarHour, UsageCalendarDay, UsageCalendarWeek} {
@@ -479,7 +514,7 @@ func TestCalendarBucketsFollowTheWallClock(t *testing.T) {
 						if err != nil {
 							t.Fatalf("%s %s %s: %v", stage, location, unit, err)
 						}
-						if want := recordFacts(t, repo, query); !reflect.DeepEqual(got.Rows, want) {
+						if want := recordFactsFromEvents(oracleEvents, query); !reflect.DeepEqual(got.Rows, want) {
 							t.Fatalf("%s: %s %s buckets disagree with request records\n got %d rows %+v\nwant %d rows %+v",
 								stage, location, unit, len(got.Rows), got.Totals(), len(want), UsageFactResult{Rows: want}.Totals())
 						}

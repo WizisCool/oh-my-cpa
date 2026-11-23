@@ -20,7 +20,7 @@ import (
 
 func demoHandler(t *testing.T, basePath string) *Handler {
 	t.Helper()
-	db, err := repository.Open(context.Background(), "file::memory:?cache=shared")
+	db, err := repository.Open(context.Background(), apiMemoryDSN())
 	if err != nil {
 		t.Fatal(err)
 	}

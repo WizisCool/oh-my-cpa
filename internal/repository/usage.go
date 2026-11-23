@@ -468,8 +468,9 @@ const usageEventColumnCount = 54
 
 var usageEventPlaceholders = "(" + strings.TrimSuffix(strings.Repeat("?, ", usageEventColumnCount), ", ") + ")"
 
-// 8 rows * 54 columns = 432 bind parameters, dividing the 200-row inbox batch evenly.
-const usageEventInsertChunkRows = 8
+// 50 rows * 54 columns = 2,700 bind parameters (well under SQLite's 32,766 limit),
+// dividing the 200-row inbox batch evenly while cutting per-statement step overhead.
+const usageEventInsertChunkRows = 50
 
 func appendUsageEventValues(dst []any, event usage.Event, locked lockedPrice, createdMS int64) []any {
 	var accountingVal any

@@ -5,11 +5,13 @@
       "ES2022",
       "DOM"
     ],
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "allowImportingTsExtensions": true,
     "allowJs": true,
     "checkJs": false,
+    "incremental": true,
+    "tsBuildInfoFile": "tmp/tsbuildinfo/tooling.tsbuildinfo",
     "noEmit": true,
     "strict": true,
     "noUnusedLocals": true,
@@ -20,6 +22,6 @@
     ]
   },
   "include": [
-    "scripts/check-demo.ts"
+    "scripts/*.ts"
   ]
 }

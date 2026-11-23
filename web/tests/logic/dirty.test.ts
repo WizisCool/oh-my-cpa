@@ -15,12 +15,12 @@ function schemaField(id: string): ConfigFieldDefinition {
   return found;
 }
 
-const testFields = [
-  { id: 'host', yamlPath: ['host'], type: 'string', defaultValue: '' },
-  { id: 'port', yamlPath: ['port'], type: 'number', defaultValue: 8317 },
-  { id: 'debug', yamlPath: ['debug'], type: 'switch', defaultValue: false },
-  { id: 'tlsEnable', yamlPath: ['tls', 'enable'], type: 'switch', defaultValue: false },
-  { id: 'tlsCert', yamlPath: ['tls', 'cert'], type: 'string', defaultValue: '' },
+const testFields: ConfigFieldDefinition[] = [
+  { id: 'host', sectionId: 'network', labelKey: 'cfg.f_host', yamlPath: ['host'], type: 'string', defaultValue: '' },
+  { id: 'port', sectionId: 'network', labelKey: 'cfg.f_port', yamlPath: ['port'], type: 'number', defaultValue: 8317 },
+  { id: 'debug', sectionId: 'logging', labelKey: 'cfg.debug', yamlPath: ['debug'], type: 'switch', defaultValue: false },
+  { id: 'tlsEnable', sectionId: 'network', labelKey: 'cfg.f_tls_enable', yamlPath: ['tls', 'enable'], type: 'switch', defaultValue: false },
+  { id: 'tlsCert', sectionId: 'network', labelKey: 'cfg.f_tls_cert', yamlPath: ['tls', 'cert'], type: 'string', defaultValue: '' },
 ];
 
 // A mixed setting's word states are not booleans. `Boolean('chat')` is true, so comparing
@@ -179,8 +179,10 @@ test('Modifying field A and field B, then reverting field A preserves field B', 
   assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, testFields), false);
 });
 
-const apiKeysField = {
+const apiKeysField: ConfigFieldDefinition = {
   id: 'apiKeys',
+  sectionId: 'connectivity',
+  labelKey: 'cfg.f_api_keys',
   yamlPath: ['api-keys'],
   type: 'api_keys',
   defaultValue: [],

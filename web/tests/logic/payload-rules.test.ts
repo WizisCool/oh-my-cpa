@@ -262,7 +262,7 @@ test('validateAllPayloadRules accurately detects issues without premature errors
     {
       id: 'r1',
       models: [{ id: 'm1', name: '' }],
-      params: [{ id: 'p1', path: '', type: 'string' as const, value: '' }],
+      params: [{ id: 'p1', path: '', type: 'string' as 'string' | 'number', value: '' as unknown }],
     },
   ];
   const draftIssues = validateAllPayloadRules(draftRule, [], [], [], []);
@@ -383,18 +383,26 @@ test('Payload Replace Rules preserve order, duplicates, empty deletions, pinned 
   ];
 
   const parsed = parseReplaceRules(original, 'replace');
+  const roleTarget = (rule: (typeof parsed)[number]) => {
+    assert.equal(rule.target.mode, 'role');
+    return rule.target;
+  };
+  const literalEntry = (entry: (typeof parsed)[number]['replacements'][number]) => {
+    assert.equal(entry.kind, 'literal');
+    return entry;
+  };
   assert.equal(parsed.length, 2);
   assert.equal(parsed[0].models[0].protocol, 'claude');
   assert.equal(parsed[0].models[0].fromProtocol, 'openai');
-  assert.deepEqual(parsed[0].target.positions, [2, 1]);
-  assert.equal(parsed[0].target.all, false);
+  assert.deepEqual(roleTarget(parsed[0]).positions, [2, 1]);
+  assert.equal(roleTarget(parsed[0]).all, false);
   assert.equal(parsed[0].replacements.length, 4);
-  assert.equal(parsed[0].replacements[1].from, 'remove this phrase');
-  assert.equal(parsed[0].replacements[1].to, '');
+  assert.equal(literalEntry(parsed[0].replacements[1]).from, 'remove this phrase');
+  assert.equal(literalEntry(parsed[0].replacements[1]).to, '');
 
   assert.equal(parsed[1].models[0].protocol, 'meta');
-  assert.equal(parsed[1].target.all, true);
-  assert.deepEqual(parsed[1].target.positions, []);
+  assert.equal(roleTarget(parsed[1]).all, true);
+  assert.deepEqual(roleTarget(parsed[1]).positions, []);
 
   const serialized = serializeReplaceRules(parsed);
   assert.equal((serialized[0] as Record<string, unknown>).extra_rule_flag, 42);
@@ -423,8 +431,8 @@ test('Payload Replace Rules preserve order, duplicates, empty deletions, pinned 
   const yamlText = doc.toString();
   assert.ok(yamlText.includes('remove this phrase: ""'), `expected verbatim empty string in YAML:\n${yamlText}`);
   const roundTripped = parseReplaceRules(readPayloadCategory(parseDocument(yamlText), 'replace'), 'replace');
-  assert.equal(roundTripped[0].replacements[1].to, '');
-  assert.deepEqual(roundTripped[0].target.positions, [2, 1]);
+  assert.equal(literalEntry(roundTripped[0].replacements[1]).to, '');
+  assert.deepEqual(roleTarget(roundTripped[0]).positions, [2, 1]);
 });
 
 test('validateAllPayloadRules validates replace target mutual exclusivity, positions >= 1, and replacement pairs', () => {
@@ -620,6 +628,7 @@ test('serializeReplaceRules and appendReplacePositionTokens preserve invalid pos
       replacements: [{ hello: 'world' }],
     },
   ]);
+  assert.equal(initial[0].target.mode, 'role');
 
   const parsed = appendReplacePositionTokens('bad, 2', initial[0].target.positions, initial[0].target.invalidPositions);
   assert.equal(parsed.changed, true);
@@ -635,6 +644,7 @@ test('serializeReplaceRules and appendReplacePositionTokens preserve invalid pos
     positions: [1, 'bad'],
   });
   const reparsed = parseReplaceRules(serialized);
+  assert.equal(reparsed[0].target.mode, 'role');
   assert.deepEqual(reparsed[0].target.positions, [1]);
   assert.deepEqual(reparsed[0].target.invalidPositions, ['bad']);
 });
@@ -647,6 +657,7 @@ test('replace target preserves unsupported or missing YAML roles instead of sile
       replacements: [{ old: 'new' }],
     },
   ]);
+  assert.equal(parsedAssistant[0].target.mode, 'role');
   assert.deepEqual(parsedAssistant[0].target.invalidRole, { present: true, value: 'assistant' });
   assert.deepEqual(
     validateAllPayloadRules([], [], [], [], [], parsedAssistant).map((i) => i.messageKey),
@@ -673,6 +684,7 @@ test('replace target preserves unsupported or missing YAML roles instead of sile
       replacements: [{ old: 'new' }],
     },
   ]);
+  assert.equal(parsedMissingRole[0].target.mode, 'role');
   assert.deepEqual(parsedMissingRole[0].target.invalidRole, { present: false });
   assert.deepEqual(
     validateAllPayloadRules([], [], [], [], [], parsedMissingRole).map((i) => i.messageKey),
@@ -754,6 +766,7 @@ test('replace target preserves unsupported or missing YAML roles instead of sile
       replacements: [{ foo: 'bar' }],
     },
   ]);
+  assert.equal(malformedAllAndMap[0].target.mode, 'role');
   assert.deepEqual(malformedAllAndMap[0].target.invalidAll, { value: 'true' });
   assert.deepEqual(malformedAllAndMap[0].invalidReplacements, { value: { old: 'new' } });
   assert.deepEqual(

@@ -40,10 +40,10 @@ import { languageLocale } from '../../src/i18n/language.ts';
 const echoT: TFunc = (key, vars) => (vars ? `${key}:${Object.values(vars).join('/')}` : key);
 
 const choices: OAuthProviderChoice[] = [
-  { id: 'anthropic', title: 'Claude', description: '', iconId: 'Claude', flow: 'manual-callback', loginLabel: '' },
-  { id: 'codex', title: 'Codex', description: '', iconId: 'Codex', flow: 'manual-callback', loginLabel: '' },
-  { id: 'kimi', title: 'Kimi', description: '', iconId: 'Kimi', flow: 'device', loginLabel: '' },
-  { id: 'iflow', title: 'iFlow', description: '', iconId: '', flow: 'manual-callback', loginLabel: '', pluginId: 'iflow-auth' },
+  { id: 'anthropic', group: 'builtin', title: 'Claude', description: '', iconId: 'Claude', flow: 'manual-callback', loginLabel: '' },
+  { id: 'codex', group: 'builtin', title: 'Codex', description: '', iconId: 'Codex', flow: 'manual-callback', loginLabel: '' },
+  { id: 'kimi', group: 'builtin', title: 'Kimi', description: '', iconId: 'Kimi', flow: 'device', loginLabel: '' },
+  { id: 'iflow', group: 'plugin', title: 'iFlow', description: '', iconId: '', flow: 'manual-callback', loginLabel: '', pluginId: 'iflow-auth' },
 ];
 
 function file(overrides: Partial<ManagementAuthFile> = {}): ManagementAuthFile {
@@ -171,11 +171,11 @@ test('providers: a multi-portal plugin files each credential under the portal th
   const plugins = [
     // Switched off, it still names and draws its credentials, so it still splits them.
     {
-      id: 'harbor-oauth', enabled: false, effective_enabled: false, supports_oauth: true, oauth_providers: ['harbor', 'harbor-cn'],
+      id: 'harbor-oauth', configured: true, registered: true, enabled: false, effective_enabled: false, supports_oauth: true, oauth_providers: ['harbor', 'harbor-cn'],
       oauth_provider_entries: [{ identifier: 'harbor', name: 'Harbor' }, { identifier: 'harbor-cn', name: 'Harbor CN' }],
       metadata: { name: 'Harbor' }, config_fields: [],
     },
-    { id: 'acme', enabled: true, effective_enabled: true, supports_oauth: true, oauth_provider: 'acme-login', metadata: { name: 'Acme' }, config_fields: [] },
+    { id: 'acme', configured: true, registered: true, enabled: true, effective_enabled: true, supports_oauth: true, oauth_provider: 'acme-login', metadata: { name: 'Acme' }, config_fields: [] },
   ];
   const portals = pluginMultiPortalKeys(plugins);
   assert.deepEqual([...portals].sort(), ['harbor', 'harbor-cn']);
@@ -195,7 +195,7 @@ test('providers: a multi-portal plugin files each credential under the portal th
 
 test('providers: workspace sections retain portal names across credential-family aliases', () => {
   const plugins = [{
-    id: 'buddy', enabled: true, effective_enabled: true, supports_oauth: true,
+    id: 'buddy', configured: true, registered: true, enabled: true, effective_enabled: true, supports_oauth: true, config_fields: [],
     oauth_providers: ['codebuddy', 'workbuddy', 'workbuddy-ai'], metadata: { name: 'Buddy' },
     oauth_provider_entries: [
       { identifier: 'codebuddy', name: 'CodeBuddy' },

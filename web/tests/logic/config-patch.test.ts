@@ -859,7 +859,7 @@ test('rebasing a sensitive-words-replace edit preserves concurrent additions whi
                 concurrent: kept
 `;
   const rebased = parseDocument(rebaseDraft(base, draft, newer) ?? '');
-  assert.deepEqual(rebased.getIn(['oauth', 'providers', 'antigravity', 'sensitive-words'])?.toJSON(), ['claude']);
+  assert.deepEqual((rebased.getIn(['oauth', 'providers', 'antigravity', 'sensitive-words']) as { toJSON(): unknown } | undefined)?.toJSON(), ['claude']);
   assert.deepEqual(getFieldSemanticValue(rebased, mapField), { concurrent: 'kept', 'Claude Code': '' });
 
   const existingYaml = `${SERVER_YAML}oauth:
@@ -1041,8 +1041,8 @@ test('rebasing a sensitive-patterns-replace edit preserves concurrent sibling se
                 concurrent: kept
 `;
   const rebased = parseDocument(rebaseDraft(base, draft, newer) ?? '');
-  assert.deepEqual(rebased.getIn(['oauth', 'providers', 'antigravity', 'sensitive-words'])?.toJSON(), ['claude']);
-  assert.deepEqual(rebased.getIn(['oauth', 'providers', 'antigravity', 'sensitive-words-replace'])?.toJSON(), { concurrent: 'kept' });
+  assert.deepEqual((rebased.getIn(['oauth', 'providers', 'antigravity', 'sensitive-words']) as { toJSON(): unknown } | undefined)?.toJSON(), ['claude']);
+  assert.deepEqual((rebased.getIn(['oauth', 'providers', 'antigravity', 'sensitive-words-replace']) as { toJSON(): unknown } | undefined)?.toJSON(), { concurrent: 'kept' });
   assert.deepEqual(getFieldSemanticValue(rebased, rulesField), [{ pattern: '(?i)claude', replacement: '' }]);
   assert.deepEqual(computeConfigChanges(parseDocument(newer), rebased), [
     {
