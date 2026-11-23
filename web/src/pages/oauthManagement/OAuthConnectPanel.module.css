@@ -16,11 +16,10 @@
   display: block;
   color: var(--fg-2);
   font-size: var(--text-sm);
-  margin-bottom: 6px;
   font-weight: 500;
 }
 
-.selector-wrap {
+.field {
   display: flex;
   flex-direction: column;
   gap: 6px;
