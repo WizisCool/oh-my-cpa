@@ -15,7 +15,6 @@ import {
   summarizeAuthFileStatusMessage,
   deriveAuthFileIdentity,
   deriveAuthFileTOSAppeal,
-  matchesStatusFilter,
   sortAuthFiles,
   filterAuthFiles,
   executeBatchStatus,
@@ -125,7 +124,7 @@ test('Batch status execution: skips runtime-only and handles partial errors', as
   ];
 
   const calls: string[] = [];
-  const setStatusFn = async (name: string, disabled: boolean) => {
+  const setStatusFn = async (name: string, _disabled: boolean) => {
     calls.push(name);
     if (name === 'f3.json') {
       throw new Error('network timeout');

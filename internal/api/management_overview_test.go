@@ -96,7 +96,7 @@ func TestManagementOverviewAggregatesWithoutSecrets(t *testing.T) {
 	}))
 	defer cpaServer.Close()
 
-	db, err := repository.Open(context.Background(), "file::memory:?cache=shared")
+	db, err := repository.Open(context.Background(), apiMemoryDSN())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestManagementOverviewPartialFailureAndNullCounts(t *testing.T) {
 			}))
 			defer cpaServer.Close()
 
-			db, err := repository.Open(context.Background(), "file::memory:?cache=shared")
+			db, err := repository.Open(context.Background(), apiMemoryDSN())
 			if err != nil {
 				t.Fatal(err)
 			}

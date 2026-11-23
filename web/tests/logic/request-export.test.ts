@@ -22,7 +22,8 @@ test('request image export uses the same issuing portal name and artwork as the 
   const globalLogo = 'https://cdn.example.test/qoder.svg';
   const cnLogo = 'https://cdn.example.test/qoder-cn.svg';
   const plugins = [{
-    id: 'qoder-plugin', supports_oauth: true, oauth_providers: ['qoder', 'qoder-cn'], logo: globalLogo,
+    id: 'qoder-plugin', configured: true, registered: true, enabled: true, effective_enabled: true, config_fields: [],
+    supports_oauth: true, oauth_providers: ['qoder', 'qoder-cn'], logo: globalLogo,
     oauth_provider_entries: [{ identifier: 'qoder-cn', name: 'Qoder CN', logo: cnLogo }],
   }];
   const credentials = indexCredentialFiles([

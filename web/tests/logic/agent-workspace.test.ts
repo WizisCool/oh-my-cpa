@@ -30,7 +30,7 @@ import { contextShare } from '../../src/components/workspace/contextShare.ts';
 import { referenceContextWindow } from '../../src/types/modelSquare.ts';
 import type { ModelSquareDirectory } from '../../src/types/modelSquare.ts';
 import { CONNECT_CLIENTS, connectSnippet, isInsecureOrigin, isOperationID, mcpEndpoint } from '../../src/pages/agent/connect.ts';
-import type { Capability, Conversation, Operation, Trace, Turn } from '../../src/pages/agent/state.ts';
+import type { Capability, Conversation, Trace, Turn } from '../../src/pages/agent/state.ts';
 
 import { applyAgentEvent, EMPTY_FRAME, invalidatedKeys, parseReceipt } from '../../src/agent/runReducer.ts';
 import type { RunFrame } from '../../src/agent/runReducer.ts';
@@ -302,7 +302,7 @@ test('agent workspace', async () => {
   check('a stored turn becomes a user and an assistant message with the turn\'s own ids', () => {
     const messages = storedMessages([pendingTurn]);
     assert.deepEqual(messages.map(message => message.id), ['t:user', 't:assistant']);
-    const content = messages[1].content as { type: string }[];
+    const content = messages[1].content as readonly { type: string }[];
     assert.deepEqual(content.map(part => part.type), ['reasoning', 'text', 'tool-call'], 'inline <think> reads as reasoning');
     assert.deepEqual(messages[1].status, { type: 'requires-action', reason: 'interrupt' });
   });

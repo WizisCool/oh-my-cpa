@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,9 +22,15 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
+var apiTestDBCounter atomic.Uint64
+
+func apiMemoryDSN() string {
+	return fmt.Sprintf("file:omc_api_%d?mode=memory&cache=shared", apiTestDBCounter.Add(1))
+}
+
 func testHandler(t *testing.T, basePath string) *Handler {
 	t.Helper()
-	db, err := repository.Open(context.Background(), "file::memory:?cache=shared")
+	db, err := repository.Open(context.Background(), apiMemoryDSN())
 	if err != nil {
 		t.Fatal(err)
 	}

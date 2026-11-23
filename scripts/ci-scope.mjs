@@ -11,11 +11,11 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const SHARED_INPUTS = /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.node-version|\.nvmrc|tsconfig\.tooling\.json|scripts\/tools-versions\.json|\.github\/workflows\/ci\.yml|\.github\/actions\/.*|scripts\/ci-scope\.(?:mjs|test\.mjs))$/;
+export const SHARED_INPUTS = /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.node-version|\.nvmrc|tsconfig\.tooling\.json|scripts\/tools-versions\.json|\.github\/workflows\/ci\.yml|\.github\/actions\/.*|scripts\/ci-scope\.(?:mjs|test\.mjs)|scripts\/run-gates\.mjs)$/;
 
 const DOCKER_INPUTS = /^(?:Dockerfile|\.dockerignore|deploy\/(?:base-path|healthcheck)\.sh)$/;
 const GO_ONLY = /(?:\.go$|^go\.(?:mod|sum)$|^\.golangci\.yml$|^\.swaggo$|^(?:cmd|internal|migrations)\/|^scripts\/fixture\/)/;
-const GO_CROSS_FRONTEND = /^(?:internal\/(?:api|demo|domain|web)\/|migrations\/|^\.swaggo$|go\.(?:mod|sum)$)/;
+const GO_CROSS_FRONTEND = /^(?:internal\/(?:agent|api|capability|demo|domain|operations|web)\/|migrations\/|^\.swaggo$|go\.(?:mod|sum)$)/;
 const OPENAPI_SPEC = /^docs\/openapi\/swagger\.json$/;
 const GO_READS_WEB = /^(?:scripts\/acceptance\/contracts\/|web\/public\/|web\/index\.html$)/;
 const WEB = /^(?:web\/|vitest\.config\.[cm]?[jt]s$|deploy\/cloudflare\/|scripts\/acceptance\/|scripts\/(?:api-target|browser-acceptance|build-demo|compact-locales|dev-base-redirect|fake-cpa|generate-demo-data|install-chromium|check-bundle-budget|sync-web-dist|sync-lobe-icons|bundle-[^/]+|generate-lucide-icons|sync-lobe-icon-catalog|sync-brand)\.(?:mjs|ts|json)$)/;

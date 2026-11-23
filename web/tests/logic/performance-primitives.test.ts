@@ -672,7 +672,7 @@ test('optimistic mutation updates cache synchronously, rolls back on error, and 
 test('state SSE channel suspends when hidden and reconcileStateSyncEvent applies sync_error rollback while guarding active mutations', async () => {
   const queryClient = new QueryClient();
   let isVisible = true;
-  let visibilityHandler: (() => void) | null = null;
+  let visibilityHandler: (() => void) | undefined;
   const listenersByType = new Map<string, Array<(evt: MessageEvent<string> | Event) => void>>();
   let closedCount = 0;
 
@@ -695,7 +695,7 @@ test('state SSE channel suspends when hidden and reconcileStateSyncEvent applies
     onVisibilityChange: (handler) => {
       visibilityHandler = handler;
       return () => {
-        visibilityHandler = null;
+        visibilityHandler = undefined;
       };
     },
     setTimer: () => 1,
@@ -955,7 +955,11 @@ test('invalidateQueriesSilently keeps DataProgress bar idle when cached data rec
 
 test('a chart redraws for a new dataset, not for a parent re-render that only renews its handlers', () => {
   const groups = [{ id: 'a', values: [1, 2] }];
-  const drawn = { groups, metric: 'tokens', onSelect: () => undefined };
+  const drawn: { groups: { id: string; values: number[] }[]; metric: string; onSelect?: () => undefined } = {
+    groups,
+    metric: 'tokens',
+    onSelect: () => undefined,
+  };
   assert.equal(isSameDrawing({ ...drawn, onSelect: () => undefined }, drawn), true);
   assert.equal(isSameDrawing({ ...drawn, groups: [...groups] }, drawn), false);
   assert.equal(isSameDrawing({ ...drawn, metric: 'cost' }, drawn), false);
@@ -1317,5 +1321,54 @@ test('trendsQuotaParamsFromSearch matches readTrendsView + trendsQuotaParams and
   ]);
   assert.equal(retryTrendsQuery(0, new Error('transient 500')), true);
   assert.equal(retryTrendsQuery(2, new Error('transient 500')), false);
-  assert.equal(retryTrendsQuery(0, new ApiError(404, 'uncaptured', { code: 'demo_uncaptured' })), false);
+  assert.equal(retryTrendsQuery(0, new ApiError('uncaptured', 404, { code: 'demo_uncaptured' })), false);
+});
+
+test('settlePendingRouteLoaders stays pending until in-flight imports settle and drains handled rejections cleanly', async () => {
+  const { createNamedLoader, createRouteLoader, settlePendingRouteLoaders } = await import('../../src/utils/routeLoader.ts');
+  let release!: (mod: { Widget: () => null }) => void;
+  const loadWidget = createNamedLoader(
+    () =>
+      new Promise<{ Widget: () => null }>((resolve) => {
+        release = resolve;
+      }),
+    'Widget',
+  );
+  const pending = loadWidget();
+  let waitCompleted = false;
+  const wait = settlePendingRouteLoaders().then(() => {
+    waitCompleted = true;
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(waitCompleted, false, 'settlement must remain pending until the import resolves');
+  release({ Widget: () => null });
+  await wait;
+  assert.equal(waitCompleted, true);
+  assert.equal(typeof (await pending).default, 'function');
+
+  // A rejected import whose caller handles the rejection still resolves settlement and allows retry.
+  let failLoad!: (reason: Error) => void;
+  let attempts = 0;
+  const loadFlaky = createRouteLoader(() => {
+    attempts += 1;
+    if (attempts === 1) {
+      return new Promise<{ default: () => null }>((_, reject) => {
+        failLoad = reject;
+      });
+    }
+    return Promise.resolve({ default: () => null });
+  });
+  const firstAttempt = loadFlaky().catch((err: unknown) => err);
+  let rejectSettled = false;
+  const drainRejected = settlePendingRouteLoaders().then(() => {
+    rejectSettled = true;
+  });
+  await Promise.resolve();
+  assert.equal(rejectSettled, false);
+  failLoad(new Error('chunk network error'));
+  await drainRejected;
+  assert.equal(rejectSettled, true);
+  assert.equal((await firstAttempt) instanceof Error, true);
+  assert.equal(typeof (await loadFlaky()).default, 'function');
 });

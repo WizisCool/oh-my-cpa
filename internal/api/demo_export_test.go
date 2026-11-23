@@ -989,7 +989,7 @@ func demoExportRouter(t *testing.T) (http.Handler, time.Time) {
 		t.Fatalf("build export cipher: %v", err)
 	}
 
-	db, err := repository.Open(context.Background(), "file::memory:?cache=shared",
+	db, err := repository.Open(context.Background(), apiMemoryDSN(),
 		repository.WithCipher(cipher))
 	if err != nil {
 		t.Fatalf("open export repository: %v", err)

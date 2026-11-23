@@ -20,7 +20,6 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { messagePlaceholders, pluralBranches } from '../web/src/i18n/format.ts';
 import { LANGUAGES } from '../web/src/i18n/language.ts';
-import { ensureDemoDataset } from './generate-demo-data.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const I18N = path.join(ROOT, 'web', 'src', 'i18n');
@@ -220,9 +219,9 @@ export async function checkCatalogs(): Promise<{ problems: Problem[]; report: st
   }
 
   // Capability copy is looked up by computed id, so the reference scan cannot see a missing one.
-  const datasetPath = await ensureDemoDataset(ROOT);
-  const dataset = JSON.parse(fs.readFileSync(datasetPath, 'utf8'));
-  const names = new Set<string>(JSON.parse(dataset.responses.capabilities.body).capabilities.map((capability: { name: string }) => capability.name));
+  // Kept synchronized with Registry.List(agent.PRINCIPAL) by TestOpenUICapabilityCatalogue.
+  const capabilityNamesPath = path.join(ROOT, 'internal', 'agent', 'openui', 'registered_capabilities.json');
+  const names = new Set<string>(JSON.parse(fs.readFileSync(capabilityNamesPath, 'utf8')) as string[]);
   for (const name of names) {
     for (const key of [`${CAPABILITY_PREFIX}${name}`, `${CAPABILITY_PREFIX}${name}.description`]) {
       if (!(key in source)) fail('capability', `capability "${name}" has no copy "${key}"`);

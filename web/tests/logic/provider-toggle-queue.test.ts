@@ -91,7 +91,7 @@ test('provider toggle queue', async () => {
     delayByKey = {},
     failuresByKey = {},
     schedule,
-    cancelScheduled,
+    cancelScheduled: _cancelScheduled,
   }: {
     delayMs?: number;
     delayByKey?: Record<string, number>;
@@ -484,7 +484,7 @@ test('provider toggle queue', async () => {
     // answer different failures, and spending the whole budget on a console that is
     // already answering would make the operator wait far longer than needed for the
     // same outcome.
-    const harness = buildQueue<boolean>(() => ({}), {});
+    const harness = buildQueue<boolean>({}, {});
     const scheduler = harness.scheduler;
     let calls = 0;
     const errors: unknown[] = [];

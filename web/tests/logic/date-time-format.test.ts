@@ -62,7 +62,7 @@ test('grid observation converts just two instants and keeps DST and non-UTC stat
     const days = ['2026-03-06', '2026-03-07', '2026-03-08', '2026-03-09', '2026-03-10'].map((key) => createDay(key));
     const expected = days.map((day) => heatmapCellState(day, from, to));
     let conversions = 0;
-    datePrototype.tz = function (...parameters) { conversions += 1; return originalTz.apply(this, parameters); };
+    datePrototype.tz = function (...parameters: unknown[]) { conversions += 1; return originalTz.apply(this, parameters); };
     try {
       const classifyCell = createHeatmapCellClassifier(from, to);
       for (let i = 0; i < 100; i += 1) assert.deepEqual(days.map(classifyCell), expected);

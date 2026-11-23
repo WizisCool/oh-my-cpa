@@ -152,7 +152,8 @@ test('a recording is measured from the moment it is replayed', () => {
 test('the recorded figures agree with each other', () => {
   // The demonstration cannot read rows it did not receive, so its program carries them; the card
   // derives every figure from them rather than restating a number nobody checked.
-  const rows = [...agentRecording.turn.traces.at(-1)!.arguments.ui.en.matchAll(/\{day: "[^"]+", requests: (\d+), failures: (\d+), failure_rate: ([\d.]+)\}/g)]
+  const uiByLang = agentRecording.turn.traces.at(-1)!.arguments.ui!;
+  const rows = [...uiByLang.en.matchAll(/\{day: "[^"]+", requests: (\d+), failures: (\d+), failure_rate: ([\d.]+)\}/g)]
     .map(([, requests, failures, rate]) => ({ requests: Number(requests), failures: Number(failures), rate: Number(rate) }));
   assert.equal(rows.length, 8, 'one row per day of the window');
   const requests = rows.reduce((sum, row) => sum + row.requests, 0);
@@ -161,7 +162,7 @@ test('the recorded figures agree with each other', () => {
   assert.equal(failures, 88);
   for (const row of rows) assert.equal(row.rate, Math.round(1e4 * row.failures / row.requests) / 1e4);
   for (const language of ['zh', 'en'] as const) {
-    const program = agentRecording.turn.traces.at(-1)!.arguments.ui[language];
+    const program = uiByLang[language];
     assert.ok(program.includes('@Sum(rows.requests)'), `${language}: the total is read from the rows`);
     assert.ok(program.includes('@Round(100 * @Sum(rows.failures) / @Sum(rows.requests), 1)'), `${language}: the rate is read from the rows`);
   }

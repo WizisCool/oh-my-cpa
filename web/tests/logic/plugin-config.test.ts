@@ -120,7 +120,7 @@ test('plugin config', () => {
   assert.equal(JSON.stringify(protoComposed), '{"__proto__":{"polluted":true},"level":"info"}');
 
   // Typed values are written with their types; clearing a field removes its key.
-  const edited = {
+  const edited: typeof draft = {
     ...draft,
     priority: '5',
     fields: {
@@ -208,7 +208,7 @@ test('plugin config', () => {
     ['zh-Hant', 'zh-HK'], ['zh-Hant', 'zh-Hant'], ['zh-Hant', 'zh-TW'],
     ['en', 'en'], ['ms', 'ms-MY'], ['ms', 'ms'],
   ] as const) {
-    const translated = { ...baseMetadata, name: `Title ${locale}`, description: `Text ${locale}`, author: `Author ${locale}`, homepage: `https://publisher.example/${locale}`, license: `License ${locale}`, tags: [locale] };
+    const translated: NonNullable<StorePluginItem['locales']>[string] = { ...baseMetadata, name: `Title ${locale}`, description: `Text ${locale}`, author: `Author ${locale}`, homepage: `https://publisher.example/${locale}`, license: `License ${locale}`, tags: [locale] };
     assert.deepEqual(selectStorePluginMetadata({ ...base, locales: { [locale]: translated } }, lang), translated);
   }
   assert.deepEqual(selectStorePluginMetadata({ ...base, locales: { 'zh-CN': { name: '简体' }, zh: { name: '通用' } } }, 'zh-Hant'), baseMetadata);

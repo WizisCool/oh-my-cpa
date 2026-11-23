@@ -17,7 +17,6 @@ import { targetIdentity } from '../../src/components/dashboard/routing/routingId
 import { EVENT_AUTO_REFRESH_MS } from '../../src/types/usageEventCadence.ts';
 import { pluginMultiPortalKeys, pluginOAuthProviderLogos, pluginOAuthProviderTitles } from '../../src/types/pluginOAuthProviders.ts';
 import {
-  DEFAULT_USAGE_EVENTS_VIEW,
   USAGE_EVENTS_VIEW_PREFERENCE,
   EVENT_GROUPING_VALUES,
   parseEventGrouping,
@@ -101,7 +100,7 @@ test('request provider artwork follows the credential issuing portal', () => {
   const globalLogo = 'https://cdn.example.test/qoder.svg';
   const cnLogo = 'data:image/svg+xml,%3Csvg%20id%3D%22qoder-cn%22/%3E';
   const plugins = [{
-    id: 'omc-qoder-oauth', supports_oauth: true, enabled: false,
+    id: 'omc-qoder-oauth', configured: true, registered: true, supports_oauth: true, enabled: false, effective_enabled: false, config_fields: [],
     oauth_providers: ['qoder', 'qoder-cn'], logo: globalLogo,
     oauth_provider_entries: [{ identifier: 'qoder-cn', name: 'Qoder CN', logo: cnLogo }],
   }];
@@ -132,7 +131,7 @@ test('request provider artwork follows the credential issuing portal', () => {
 
 test('request and live routing names follow the declared issuing portal, with family fallback', () => {
   const plugins = [{
-    id: 'buddy', supports_oauth: true, enabled: false, metadata: { name: 'Buddy' },
+    id: 'buddy', configured: true, registered: true, supports_oauth: true, enabled: false, effective_enabled: false, config_fields: [], metadata: { name: 'Buddy' },
     oauth_providers: ['workbuddy', 'workbuddy-ai'],
     oauth_provider_entries: [
       { identifier: 'workbuddy', name: 'Workbuddy' },
@@ -650,7 +649,7 @@ test('usage event view', () => {
       cost_max: ['12.5'],
     },
   });
-  assert.equal((parsedFull as Record<string, unknown>).unknown_garbage, undefined);
+  assert.equal((parsedFull as unknown as Record<string, unknown>).unknown_garbage, undefined);
 
   // The legacy flat shape is still on disk. Dropping it would silently reset a
   // returning operator's filters to the default window, so each old scalar becomes
@@ -1765,7 +1764,7 @@ test('usage event view', () => {
   assert.equal(durationScalePosition(Number.POSITIVE_INFINITY), null, 'an unreadable duration has no position');
   // Continuous: every reading in what used to be the green band now differs from its neighbour.
   assert.notEqual(durationScalePosition(1_000), durationScalePosition(14_999), 'duration is not banded');
-  assert.ok(durationScalePosition(15_000) > durationScalePosition(14_999), 'the ramp never reverses');
+  assert.ok(durationScalePosition(15_000)! > durationScalePosition(14_999)!, 'the ramp never reverses');
   assert.deepEqual(
     durationScaleMix(0),
     { from: 'var(--timing-green)', to: 'var(--timing-orange)', fromShare: '100%' },

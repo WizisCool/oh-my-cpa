@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'vitest';
 import { pluginOwnsProvider } from '../../src/types/pluginOAuthProviders';
-import type { PluginItem } from '../../src/types';
+import type { PluginItem } from '../../src/types/plugin';
 import {
   customIconID,
   clearCustomIconAssignments,

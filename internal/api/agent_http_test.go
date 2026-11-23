@@ -215,7 +215,13 @@ func TestOpenUICapabilityCatalogue(t *testing.T) {
 	if err := fixture.handler.ensureAgent(); err != nil {
 		t.Fatal(err)
 	}
-	testkit.Golden(t, "../agent/openui/capabilities.json", agent.OpenUITools(fixture.handler.agent.executor.Registry.List(agent.PRINCIPAL)))
+	listed := fixture.handler.agent.executor.Registry.List(agent.PRINCIPAL)
+	testkit.Golden(t, "../agent/openui/capabilities.json", agent.OpenUITools(listed))
+	names := make([]string, len(listed))
+	for index, definition := range listed {
+		names[index] = definition.Metadata.Name
+	}
+	testkit.Golden(t, "../agent/openui/registered_capabilities.json", names)
 }
 
 // TestAgentDataRowsWireFormat pins the contract the OpenUI renderer reads: a reference the

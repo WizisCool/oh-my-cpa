@@ -49,6 +49,9 @@ export default defineConfig({
           environment: 'jsdom',
           environmentOptions: { jsdom: { url: 'http://localhost/' } },
           isolate: false,
+          // Multi-step StrictMode + Base UI dialog/select workflows (~1.8s solo)
+          // cross 5s when four jsdom workers contend on 2-4 vCPU runners.
+          testTimeout: 15_000,
           setupFiles: ['./web/tests/setup.ts'],
         },
       },

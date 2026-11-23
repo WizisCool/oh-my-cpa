@@ -6,18 +6,36 @@ export interface RouteLoader<Module> {
   loaded(): Module | undefined;
 }
 
+const pendingRouteLoads = new Set<Promise<unknown>>();
+
+/**
+ * Waits for every in-flight lazy route or chart import to settle so shared-worker test
+ * teardowns never race background module transforms (`EnvironmentTeardownError`).
+ */
+export async function settlePendingRouteLoaders(): Promise<void> {
+  while (pendingRouteLoads.size > 0) {
+    await Promise.allSettled([...pendingRouteLoads]);
+  }
+}
+
 // Navigation and intent signals share one import; a failed preload must not poison a later visit.
 export function createRouteLoader<Module>(importModule: () => Promise<Module>): RouteLoader<Module> {
   let pending: Promise<Module> | undefined;
   let module: Module | undefined;
   const load = () => {
-    pending ??= importModule().then((value) => {
-      module = value;
-      return value;
-    }, (error: unknown) => {
-      pending = undefined;
-      throw error;
-    });
+    if (!pending) {
+      const next = importModule().then((value) => {
+        module = value;
+        return value;
+      }, (error: unknown) => {
+        pending = undefined;
+        throw error;
+      }).finally(() => {
+        pendingRouteLoads.delete(next);
+      });
+      pending = next;
+      pendingRouteLoads.add(next);
+    }
     return pending;
   };
   return Object.assign(load, { loaded: () => module });

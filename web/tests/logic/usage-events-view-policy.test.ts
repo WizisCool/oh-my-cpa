@@ -307,7 +307,7 @@ test('typing back to the committed value schedules nothing', () => {
   search.change('gpt', (value) => commits.push(value));
   assert.equal(clock.pendingCount(), 0);
   clock.fire();
-  assert.deepEqual(commits, []);
+  assert.deepEqual(commits, [] as string[]);
 });
 
 test('the commit reads the latest callback, not the one captured when it was scheduled', () => {
@@ -364,7 +364,7 @@ test('an invalidation reached through the controller suppresses a queued commit'
   search.invalidate();
   assert.equal(clock.pendingCount(), 0, 'the timer is cancelled outright');
   clock.fire();
-  assert.deepEqual(commits, []);
+  assert.deepEqual(commits, [] as string[]);
 });
 
 test('adopting an external committed value cancels the queued keystroke', () => {
@@ -377,7 +377,7 @@ test('adopting an external committed value cancels the queued keystroke', () => 
   search.sync('navigated');
   assert.equal(search.committed(), 'navigated');
   clock.fire();
-  assert.deepEqual(commits, []);
+  assert.deepEqual(commits, [] as string[]);
 });
 
 test('a keystroke after an external navigation commits against the new view', () => {
@@ -397,7 +397,7 @@ test('a disposed controller commits nothing', () => {
   search.change('gpt', (value) => commits.push(value));
   search.dispose();
   clock.fire();
-  assert.deepEqual(commits, []);
+  assert.deepEqual(commits, [] as string[]);
   // A keystroke on a disposed controller is dropped rather than arming a timer
   // nothing will cancel.
   search.change('after-dispose', (value) => commits.push(value));
@@ -523,6 +523,7 @@ const chipBase = {
   resolveProviderName: (value: string) => (value === 'codex-0' ? 'My Codex Line' : value),
   costLabels: { priced: 'Priced', unpriced: 'Unpriced' },
   servedLabels: { substituted: 'Substituted', matched: 'As requested' },
+  transportLabels: { sse: 'SSE', websocket: 'WebSocket', http: 'HTTP' },
 };
 
 test('a credential chip shows the file name rather than the stored fingerprint', () => {

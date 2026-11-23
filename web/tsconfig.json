@@ -9,8 +9,11 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "allowJs": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "incremental": true,
+    "tsBuildInfoFile": "../tmp/tsbuildinfo/web.tsbuildinfo",
     "noEmit": true,
     "jsx": "react-jsx",
 
@@ -25,6 +28,5 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src", "tests"],
-  "exclude": ["tests/logic"]
+  "include": ["src", "tests"]
 }

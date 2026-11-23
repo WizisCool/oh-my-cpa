@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeEach, vi } from 'vitest';
 import { resetSettledRemoteSources } from '../src/components/common/RemoteImage';
+import { settlePendingRouteLoaders } from '../src/utils/routeLoader';
 import { finishOmcApi } from './support/omcApi';
 
 const isBrowserEnvironment = typeof window !== 'undefined';
@@ -81,15 +82,19 @@ beforeEach(() => {
 // Vitest globals are deliberately disabled, so RTL cleanup is explicit. Queries
 // and response rendezvous, not synthetic geometry or blanket error suppression,
 // define readiness in this layer.
-afterEach(() => {
-  cleanup?.();
-  clearTestQueryClients?.();
-  resetSettledRemoteSources();
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-  if (isBrowserEnvironment) {
-    window.localStorage.clear();
-    delete window.__OMCPA_CONFIG__;
+afterEach(async () => {
+  try {
+    cleanup?.();
+    clearTestQueryClients?.();
+    resetSettledRemoteSources();
+    await settlePendingRouteLoaders();
+  } finally {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    if (isBrowserEnvironment) {
+      window.localStorage.clear();
+      delete window.__OMCPA_CONFIG__;
+    }
+    finishOmcApi();
   }
-  finishOmcApi();
 });

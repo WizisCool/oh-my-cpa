@@ -9,14 +9,14 @@ and shipped-artifact checks strict.
 
 | Work | Command |
 | --- | --- |
-| Routine edit, fast feedback | `pnpm test:fast` (`pnpm type-check && pnpm test:logic && go test -short ./...`) |
+| Routine edit, fast feedback | `pnpm test:fast` (concurrent `gofmt`, TypeScript across `web/` + `scripts/`, Vitest `logic`, and `go test -short ./...`) |
 | Frontend behavior while editing | `pnpm test:frontend`, or `pnpm exec vitest run --config web/vitest.config.ts <file>` |
-| Full local static + build check | `pnpm verify` (`pnpm test:fast && pnpm test:components && pnpm verify:build`) |
+| Full local static + build check | `pnpm verify && pnpm verify:build` |
 | Embedded SPA + Go binary browser smoke | `pnpm verify:browser:smoke` (or `pnpm verify:browser` for the full suite) |
 | Complete pre-release / CI gate | `pnpm verify:full` |
 | A failing CI lane | Run that lane first; do not repeat passing, unchanged checks |
 
-`pnpm test:fast` never builds the product or launches a browser. It runs TypeScript type checking across `web/` and `scripts/`, the Node-based Vitest `logic` suite (`~1.2s`), and `go test -short ./...`.
+`pnpm test:fast` never builds the product or launches a browser. It runs `gofmt` verification, incremental TypeScript type checking across `web/` (including `web/tests/`) and `scripts/`, the Node-based Vitest `logic` suite, and `go test -short ./...` concurrently through `scripts/run-gates.mjs`.
 
 ## Test pyramid & ownership
 
@@ -39,7 +39,7 @@ and shipped-artifact checks strict.
 
 ## Golden data, OpenAPI spec, and demo dataset
 
-- **Go golden files**: Regenerate only the owning package with `UPDATE_GOLDEN=1 go test ./<package>`.
+- **Go golden files**: Regenerate only the owning package with `UPDATE_GOLDEN=1 go test ./<package>`. `internal/agent/openui/registered_capabilities.json` is pinned by `TestOpenUICapabilityCatalogue` (`internal/api/agent_http_test.go`) so `pnpm check-i18n` verifies capability locale coverage directly without generating the demo dataset.
 - **OpenAPI / Swagger 2.0 spec**: Regenerate `docs/openapi/swagger.json` with `pnpm openapi:generate` whenever `/api` routes, annotations, or DTOs change. `pnpm check:openapi` (in `verify:static:repository`), `TestOpenAPIRouteCoverage`, and `TestOpenAPISpecFreshness` (`internal/api/openapi_test.go`) enforce 100% route parity and freshness.
 - **Cloudflare demo & public site**: Generated on demand (and in CI / Workers Builds) from real Go handlers over the deterministic demo fixture rather than committed to Git. Run `pnpm check:demo` to verify route coverage and privacy, `TestExportDemoDataset` (`internal/api/demo_export_test.go`) to validate in-memory export invariants and dashboard health parity, and `pnpm build:site` to sync and build `/docs/`, `/api-reference/`, `/demo/`, and the landing root into `tmp/site/dist/`.
 

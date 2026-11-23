@@ -2,16 +2,20 @@ package outbound
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"sync/atomic"
 	"testing"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
+var outboundTestDBCounter atomic.Uint64
+
 func TestProxyPolicy(t *testing.T) {
 	ctx := context.Background()
-	db, err := repository.Open(ctx, "file::memory:?cache=shared")
+	db, err := repository.Open(ctx, fmt.Sprintf("file:omc_outbound_%d?mode=memory&cache=shared", outboundTestDBCounter.Add(1)))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -60,6 +60,19 @@ test('Go backend changes trigger go + browser, and API/migration changes also ve
     docker: false,
     docs: false,
   });
+  for (const agentOrCapabilityFile of [
+    'internal/agent/openui/registered_capabilities.json',
+    'internal/capability/registry.go',
+    'internal/operations/config.go',
+  ]) {
+    assert.deepEqual(scopeOf([agentOrCapabilityFile]), {
+      go: true,
+      frontend: true,
+      browser: true,
+      docker: false,
+      docs: false,
+    }, agentOrCapabilityFile);
+  }
   assert.deepEqual(scopeOf(['migrations/020_example.sql']), {
     go: true,
     frontend: true,
@@ -157,6 +170,13 @@ test('container, lockfile, CI, and unrecognized changes trigger docker or full v
     docs: true,
   });
   assert.deepEqual(scopeOf(['.github/workflows/ci.yml']), {
+    go: true,
+    frontend: true,
+    browser: true,
+    docker: true,
+    docs: true,
+  });
+  assert.deepEqual(scopeOf(['scripts/run-gates.mjs']), {
     go: true,
     frontend: true,
     browser: true,
