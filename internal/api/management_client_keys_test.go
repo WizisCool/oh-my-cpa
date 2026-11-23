@@ -105,3 +105,31 @@ func TestManagementClientAPIKeysEndpoints(t *testing.T) {
 		t.Fatalf("expected 2 keys after delete, got %d", keyCountAfterDel)
 	}
 }
+
+func TestManagementClientAPIKeyAcceptsMaxLengthAndDistinguishes413(t *testing.T) {
+	client, baseURL, _ := startProviderTestServer(t)
+
+	// An exact 8192-byte key is allowed by the length check and must not trip the
+	// JSON body reader before validation runs.
+	maxKey := "sk-" + strings.Repeat("k", 8192-3)
+	createBody, _ := json.Marshal(map[string]string{"key": maxKey})
+	resp, payload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/api-keys", string(createBody))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("8192-byte key status = %d body %s, want 200", resp.StatusCode, payload)
+	}
+
+	// 8193 bytes must reach the field validator and return 400 (not 413 or malformed JSON).
+	tooLongKey := "sk-" + strings.Repeat("k", 8193-3)
+	tooLongBody, _ := json.Marshal(map[string]string{"key": tooLongKey})
+	resp, payload = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/api-keys", string(tooLongBody))
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(payload), "exceeds maximum length") {
+		t.Fatalf("8193-byte key status = %d body %s, want 400 exceeds maximum length", resp.StatusCode, payload)
+	}
+
+	// Exceeding the JSON body limit returns 413 request_too_large.
+	oversized := `{"key":"` + strings.Repeat("z", managementClientKeyBodyLimit+64) + `"}`
+	resp, payload = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/api-keys", oversized)
+	if resp.StatusCode != http.StatusRequestEntityTooLarge || !strings.Contains(string(payload), requestTooLargeCode) {
+		t.Fatalf("oversized body status = %d body %s, want 413 request_too_large", resp.StatusCode, payload)
+	}
+}

@@ -24,7 +24,7 @@ import (
  */
 
 // pluginConfigBodyLimit bounds one plugin settings document.
-const pluginConfigBodyLimit = 64 * 1024
+const pluginConfigBodyLimit = 1024 * 1024
 
 // pluginIDFromRequest reads the `{id}` segment. CPA validates the id's shape itself;
 // this only refuses what cannot be one path segment.
@@ -222,6 +222,7 @@ type setPluginEnabledRequest struct {
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
@@ -333,6 +334,7 @@ type setPluginConfigRequest struct {
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
@@ -519,6 +521,7 @@ type installPluginRequest struct {
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 429 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
@@ -535,6 +538,10 @@ func (h *Handler) installPlugin(writer http.ResponseWriter, request *http.Reques
 		request.Body = http.MaxBytesReader(writer, request.Body, 4*1024)
 		raw, err := io.ReadAll(request.Body)
 		if err != nil {
+			if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+				writeRequestBodyTooLarge(writer, maxBytes)
+				return
+			}
 			writeError(writer, http.StatusBadRequest, "invalid request body")
 			return
 		}
@@ -542,6 +549,10 @@ func (h *Handler) installPlugin(writer http.ResponseWriter, request *http.Reques
 			decoder := json.NewDecoder(strings.NewReader(string(raw)))
 			decoder.DisallowUnknownFields()
 			if err := decoder.Decode(&req); err != nil {
+				writeError(writer, http.StatusBadRequest, "invalid request body")
+				return
+			}
+			if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 				writeError(writer, http.StatusBadRequest, "invalid request body")
 				return
 			}

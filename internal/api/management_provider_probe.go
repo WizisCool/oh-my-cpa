@@ -314,6 +314,7 @@ type ProbeProviderResponseDTO struct {
 // @Success 200 {object} ProbeProviderResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Router /v1/management/providers/probe [post]

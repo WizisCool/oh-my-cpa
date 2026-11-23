@@ -95,6 +95,7 @@ export default {
   "toast.group_unknown": "結果未知",
   "toast.group_skipped": "已略過",
   "common.save_failed": "儲存失敗：{msg}",
+  "common.request_too_large": "請求內容超出允許大小限制",
   "common.sync_reverted": "背景設定同步失敗，已恢復為閘道目前狀態：{msg}",
   "common.save": "儲存",
   "common.loading": "載入中…",

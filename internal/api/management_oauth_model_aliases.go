@@ -155,6 +155,7 @@ func (h *Handler) applyManagementOAuthModelAliases(ctx context.Context, client *
 // @Success 200 {object} OAuthModelAliasesPatchResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Router /v1/management/auth-files/model-aliases [patch]

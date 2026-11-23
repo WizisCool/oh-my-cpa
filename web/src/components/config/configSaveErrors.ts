@@ -27,6 +27,8 @@ export function describeConfigSaveError(
       return t('cfg.save_management_key_environment_owned');
     case 'cpa_request_too_large':
       return t('cfg.save_too_large');
+    case 'request_too_large':
+      return t('common.request_too_large');
     case 'config_partially_applied':
       // Part of the change set landed, so the editor's baseline is stale and its
       // next save meets the revision conflict dialog, which reloads onto it.

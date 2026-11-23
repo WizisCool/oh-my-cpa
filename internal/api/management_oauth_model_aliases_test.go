@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -193,5 +194,54 @@ func TestNormalizeManagementOAuthModelAliasProvider(t *testing.T) {
 	}
 	if _, err := normalizeManagementOAuthModelAliasProvider("a" + strings.Repeat("b", 64)); err == nil || !strings.Contains(err.Error(), "at most 64") {
 		t.Fatalf("oversized provider error = %v", err)
+	}
+}
+
+func TestManagementOAuthModelAliasesAcceptsFullEntryBudget(t *testing.T) {
+	state := map[string][]management.OAuthModelAlias{}
+	const aliasPath = "/v8/management/config/oauth/model-alias"
+	handler := func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == aliasPath:
+			_ = json.NewEncoder(writer).Encode(state)
+		case request.Method == http.MethodPatch && request.URL.Path == "/v8/management/config":
+			var payload struct {
+				OAuth struct {
+					ModelAlias map[string][]management.OAuthModelAlias `json:"model-alias"`
+				} `json:"oauth"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode model alias patch: %v", err)
+			}
+			for channel, aliases := range payload.OAuth.ModelAlias {
+				state[channel] = aliases
+			}
+			_, _ = writer.Write([]byte(`{"status":"ok"}`))
+		default:
+			_, _ = writer.Write([]byte(`{}`))
+		}
+	}
+	client, baseURL, _ := startAuthFilesTestServer(t, "management-secret-value", handler)
+	base := baseURL + "/omc/api/v1/management/auth-files/model-aliases"
+
+	// 512 aliases with ~300-byte names+aliases exceed the old 256 KiB request limit.
+	aliases := make([]managementOAuthModelAlias, managementOAuthModelAliasEntryLimit)
+	for i := range aliases {
+		aliases[i] = managementOAuthModelAlias{
+			Name:  fmt.Sprintf("model-%03d-%s", i, strings.Repeat("m", 250)),
+			Alias: fmt.Sprintf("alias-%03d-%s", i, strings.Repeat("a", 250)),
+		}
+	}
+	body, err := json.Marshal(map[string]any{"provider": "codex", "aliases": aliases})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(body) <= 256*1024 {
+		t.Fatalf("expected payload > 256 KiB, got %d", len(body))
+	}
+	resp, raw := doJSON(t, client, http.MethodPatch, base, string(body))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("full-budget model aliases status = %d body = %s, want 200", resp.StatusCode, raw)
 	}
 }

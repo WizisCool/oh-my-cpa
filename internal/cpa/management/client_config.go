@@ -21,6 +21,9 @@ import (
 // CONFIG_YAML_LIMIT bounds a whole configuration document in either direction.
 const CONFIG_YAML_LIMIT = 2 * 1024 * 1024
 
+// ErrConfigYAMLTooLarge reports a YAML document that exceeds CONFIG_YAML_LIMIT.
+var ErrConfigYAMLTooLarge = errors.New("configuration YAML exceeds 2MB limit")
+
 // ConfigScalarsDTO contains safe, non-sensitive projected scalar configuration.
 type ConfigScalarsDTO struct {
 	ProxyURL               string `json:"proxy_url"`
@@ -231,7 +234,7 @@ func (c *Client) UpdateConfigYAML(ctx context.Context, rawYAML string) error {
 		return errors.New("CPA client is not initialized")
 	}
 	if len(rawYAML) > CONFIG_YAML_LIMIT {
-		return errors.New("configuration YAML exceeds 2MB limit")
+		return ErrConfigYAMLTooLarge
 	}
 	stored, err := c.keepStoredConfigChecked(
 		WithBackupReason(ctx, BackupReasonConfigSource),

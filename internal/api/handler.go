@@ -565,6 +565,7 @@ type ResourceOverrideResponseDTO struct {
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 403 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 429 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /auth/login [post]
@@ -588,7 +589,23 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 	var payload loginRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 8*1024))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&payload); err != nil || strings.TrimSpace(payload.Password) == "" {
+	if err := decoder.Decode(&payload); err != nil {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return
+		}
+		writeError(writer, http.StatusBadRequest, "management key is required")
+		return
+	}
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return
+		}
+		writeError(writer, http.StatusBadRequest, "management key is required")
+		return
+	}
+	if strings.TrimSpace(payload.Password) == "" {
 		writeError(writer, http.StatusBadRequest, "management key is required")
 		return
 	}
@@ -889,6 +906,7 @@ func (h *Handler) listResources(writer http.ResponseWriter, request *http.Reques
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Router /v1/resources/{id}/override [patch]
 func (h *Handler) updateResourceOverride(writer http.ResponseWriter, request *http.Request) {
 	id := chi.URLParam(request, "id")
@@ -900,6 +918,18 @@ func (h *Handler) updateResourceOverride(writer http.ResponseWriter, request *ht
 	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 16*1024))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&payload); err != nil {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return
+		}
+		writeError(writer, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return
+		}
 		writeError(writer, http.StatusBadRequest, "invalid JSON body")
 		return
 	}

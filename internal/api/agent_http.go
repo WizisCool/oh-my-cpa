@@ -75,7 +75,19 @@ func readAgentInput(writer http.ResponseWriter, request *http.Request, value any
 	request.Body = http.MaxBytesReader(writer, request.Body, 64<<10)
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(value) != nil || decoder.Decode(new(any)) != io.EOF {
+	if err := decoder.Decode(value); err != nil {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return false
+		}
+		writePlaygroundError(writer, 400, "invalid_parameters")
+		return false
+	}
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return false
+		}
 		writePlaygroundError(writer, 400, "invalid_parameters")
 		return false
 	}
@@ -190,6 +202,7 @@ func (h *Handler) listCapabilities(writer http.ResponseWriter, request *http.Req
 // @Success 200 {object} capability.Result
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/capabilities/invoke [post]
 func (h *Handler) invokeCapability(writer http.ResponseWriter, request *http.Request) {
@@ -255,6 +268,7 @@ func (h *Handler) getCapabilityOperation(writer http.ResponseWriter, request *ht
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 403 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/agent/operations/{id}/decision [post]
 func (h *Handler) decideAgentOperation(writer http.ResponseWriter, request *http.Request) {
@@ -327,6 +341,7 @@ func (h *Handler) currentAgent(writer http.ResponseWriter, request *http.Request
 // @Success 200 {object} agentConversationDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/agent/session/reset [post]
 func (h *Handler) resetAgent(writer http.ResponseWriter, request *http.Request) {
@@ -417,6 +432,7 @@ func (h *Handler) agentImage(writer http.ResponseWriter, request *http.Request) 
 // @Param body body AgentDataRowsRequestDTO true "Data reference"
 // @Success 200 {object} capability.Result
 // @Failure 400 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/agent/data-rows [post]

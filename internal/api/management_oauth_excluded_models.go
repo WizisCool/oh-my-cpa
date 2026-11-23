@@ -150,6 +150,7 @@ func (h *Handler) applyManagementOAuthExcludedModels(ctx context.Context, client
 // @Success 200 {object} OAuthExcludedModelsPatchResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Router /v1/management/auth-files/excluded-models [patch]

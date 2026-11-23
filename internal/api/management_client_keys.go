@@ -179,6 +179,10 @@ func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Re
 	})
 }
 
+// managementClientKeyBodyLimit exceeds the 8192-byte key limit to cover JSON
+// framing, escaping, and the optional expected_fingerprint precondition.
+const managementClientKeyBodyLimit = 16 * 1024
+
 type createClientKeyRequest struct {
 	Key                 string `json:"key"`
 	ExpectedFingerprint string `json:"expected_fingerprint,omitempty"`
@@ -195,6 +199,7 @@ type createClientKeyRequest struct {
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
@@ -202,7 +207,7 @@ type createClientKeyRequest struct {
 func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var req createClientKeyRequest
-	if err := decodeManagementJSON(writer, request, 8*1024, &req); err != nil {
+	if err := decodeManagementJSON(writer, request, managementClientKeyBodyLimit, &req); err != nil {
 		return
 	}
 	newKey := strings.TrimSpace(req.Key)
@@ -316,6 +321,7 @@ func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.R
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
@@ -330,7 +336,7 @@ func (h *Handler) updateClientAPIKey(writer http.ResponseWriter, request *http.R
 	}
 
 	var req createClientKeyRequest
-	if err := decodeManagementJSON(writer, request, 8*1024, &req); err != nil {
+	if err := decodeManagementJSON(writer, request, managementClientKeyBodyLimit, &req); err != nil {
 		return
 	}
 	updatedKey := strings.TrimSpace(req.Key)

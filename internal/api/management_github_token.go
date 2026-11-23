@@ -120,6 +120,7 @@ func (h *Handler) getGitHubToken(writer http.ResponseWriter, request *http.Reque
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
@@ -217,19 +218,20 @@ func (h *Handler) putGitHubToken(writer http.ResponseWriter, request *http.Reque
 // @Success 200 {object} GitHubTokenTestResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Router /v1/management/github-token/test [post]
 func (h *Handler) testGitHubToken(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var input gitHubTokenTestInput
 	if request.Body != nil {
-		raw, err := io.ReadAll(io.LimitReader(request.Body, 4096+1))
+		raw, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, 4096))
 		if err != nil {
+			if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+				writeRequestBodyTooLarge(writer, maxBytes)
+				return
+			}
 			writeError(writer, http.StatusBadRequest, "unreadable request body")
-			return
-		}
-		if len(raw) > 4096 {
-			writeError(writer, http.StatusRequestEntityTooLarge, "request body too large")
 			return
 		}
 		if strings.TrimSpace(string(raw)) != "" {

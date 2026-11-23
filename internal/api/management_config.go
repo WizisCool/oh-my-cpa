@@ -160,6 +160,11 @@ type configPatchRequest struct {
 // setting, so a larger set is not something it produces.
 const MAX_CONFIG_CHANGES = 256
 
+// managementConfigSourceBodyLimit leaves room for JSON string escaping and framing
+// around a full CONFIG_YAML_LIMIT document on PUT /config/source; the handler
+// and UpdateConfigYAML enforce CONFIG_YAML_LIMIT on the decoded YAML itself.
+const managementConfigSourceBodyLimit = 2 * management.CONFIG_YAML_LIMIT
+
 // managementConfigPatch saves only the settings the operator changed.
 //
 // @Summary Patch CPA configuration fields
@@ -174,6 +179,7 @@ const MAX_CONFIG_CHANGES = 256
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
@@ -182,7 +188,7 @@ func (h *Handler) managementConfigPatch(writer http.ResponseWriter, request *htt
 	writer.Header().Set("Cache-Control", "no-store")
 
 	var req configPatchRequest
-	if err := decodeManagementJSON(writer, request, 2*1024*1024, &req); err != nil {
+	if err := decodeManagementJSON(writer, request, management.CONFIG_YAML_LIMIT, &req); err != nil {
 		return
 	}
 	defer request.Body.Close()
@@ -344,6 +350,7 @@ func (h *Handler) afterConfigWrite() {
 // @Success 200 {object} ManagementConfigScalarResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
@@ -498,6 +505,7 @@ func (h *Handler) managementConfigSourceGet(writer http.ResponseWriter, request 
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 409 {object} ErrorResponseDTO
+// @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
 // @Failure 503 {object} ErrorResponseDTO
@@ -506,13 +514,17 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 	writer.Header().Set("Cache-Control", "no-store")
 
 	var req configSourcePutRequest
-	if err := decodeManagementJSON(writer, request, 2*1024*1024, &req); err != nil {
+	if err := decodeManagementJSON(writer, request, managementConfigSourceBodyLimit, &req); err != nil {
 		return
 	}
 	defer request.Body.Close()
 
 	if strings.TrimSpace(req.YAML) == "" {
 		writeError(writer, http.StatusBadRequest, "configuration YAML cannot be empty")
+		return
+	}
+	if len(req.YAML) > management.CONFIG_YAML_LIMIT {
+		writeRequestBodyTooLarge(writer, management.CONFIG_YAML_LIMIT)
 		return
 	}
 

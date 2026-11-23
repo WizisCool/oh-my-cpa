@@ -53,6 +53,10 @@ func (h *Handler) uploadManagementAuthFiles(writer http.ResponseWriter, request 
 
 	if strings.HasPrefix(strings.ToLower(request.Header.Get("Content-Type")), "multipart/form-data") {
 		if err := request.ParseMultipartForm(2 * 1024 * 1024); err != nil {
+			if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+				writeRequestBodyTooLarge(writer, maxBytes)
+				return
+			}
 			writeError(writer, http.StatusBadRequest, "invalid multipart form")
 			return
 		}
@@ -82,13 +86,13 @@ func (h *Handler) uploadManagementAuthFiles(writer http.ResponseWriter, request 
 		writeError(writer, http.StatusBadRequest, validationErr.Error())
 		return
 	}
-	data, err := io.ReadAll(io.LimitReader(request.Body, managementAuthFileUploadLimit+1))
+	data, err := io.ReadAll(request.Body)
 	if err != nil {
+		if maxBytes, tooLarge := isRequestBodyTooLarge(err); tooLarge {
+			writeRequestBodyTooLarge(writer, maxBytes)
+			return
+		}
 		writeError(writer, http.StatusBadRequest, "cannot read upload")
-		return
-	}
-	if int64(len(data)) > managementAuthFileUploadLimit {
-		writeError(writer, http.StatusRequestEntityTooLarge, "upload is too large")
 		return
 	}
 	if err := validateAuthJSON(data); err != nil {

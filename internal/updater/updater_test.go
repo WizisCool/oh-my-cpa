@@ -2070,3 +2070,25 @@ func TestAwaitStartedAndHealthTimeoutConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestUpdaterServerReturns413OnOversizedBody(t *testing.T) {
+	stack := newDeployment(t, OMC_REPOSITORY+":latest")
+	server := httptest.NewServer(stack.service.Handler("v1.0.0"))
+	t.Cleanup(server.Close)
+
+	oversized := `{"product":"oh-my-cpa","manifest":"` + strings.Repeat("m", MAX_REQUEST_BYTES+64) + `"}`
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/v1/update", strings.NewReader(oversized))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+ControlToken(MASTER_KEY))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusRequestEntityTooLarge || !strings.Contains(string(body), "request_too_large") {
+		t.Fatalf("status = %d body = %s, want 413 request_too_large", resp.StatusCode, body)
+	}
+}

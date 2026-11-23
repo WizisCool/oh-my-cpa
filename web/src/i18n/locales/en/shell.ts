@@ -95,6 +95,7 @@ export default {
   'toast.group_unknown': 'No outcome',
   'toast.group_skipped': 'Skipped',
   'common.save_failed': 'Save failed: {msg}',
+  'common.request_too_large': 'The request payload exceeds the size limit',
   'common.sync_reverted': 'Configuration sync failed; reverted to gateway state: {msg}',
   'common.save': 'Save',
   'common.loading': 'Loading…',
