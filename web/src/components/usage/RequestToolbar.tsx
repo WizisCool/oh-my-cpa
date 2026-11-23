@@ -50,6 +50,8 @@ interface RequestToolbarProps {
   onClearFilters: () => void;
   grouping: EventGrouping;
   onGroupingChange: (grouping: EventGrouping) => void;
+  /** Desktop table column management control; omitted in phone/stacked modes. */
+  columnsControl?: React.ReactNode;
 }
 
 /**
@@ -80,6 +82,7 @@ export const RequestToolbar = React.memo(function RequestToolbar({
   onClearFilters,
   grouping,
   onGroupingChange,
+  columnsControl,
 }: RequestToolbarProps) {
   const t = useT();
   const { modelView, setModelView } = useTokenDisplayStyle();
@@ -257,12 +260,17 @@ export const RequestToolbar = React.memo(function RequestToolbar({
         {moreFilters}
       </div>
       <div className="request-toolbar-bottom">
-        {facetsNote}
         <div className="request-actions">
           {groupingSelect}
           {modelViewToggle}
           {resetFilters}
         </div>
+        {(facetsNote || columnsControl) && (
+          <div className="request-toolbar-end">
+            {facetsNote}
+            {columnsControl}
+          </div>
+        )}
       </div>
     </section>
   );

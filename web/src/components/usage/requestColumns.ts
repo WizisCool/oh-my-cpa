@@ -1,4 +1,6 @@
 import type { MessageKey } from '../../i18n/catalog';
+import { moveKey, type DropSide } from '../../types/displayOrder';
+
 export type RequestColumnId =
   | 'time'
   | 'result'
@@ -187,6 +189,10 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
   },
 ] as const;
 
+export const REQUEST_COLUMN_IDS: readonly RequestColumnId[] = Object.freeze(
+  REQUEST_COLUMNS.map((column) => column.id),
+);
+
 export const CHEVRON_TRACK_WIDTH = 14;
 
 /**
@@ -227,9 +233,70 @@ export const USAGE_EVENTS_COLUMNS_PREFERENCE = 'usage_events_columns';
 
 export type RequestColumnWidths = Partial<Record<RequestColumnId, number>>;
 
+/**
+ * Stored JSON document under `usage_events_columns`.
+ *
+ * Existing documents store per-column pixel widths at the top level (`{ provider: 220 }`).
+ * Optional `hidden` and `order` arrays extend the same document backward-compatibly: older
+ * documents omit both (all columns visible in default order), and older builds ignore them
+ * while keeping saved widths intact.
+ */
+export type UsageEventsColumnsPreferenceDoc = RequestColumnWidths & {
+  hidden?: RequestColumnId[];
+  order?: RequestColumnId[];
+};
+
+export interface RequestColumnPreference {
+  widths: RequestColumnWidths;
+  hidden: readonly RequestColumnId[];
+  order: readonly RequestColumnId[];
+}
+
+/** Module-scope fallback so `usePreference` keeps one stable reference across renders. */
+export const DEFAULT_USAGE_EVENTS_COLUMNS_DOC: UsageEventsColumnsPreferenceDoc = Object.freeze({});
+
 export const COLUMN_MAP = new Map<RequestColumnId, RequestColumnDefinition>(
   REQUEST_COLUMNS.map((c) => [c.id, c]),
 );
+
+export function isRequestColumnId(value: unknown): value is RequestColumnId {
+  return typeof value === 'string' && COLUMN_MAP.has(value as RequestColumnId);
+}
+
+export function isDefaultRequestColumnOrder(order: readonly RequestColumnId[]): boolean {
+  return order.length === REQUEST_COLUMN_IDS.length
+    && order.every((id, index) => id === REQUEST_COLUMN_IDS[index]);
+}
+
+/**
+ * Normalizes a column sequence into a complete permutation of `REQUEST_COLUMN_IDS`:
+ * unknown or repeated ids are dropped and any columns added later follow in default order.
+ */
+export function completeRequestColumnOrder(rawOrder: readonly RequestColumnId[] | undefined): readonly RequestColumnId[] {
+  if (!rawOrder || rawOrder.length === 0) return REQUEST_COLUMN_IDS;
+  const seen = new Set<RequestColumnId>();
+  const complete: RequestColumnId[] = [];
+  for (const id of rawOrder) {
+    if (!COLUMN_MAP.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    complete.push(id);
+  }
+  for (const id of REQUEST_COLUMN_IDS) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    complete.push(id);
+  }
+  return isDefaultRequestColumnOrder(complete) ? REQUEST_COLUMN_IDS : complete;
+}
+
+/** Column definitions in the operator's chosen order. */
+export function orderedRequestColumns(
+  order: readonly RequestColumnId[] = REQUEST_COLUMN_IDS,
+): readonly RequestColumnDefinition[] {
+  const normalized = completeRequestColumnOrder(order);
+  if (normalized === REQUEST_COLUMN_IDS) return REQUEST_COLUMNS;
+  return normalized.map((id) => COLUMN_MAP.get(id)!);
+}
 
 /**
  * requestColumnAlignClass returns the alignment class for one column.
@@ -250,7 +317,7 @@ export function requestColumnAlignClass(id: RequestColumnId): string {
  * and non-numbers are dropped.
  */
 export function parseUsageEventsColumns(raw: unknown): RequestColumnWidths {
-  if (typeof raw !== 'object' || raw === null) return {};
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
   const rawRecord = raw as Record<string, unknown>;
   const result: RequestColumnWidths = {};
 
@@ -265,6 +332,113 @@ export function parseUsageEventsColumns(raw: unknown): RequestColumnWidths {
   return result;
 }
 
+function normalizeHiddenColumns(raw: readonly unknown[]): RequestColumnId[] {
+  const hiddenSet = new Set<RequestColumnId>();
+  for (const entry of raw) {
+    if (isRequestColumnId(entry)) hiddenSet.add(entry);
+  }
+  // At least one column must remain visible so the table never renders empty.
+  if (hiddenSet.size === 0 || hiddenSet.size >= REQUEST_COLUMNS.length) return [];
+  return REQUEST_COLUMN_IDS.filter((id) => hiddenSet.has(id));
+}
+
+/**
+ * parseUsageEventsColumnPreference reads widths, user-hidden columns, and column order from
+ * the stored `usage_events_columns` preference document.
+ */
+export function parseUsageEventsColumnPreference(raw: unknown): RequestColumnPreference {
+  const widths = parseUsageEventsColumns(raw);
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return { widths, hidden: [], order: REQUEST_COLUMN_IDS };
+  }
+  const rawRecord = raw as Record<string, unknown>;
+  const hidden = Array.isArray(rawRecord.hidden) ? normalizeHiddenColumns(rawRecord.hidden) : [];
+  const order = Array.isArray(rawRecord.order)
+    ? completeRequestColumnOrder(rawRecord.order.filter(isRequestColumnId))
+    : REQUEST_COLUMN_IDS;
+  return { widths, hidden, order };
+}
+
+/**
+ * serializeUsageEventsColumns encodes column widths, visibility, and order into the compact
+ * wire document stored under `usage_events_columns`. Empty `hidden` and default `order` are
+ * omitted so default documents remain identical to width-only maps.
+ */
+export function serializeUsageEventsColumns(
+  widths: RequestColumnWidths,
+  hidden: readonly RequestColumnId[] = [],
+  order: readonly RequestColumnId[] = REQUEST_COLUMN_IDS,
+): UsageEventsColumnsPreferenceDoc {
+  const doc: UsageEventsColumnsPreferenceDoc = { ...parseUsageEventsColumns(widths) };
+  const normalizedHidden = normalizeHiddenColumns(hidden);
+  if (normalizedHidden.length > 0) doc.hidden = normalizedHidden;
+  const normalizedOrder = completeRequestColumnOrder(order);
+  if (!isDefaultRequestColumnOrder(normalizedOrder)) doc.order = [...normalizedOrder];
+  return doc;
+}
+
+/** Parser passed to `usePreference` for `usage_events_columns`. */
+export function parseUsageEventsColumnsDoc(raw: unknown): UsageEventsColumnsPreferenceDoc | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
+  const { widths, hidden, order } = parseUsageEventsColumnPreference(raw);
+  return serializeUsageEventsColumns(widths, hidden, order);
+}
+
+/** True when hiding `colId` would still leave at least one visible column. */
+export function canHideRequestColumn(
+  hidden: ReadonlySet<RequestColumnId> | readonly RequestColumnId[],
+  colId: RequestColumnId,
+): boolean {
+  if (!COLUMN_MAP.has(colId)) return false;
+  const hiddenSet = hidden instanceof Set ? hidden : new Set(hidden);
+  if (hiddenSet.has(colId)) return true;
+  let validHiddenCount = 0;
+  for (const id of hiddenSet) {
+    if (COLUMN_MAP.has(id)) validHiddenCount += 1;
+  }
+  return REQUEST_COLUMNS.length - validHiddenCount > 1;
+}
+
+/** Toggles one column's hidden state while enforcing the at-least-one-visible invariant. */
+export function setRequestColumnHidden(
+  hidden: readonly RequestColumnId[],
+  colId: RequestColumnId,
+  isHidden: boolean,
+): RequestColumnId[] {
+  const normalized = normalizeHiddenColumns(hidden);
+  if (!COLUMN_MAP.has(colId)) return normalized;
+  if (isHidden) {
+    if (normalized.includes(colId) || !canHideRequestColumn(normalized, colId)) return normalized;
+    return normalizeHiddenColumns([...normalized, colId]);
+  }
+  return normalized.filter((id) => id !== colId);
+}
+
+/** Moves `movingId` beside `targetId` in the column sequence. */
+export function moveRequestColumn(
+  order: readonly RequestColumnId[],
+  movingId: RequestColumnId,
+  targetId: RequestColumnId,
+  side: DropSide,
+): readonly RequestColumnId[] {
+  const current = completeRequestColumnOrder(order);
+  const moved = moveKey(current, movingId, targetId, side) as readonly RequestColumnId[];
+  return moved === current ? current : completeRequestColumnOrder(moved);
+}
+
+/** Moves `colId` one step earlier (`-1`) or later (`1`) in the column sequence. */
+export function stepRequestColumn(
+  order: readonly RequestColumnId[],
+  colId: RequestColumnId,
+  direction: -1 | 1,
+): readonly RequestColumnId[] {
+  const current = completeRequestColumnOrder(order);
+  const index = current.indexOf(colId);
+  const neighbour = current[index + direction];
+  if (index < 0 || neighbour === undefined) return current;
+  return moveRequestColumn(current, colId, neighbour, direction < 0 ? 'before' : 'after');
+}
+
 const NO_COLUMNS: ReadonlySet<RequestColumnId> = new Set();
 
 /**
@@ -273,27 +447,36 @@ const NO_COLUMNS: ReadonlySet<RequestColumnId> = new Set();
  * If a column has a manual override, it renders as a fixed pixel track (e.g. 210px).
  * If no override exists and flexGrow > 0, it renders as minmax(minWidth, flexGrow fr) for adaptive sizing.
  * If no override exists and flexGrow === 0, it renders as defaultWidth px.
- * A folded column contributes no track.
+ * A hidden or folded column contributes no track. When no visible data column is flexible,
+ * the trailing chevron track absorbs spare width so the chevron stays anchored to the row's
+ * trailing edge rather than floating mid-row.
  */
 export function buildGridTemplateColumns(
   widths: RequestColumnWidths = {},
   chrome: RequestGridChrome = LIST_GRID_CHROME,
-  folded: ReadonlySet<RequestColumnId> = NO_COLUMNS,
+  excluded: ReadonlySet<RequestColumnId> = NO_COLUMNS,
+  order: readonly RequestColumnId[] = REQUEST_COLUMN_IDS,
 ): string {
-  const tracks = REQUEST_COLUMNS.filter((col) => !folded.has(col.id)).map((col) => {
-    const manualWidth = widths[col.id];
-    if (manualWidth !== undefined && Number.isFinite(manualWidth)) {
-      const clamped = Math.min(col.maxWidth, Math.max(col.minWidth, manualWidth));
-      return `${Math.round(clamped)}px`;
-    }
-    if (col.flexGrow > 0) {
-      return `minmax(${col.minWidth}px, ${col.flexGrow}fr)`;
-    }
-    return `${col.defaultWidth}px`;
-  });
+  let hasFlexibleDataTrack = false;
+  const tracks = orderedRequestColumns(order)
+    .filter((col) => !excluded.has(col.id))
+    .map((col) => {
+      const manualWidth = widths[col.id];
+      if (manualWidth !== undefined && Number.isFinite(manualWidth)) {
+        const clamped = Math.min(col.maxWidth, Math.max(col.minWidth, manualWidth));
+        return `${Math.round(clamped)}px`;
+      }
+      if (col.flexGrow > 0) {
+        hasFlexibleDataTrack = true;
+        return `minmax(${col.minWidth}px, ${col.flexGrow}fr)`;
+      }
+      return `${col.defaultWidth}px`;
+    });
 
   if (chrome.hasSelection) tracks.unshift(`${chrome.isSelectionClosed ? 0 : SELECT_TRACK_WIDTH}px`);
-  if (chrome.hasChevron) tracks.push(`${CHEVRON_TRACK_WIDTH}px`);
+  if (chrome.hasChevron) {
+    tracks.push(hasFlexibleDataTrack ? `${CHEVRON_TRACK_WIDTH}px` : `minmax(${CHEVRON_TRACK_WIDTH}px, 1fr)`);
+  }
   return tracks.join(' ');
 }
 
@@ -313,9 +496,9 @@ export function computeGridMinWidth(
   gap = REQUEST_GRID_GAP,
   paddingInline = REQUEST_PAD_INLINE,
   chrome: RequestGridChrome = LIST_GRID_CHROME,
-  folded: ReadonlySet<RequestColumnId> = NO_COLUMNS,
+  excluded: ReadonlySet<RequestColumnId> = NO_COLUMNS,
 ): number {
-  const columns = REQUEST_COLUMNS.filter((col) => !folded.has(col.id));
+  const columns = REQUEST_COLUMNS.filter((col) => !excluded.has(col.id));
   const total = columns.reduce((sum, col) => {
     const manual = widths[col.id];
     if (manual !== undefined && Number.isFinite(manual)) {
@@ -328,9 +511,32 @@ export function computeGridMinWidth(
     chrome.hasChevron ? CHEVRON_TRACK_WIDTH : null,
   ].filter((width): width is number => width !== null);
   // One gap between each pair of neighbouring tracks, data and fixed alike.
-  const gaps = (columns.length + fixedTracks.length - 1) * gap;
+  const gaps = Math.max(0, columns.length + fixedTracks.length - 1) * gap;
   const fixed = fixedTracks.reduce((sum, width) => sum + width, 0);
   return Math.round(total + fixed + gaps + paddingInline * 2);
+}
+
+/**
+ * resolveSeamColumns picks visible columns that need extra leading breathing room so adjacent
+ * columns never visually collide: a left-aligned text column immediately after a right-aligned
+ * numeric column, or the two flexible name columns (`provider` and `model`) sitting side by side.
+ * The first visible column never receives a seam.
+ */
+export function resolveSeamColumns(
+  excluded: ReadonlySet<RequestColumnId> = NO_COLUMNS,
+  order: readonly RequestColumnId[] = REQUEST_COLUMN_IDS,
+): RequestColumnId[] {
+  const visible = orderedRequestColumns(order).filter((col) => !excluded.has(col.id));
+  const seams: RequestColumnId[] = [];
+  for (let index = 1; index < visible.length; index += 1) {
+    const prev = visible[index - 1];
+    const curr = visible[index];
+    const isNumberToText = prev.align === 'right' && curr.align === 'left';
+    const isAdjacentNamePair =
+      (prev.id === 'provider' && curr.id === 'model') || (prev.id === 'model' && curr.id === 'provider');
+    if (isNumberToText || isAdjacentNamePair) seams.push(curr.id);
+  }
+  return seams;
 }
 
 /** The foldable columns, the first to go first. */
@@ -339,13 +545,15 @@ const FOLD_SEQUENCE: readonly RequestColumnId[] = REQUEST_COLUMNS.filter((col) =
   .map((col) => col.id);
 
 /**
- * foldRequestColumns decides which columns a list of the given width leaves out.
+ * foldRequestColumns decides which additional columns a list of the given width
+ * leaves out on top of any columns the operator already hid.
  *
  * A list too narrow for its columns used to scroll sideways, which hides the
  * right-hand columns just the same but behind a gesture, and takes the header's
  * alignment with it on the way. Folding instead keeps every remaining column
  * whole: the least-scanned ones go first, one at a time, until the grid's floor
- * fits. Whatever is folded is still a click away in the record's detail drawer.
+ * fits. Hiding other columns frees space so previously folded columns can return,
+ * and folding always leaves at least one visible column.
  *
  * Nothing folds before the width is measured, or at the stacked-card width, where
  * each record labels all of its fields. The columns without a `foldOrder` never
@@ -355,12 +563,20 @@ const FOLD_SEQUENCE: readonly RequestColumnId[] = REQUEST_COLUMNS.filter((col) =
 export function foldRequestColumns(
   availableWidth: number | null,
   widths: RequestColumnWidths = {},
+  userHidden: ReadonlySet<RequestColumnId> = NO_COLUMNS,
 ): ReadonlySet<RequestColumnId> {
   const folded = new Set<RequestColumnId>();
   if (availableWidth === null || availableWidth <= REQUEST_STACK_WIDTH) return folded;
+  const excluded = new Set<RequestColumnId>();
+  for (const id of userHidden) {
+    if (COLUMN_MAP.has(id)) excluded.add(id);
+  }
   // Room is kept for the selection track even while it is hidden, so starting a choice never folds a column.
   for (const id of FOLD_SEQUENCE) {
-    if (computeGridMinWidth(widths, REQUEST_GRID_GAP, REQUEST_PAD_INLINE, LIST_GRID_CHROME, folded) <= availableWidth) break;
+    if (excluded.has(id)) continue;
+    if (REQUEST_COLUMNS.length - excluded.size <= 1) break;
+    if (computeGridMinWidth(widths, REQUEST_GRID_GAP, REQUEST_PAD_INLINE, LIST_GRID_CHROME, excluded) <= availableWidth) break;
+    excluded.add(id);
     folded.add(id);
   }
   return folded;

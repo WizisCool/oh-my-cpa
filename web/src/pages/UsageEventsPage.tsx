@@ -59,6 +59,7 @@ import {
   toggleSelection,
 } from '../components/usage/requestSelection';
 import { RequestToolbar } from '../components/usage/RequestToolbar';
+import { RequestColumnsPopover } from '../components/usage/RequestColumnsPopover';
 import './UsageEventsPage.css';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { ToolButton } from '../components/common/ToolButton';
@@ -103,15 +104,31 @@ export const UsageEventsPage: React.FC = () => {
   const isSelecting = isSelectMode || selection.size > 0;
 
   const {
+    isReady: isColumnsReady,
+    isStacked,
     colWidths,
+    orderedColumns,
+    columnOrder,
+    userHiddenSet,
+    autoFoldedColumns,
+    visibleCount,
+    totalCount,
     gridTemplate,
     gridMinWidth,
-    foldedColumns,
+    hiddenColumnsAttr,
+    seamColumnsAttr,
     streamRef,
     hasCustomWidths,
+    hasHiddenColumns,
+    hasCustomOrder,
+    handleToggleColumn,
+    handleShowAllColumns,
+    handleMoveColumn,
+    handleStepColumn,
+    handleResetColumnOrder,
     handleResizeStart,
     handleResetColumn,
-    handleResetAllColumns,
+    handleResetAllWidths,
     handleResizeKeyDown,
   } = useRequestColumnLayout(isSelecting);
 
@@ -578,9 +595,11 @@ export const UsageEventsPage: React.FC = () => {
         isChecked={selection.has(event.id)}
         isSelecting={isSelecting}
         onToggleSelect={handleToggleSelect}
+        columnOrder={columnOrder}
       />
     ),
     [
+      columnOrder,
       configuredProviders,
       credentials,
       handleToggleSelect,
@@ -652,16 +671,6 @@ export const UsageEventsPage: React.FC = () => {
                   </div>
                 </PopoverContent>
               </Popover>
-              {hasCustomWidths && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="req-reset-columns-btn"
-                  onClick={handleResetAllColumns}
-                >
-                  {t('events.reset_columns')}
-                </Button>
-              )}
               <ToolButton
                 icon={<CheckSquareOutlined />}
                 label={t('events.select_requests')}
@@ -714,6 +723,25 @@ export const UsageEventsPage: React.FC = () => {
             onClearFilters={clearFilters}
             grouping={grouping}
             onGroupingChange={changeGrouping}
+            columnsControl={!isStacked ? (
+              <RequestColumnsPopover
+                orderedColumns={orderedColumns}
+                userHidden={userHiddenSet}
+                autoFolded={autoFoldedColumns}
+                visibleCount={visibleCount}
+                totalCount={totalCount}
+                isReady={isColumnsReady}
+                hasHiddenColumns={hasHiddenColumns}
+                hasCustomOrder={hasCustomOrder}
+                hasCustomWidths={hasCustomWidths}
+                onToggle={handleToggleColumn}
+                onShowAll={handleShowAllColumns}
+                onMove={handleMoveColumn}
+                onStep={handleStepColumn}
+                onResetOrder={handleResetColumnOrder}
+                onResetWidths={handleResetAllWidths}
+              />
+            ) : undefined}
           />
           <RequestFilterChips
             committed={committedParams}
@@ -749,13 +777,15 @@ export const UsageEventsPage: React.FC = () => {
         <section
           ref={streamRef}
           className={clsx('request-stream', isSelecting && 'is-selecting')}
-          data-folded-columns={foldedColumns}
+          data-hidden-columns={hiddenColumnsAttr}
+          data-seam-columns={seamColumnsAttr}
           aria-label={t('events.title')}
           aria-busy={isVisibleFetching}
           style={streamStyle}
         >
           <div ref={scrollAreaRef} className="request-table-scroll-area">
             <RequestStreamHeader
+              columns={orderedColumns}
               colWidths={colWidths}
               handleResizeStart={handleResizeStart}
               handleResetColumn={handleResetColumn}

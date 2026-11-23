@@ -66,10 +66,19 @@ import {
 } from '../../src/types/usageEventFilters.ts';
 import {
   REQUEST_COLUMNS,
+  REQUEST_COLUMN_IDS,
   REQUEST_STACK_WIDTH,
   foldRequestColumns,
   USAGE_EVENTS_COLUMNS_PREFERENCE,
   parseUsageEventsColumns,
+  parseUsageEventsColumnPreference,
+  parseUsageEventsColumnsDoc,
+  serializeUsageEventsColumns,
+  canHideRequestColumn,
+  setRequestColumnHidden,
+  moveRequestColumn,
+  stepRequestColumn,
+  resolveSeamColumns,
   SHEET_GRID_CHROME,
   buildGridTemplateColumns,
   LIST_GRID_CHROME,
@@ -1565,11 +1574,16 @@ test('usage event view', () => {
   const restingGrid = buildGridTemplateColumns({}, { ...LIST_GRID_CHROME, isSelectionClosed: true });
   assert.equal(restingGrid, defaultGrid.replace(/^20px /, '0px '));
 
-  // Manual overrides lock specified tracks to exact px
+  // Manual overrides lock specified tracks to exact px; when no flexible data column remains,
+  // the trailing chevron track absorbs spare width so the chevron stays anchored to the right edge.
   const manualGrid = buildGridTemplateColumns({ provider: 250, model: 200 });
   assert.ok(manualGrid.includes('250px'));
   assert.ok(manualGrid.includes('200px'));
-  assert.ok(manualGrid.endsWith('14px'));
+  assert.ok(manualGrid.endsWith('minmax(14px, 1fr)'));
+  const singleManualGrid = buildGridTemplateColumns({ provider: 250 });
+  assert.ok(singleManualGrid.includes('250px'));
+  assert.ok(singleManualGrid.includes('minmax(126px, 1fr)'));
+  assert.ok(singleManualGrid.endsWith('14px'));
 
   // computeGridMinWidth: fixed defaults + flexible mins + the two fixed tracks + 13 gaps + inline padding
   // 96 + 76 + 136 + 126 + 84 + 78 + 88 + 140 + 56 + 52 + 136 + 120 = 1188; selection 20 + chevron 14 = 34;
@@ -1613,6 +1627,86 @@ test('usage event view', () => {
   const trackCount = (grid: string) => grid.match(/minmax\([^)]*\)|\S+/g)!.length;
   assert.equal(trackCount(foldedGrid), trackCount(defaultGrid) - 2);
   assert.equal(computeGridMinWidth({}, 16, 20, undefined, new Set(['client'])), baseMin + 208 + 40 - 120 - 16);
+
+  // Column visibility & ordering preference parsing, sanitization, and serialization
+  const legacyPref = parseUsageEventsColumnPreference({ provider: 220, latency: 96 });
+  assert.deepEqual(legacyPref.widths, { provider: 220, latency: 96 });
+  assert.deepEqual(legacyPref.hidden, []);
+  assert.equal(legacyPref.order, REQUEST_COLUMN_IDS);
+  assert.deepEqual(parseUsageEventsColumnsDoc({ provider: 220 }), { provider: 220 });
+  assert.equal(parseUsageEventsColumnsDoc(null), undefined);
+
+  const richPref = parseUsageEventsColumnPreference({
+    provider: 260,
+    hidden: ['client', 'unknown_col', 'key', 'client'],
+    order: ['key', 'time', 'unknown_col', 'key'],
+  });
+  assert.deepEqual(richPref.widths, { provider: 260 });
+  assert.deepEqual(richPref.hidden, ['key', 'client']);
+  assert.equal(richPref.order[0], 'key');
+  assert.equal(richPref.order[1], 'time');
+  assert.equal(richPref.order.length, REQUEST_COLUMNS.length);
+
+  // Hiding every column falls back to showing all columns so the table never renders empty.
+  const allHiddenPref = parseUsageEventsColumnPreference({ hidden: [...REQUEST_COLUMN_IDS], provider: 240 });
+  assert.deepEqual(allHiddenPref.hidden, []);
+  assert.deepEqual(allHiddenPref.widths, { provider: 240 });
+
+  // Serialization omits empty hidden / default order and preserves widths independently.
+  assert.deepEqual(serializeUsageEventsColumns({ provider: 240 }, [], REQUEST_COLUMN_IDS), { provider: 240 });
+  assert.deepEqual(
+    serializeUsageEventsColumns({ provider: 240 }, ['client', 'key'], REQUEST_COLUMN_IDS),
+    { provider: 240, hidden: ['key', 'client'] },
+  );
+  const reorderedIds = moveRequestColumn(REQUEST_COLUMN_IDS, 'cost', 'model', 'after');
+  assert.equal(reorderedIds.indexOf('cost'), reorderedIds.indexOf('model') + 1);
+  assert.deepEqual(
+    serializeUsageEventsColumns({ provider: 240 }, ['client'], reorderedIds),
+    { provider: 240, hidden: ['client'], order: [...reorderedIds] },
+  );
+  // Stepping back to canonical order returns the default reference and omits `order` on serialize.
+  const stepped = stepRequestColumn(REQUEST_COLUMN_IDS, 'result', -1);
+  assert.equal(stepped[0], 'result');
+  assert.equal(stepped[1], 'time');
+  assert.equal(stepRequestColumn(stepped, 'result', 1), REQUEST_COLUMN_IDS);
+
+  // At-least-one-visible invariant on visibility toggles.
+  const elevenHidden = REQUEST_COLUMN_IDS.filter((id) => id !== 'model');
+  assert.equal(canHideRequestColumn(elevenHidden, 'model'), false);
+  assert.equal(canHideRequestColumn(elevenHidden, 'time'), true);
+  assert.deepEqual(setRequestColumnHidden(elevenHidden, 'model', true), elevenHidden);
+  assert.deepEqual(setRequestColumnHidden(elevenHidden, 'time', false), elevenHidden.filter((id) => id !== 'time'));
+
+  // Hiding both flexible columns pins the trailing chevron via `minmax(14px, 1fr)`.
+  const noFlexGrid = buildGridTemplateColumns({}, LIST_GRID_CHROME, new Set(['provider', 'model']));
+  assert.ok(noFlexGrid.endsWith('minmax(14px, 1fr)'));
+  // Custom order controls track order in the grid template.
+  const customOrderGrid = buildGridTemplateColumns({}, SHEET_GRID_CHROME, new Set(), stepped);
+  assert.ok(customOrderGrid.startsWith('76px 96px '));
+
+  // User-hidden columns compose with automatic width folding without mutating user choices.
+  assert.deepEqual(
+    [...foldRequestColumns(1140, {}, new Set(['tokens', 'latency', 'cost']))],
+    [],
+    'hiding wide columns frees enough room so foldable columns unfold automatically',
+  );
+  assert.deepEqual(
+    [...foldRequestColumns(1140, {}, new Set(['client']))],
+    ['key', 'cache'],
+    'auto-folding skips columns already hidden by the user',
+  );
+  assert.deepEqual(
+    [...foldRequestColumns(REQUEST_STACK_WIDTH + 1, { client: 320 }, new Set(REQUEST_COLUMN_IDS.filter((id) => id !== 'client')))],
+    [],
+    'auto-folding never folds the last remaining visible column',
+  );
+
+  // Dynamic seam calculation adapts to hidden and reordered columns.
+  assert.deepEqual(resolveSeamColumns(), ['model', 'key']);
+  assert.deepEqual(resolveSeamColumns(new Set(['key'])), ['model', 'client']);
+  assert.deepEqual(resolveSeamColumns(new Set(['provider'])), ['key']);
+  assert.deepEqual(resolveSeamColumns(new Set(), moveRequestColumn(REQUEST_COLUMN_IDS, 'key', 'time', 'before')), ['model', 'client']);
+  assert.deepEqual(resolveSeamColumns(new Set(), moveRequestColumn(REQUEST_COLUMN_IDS, 'model', 'provider', 'before')), ['provider', 'key']);
 
 
 

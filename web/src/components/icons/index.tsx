@@ -33,6 +33,7 @@ import {
   CloudDownload,
   CloudUpload,
   Code,
+  Columns3,
   Compass,
   Copy,
   Database,
@@ -192,6 +193,7 @@ export const CloudDownloadOutlined = /*#__PURE__*/ createIcon(CloudDownload, 'om
 export const CloudServerOutlined = /*#__PURE__*/ createIcon(Server, 'omc-icon-cloud-server');
 export const CloudOutlined = /*#__PURE__*/ createIcon(Cloud, 'omc-icon-cloud');
 export const CodeOutlined = /*#__PURE__*/ createIcon(Code, 'omc-icon-code');
+export const ColumnsOutlined = /*#__PURE__*/ createIcon(Columns3, 'omc-icon-columns');
 export const CodeSandboxOutlined = /*#__PURE__*/ createIcon(SquareTerminal, 'omc-icon-code-sandbox');
 export const CompassOutlined = /*#__PURE__*/ createIcon(Compass, 'omc-icon-compass');
 export const CloudUploadOutlined = /*#__PURE__*/ createIcon(CloudUpload, 'omc-icon-cloud-upload');

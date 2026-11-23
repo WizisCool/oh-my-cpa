@@ -116,4 +116,65 @@ export async function runRequestListAcceptance({ appURL, page, check }) {
     (await oauthRow.locator('.req-provider-key').count()) === 0,
     `key cells on that row=${await oauthRow.locator('.req-provider-key').count()}`,
   );
+
+  // ---- column visibility & SQLite reload persistence ----
+  // Exercise real Chromium container queries (`@container reqstream`) and SQLite
+  // preference persistence across full page reload.
+  const columnsTrigger = page.getByTestId('request-columns-trigger');
+  await columnsTrigger.waitFor({ state: 'visible', timeout: 10_000 });
+  await columnsTrigger.click();
+  const columnsPopover = page.getByTestId('request-columns-popover');
+  await columnsPopover.waitFor({ state: 'visible', timeout: 5_000 });
+
+  for (const colId of ['time', 'provider', 'model']) {
+    const save = page.waitForResponse(
+      (res) => res.request().method() === 'PUT' && res.url().includes('/api/v1/preferences/usage_events_columns') && res.ok(),
+      { timeout: 10_000 },
+    );
+    await columnsPopover.locator(`[data-column-row="${colId}"] [data-slot="checkbox"]`).click();
+    await save;
+  }
+  const visibility = await page.evaluate(() => {
+    const row = document.querySelector('.request-row');
+    const timeTh = document.querySelector('.req-th-time');
+    const timeCell = row?.querySelector('.req-col-time');
+    const resultTh = document.querySelector('.req-th-result');
+    const resultCell = row?.querySelector('.req-col-result');
+    if (!row || !timeTh || !timeCell || !resultTh || !resultCell) return null;
+    return {
+      timeThHidden: getComputedStyle(timeTh).display === 'none',
+      timeCellHidden: getComputedStyle(timeCell).display === 'none',
+      resultThVisible: getComputedStyle(resultTh).display !== 'none',
+      resultCellVisible: getComputedStyle(resultCell).display !== 'none',
+    };
+  });
+  check(
+    'hidden columns leave both header and row via container query while remaining columns stay visible',
+    visibility !== null
+      && visibility.timeThHidden
+      && visibility.timeCellHidden
+      && visibility.resultThVisible
+      && visibility.resultCellVisible,
+    JSON.stringify(visibility),
+  );
+
+  // Reload and verify the column choices persisted in SQLite, then restore defaults for later checks.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15_000 });
+  const reloadedAttr = await page.locator('.request-stream').getAttribute('data-hidden-columns');
+  check(
+    'column visibility persists across page reload',
+    Boolean(reloadedAttr && reloadedAttr.includes('time') && reloadedAttr.includes('provider') && reloadedAttr.includes('model')),
+    `data-hidden-columns="${reloadedAttr}"`,
+  );
+
+  // Restore all columns so the database returns to clean defaults.
+  await page.getByTestId('request-columns-trigger').click();
+  const restoreSave = page.waitForResponse(
+    (res) => res.request().method() === 'PUT' && res.url().includes('/api/v1/preferences/usage_events_columns') && res.ok(),
+    { timeout: 10_000 },
+  );
+  await page.getByTestId('request-columns-show-all').click();
+  await restoreSave;
+  await page.keyboard.press('Escape');
 }

@@ -40,7 +40,7 @@ import {
 } from '../../types/usageEventLabels';
 import { clientDisplayName, eventClientId } from '../../types/clientAgents';
 import { ClientMark } from '../common/ClientMark';
-import { requestColumnAlignClass } from './requestColumns';
+import { REQUEST_COLUMN_IDS, requestColumnAlignClass, type RequestColumnId } from './requestColumns';
 import { ModelMark } from '../ModelMark';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
@@ -72,6 +72,8 @@ export interface RequestRowProps {
   isSelecting?: boolean;
   /** A pick of the row; `isRange` is a Shift click, which runs from the last row picked. */
   onToggleSelect: (id: number, isRange: boolean) => void;
+  /** Column sequence matching the header and CSS grid template. */
+  columnOrder?: readonly RequestColumnId[];
 }
 
 export const RequestRow = React.memo<RequestRowProps>(
@@ -90,6 +92,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     isChecked = false,
     isSelecting = false,
     onToggleSelect,
+    columnOrder = REQUEST_COLUMN_IDS,
   }) => {
     const timeZone = useTimeZone();
     const t = useT();
@@ -195,46 +198,9 @@ export const RequestRow = React.memo<RequestRowProps>(
       [event.timestamp_ms, timeZone],
     );
 
-    return (
-      <div
-        role="button"
-        tabIndex={0}
-        className={`request-row${isSelected ? ' is-selected' : ''}${isChecked ? ' is-checked' : ''}`}
-        // Shift extends a choice, so it must not also start a text selection across the rows.
-        onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }}
-        onClick={(e) => {
-          const intent = rowClickIntent(e, isSelecting);
-          if (intent === 'open') onOpen(event.id);
-          else onToggleSelect(event.id, intent === 'range');
-        }}
-        onKeyDown={(e) => {
-          if (e.target !== e.currentTarget) return;
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onOpen(event.id);
-          }
-        }}
-        aria-label={`${t('common.details')}: ${displayModel}, ${event.request_id || event.id}`}
-      >
-        {/* The checkbox picks the row; neither a click nor a key on it may also reach the row. It
-            stays mounted so its column can open and close around it. */}
-        <label
-          className="req-select select-reveal"
-          data-hidden={isSelecting ? undefined : ''}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          <input
-            type="checkbox"
-            className="req-select-box"
-            checked={isChecked}
-            aria-label={t('events.select_row', { id: event.request_id || event.id })}
-            onChange={(e) => onToggleSelect(event.id, isRangeCheckboxClick(e.nativeEvent as MouseEvent))}
-          />
-        </label>
-
-        {/* Column 1: timestamp */}
-        <div className={`req-col req-col-time ${requestColumnAlignClass('time')}`}>
+    const cells: Record<RequestColumnId, React.ReactNode> = {
+      time: (
+        <div key="time" className={`req-col req-col-time ${requestColumnAlignClass('time')}`}>
           <time dateTime={isoTime} className="req-time-text" data-request-tooltip={fullTime}>
             {formattedTime}
           </time>
@@ -263,9 +229,9 @@ export const RequestRow = React.memo<RequestRowProps>(
             ) : null}
           </div>
         </div>
-
-        {/* Column 2: outcome (success/failure status) */}
-        <div className={`req-col req-col-result ${requestColumnAlignClass('result')}`}>
+      ),
+      result: (
+        <div key="result" className={`req-col req-col-result ${requestColumnAlignClass('result')}`}>
           <span className="req-mobile-label">{t('events.col_result')}</span>
           {event.failed && event.fail_status_code ? (
             // The status is what the list knows; the popup reads the upstream's
@@ -291,9 +257,9 @@ export const RequestRow = React.memo<RequestRowProps>(
             </StatusLabel>
           )}
         </div>
-
-        {/* Column 3: provider (credential that answered) */}
-        <div className={`req-col req-col-provider ${requestColumnAlignClass('provider')}`}>
+      ),
+      provider: (
+        <div key="provider" className={`req-col req-col-provider ${requestColumnAlignClass('provider')}`}>
           <div className="req-provider-icon-wrapper">
             <ProviderBrandIcon mark={providerInfo} size={20} />
           </div>
@@ -337,10 +303,9 @@ export const RequestRow = React.memo<RequestRowProps>(
             )}
           </div>
         </div>
-
-        {/* Column 4: model. The cell is the model's identity and nothing else: how
-            the request was made has its own column, so a row is two lines at most. */}
-        <div className={`req-col req-col-model ${requestColumnAlignClass('model')}`}>
+      ),
+      model: (
+        <div key="model" className={`req-col req-col-model ${requestColumnAlignClass('model')}`}>
           <div className="req-model-primary">
             {showModelIcons && (
               <ModelMark
@@ -384,12 +349,9 @@ export const RequestRow = React.memo<RequestRowProps>(
             </span>
           ) : null}
         </div>
-
-        {/* Column 5: mode - the reasoning effort, then a mark per way this request
-            departed from an ordinary streamed call: served on the fast lane,
-            carried over a WebSocket, or answered in one piece. The requested service tier ("auto") is not
-            something operators scan for and stays in the drawer. */}
-        <div className={`req-col req-col-mode ${requestColumnAlignClass('mode')}`}>
+      ),
+      mode: (
+        <div key="mode" className={`req-col req-col-mode ${requestColumnAlignClass('mode')}`}>
           <span className="req-mobile-label">{t('events.col_mode')}</span>
           {event.reasoning_effort || isFastTier || transport === 'websocket' || transport === 'http' ? (
             <div className="req-mode-marks">
@@ -436,9 +398,9 @@ export const RequestRow = React.memo<RequestRowProps>(
             <span className="req-mode-none">—</span>
           )}
         </div>
-
-        {/* Column 6: output tokens per second */}
-        <div className={`req-col req-col-tps ${requestColumnAlignClass('tps')}`}>
+      ),
+      tps: (
+        <div key="tps" className={`req-col req-col-tps ${requestColumnAlignClass('tps')}`}>
           <span className="req-mobile-label">{t('events.col_tps')}</span>
           {tpsInfo.basis !== null ? (
             <span
@@ -451,9 +413,9 @@ export const RequestRow = React.memo<RequestRowProps>(
             <span className="req-tps-none">—</span>
           )}
         </div>
-
-        {/* Column 7: total latency */}
-        <div className={`req-col req-col-latency ${requestColumnAlignClass('latency')}`}>
+      ),
+      latency: (
+        <div key="latency" className={`req-col req-col-latency ${requestColumnAlignClass('latency')}`}>
           <span className="req-mobile-label">{t('events.col_latency')}</span>
           {durationScaleStyle ? (
             <strong className="req-latency-val req-timing-value" style={durationScaleStyle}>
@@ -470,9 +432,9 @@ export const RequestRow = React.memo<RequestRowProps>(
             </span>
           )}
         </div>
-
-        {/* Column 8: tokens (total, input, output, reasoning) */}
-        <div className={`req-col req-col-tokens ${requestColumnAlignClass('tokens')}`}>
+      ),
+      tokens: (
+        <div key="tokens" className={`req-col req-col-tokens ${requestColumnAlignClass('tokens')}`}>
           <span className="req-mobile-label">{t('events.col_tokens')}</span>
           <div className="req-tokens-total">
             <strong data-request-tooltip={`${formatTokensFull(event.tokens.total)} ${t('dash.unit_tokens')}`}>{formatTokens(event.tokens.total, tokenStyle)}</strong>
@@ -507,10 +469,11 @@ export const RequestRow = React.memo<RequestRowProps>(
             )}
           </div>
         </div>
-
-        {/* Missing prices can be configured for future requests; unresolved
-            accounting cannot be repaired by changing the model's price. */}
-        <div className={`req-col req-col-cost ${requestColumnAlignClass('cost')}`}>
+      ),
+      cost: (
+        // Missing prices can be configured for future requests; unresolved
+        // accounting cannot be repaired by changing the model's price.
+        <div key="cost" className={`req-col req-col-cost ${requestColumnAlignClass('cost')}`}>
           <span className="req-mobile-label">{t('events.col_cost')}</span>
           {event.cost_usd != null ? (
             <strong className="req-cost-val">{formatCurrency(event.cost_usd, currency)}</strong>
@@ -542,8 +505,9 @@ export const RequestRow = React.memo<RequestRowProps>(
             </>
           )}
         </div>
-        {/* Column 10: cache hit rate */}
-        <div className={`req-col req-col-cache ${requestColumnAlignClass('cache')}`}>
+      ),
+      cache: (
+        <div key="cache" className={`req-col req-col-cache ${requestColumnAlignClass('cache')}`}>
           <span className="req-mobile-label">{t('events.col_cache_rate')}</span>
           {/* One badge for every reading: 0% keeps the pill and the dot — it
               is a real value, not a missing one. Only the no-data case drops
@@ -566,19 +530,17 @@ export const RequestRow = React.memo<RequestRowProps>(
             {cacheLabel}
           </span>
         </div>
-
-        {/* Column 11: caller key, masked, and only for api_key callers;
-            every other auth type falls back to the source fingerprint */}
-        <div className={`req-col req-col-key ${requestColumnAlignClass('key')}`}>
+      ),
+      key: (
+        <div key="key" className={`req-col req-col-key ${requestColumnAlignClass('key')}`}>
           <span className="req-mobile-label">{t('events.col_key')}</span>
           <span className="req-key-val" data-request-tooltip={keyLabel} data-request-tooltip-overflow="">
             {keyLabel}
           </span>
         </div>
-
-        {/* Column 12: the client program, by its mark and name; the User-Agent
-            it was recognised from is the exact value behind it */}
-        <div className={`req-col req-col-client ${requestColumnAlignClass('client')}`}>
+      ),
+      client: (
+        <div key="client" className={`req-col req-col-client ${requestColumnAlignClass('client')}`}>
           <span className="req-mobile-label">{t('events.col_client')}</span>
           {clientId ? (
             <span className="req-client" data-request-tooltip={userAgent || undefined}>
@@ -591,6 +553,48 @@ export const RequestRow = React.memo<RequestRowProps>(
             <span className="req-client-name is-empty">—</span>
           )}
         </div>
+      ),
+    };
+
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        className={`request-row${isSelected ? ' is-selected' : ''}${isChecked ? ' is-checked' : ''}`}
+        // Shift extends a choice, so it must not also start a text selection across the rows.
+        onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }}
+        onClick={(e) => {
+          const intent = rowClickIntent(e, isSelecting);
+          if (intent === 'open') onOpen(event.id);
+          else onToggleSelect(event.id, intent === 'range');
+        }}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onOpen(event.id);
+          }
+        }}
+        aria-label={`${t('common.details')}: ${displayModel}, ${event.request_id || event.id}`}
+      >
+        {/* The checkbox picks the row; neither a click nor a key on it may also reach the row. It
+            stays mounted so its column can open and close around it. */}
+        <label
+          className="req-select select-reveal"
+          data-hidden={isSelecting ? undefined : ''}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            className="req-select-box"
+            checked={isChecked}
+            aria-label={t('events.select_row', { id: event.request_id || event.id })}
+            onChange={(e) => onToggleSelect(event.id, isRangeCheckboxClick(e.nativeEvent as MouseEvent))}
+          />
+        </label>
+
+        {columnOrder.map((colId) => cells[colId])}
 
         {/* Row Action Chevron */}
         <RightOutlined className="request-chevron" />
