@@ -136,8 +136,9 @@ export const PROVIDER_FAMILIES: ProviderFamilyMeta[] = [
     color: '#4285F4',
     iconId: 'Google',
     protocolMatchers: ['vertex'],
+    supportsErrorRules: true,
     behaviorSwitches: ['interactions', 'openapi', 'openapi_location'],
- modelOptionFields: ['openapi'],
+    modelOptionFields: ['openapi'],
   },
   {
     id: 'interactions',

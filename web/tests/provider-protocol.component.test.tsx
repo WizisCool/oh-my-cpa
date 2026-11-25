@@ -125,12 +125,12 @@ it('keeps probe failures readable until dismissed', async () => {
   } finally { view.unmount(); }
 });
 
-function Editor() {
+function Editor({ provider = PROVIDER }: { provider?: ProviderItem }) {
   const t = useT();
   const icons = useProviderIconOverrides();
   const editor = useProviderManagement({ ...icons, t, toast, settleProviderRow: () => {} });
   return <>
-    <button onClick={() => editor.handleOpenEdit(PROVIDER)}>Edit fixture</button>
+    <button onClick={() => editor.handleOpenEdit(provider)}>Edit fixture</button>
     <ProviderEditorDrawer {...editor} familyDisplayNames={{}} />
   </>;
 }
@@ -162,5 +162,56 @@ it('saves a changed protocol with the original identity and refreshes migrated i
       model_entries: [{ name: 'model-one', alias: 'one', image: false, options: { max_context_length: 32000 } }],
     });
     expect(writes()[2].body).toEqual({ 'openai-compat-0': 'Anthropic', 'codex-1': 'DeepSeek', 'codex-2': 'DeepSeek' });
+  } finally { view.unmount(); }
+});
+
+it('shows, validates, and saves request-scoped error rules for Vertex providers', async () => {
+  const vertexProvider: ProviderItem = {
+    id: 'vertex-0',
+    family: 'vertex',
+    name: 'Vertex AI',
+    protocol: 'Vertex Generate Content',
+    base_url: 'https://vertex.example.test/v1',
+    disabled: false,
+    key_configured: true,
+    auth_index: 'vx-1',
+    key_entries: [{ index: 0, api_key: 'fixture-vertex-key' }],
+    runtime_policy: {
+      cooling: 'inherit',
+      supports_error_rules: true,
+      error_rules: [{ status: 429, match: ['RESOURCE_EXHAUSTED'], action: 'stop-and-cooldown' }],
+    },
+  };
+  const client = createTestQueryClient();
+  client.setQueryData(['management-plugins'], { plugins: [] });
+  const api = installOmcApi({ providers: [vertexProvider] });
+  api.on('PUT', '/management/providers/vertex-0', () => ({ status: 'ok', id: 'vertex-0' }));
+  vi.mocked(toast.warning).mockClear();
+  const view = renderWithOmc(<Editor provider={vertexProvider} />, { client });
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Edit fixture' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Runtime policy/ }));
+    expect(await screen.findByTestId('error-rules-editor')).toBeTruthy();
+    expect(screen.getByLabelText('Rule 1: Status code')).toHaveProperty('value', '429');
+    expect(screen.getByLabelText('Rule 1: Pattern')).toHaveProperty('value', 'RESOURCE_EXHAUSTED');
+
+    // Adding an incomplete rule blocks saving until fixed.
+    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(toast.warning).toHaveBeenCalledWith('Error rule 2 is incomplete. Fix it before saving.');
+    expect(api.writes('/management/providers/vertex-0')).toHaveLength(0);
+
+    fireEvent.change(screen.getByLabelText('Rule 2: Status code'), { target: { value: '400' } });
+    fireEvent.change(screen.getByLabelText('Rule 2: Pattern'), { target: { value: 'INVALID_ARGUMENT' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(api.writes('/management/providers/vertex-0')).toHaveLength(1));
+    expect((api.writes('/management/providers/vertex-0')[0].body as Record<string, unknown>).runtime_policy).toEqual({
+      cooling: 'inherit',
+      error_rules: [
+        { status: 429, match: ['RESOURCE_EXHAUSTED'], action: 'stop-and-cooldown' },
+        { status: 400, match: ['INVALID_ARGUMENT'], action: 'continue' },
+      ],
+    });
   } finally { view.unmount(); }
 });

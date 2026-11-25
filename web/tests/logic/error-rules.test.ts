@@ -150,6 +150,14 @@ test('Vertex policy counts only explicit routing overrides and a non-empty locat
   assert.equal(count({ ...EMPTY_BEHAVIOR_DRAFT, openapi_location: 'global' }), 1);
   assert.equal(count({ ...EMPTY_BEHAVIOR_DRAFT, openapi: 'enabled' }), 1);
   assert.equal(count({ ...EMPTY_BEHAVIOR_DRAFT, openapi: 'disabled', openapi_location: 'global', interactions: true }), 3);
+  assert.equal(
+    countPolicyOverrides(
+      { ...EMPTY_RUNTIME_POLICY_DRAFT, errorRules: readErrorRuleDrafts(storedRules) },
+      { ...EMPTY_BEHAVIOR_DRAFT, openapi: 'disabled', openapi_location: 'global', interactions: true },
+      [...switches],
+    ),
+    5,
+  );
 });
 
 test('connection pool drafts keep opt-in presence, inheritance and explicit false/zero distinct', () => {

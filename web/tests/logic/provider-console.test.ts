@@ -253,6 +253,14 @@ test('provider console', () => {
     ['openai-compatibility'],
   );
 
+  // Every provider family CPA exposes now declares request-scoped error rules,
+  // including Vertex (CPA v8.1.4+).
+  assert.equal(lookupProviderFamily('vertex')?.supportsErrorRules, true);
+  assert.deepEqual(
+    PROVIDER_FAMILIES.filter((family) => family.supportsErrorRules).map((family) => family.id),
+    PROVIDER_FAMILIES.map((family) => family.id),
+  );
+
   // The tag's border and fill are derived by appending hex alpha to this value, so a
   // non-hex colour would silently produce an invalid declaration rather than a
   // visible error. Asserting the form here is what keeps that invariant honest.
