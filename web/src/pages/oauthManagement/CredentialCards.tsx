@@ -23,6 +23,7 @@ import { rowClickIntent } from '../../types/rowSelection';
 import { activityOf } from './fleetPresentation';
 import { maskedCredentialLabel, type OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
 import { ActivitySpark, QuotaLines, QuotaMetrics } from './QuotaGauges';
+import { hasActiveSubscriptionPeriod } from '../quota/quotaCapacity';
 import styles from './CredentialCards.module.css';
 
 /**
@@ -93,7 +94,12 @@ function CredentialCard({ record, providerName, isSelected, isSelecting, nowMS, 
   const metrics = record.quota?.plan?.metrics ?? [];
   const hasLines = facts.quotaLines.length > 0;
   const owner = file.auth_index
-    ? { authIndex: file.auth_index, credentialName: maskedCredentialLabel(record), mark: <CredentialMark credential={{ provider: record.displayProvider, hint: file.name }} pluginLogos={pluginLogos} size={22} /> }
+    ? {
+      authIndex: file.auth_index,
+      credentialName: maskedCredentialLabel(record),
+      mark: <CredentialMark credential={{ provider: record.displayProvider, hint: file.name }} pluginLogos={pluginLogos} size={22} />,
+      hasSubscriptionCycle: hasActiveSubscriptionPeriod(record.quota?.plan, nowMS),
+    }
     : undefined;
   return (
     <m.article

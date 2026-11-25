@@ -12,7 +12,7 @@ import { HistoryOutlined, HourglassOutlined, InfoCircleOutlined, InsightsOutline
 import { useT } from '../../i18n';
 import { cacheScaleMix } from '../../theme/cacheScale';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
-import type { QuotaCapacityCycle, QuotaWindow, QuotaWindowCapacity } from '../../types/quota';
+import type { QuotaCapacityCycle, QuotaSubscriptionPeriod, QuotaWindow, QuotaWindowCapacity } from '../../types/quota';
 import type { RollingReadout } from '../../types/rollingNumber';
 import { formatShortDateTime } from './quotaFormat';
 import {
@@ -20,70 +20,195 @@ import {
   describeCapacityCard,
   quotaCapacityNote,
   formatCycleCardFigures,
+  subscriptionProjectionNote,
+  supportsSubscriptionCycleTab,
 } from './quotaCapacity';
 import type { QuotaCapacityOwner } from './QuotaCapacityButton';
 import { quotaWindowGroupName, siblingCapacityWindows } from './quotaWindowSelection';
 import { quotaDetailWindowName } from '../oauthManagement/credentialSections';
 import styles from './QuotaCapacityDialog.module.css';
 
+export const SUBSCRIPTION_CYCLE_TAB = '__subscription_cycle__';
+
 export interface QuotaCapacityDialogProps {
   open: boolean;
   onClose: () => void;
   owner: QuotaCapacityOwner;
-  window: QuotaWindow;
+  window?: QuotaWindow;
   windows?: readonly QuotaWindow[];
+  /** Starts on the subscription billing-cycle view instead of a rate-limit window. */
+  initialTab?: 'subscription_cycle';
 }
 
-/** Recorded consumption and estimated full-window capacity share one window selector. */
-export default function QuotaCapacityDialog({ open, onClose, owner, window, windows }: QuotaCapacityDialogProps) {
+/** Recorded consumption, estimated full-window capacity, and subscription-cycle totals share one period switcher. */
+export default function QuotaCapacityDialog({ open, onClose, owner, window, windows, initialTab }: QuotaCapacityDialogProps) {
   const t = useT();
   const { style: tokenStyle } = useTokenDisplayStyle();
-  const siblingWindows = React.useMemo(() => siblingCapacityWindows(window, windows), [window, windows]);
-  const [selectedWindowId, setSelectedWindowId] = React.useState(window.id);
-  const [prevTrigger, setPrevTrigger] = React.useState({ open, windowId: window.id });
-  if (prevTrigger.open !== open || prevTrigger.windowId !== window.id) {
+  const siblingWindows = React.useMemo(
+    () => (window ? siblingCapacityWindows(window, windows) : []),
+    [window, windows],
+  );
+  const canShowSubscriptionTab = supportsSubscriptionCycleTab(window, Boolean(owner.hasSubscriptionCycle));
+  const defaultTab = canShowSubscriptionTab && (initialTab === 'subscription_cycle' || !window)
+    ? SUBSCRIPTION_CYCLE_TAB
+    : window?.id ?? SUBSCRIPTION_CYCLE_TAB;
+
+  const [selectedTab, setSelectedTab] = React.useState(defaultTab);
+  const [prevTrigger, setPrevTrigger] = React.useState({ open, defaultTab });
+  if (prevTrigger.open !== open || prevTrigger.defaultTab !== defaultTab) {
     const openedFresh = open && !prevTrigger.open;
-    const triggerChanged = prevTrigger.windowId !== window.id;
-    setPrevTrigger({ open, windowId: window.id });
+    const triggerChanged = prevTrigger.defaultTab !== defaultTab;
+    setPrevTrigger({ open, defaultTab });
     if (openedFresh || triggerChanged) {
-      setSelectedWindowId(window.id);
+      setSelectedTab(defaultTab);
     }
   }
 
-  const activeWindow = siblingWindows.find((candidate) => candidate.id === selectedWindowId) ?? window;
+  const isSubscriptionTab = canShowSubscriptionTab && (selectedTab === SUBSCRIPTION_CYCLE_TAB || !window);
+  const activeWindow = siblingWindows.find((candidate) => candidate.id === selectedTab) ?? window;
 
   const history = useQuery({
-    queryKey: ['quota-capacity', owner.authIndex, activeWindow.id],
-    queryFn: () => api.getQuotaCapacityHistory(owner.authIndex, activeWindow.id),
-    enabled: open,
+    queryKey: ['quota-capacity', owner.authIndex, activeWindow?.id ?? ''],
+    queryFn: () => api.getQuotaCapacityHistory(owner.authIndex, activeWindow!.id),
+    enabled: open && !isSubscriptionTab && Boolean(activeWindow),
     staleTime: 30_000,
   });
 
-  const used = activeWindow.used_percent
-    ?? (activeWindow.remaining_percent == null ? undefined : 100 - activeWindow.remaining_percent);
+  const subscription = useQuery({
+    queryKey: ['quota-subscription-cycle', owner.authIndex],
+    queryFn: () => api.getQuotaSubscriptionCycle(owner.authIndex),
+    enabled: open && isSubscriptionTab,
+    staleTime: 30_000,
+  });
+
+  const tabOptions = [
+    ...siblingWindows.map((candidate) => ({
+      value: candidate.id,
+      label: quotaDetailWindowName(candidate, t, siblingWindows),
+    })),
+    ...(canShowSubscriptionTab
+      ? [{ value: SUBSCRIPTION_CYCLE_TAB, label: t('quota.subscription_cycle_tab') }]
+      : []),
+  ];
+
+  const titleWindowLabel = isSubscriptionTab
+    ? t('quota.subscription_cycle_tab')
+    : activeWindow
+      ? quotaDetailWindowName(activeWindow, t, siblingWindows)
+      : t('quota.subscription_cycle_tab');
+
+  const group = !isSubscriptionTab && activeWindow ? quotaWindowGroupName(activeWindow) : null;
+
+  // Rate-limit window state
+  const used = activeWindow
+    ? activeWindow.used_percent
+      ?? (activeWindow.remaining_percent == null ? undefined : 100 - activeWindow.remaining_percent)
+    : undefined;
   const current: QuotaCapacityCycle | null = history.data?.current
-    ?? (activeWindow.usage && activeWindow.reset_at_ms
+    ?? (activeWindow?.usage && activeWindow.reset_at_ms
       ? { from_ms: activeWindow.usage.from_ms, reset_at_ms: activeWindow.reset_at_ms, used_percent: used, usage: activeWindow.usage }
       : null);
   const previous = history.data?.previous ?? null;
   const currentUsed = current?.used_percent ?? used;
-  const group = quotaWindowGroupName(activeWindow);
   const activeCapacity: QuotaWindowCapacity | null = history.isError
     ? null
     : history.data
       ? history.data.capacity ?? null
-      : activeWindow.capacity ?? null;
+      : activeWindow?.capacity ?? null;
   const pendingNote = quotaCapacityNote(
-    history.isError ? 'usage_unavailable' : history.data?.capacity_unavailable ?? activeWindow.capacity_unavailable,
+    history.isError ? 'usage_unavailable' : history.data?.capacity_unavailable ?? activeWindow?.capacity_unavailable,
     t,
   );
   const forecastFigures = describeCapacityCard(activeCapacity, tokenStyle, t);
-  const untilText = activeWindow.reset_at_ms
+  const untilText = activeWindow?.reset_at_ms
     ? t('quota.capacity_until', { when: formatShortDateTime(activeWindow.reset_at_ms) })
     : null;
   const forecastCaption = activeCapacity?.basis === 'previous_window'
     ? t('quota.capacity_from_previous')
     : untilText ?? '\u00a0';
+
+  // Subscription billing-cycle state
+  const subCurrent = subscription.isError ? null : subscription.data?.current ?? null;
+  const subPrevious = subscription.isError ? null : subscription.data?.previous ?? null;
+  const subProjection: QuotaWindowCapacity | null = subscription.isError ? null : subscription.data?.projection ?? null;
+  const subPendingNote = subscriptionProjectionNote(
+    subscription.isError ? 'usage_unavailable' : subscription.data?.projection_unavailable,
+    t,
+  );
+  const subProjectionFigures = describeCapacityCard(subProjection, tokenStyle, t);
+  const subUntilCaption = subCurrent
+    ? t('quota.capacity_until', { when: formatShortDateTime(subCurrent.to_ms) })
+    : '\u00a0';
+
+  // Keep one stable three-card DOM tree across all period tabs so RollingNumber and Meter
+  // stay mounted without layout remounts or height shifts when switching tabs.
+  const previousCard = isSubscriptionTab
+    ? {
+      title: t('quota.subscription_previous_cycle'),
+      caption: subPrevious
+        ? subscriptionSpan(subPrevious)
+        : t(subscription.isError ? 'quota.capacity_reason_history_unavailable' : 'quota.subscription_no_previous'),
+      figures: formatCycleCardFigures(asCapacityCycle(subPrevious), tokenStyle, t),
+      isEmpty: !subPrevious,
+      isPending: subscription.isPending,
+      foot: (
+        <span className={styles['foot-figure']}>
+          {subPrevious ? t('quota.subscription_completed') : '—'}
+        </span>
+      ),
+    }
+    : {
+      title: t('quota.capacity_previous_window'),
+      caption: previous
+        ? cycleSpan(previous)
+        : t(history.isError ? 'quota.capacity_reason_history_unavailable' : 'quota.capacity_no_previous'),
+      figures: formatCycleCardFigures(previous, tokenStyle, t),
+      isEmpty: !previous,
+      isPending: history.isPending,
+      foot: <UsedShare usedPercent={previous?.used_percent} />,
+    };
+
+  const currentCard = isSubscriptionTab
+    ? {
+      title: t('quota.subscription_current_cycle'),
+      caption: subCurrent
+        ? subscriptionSpan(subCurrent)
+        : t(subscription.isError ? 'quota.capacity_reason_usage_unavailable' : 'quota.capacity_reason_no_traffic'),
+      figures: formatCycleCardFigures(asCapacityCycle(subCurrent), tokenStyle, t),
+      isEmpty: !subCurrent,
+      isPending: subscription.isPending,
+      foot: <ElapsedShare elapsedPercent={subCurrent?.elapsed_percent} />,
+    }
+    : {
+      title: t('quota.capacity_current_window'),
+      caption: current ? cycleSpan(current) : t('quota.capacity_reason_no_traffic'),
+      figures: formatCycleCardFigures(current, tokenStyle, t),
+      isEmpty: !current,
+      isPending: false,
+      foot: <UsedShare usedPercent={currentUsed} />,
+    };
+
+  const forecastFootNote = isSubscriptionTab
+    ? (!subProjection && !subscription.isPending ? (subPendingNote ?? t('quota.subscription_reason_insufficient_elapsed')) : null)
+    : (!activeCapacity ? (pendingNote ?? t('quota.capacity_reason_low_usage')) : null);
+
+  const forecastCard = isSubscriptionTab
+    ? {
+      title: t('quota.subscription_projected_cycle'),
+      caption: subUntilCaption,
+      figures: subProjectionFigures,
+      isEmpty: !subProjection,
+      isPending: subscription.isPending,
+      tag: t('quota.subscription_projection_tag'),
+    }
+    : {
+      title: t('quota.capacity_forecast_window'),
+      caption: forecastCaption,
+      figures: forecastFigures,
+      isEmpty: !activeCapacity,
+      isPending: false,
+      tag: t('quota.capacity_forecast_tag'),
+    };
 
   return (
     <AppModal
@@ -95,61 +220,60 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
         <span className={styles['dialog-title']}>
           {owner.mark && <span className={styles['mark-tile']} aria-hidden="true">{owner.mark}</span>}
           <span className={styles['title-text']}>
-            {t('quota.capacity_dialog_title', { window: quotaDetailWindowName(activeWindow, t, siblingWindows) })}
+            {t('quota.capacity_dialog_title', { window: titleWindowLabel })}
           </span>
         </span>
       )}
       description={group ? <MetaLine>{owner.credentialName}{group}</MetaLine> : owner.credentialName}
     >
-      {siblingWindows.length > 1 && (
+      {tabOptions.length > 1 && (
         <div className={styles['cycle-bar']} data-quota-capacity-toolbar="">
           <Segmented
             size="sm"
             className={styles['window-switch']}
             aria-label={t('quota.capacity_window_switch')}
-            value={activeWindow.id}
-            onChange={setSelectedWindowId}
-            options={siblingWindows.map((candidate) => ({
-              value: candidate.id,
-              label: quotaDetailWindowName(candidate, t, siblingWindows),
-            }))}
+            value={isSubscriptionTab ? SUBSCRIPTION_CYCLE_TAB : activeWindow?.id ?? SUBSCRIPTION_CYCLE_TAB}
+            onChange={setSelectedTab}
+            options={tabOptions}
           />
         </div>
       )}
 
-      <div className={styles.cards} data-quota-capacity-dialog={activeWindow.id}>
+      <div className={styles.cards} data-quota-capacity-dialog={isSubscriptionTab ? 'subscription_cycle' : activeWindow?.id}>
         <Card
           icon={<HistoryOutlined />}
-          title={t('quota.capacity_previous_window')}
-          caption={previous
-            ? cycleSpan(previous)
-            : t(history.isError ? 'quota.capacity_reason_history_unavailable' : 'quota.capacity_no_previous')}
-          figures={formatCycleCardFigures(previous, tokenStyle, t)}
-          isEmpty={!previous}
-          isPending={history.isPending}
-          foot={<UsedShare usedPercent={previous?.used_percent} />}
+          title={previousCard.title}
+          caption={previousCard.caption}
+          figures={previousCard.figures}
+          isEmpty={previousCard.isEmpty}
+          isPending={previousCard.isPending}
+          foot={previousCard.foot}
         />
         <Card
           icon={<HourglassOutlined />}
-          title={t('quota.capacity_current_window')}
-          caption={current ? cycleSpan(current) : t('quota.capacity_reason_no_traffic')}
-          figures={formatCycleCardFigures(current, tokenStyle, t)}
-          isEmpty={!current}
-          foot={<UsedShare usedPercent={currentUsed} />}
+          title={currentCard.title}
+          caption={currentCard.caption}
+          figures={currentCard.figures}
+          isEmpty={currentCard.isEmpty}
+          isPending={currentCard.isPending}
+          foot={currentCard.foot}
         />
         <Card
           tone="forecast"
           icon={<InsightsOutlined />}
-          title={t('quota.capacity_forecast_window')}
-          caption={forecastCaption}
-          figures={forecastFigures}
-          isEmpty={!activeCapacity}
+          title={forecastCard.title}
+          caption={forecastCard.caption}
+          figures={forecastCard.figures}
+          isEmpty={forecastCard.isEmpty}
+          isPending={forecastCard.isPending}
           foot={(
             <>
-              {!activeCapacity && (
-                <span className={styles['foot-text']}>{pendingNote ?? t('quota.capacity_reason_low_usage')}</span>
+              {forecastFootNote && (
+                <span className={styles['foot-text']} data-tip={forecastFootNote} data-tip-overflow="">
+                  {forecastFootNote}
+                </span>
               )}
-              <Tag tone="accent" size="small" className={styles['foot-tag']}>{t('quota.capacity_forecast_tag')}</Tag>
+              <Tag tone="accent" size="small" className={styles['foot-tag']}>{forecastCard.tag}</Tag>
             </>
           )}
         />
@@ -157,7 +281,13 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
 
       <div className={styles.note}>
         <InfoCircleOutlined className={styles['note-glyph']} />
-        <span>{t('quota.capacity_hint')}</span>
+        <span>
+          {t(
+            isSubscriptionTab
+              ? (subCurrent?.widened || subPrevious?.widened ? 'insights.widened' : 'quota.subscription_hint_live')
+              : 'quota.capacity_hint',
+          )}
+        </span>
       </div>
     </AppModal>
   );
@@ -165,6 +295,14 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
 
 function cycleSpan(cycle: QuotaCapacityCycle): string {
   return `${formatShortDateTime(cycle.from_ms)} – ${formatShortDateTime(cycle.reset_at_ms)}`;
+}
+
+function subscriptionSpan(period: QuotaSubscriptionPeriod): string {
+  return `${formatShortDateTime(period.from_ms)} – ${formatShortDateTime(period.to_ms)}`;
+}
+
+function asCapacityCycle(period: QuotaSubscriptionPeriod | null): QuotaCapacityCycle | null {
+  return period ? { from_ms: period.from_ms, reset_at_ms: period.to_ms, usage: period.usage } : null;
 }
 
 /**
@@ -245,6 +383,19 @@ function UsedShare({ usedPercent }: { usedPercent: number | undefined }) {
       {share != null && <Meter className={styles.meter} value={share} label={t('quota.capacity_used_share', { n: share })} />}
       <span className={styles['foot-figure']}>
         {share == null ? '—' : t('quota.capacity_used_share', { n: share })}
+      </span>
+    </>
+  );
+}
+
+function ElapsedShare({ elapsedPercent }: { elapsedPercent: number | undefined }) {
+  const t = useT();
+  const share = elapsedPercent == null ? null : Math.round(Math.min(Math.max(elapsedPercent, 0), 100));
+  return (
+    <>
+      {share != null && <Meter className={styles.meter} value={share} label={t('quota.subscription_elapsed_share', { n: share })} />}
+      <span className={styles['foot-figure']}>
+        {share == null ? '—' : t('quota.subscription_elapsed_share', { n: share })}
       </span>
     </>
   );

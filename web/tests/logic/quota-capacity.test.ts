@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { TFunc } from '../../src/i18n/index.tsx';
 import type { QuotaWindowCapacity } from '../../src/types/quota.ts';
-import { compactQuotaCapacity, describeCapacityCard, formatCycleCardFigures, quotaCapacityNote } from '../../src/pages/quota/quotaCapacity.ts';
+import {
+  compactQuotaCapacity,
+  describeCapacityCard,
+  formatCycleCardFigures,
+  hasActiveSubscriptionPeriod,
+  quotaCapacityNote,
+  subscriptionProjectionNote,
+  supportsSubscriptionCycleTab,
+} from '../../src/pages/quota/quotaCapacity.ts';
 import { formatQuotaMetric, orderCodexResetCredits, quotaPayloadSummary } from '../../src/pages/quota/quotaFormat.ts';
 import { siblingCapacityWindows } from '../../src/pages/quota/quotaWindowSelection.ts';
 
@@ -117,4 +125,31 @@ test('orderCodexResetCredits excludes spent credits and orders soonest-expiring 
     ['c-early', 'c-tie-a', 'c-tie-b', 'c-late', 'c-undated'],
   );
   assert.deepEqual(orderCodexResetCredits(undefined), []);
+});
+
+test('subscription cycle helpers require verified active start and expiry boundaries', () => {
+  const now = Date.UTC(2026, 10, 15, 12, 0);
+  const start = Date.UTC(2026, 10, 1, 12, 0);
+  const end = Date.UTC(2026, 11, 1, 12, 0);
+
+  assert.equal(hasActiveSubscriptionPeriod({ starts_at_ms: start, expires_at_ms: end, expires_source: 'live_subscription' }, now), true);
+  assert.equal(hasActiveSubscriptionPeriod({ starts_at_ms: start, expires_at_ms: end }, now), true);
+  assert.equal(hasActiveSubscriptionPeriod({ starts_at_ms: start, expires_at_ms: end, expires_source: 'credential_snapshot' }, now), false);
+  assert.equal(hasActiveSubscriptionPeriod({ expires_at_ms: end, expires_source: 'live_subscription' }, now), false);
+  assert.equal(hasActiveSubscriptionPeriod({ starts_at_ms: start, expires_source: 'live_subscription' }, now), false);
+  assert.equal(hasActiveSubscriptionPeriod({ starts_at_ms: start, expires_at_ms: end, expires_source: 'live_subscription' }, end), false);
+  assert.equal(hasActiveSubscriptionPeriod({ starts_at_ms: start, expires_at_ms: end, expires_source: 'live_subscription' }, start - 1), false);
+  assert.equal(hasActiveSubscriptionPeriod(undefined, now), false);
+
+  assert.equal(supportsSubscriptionCycleTab(undefined, true), true);
+  assert.equal(supportsSubscriptionCycleTab({ scope: 'standard' }, true), true);
+  assert.equal(supportsSubscriptionCycleTab({ scope: 'standard' }, false), false);
+  assert.equal(supportsSubscriptionCycleTab({ scope: 'model' }, true), false);
+  assert.equal(supportsSubscriptionCycleTab({ scope: 'group' }, true), false);
+  assert.equal(supportsSubscriptionCycleTab({ scope: 'code_review' }, true), false);
+
+  assert.equal(subscriptionProjectionNote('insufficient_elapsed', t), 'quota.subscription_reason_insufficient_elapsed');
+  assert.equal(subscriptionProjectionNote('no_traffic', t), 'quota.capacity_reason_no_traffic');
+  assert.equal(subscriptionProjectionNote('usage_unavailable', t), 'quota.capacity_reason_usage_unavailable');
+  assert.equal(subscriptionProjectionNote(undefined, t), null);
 });

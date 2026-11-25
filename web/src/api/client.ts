@@ -56,7 +56,7 @@ import {
 import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderErrorRule, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { GatewayModelItem } from '../types/gatewayModels';
 import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse, OAuthCancelResponse, SIWCBindingStart, SIWCBindingStatus } from '../types/oauth';
-import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem, QuotaCapacityHistory } from '../types/quota';
+import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem, QuotaCapacityHistory, QuotaSubscriptionCycleHistory } from '../types/quota';
 import {
   SystemInfoResponse,
   SystemReleasesResponse,
@@ -1609,6 +1609,12 @@ export const api = {
 
   async getQuotaCapacityHistory(authIndex: string, windowId: string): Promise<QuotaCapacityHistory> {
     return request<QuotaCapacityHistory>(`/management/quota/${encodeURIComponent(authIndex)}/capacity?window=${encodeURIComponent(windowId)}`, {
+      method: 'GET',
+    });
+  },
+
+  async getQuotaSubscriptionCycle(authIndex: string): Promise<QuotaSubscriptionCycleHistory> {
+    return request<QuotaSubscriptionCycleHistory>(`/management/quota/${encodeURIComponent(authIndex)}/subscription-cycle`, {
       method: 'GET',
     });
   },

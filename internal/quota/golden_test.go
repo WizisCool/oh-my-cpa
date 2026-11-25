@@ -22,8 +22,8 @@ func TestParsersMatchGoldenFiles(t *testing.T) {
 			return goldenReading{ResetCredits: credits, Error: errorText(err)}
 		},
 		"codex-subscription": func(t *testing.T, input testkit.Case) any {
-			untilMS, shouldRenew, isRead := ParseCodexSubscription(input.Body)
-			return map[string]any{"until_ms": untilMS, "should_renew": shouldRenew, "is_read": isRead}
+			sub, isRead := ParseCodexSubscription(input.Body)
+			return map[string]any{"start_ms": sub.StartAtMS, "until_ms": sub.UntilAtMS, "should_renew": sub.ShouldRenew, "is_read": isRead}
 		},
 		"claude": func(t *testing.T, input testkit.Case) any {
 			windows, extraUsage, err := ParseClaudeUsage(input.Body, input.NowMS)

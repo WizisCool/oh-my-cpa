@@ -418,6 +418,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Delete("/management/quota/warmup/runs", h.clearWarmupRuns)
 				v1.Get("/management/quota/{authIndex}", h.getCredentialQuotaDetail)
 				v1.Get("/management/quota/{authIndex}/capacity", h.getQuotaCapacityHistory)
+				v1.Get("/management/quota/{authIndex}/subscription-cycle", h.getQuotaSubscriptionCycle)
 
 				v1.Post("/management/system/database-backup-authorization", h.startDatabaseBackupOAuth)
 				v1.Get("/management/system/database-backup-authorization/{id}", h.getDatabaseBackupOAuth)

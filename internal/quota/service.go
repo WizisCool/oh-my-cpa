@@ -554,11 +554,13 @@ func (s *Service) applyCodexSubscription(ctx context.Context, file management.Au
 		target := CodexSubscriptionURL + "?account_id=" + url.QueryEscape(accountID)
 		if resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", target, headers, ""); err == nil {
 			if body, errBody := resp.NormalizedBody(); errBody == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				if untilMS, shouldRenew, ok := ParseCodexSubscription(body); ok {
+				if sub, ok := ParseCodexSubscription(body); ok {
+					untilMS := sub.UntilAtMS
+					plan.StartsAtMS = sub.StartAtMS
 					plan.ExpiresAtMS = &untilMS
 					plan.ExpiresLabel = ""
 					plan.ExpiresSource = PlanSourceLiveSubscription
-					plan.IsAutoRenewing = shouldRenew
+					plan.IsAutoRenewing = sub.ShouldRenew
 					return
 				}
 			}
@@ -574,6 +576,9 @@ func (s *Service) applyCodexSubscription(ctx context.Context, file management.Au
 	}
 
 	if untilMS, ok := file.CodexSubscriptionActiveUntil(); ok && untilMS > 0 {
+		if startMS, hasStart := file.CodexSubscriptionActiveStart(); hasStart && startMS > 0 && startMS < untilMS {
+			plan.StartsAtMS = &startMS
+		}
 		plan.ExpiresAtMS = &untilMS
 		plan.ExpiresLabel = ""
 		plan.ExpiresSource = PlanSourceCredentialSnapshot

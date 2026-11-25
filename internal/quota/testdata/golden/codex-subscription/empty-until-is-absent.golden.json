@@ -1,5 +1,6 @@
 {
   "is_read": false,
   "should_renew": null,
+  "start_ms": null,
   "until_ms": 0
 }

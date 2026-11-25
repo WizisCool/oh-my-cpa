@@ -31,6 +31,20 @@ func seedQuotaObservations(ctx context.Context, repo *repository.Repository, now
 		switch credential.provider {
 		case "codex":
 			plan, windows, _, err = quota.ParseCodexUsage(raw, now.UnixMilli())
+			if err == nil && plan != nil && !subscriptionUnavailable[credential.authIndex] {
+				if subPayload, ok := payloads[codexSubscriptionURL]; ok {
+					if subRaw, marshalErr := json.Marshal(subPayload); marshalErr == nil {
+						if sub, okSub := quota.ParseCodexSubscription(subRaw); okSub {
+							untilMS := sub.UntilAtMS
+							plan.StartsAtMS = sub.StartAtMS
+							plan.ExpiresAtMS = &untilMS
+							plan.ExpiresLabel = ""
+							plan.ExpiresSource = quota.PlanSourceLiveSubscription
+							plan.IsAutoRenewing = sub.ShouldRenew
+						}
+					}
+				}
+			}
 		case "claude":
 			windows, _, err = quota.ParseClaudeUsage(raw, now.UnixMilli())
 			if profilePayload, ok := payloads[claudeProfileURL]; ok {

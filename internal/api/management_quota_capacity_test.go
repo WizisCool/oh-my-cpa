@@ -422,3 +422,269 @@ func TestAttachQuotaCapacityReconcilesPreResetLateUsageAndLongRunningTail(t *tes
 		t.Fatalf("post-reset capacity = %+v, want 30 requests after reconciling reset baseline", got.Capacity)
 	}
 }
+
+func getSubscriptionCycle(t *testing.T, handler *Handler, authIndex string) (int, map[string]any) {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/management/quota/"+authIndex+"/subscription-cycle", nil)
+	routeContext := chi.NewRouteContext()
+	routeContext.URLParams.Add("authIndex", authIndex)
+	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeContext))
+	recorder := httptest.NewRecorder()
+	handler.getQuotaSubscriptionCycle(recorder, request)
+	var body map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("body %q: %v", recorder.Body.String(), err)
+	}
+	return recorder.Code, body
+}
+
+func TestQuotaSubscriptionCycleSurvivesUsageDetailPruning(t *testing.T) {
+	handler := capacityTestHandler(t)
+	ctx := context.Background()
+	start := time.Date(2026, time.November, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.November, 16, 0, 0, 0, 0, time.UTC) // exactly 50% elapsed
+	handler.nowFn = func() time.Time { return now }
+
+	startMS := start.UnixMilli()
+	endMS := end.UnixMilli()
+	reading := capacityReading(now.UnixMilli()-60_000, now.UnixMilli()+2*3600*1000, 5, 40)
+	reading.Plan = &quota.QuotaPlan{
+		PlanType:      "pro",
+		PlanLabel:     "Pro 200",
+		Tier:          "elite",
+		StartsAtMS:    &startMS,
+		ExpiresAtMS:   &endMS,
+		ExpiresSource: quota.PlanSourceLiveSubscription,
+	}
+	if err := handler.persistNormalizedQuotaSnapshot(ctx, reading); err != nil {
+		t.Fatal(err)
+	}
+
+	insertEvent := func(key, auth string, at time.Time, prompt, cached, total int64, cost any, status string) {
+		t.Helper()
+		if _, err := handler.repo.SQL().ExecContext(ctx, `
+			INSERT INTO usage_events (
+				instance_id, event_key, api_group_key, auth_index, provider, model,
+				timestamp_ms, created_at_ms, input_tokens, output_tokens, cached_tokens, cache_read_tokens, total_tokens,
+				cost_nanos, pricing_status
+			) VALUES ('default', ?, 'group', ?, 'codex', 'gpt-5', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			key, auth, at.UnixMilli(), at.UnixMilli(), prompt, total-prompt, cached, cached, total, cost, status,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Previous cycle (Oct 1 - Nov 1): 2 requests, 100% priced, $12 total, 80% cache rate.
+	insertEvent("prev-1", "codex-1", time.Date(2026, time.October, 10, 10, 0, 0, 0, time.UTC), 1000, 800, 1200, int64(5_000_000_000), "priced")
+	insertEvent("prev-2", "codex-1", time.Date(2026, time.October, 22, 15, 0, 0, 0, time.UTC), 1000, 800, 1200, int64(7_000_000_000), "priced")
+	// Unrelated credential in same period must be excluded.
+	insertEvent("other-cred", "codex-2", time.Date(2026, time.November, 5, 12, 0, 0, 0, time.UTC), 9000, 0, 9999, int64(99_000_000_000), "priced")
+	// Current cycle (Nov 1 - Nov 16): 1 old folded/pruned event + 1 recent retained event (partial pricing: 1 priced $30, 1 unpriced).
+	insertEvent("curr-old", "codex-1", time.Date(2026, time.November, 2, 12, 0, 0, 0, time.UTC), 2000, 1800, 2500, int64(30_000_000_000), "priced")
+	insertEvent("curr-new", "codex-1", time.Date(2026, time.November, 15, 18, 0, 0, 0, time.UTC), 2000, 1400, 2500, nil, "unpriced")
+
+	// Fold everything into permanent usage_facts_15m/daily, then prune usage_events older than Nov 10
+	// and advance the retention horizon to prove subscription totals survive detail pruning.
+	if _, err := handler.repo.AggregateUsageFacts(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	horizonMS := time.Date(2026, time.November, 10, 0, 0, 0, 0, time.UTC).UnixMilli()
+	if _, err := handler.repo.SQL().ExecContext(ctx, `DELETE FROM usage_events WHERE timestamp_ms < ?`, horizonMS); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handler.repo.SQL().ExecContext(ctx, `
+		INSERT INTO data_lifecycle_state (policy, horizon_ms, deleted_rows, last_run_at_ms)
+		VALUES (?, ?, 3, ?)
+		ON CONFLICT(policy) DO UPDATE SET horizon_ms = excluded.horizon_ms`,
+		repository.LifecycleUsageDetail, horizonMS, now.UnixMilli(),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	code, body := getSubscriptionCycle(t, handler, "codex-1")
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, body = %+v", code, body)
+	}
+	if body["source"] != quota.SubscriptionCycleSourceLive || body["plan_label"] != "Pro 200" {
+		t.Fatalf("header fields = %+v", body)
+	}
+	prev := body["previous"].(map[string]any)
+	prevUsage := prev["usage"].(map[string]any)
+	if prevUsage["requests"] != float64(2) || prevUsage["priced_requests"] != float64(2) || prevUsage["tokens"] != float64(2400) || prevUsage["cost_nanos"] != float64(12_000_000_000) || prevUsage["cache_rate"] != float64(80) {
+		t.Fatalf("previous usage after pruning = %+v", prevUsage)
+	}
+	curr := body["current"].(map[string]any)
+	currUsage := curr["usage"].(map[string]any)
+	if curr["elapsed_percent"] != float64(50) || currUsage["requests"] != float64(2) || currUsage["priced_requests"] != float64(1) || currUsage["tokens"] != float64(5000) || currUsage["cost_nanos"] != float64(30_000_000_000) || currUsage["cache_rate"] != float64(80) {
+		t.Fatalf("current usage after pruning = %+v", curr)
+	}
+	proj := body["projection"].(map[string]any)
+	if proj["basis"] != quota.SubscriptionProjectionBasisPace || proj["requests"] != float64(4) || proj["tokens"] != float64(10000) || proj["cost_nanos"] != float64(60_000_000_000) || proj["sample_priced_requests"] != float64(1) {
+		t.Fatalf("projection = %+v", proj)
+	}
+
+	// Missing snapshot returns 404; empty authIndex returns 400.
+	if notFoundCode, _ := getSubscriptionCycle(t, handler, "missing-cred"); notFoundCode != http.StatusNotFound {
+		t.Fatalf("missing credential status = %d, want 404", notFoundCode)
+	}
+	if badCode, _ := getSubscriptionCycle(t, handler, ""); badCode != http.StatusBadRequest {
+		t.Fatalf("empty authIndex status = %d, want 400", badCode)
+	}
+}
+
+func TestQuotaSubscriptionCycleRequiresVerifiedPeriodAndHandlesEarlyCycle(t *testing.T) {
+	handler := capacityTestHandler(t)
+	ctx := context.Background()
+	start := time.Date(2026, time.November, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.November, 1, 6, 0, 0, 0, time.UTC) // 6h into cycle (< 24h guard)
+	handler.nowFn = func() time.Time { return now }
+
+	// Credentials without upstream billing start/end dates return 404.
+	claudeReading := capacityReading(now.UnixMilli()-60_000, now.UnixMilli()+2*3600*1000, 5, 15)
+	claudeReading.AuthIndex = "claude-1"
+	claudeReading.Provider = "claude"
+	claudeReading.Plan = &quota.QuotaPlan{PlanType: "max", PlanLabel: "Claude Max", Tier: "elite"}
+	if err := handler.persistNormalizedQuotaSnapshot(ctx, claudeReading); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := getSubscriptionCycle(t, handler, "claude-1"); code != http.StatusNotFound {
+		t.Fatalf("credential without billing period status = %d, want 404", code)
+	}
+
+	// Codex with verified live start+end early in the cycle returns 200 with nil previous and insufficient_elapsed.
+	startMS, endMS := start.UnixMilli(), end.UnixMilli()
+	earlyReading := capacityReading(now.UnixMilli()-60_000, now.UnixMilli()+2*3600*1000, 5, 15)
+	earlyReading.AuthIndex = "codex-early"
+	earlyReading.Plan = &quota.QuotaPlan{
+		PlanType:      "plus",
+		PlanLabel:     "Plus",
+		Tier:          "standard",
+		StartsAtMS:    &startMS,
+		ExpiresAtMS:   &endMS,
+		ExpiresSource: quota.PlanSourceLiveSubscription,
+	}
+	if err := handler.persistNormalizedQuotaSnapshot(ctx, earlyReading); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handler.repo.SQL().ExecContext(ctx, `
+		INSERT INTO usage_events (instance_id, event_key, api_group_key, auth_index, provider, model, timestamp_ms, created_at_ms, input_tokens, total_tokens, cost_nanos, pricing_status)
+		VALUES ('default', 'c-1', 'group', 'codex-early', 'codex', 'gpt-5', ?, ?, 500, 800, 2000000000, 'priced')`,
+		now.UnixMilli()-3600*1000, now.UnixMilli()-3600*1000,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	code, body := getSubscriptionCycle(t, handler, "codex-early")
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, body = %+v", code, body)
+	}
+	if body["source"] != quota.SubscriptionCycleSourceLive {
+		t.Fatalf("source = %v, want live_subscription", body["source"])
+	}
+	if body["previous"] != nil {
+		t.Fatalf("previous = %+v, want nil when previous cycle has no traffic", body["previous"])
+	}
+	if body["projection"] != nil || body["projection_unavailable"] != quota.SubscriptionProjectionReasonInsufficientTime {
+		t.Fatalf("early cycle projection = (%v, %v), want nil + insufficient_elapsed", body["projection"], body["projection_unavailable"])
+	}
+}
+
+func TestQuotaSubscriptionCyclePreservesEffectiveBoundsAfterPruning(t *testing.T) {
+	handler := capacityTestHandler(t)
+	ctx := context.Background()
+	start := time.Date(2026, time.November, 1, 0, 7, 0, 0, time.UTC) // non-15m-aligned start
+	end := time.Date(2026, time.December, 1, 0, 7, 0, 0, time.UTC)
+	now := time.Date(2026, time.November, 15, 12, 0, 0, 0, time.UTC)
+	handler.nowFn = func() time.Time { return now }
+
+	startMS, endMS := start.UnixMilli(), end.UnixMilli()
+	reading := capacityReading(now.UnixMilli()-60_000, now.UnixMilli()+2*3600*1000, 5, 30)
+	reading.AuthIndex = "codex-unaligned"
+	reading.Plan = &quota.QuotaPlan{
+		PlanType:      "pro",
+		PlanLabel:     "Pro",
+		Tier:          "elite",
+		StartsAtMS:    &startMS,
+		ExpiresAtMS:   &endMS,
+		ExpiresSource: quota.PlanSourceLiveSubscription,
+	}
+	if err := handler.persistNormalizedQuotaSnapshot(ctx, reading); err != nil {
+		t.Fatal(err)
+	}
+
+	insert := func(key string, at time.Time, tokens int64) {
+		t.Helper()
+		if _, err := handler.repo.SQL().ExecContext(ctx, `
+			INSERT INTO usage_events (
+				instance_id, event_key, api_group_key, auth_index, provider, model,
+				timestamp_ms, created_at_ms, input_tokens, total_tokens, cost_nanos, pricing_status
+			) VALUES ('default', ?, 'group', 'codex-unaligned', 'codex', 'gpt-5', ?, ?, ?, ?, 1000000000, 'priced')`,
+			key, at.UnixMilli(), at.UnixMilli(), tokens, tokens,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert("prev-mid", time.Date(2026, time.October, 15, 12, 0, 0, 0, time.UTC), 100)
+	insert("before-start", time.Date(2026, time.November, 1, 0, 3, 0, 0, time.UTC), 200) // previous cycle, same 00:00..00:15 bucket
+	insert("after-start", time.Date(2026, time.November, 1, 0, 8, 0, 0, time.UTC), 300)  // current cycle, same 00:00..00:15 bucket
+
+	// Before detail pruning: exact millisecond boundaries separate 00:03 and 00:08 with widened=false.
+	code, before := getSubscriptionCycle(t, handler, "codex-unaligned")
+	if code != http.StatusOK {
+		t.Fatalf("before pruning status = %d, body = %+v", code, before)
+	}
+	beforeCurr := before["current"].(map[string]any)
+	beforeCurrUsage := beforeCurr["usage"].(map[string]any)
+	beforePrev := before["previous"].(map[string]any)
+	beforePrevUsage := beforePrev["usage"].(map[string]any)
+	if beforeCurr["widened"] == true || beforePrev["widened"] == true {
+		t.Fatalf("expected non-widened periods before pruning: curr=%+v prev=%+v", beforeCurr, beforePrev)
+	}
+	if beforeCurrUsage["from_ms"] != float64(startMS) || beforeCurrUsage["requests"] != float64(1) || beforeCurrUsage["tokens"] != float64(300) {
+		t.Fatalf("before pruning current usage = %+v, want exact start and 1 req / 300 tokens", beforeCurrUsage)
+	}
+	if beforePrevUsage["to_ms"] != float64(startMS) || beforePrevUsage["requests"] != float64(2) || beforePrevUsage["tokens"] != float64(300) {
+		t.Fatalf("before pruning previous usage = %+v, want exact end and 2 req / 300 tokens", beforePrevUsage)
+	}
+
+	// Fold into 15-minute facts and prune details before Nov 2 00:00 UTC.
+	if _, err := handler.repo.AggregateUsageFacts(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	horizonMS := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC).UnixMilli()
+	if _, err := handler.repo.SQL().ExecContext(ctx, `DELETE FROM usage_events WHERE timestamp_ms < ?`, horizonMS); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handler.repo.SQL().ExecContext(ctx, `
+		INSERT INTO data_lifecycle_state (policy, horizon_ms, deleted_rows, last_run_at_ms)
+		VALUES (?, ?, 3, ?)
+		ON CONFLICT(policy) DO UPDATE SET horizon_ms = excluded.horizon_ms`,
+		repository.LifecycleUsageDetail, horizonMS, now.UnixMilli(),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// After detail pruning: effective quarter-hour bounds and widened flags are preserved,
+	// and previous.usage.to_ms stays strictly disjoint from current.usage.from_ms (no double-counting).
+	code, after := getSubscriptionCycle(t, handler, "codex-unaligned")
+	if code != http.StatusOK {
+		t.Fatalf("after pruning status = %d, body = %+v", code, after)
+	}
+	afterCurr := after["current"].(map[string]any)
+	afterCurrUsage := afterCurr["usage"].(map[string]any)
+	afterPrev := after["previous"].(map[string]any)
+	afterPrevUsage := afterPrev["usage"].(map[string]any)
+	wantNovAligned := float64(time.Date(2026, time.November, 1, 0, 0, 0, 0, time.UTC).UnixMilli())
+	wantOctAligned := float64(time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC).UnixMilli())
+	if afterCurr["widened"] != true || afterPrev["widened"] != true {
+		t.Fatalf("expected widened=true after pruning unaligned cycle: curr=%+v prev=%+v", afterCurr, afterPrev)
+	}
+	if afterCurrUsage["from_ms"] != wantNovAligned || afterCurrUsage["requests"] != float64(2) || afterCurrUsage["tokens"] != float64(500) {
+		t.Fatalf("after pruning current usage = %+v, want widened Nov 1 00:00 and 2 req / 500 tokens", afterCurrUsage)
+	}
+	if afterPrevUsage["from_ms"] != wantOctAligned || afterPrevUsage["to_ms"] != wantNovAligned || afterPrevUsage["requests"] != float64(1) || afterPrevUsage["tokens"] != float64(100) {
+		t.Fatalf("after pruning previous usage = %+v, want disjoint [Oct 1 00:00, Nov 1 00:00) and 1 req / 100 tokens", afterPrevUsage)
+	}
+}

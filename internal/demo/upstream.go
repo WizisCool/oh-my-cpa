@@ -210,10 +210,12 @@ func newUpstreamState(now time.Time) *upstreamState {
 		// The identity claims a real response carries. Plan and expiry are what the
 		// quota panel reads, so they have to be present for the Codex rows.
 		if item.plan != "" {
+			until := now.Add(21 * 24 * time.Hour)
 			claims := map[string]any{
 				"chatgpt_account_id":                "acct-" + item.authIndex,
 				"plan_type":                         item.plan,
-				"chatgpt_subscription_active_until": now.Add(21 * 24 * time.Hour).Unix(),
+				"chatgpt_subscription_active_start": until.AddDate(0, -1, 0).Unix(),
+				"chatgpt_subscription_active_until": until.Unix(),
 			}
 			encoded, err := json.Marshal(claims)
 			if err == nil {

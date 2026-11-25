@@ -289,20 +289,36 @@ type RawCodexSubscriptionPayload struct {
 	ShouldRenew *bool  `json:"will_renew"`
 }
 
+// CodexSubscription is the parsed billing window from Codex's live subscription
+// endpoint. StartAtMS is omitted when absent or not strictly before UntilAtMS.
+type CodexSubscription struct {
+	StartAtMS   *int64
+	UntilAtMS   int64
+	ShouldRenew *bool
+}
+
 // ParseCodexSubscription reads the authoritative subscription window. Only
-// active_until is consumed: upstream's separate entitlement payload also carries
-// an expires_at that trails the renewal instant, and conflating the two would
-// report a different date than the plan's own renewal.
-func ParseCodexSubscription(raw []byte) (untilMS int64, shouldRenew *bool, ok bool) {
+// active_start and active_until are consumed: upstream's separate entitlement
+// payload also carries an expires_at that trails the renewal instant, and
+// conflating the two would report a different date than the plan's own renewal.
+func ParseCodexSubscription(raw []byte) (CodexSubscription, bool) {
 	var payload RawCodexSubscriptionPayload
 	if err := json.Unmarshal(raw, &payload); err != nil {
-		return 0, nil, false
+		return CodexSubscription{}, false
 	}
 	until, parsed := parseCreditInstantToMS(payload.ActiveUntil)
 	if !parsed || until <= 0 {
-		return 0, nil, false
+		return CodexSubscription{}, false
 	}
-	return until, payload.ShouldRenew, true
+	var startAtMS *int64
+	if start, ok := parseCreditInstantToMS(payload.ActiveStart); ok && start > 0 && start < until {
+		startAtMS = &start
+	}
+	return CodexSubscription{
+		StartAtMS:   startAtMS,
+		UntilAtMS:   until,
+		ShouldRenew: payload.ShouldRenew,
+	}, true
 }
 
 func resolveCodexPlanTier(planType string) (tier string, label string) {

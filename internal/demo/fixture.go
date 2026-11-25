@@ -914,7 +914,7 @@ func quotaPayloads(now time.Time) map[string]any {
 		},
 		codexSubscriptionURL: map[string]any{
 			"plan_type":     "pro",
-			"active_start":  now.Add(-21 * 24 * time.Hour).UTC().Format(time.RFC3339),
+			"active_start":  now.Add(21*24*time.Hour).AddDate(0, -1, 0).UTC().Format(time.RFC3339),
 			"active_until":  now.Add(21 * 24 * time.Hour).UTC().Format(time.RFC3339),
 			"will_renew":    true,
 			"is_delinquent": false,
