@@ -991,8 +991,15 @@ func TestObservedModelPricingEndToEndHTTP(t *testing.T) {
 	}
 	// Backfilling prices the existing unpriced request.
 	response, payload = postJSON(t, client, baseURL+"/omc/api/v1/pricing/models/gemini-4-hydrogen-high/price-unpriced")
-	if response.StatusCode != http.StatusOK || !strings.Contains(string(payload), `"priced":1`) {
+	if response.StatusCode != http.StatusOK {
 		t.Fatalf("POST price-unpriced = %d %s", response.StatusCode, payload)
+	}
+	var backfill PricingUnpricedPricedResponseDTO
+	if err := json.Unmarshal(payload, &backfill); err != nil {
+		t.Fatalf("decode POST price-unpriced: %v (%s)", err, payload)
+	}
+	if backfill.Priced != 1 {
+		t.Fatalf("POST price-unpriced priced = %d, want 1 (%s)", backfill.Priced, payload)
 	}
 	// Saving and reading back a price for an observed model older than 30 days also works.
 	response, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/pricing/models/legacy-variant", `{"mode":"custom","prompt_price_per_1m":1,"completion_price_per_1m":2,"price_multiplier":1}`)
