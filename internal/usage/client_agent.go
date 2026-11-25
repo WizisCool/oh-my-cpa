@@ -921,6 +921,9 @@ func ClassifyClientAgent(userAgent, endpoint string) ClientAgentMatch {
 
 		// 3. Native CLI, IDE, desktop, and autonomous agent tokens.
 		prevHead := ""
+		hasGoogleGenAISDK := false
+		hasGoogleInternalGo := false
+		hasGooglePiperCL := false
 		for pos := 0; ; {
 			token, next, ok := nextUAToken(redacted, pos)
 			if !ok {
@@ -989,7 +992,23 @@ func ClassifyClientAgent(userAgent, endpoint string) ClientAgentMatch {
 					return agentMatch(canonical, minimized, head)
 				}
 			}
+			if hasSlash {
+				switch {
+				case equalASCIIFold(head, "google-genai-sdk") && startsWithVersionToken(tail):
+					hasGoogleGenAISDK = true
+				case equalASCIIFold(head, "gl-go") && isGoogleInternalGoRuntime(tail):
+					hasGoogleInternalGo = true
+				case equalASCIIFold(head, "cl") && isPiperChangelistToken(tail):
+					hasGooglePiperCL = true
+				}
+			}
 			prevHead = head
+		}
+		// Antigravity CLI (agy) sends Go google-genai-sdk's default User-Agent without an
+		// explicit product token; Google's internal Blaze/Piper Go runtime signature
+		// ("gl-go/go1.28-20261102-RC01 cl/1012564305 ...") separates it from public SDK callers.
+		if hasGoogleGenAISDK && hasGoogleInternalGo && hasGooglePiperCL {
+			return agentMatch(ClientAgentAntigravity, minimized, "")
 		}
 	}
 
@@ -1535,8 +1554,74 @@ func hasPrefixASCIIFold(s, prefix string) bool {
 	return len(s) >= len(prefix) && equalASCIIFold(s[:len(prefix)], prefix)
 }
 
+func isASCIIDigit(c byte) bool {
+	return c >= '0' && c <= '9'
+}
+
 func startsWithDigit(s string) bool {
-	return len(s) > 0 && s[0] >= '0' && s[0] <= '9'
+	return len(s) > 0 && isASCIIDigit(s[0])
+}
+
+// isGoogleInternalGoRuntime reports whether s matches Google's internal dated
+// Go toolchain version segment ("go<major>.<minor>[.<patch>]-<YYYYMMDD>[-...]").
+func isGoogleInternalGoRuntime(s string) bool {
+	if !hasPrefixASCIIFold(s, "go") {
+		return false
+	}
+	i := 2
+	start := i
+	for i < len(s) && isASCIIDigit(s[i]) {
+		i++
+	}
+	if i == start || i >= len(s) || s[i] != '.' {
+		return false
+	}
+	i++
+	start = i
+	for i < len(s) && isASCIIDigit(s[i]) {
+		i++
+	}
+	if i == start {
+		return false
+	}
+	if i < len(s) && s[i] == '.' {
+		i++
+		start = i
+		for i < len(s) && isASCIIDigit(s[i]) {
+			i++
+		}
+		if i == start {
+			return false
+		}
+	}
+	if i >= len(s) || s[i] != '-' {
+		return false
+	}
+	i++
+	if i+8 > len(s) {
+		return false
+	}
+	for j := 0; j < 8; j++ {
+		if !isASCIIDigit(s[i+j]) {
+			return false
+		}
+	}
+	i += 8
+	return i == len(s) || s[i] == '-'
+}
+
+// isPiperChangelistToken reports whether s is a numeric Google Piper changelist ID
+// ("cl/1012564305") emitted inside Google's internal Go runtime.Version().
+func isPiperChangelistToken(s string) bool {
+	if len(s) < 6 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if !isASCIIDigit(s[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // startsWithVersionToken accepts numeric versions ("1.5.0") and channel-prefixed

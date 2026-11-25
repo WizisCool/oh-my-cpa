@@ -127,6 +127,21 @@ func TestClassifyClientAgent(t *testing.T) {
 			wantID: ClientAgentAntigravity, wantCat: ClientAgentCategoryAgent, wantPrefix: "agy-production-verification",
 		},
 		{
+			name: "antigravity cli google genai sdk arm64 build",
+			ua:   "google-genai-sdk/1.79.1 gl-go/go1.28-20261102-RC01 cl/1012564305 +298f53e483 X:fieldtrack,boringcrypto,nogolistexportnewformat", endpoint: "POST /v1beta/models/*action",
+			wantID: ClientAgentAntigravity, wantCat: ClientAgentCategoryAgent, wantPrefix: "",
+		},
+		{
+			name: "antigravity cli google genai sdk x64 simd build",
+			ua:   "google-genai-sdk/1.76.0 gl-go/go1.28-20261015-RC02 cl/1000353293 +18a2e1f59d X:fieldtrack,boringcrypto,simd,nogolistexportnewformat", endpoint: "POST /v1beta/models/gemini-4-hydrogen:streamGenerateContent?alt=sse",
+			wantID: ClientAgentAntigravity, wantCat: ClientAgentCategoryAgent, wantPrefix: "",
+		},
+		{
+			name: "explicit agent takes precedence over google genai internal go toolchain",
+			ua:   "google-genai-sdk/1.79.1 gl-go/go1.28-20261102-RC01 cl/1012564305 GeminiCLI/0.66.0", endpoint: "POST /v1beta/models/*action",
+			wantID: ClientAgentGeminiCLI, wantCat: ClientAgentCategoryAgent, wantPrefix: "",
+		},
+		{
 			name: "oh my cpa console and agent traffic",
 			ua:   "Oh-My-CPA/0.4.5", endpoint: "POST /v1/chat/completions",
 			wantID: ClientAgentOhMyCPA, wantCat: ClientAgentCategoryAgent, wantPrefix: "Oh-My-CPA",
@@ -392,6 +407,21 @@ func TestClassifyClientAgent(t *testing.T) {
 			wantID: ClientAgentGoogleGenAISDK, wantCat: ClientAgentCategorySDK, wantPrefix: "google-genai-sdk",
 		},
 		{
+			name: "generic sdk google genai public go runtime",
+			ua:   "google-genai-sdk/1.79.1 gl-go/go1.25.0 X:boringcrypto", endpoint: "POST /v1beta/models/*action",
+			wantID: ClientAgentGoogleGenAISDK, wantCat: ClientAgentCategorySDK, wantPrefix: "google-genai-sdk",
+		},
+		{
+			name: "generic sdk google genai public go runtime with short cl token",
+			ua:   "google-genai-sdk/1.79.1 gl-go/go1.28-20261102-RC01 cl/123", endpoint: "POST /v1beta/models/*action",
+			wantID: ClientAgentGoogleGenAISDK, wantCat: ClientAgentCategorySDK, wantPrefix: "google-genai-sdk",
+		},
+		{
+			name: "generic sdk google genai python runtime",
+			ua:   "google-genai-sdk/1.79.1 gl-python/3.12.8", endpoint: "POST /v1beta/models/*action",
+			wantID: ClientAgentGoogleGenAISDK, wantCat: ClientAgentCategorySDK, wantPrefix: "google-genai-sdk",
+		},
+		{
 			name: "absent user agent",
 			ua:   "", endpoint: "POST /v1/chat/completions",
 			wantID: ClientAgentUnknown, wantCat: ClientAgentCategoryUnknown, wantPrefix: "",
@@ -539,6 +569,7 @@ func TestRedactionFastPathEquivalenceAndZeroAllocHotPath(t *testing.T) {
 		"github_" + "pat_" + strings.Repeat("c", 16),
 		"glpat-" + strings.Repeat("d", 16),
 		"hindsight/1.2.0",
+		"google-genai-sdk/1.79.1 gl-go/go1.28-20261102-RC01 cl/1012564305 +298f53e483 X:fieldtrack,boringcrypto,nogolistexportnewformat",
 		"xoxb-" + strings.Repeat("e", 16),
 		"client\x00with-nul/1.0",
 	}
@@ -577,6 +608,7 @@ func TestRedactionFastPathEquivalenceAndZeroAllocHotPath(t *testing.T) {
 		_ = ClassifyClientAgent("hindsight/1.2.0", "POST /v1/chat/completions")
 		_ = ClassifyClientAgent("QwenCode/0.2.1", "POST /v1/chat/completions")
 		_ = ClassifyClientAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Maka/0.1.11 Electron/43.2.0", "POST /v1/chat/completions")
+		_ = ClassifyClientAgent("google-genai-sdk/1.79.1 gl-go/go1.28-20261102-RC01 cl/1012564305 +298f53e483", "POST /v1beta/models/*action")
 		_ = ClassifyClientAgent("AsyncOpenAI/Python 1.55.0", "POST /v1/chat/completions")
 		_ = ResolveHistoricalClientAttribution("", "Codex", "POST /v1/responses")
 		_ = ResolveHistoricalClientAttribution("codex_chatgpt_desktop", "codex_chatgpt_desktop/1.0.0", "POST /v1/responses")
