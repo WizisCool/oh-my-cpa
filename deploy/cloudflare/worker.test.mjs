@@ -702,6 +702,23 @@ it('rebases current and previous capacity ranges without changing their basis or
   assert.equal(after.capacity.tokens, 100);
 });
 
+it('routes and rebases subscription-cycle usage responses only for credentials with verified billing periods', () => {
+  const name = responseNameFor(request('/api/v1/management/quota/auth-codex-01/subscription-cycle'));
+  assert.equal(name, 'quota-subscription-cycle-auth-codex-01');
+  const payload = JSON.parse(DATASET.responses[name].body);
+  assert.equal(payload.source, 'live_subscription');
+  assert.ok(payload.current && payload.current.from_ms < payload.current.to_ms);
+  const shifted = rebase(payload, 3600000);
+  assert.equal(shifted.current.from_ms, payload.current.from_ms + 3600000);
+  assert.equal(shifted.current.to_ms, payload.current.to_ms + 3600000);
+  assert.equal(shifted.current.measured_at_ms, payload.current.measured_at_ms + 3600000);
+  assert.equal(shifted.current.elapsed_percent, payload.current.elapsed_percent);
+
+  for (const absent of ['auth-codex-02', 'auth-claude-01', 'auth-antigravity-01', 'unknown-cred']) {
+    assert.equal(responseNameFor(request(`/api/v1/management/quota/${absent}/subscription-cycle`)), undefined);
+  }
+});
+
 describe('provider-wide OAuth model rules', () => {
   it('serves the selected provider catalog without borrowing another provider', () => {
     for (const provider of ['claude', 'codex']) {

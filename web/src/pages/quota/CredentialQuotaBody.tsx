@@ -3,15 +3,18 @@ import clsx from 'clsx';
 import { MetaLine } from '../../components/common/MetaLine';
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { CodeOutlined, SyncOutlined } from '../../components/icons';
+import { CodeOutlined, InsightsOutlined, SyncOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
 import { formatObservedAgo, formatQuotaMetric, formatQuotaMoney, formatSnapshotRenewalBound, formatTimeWithCountdown, quotaEmptyStateKey, quotaPayloadSummary, quotaPlanLabel } from './quotaFormat';
 import { QuotaWindowCards } from './QuotaWindowCards';
 import { QuotaResetCards } from './QuotaResetCards';
+import QuotaCapacityDialog from './QuotaCapacityDialog';
+import { useQuotaCapacityBlocked } from './QuotaCapacityButton';
+import { hasActiveSubscriptionPeriod } from './quotaCapacity';
 import { ToolButton } from '../../components/common/ToolButton';
 import { AppModal } from '../../components/common/AppModal';
-import { orderQuotaWindows } from './quotaWindowSelection';
+import { isEstimableQuotaWindow, orderQuotaWindows } from './quotaWindowSelection';
 import { quotaStatusTag } from './quotaStatusTag';
 import { outlivedResetLine, refreshFailureLine } from './quotaAttempt';
 import styles from './QuotaPresentation.module.css';
@@ -55,7 +58,33 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
   useTimeZone();
   const t = useT();
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = React.useState(false);
+  const [isSubscriptionOpen, setIsSubscriptionOpen] = React.useState(false);
+  const [hasOpenedSubscription, setHasOpenedSubscription] = React.useState(false);
+  const [prevAuthIndex, setPrevAuthIndex] = React.useState(item.auth_index);
+  if (prevAuthIndex !== item.auth_index) {
+    setPrevAuthIndex(item.auth_index);
+    setIsSubscriptionOpen(false);
+    setHasOpenedSubscription(false);
+  }
+  const isCapacityBlocked = useQuotaCapacityBlocked();
+  React.useEffect(() => {
+    if (isCapacityBlocked && isSubscriptionOpen) setIsSubscriptionOpen(false);
+  }, [isCapacityBlocked, isSubscriptionOpen]);
   const windows = orderQuotaWindows(item.windows ?? []);
+  const standardCapacityWindows = windows.filter((window) => window.scope === 'standard' && isEstimableQuotaWindow(window));
+  const hasSubscriptionCycle = Boolean(
+    item.auth_index
+    && item.observed_at_ms > 0
+    && item.status !== 'idle'
+    && item.status !== 'error'
+    && hasActiveSubscriptionPeriod(item.plan, nowMS),
+  );
+  const owner = {
+    authIndex: item.auth_index,
+    credentialName: credentialLabel,
+    mark: credentialMark,
+    hasSubscriptionCycle,
+  };
   const planLabel = quotaPlanLabel(item.plan, t);
   const availableCredits = item.reset_credits?.available_count ?? 0;
   const creditBalanceText = item.plan?.credits?.unlimited
@@ -114,6 +143,20 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
         </div>
         <div className={styles['quota-tools']}>
           <span className={styles['card-meta-time']}>{formatObservedAgo(item.observed_at_ms, nowMS, t)}</span>
+          {hasSubscriptionCycle && (
+            <ToolButton
+              size="sm"
+              variant="ghost"
+              icon={<InsightsOutlined />}
+              label={t('quota.subscription_cycle_open')}
+              aria-haspopup="dialog"
+              onClick={() => {
+                if (isCapacityBlocked) return;
+                setHasOpenedSubscription(true);
+                setIsSubscriptionOpen(true);
+              }}
+            />
+          )}
           {hasDiagnostics && (
             <ToolButton size="sm" variant="ghost" icon={<CodeOutlined />} label={t('omc.quota_diagnostics')} onClick={() => setIsDiagnosticsOpen(true)} />
           )}
@@ -280,10 +323,21 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
           nowMS={nowMS}
           provider={item.provider}
           observedAtMS={item.observed_at_ms}
-          owner={{ authIndex: item.auth_index, credentialName: credentialLabel, mark: credentialMark }}
+          owner={owner}
         />
       ) : (
         <div className={styles['no-window']}>{t(quotaEmptyStateKey(item))}</div>
+      )}
+
+      {hasOpenedSubscription && (
+        <QuotaCapacityDialog
+          open={isSubscriptionOpen && !isCapacityBlocked}
+          onClose={() => setIsSubscriptionOpen(false)}
+          owner={owner}
+          window={standardCapacityWindows[0]}
+          windows={standardCapacityWindows}
+          initialTab="subscription_cycle"
+        />
       )}
 
 

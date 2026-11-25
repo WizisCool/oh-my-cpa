@@ -554,7 +554,7 @@ func TestCodexRenewalPrefersLiveSubscriptionOverStaleSnapshot(t *testing.T) {
 				subscriptionURL = req.URL
 				return management.ApiCallResponse{
 					StatusCode: 200,
-					Body:       json.RawMessage(`{"plan_type":"plus","active_until":"2026-09-29T14:02:31Z","will_renew":true}`),
+					Body:       json.RawMessage(`{"plan_type":"plus","active_start":"2026-08-29T14:02:31Z","active_until":"2026-09-29T14:02:31Z","will_renew":true}`),
 				}, nil
 			case req.URL == CodexUsageURL:
 				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(codexUsageFixture)}, nil
@@ -578,7 +578,11 @@ func TestCodexRenewalPrefersLiveSubscriptionOverStaleSnapshot(t *testing.T) {
 
 	// The reported symptom was the 2026-08-29 snapshot surfacing as the renewal
 	// date. The live window must win.
+	wantStart := time.Date(2026, 8, 29, 14, 2, 31, 0, time.UTC).UnixMilli()
 	want := time.Date(2026, 9, 29, 14, 2, 31, 0, time.UTC).UnixMilli()
+	if res.Plan.StartsAtMS == nil || *res.Plan.StartsAtMS != wantStart {
+		t.Errorf("StartsAtMS = %v, want the live %d", res.Plan.StartsAtMS, wantStart)
+	}
 	if res.Plan.ExpiresAtMS == nil || *res.Plan.ExpiresAtMS != want {
 		t.Errorf("ExpiresAtMS = %v, want the live %d", res.Plan.ExpiresAtMS, want)
 	}
@@ -613,9 +617,13 @@ func TestCodexRenewalFallsBackToTaggedSnapshotWhenProbeFails(t *testing.T) {
 	// lower bound instead of a verified renewal date.
 	// The snapshot label must not be left behind by a parser that described a
 	// different instant: here the plan had no expiry, so no label can survive.
+	wantStart := time.Date(2026, 7, 29, 14, 2, 31, 0, time.UTC).UnixMilli()
 	want := time.Date(2026, 8, 29, 14, 2, 31, 0, time.UTC).UnixMilli()
 	if res.Plan == nil || res.Plan.ExpiresAtMS == nil || *res.Plan.ExpiresAtMS != want {
 		t.Fatalf("plan = %+v, want the snapshot expiry %d", res.Plan, want)
+	}
+	if res.Plan.StartsAtMS == nil || *res.Plan.StartsAtMS != wantStart {
+		t.Errorf("StartsAtMS = %v, want the snapshot start %d", res.Plan.StartsAtMS, wantStart)
 	}
 	if res.Plan.ExpiresLabel != "" {
 		t.Errorf("ExpiresLabel = %q, want empty for a snapshot bound", res.Plan.ExpiresLabel)

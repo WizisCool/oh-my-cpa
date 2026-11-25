@@ -88,6 +88,7 @@ type QuotaPlan struct {
 	PlanType             string           `json:"plan_type"`               // e.g. "pro", "plus", "ultra", "team", "free"
 	PlanLabel            string           `json:"plan_label"`              // e.g. "Pro 200", "Pro", "Ultra", "Team"
 	Tier                 string           `json:"tier"`                    // "elite", "premium", "standard", "free", "unknown"
+	StartsAtMS           *int64           `json:"starts_at_ms,omitempty"`  // epoch ms
 	ExpiresAtMS          *int64           `json:"expires_at_ms,omitempty"` // epoch ms
 	ExpiresLabel         string           `json:"expires_label,omitempty"`
 	ExtraUsage           *QuotaExtraUsage `json:"extra_usage,omitempty"`

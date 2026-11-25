@@ -230,6 +230,9 @@ func ParseDevinSeatStatus(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, e
 		plan.ExpiresAtMS = endMS
 		plan.ExpiresLabel = formatResetInstant(*endMS, nowMS)
 	}
+	if startMS := devinInstantMS(firstNonEmptyDevin(status.PlanStart, status.PlanStartAlt)); startMS != nil && (plan.ExpiresAtMS == nil || *startMS < *plan.ExpiresAtMS) {
+		plan.StartsAtMS = startMS
+	}
 	return plan, windows, nil
 }
 

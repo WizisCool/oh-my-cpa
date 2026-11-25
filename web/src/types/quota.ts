@@ -42,7 +42,7 @@ export interface QuotaWindowUsage {
 }
 
 export interface QuotaWindowCapacity {
-  basis: 'current_window' | 'previous_window';
+  basis: 'current_window' | 'previous_window' | 'pace';
   sample_requests: number;
   sample_priced_requests?: number;
   requests: number;
@@ -68,6 +68,33 @@ export interface QuotaCapacityHistory {
   previous: QuotaCapacityCycle | null;
   capacity?: QuotaWindowCapacity;
   capacity_unavailable?: QuotaCapacityUnavailableReason;
+}
+
+export type QuotaSubscriptionCycleSource = 'live_subscription';
+
+export type QuotaSubscriptionProjectionUnavailableReason =
+  | 'no_traffic'
+  | 'insufficient_elapsed'
+  | 'usage_unavailable';
+
+export interface QuotaSubscriptionPeriod {
+  from_ms: number;
+  to_ms: number;
+  measured_at_ms?: number;
+  elapsed_percent?: number;
+  /** Request records behind the retention horizon could not split an edge, so usage was widened to whole fact buckets. */
+  widened?: boolean;
+  usage?: QuotaWindowUsage;
+}
+
+/** `GET /management/quota/{authIndex}/subscription-cycle`: actual consumption across subscription billing cycles plus pace projection. */
+export interface QuotaSubscriptionCycleHistory {
+  source: QuotaSubscriptionCycleSource;
+  plan_label?: string;
+  current: QuotaSubscriptionPeriod | null;
+  previous: QuotaSubscriptionPeriod | null;
+  projection?: QuotaWindowCapacity;
+  projection_unavailable?: QuotaSubscriptionProjectionUnavailableReason;
 }
 
 export type QuotaCapacityUnavailableReason =
@@ -127,6 +154,7 @@ export interface QuotaPlan {
   plan_type: string;
   plan_label: string;
   tier: 'elite' | 'premium' | 'standard' | 'free' | 'unknown';
+  starts_at_ms?: number;
   expires_at_ms?: number;
   expires_label?: string;
   /** Where the expiry came from; absent on snapshots written before provenance was tracked. */

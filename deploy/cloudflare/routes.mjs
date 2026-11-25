@@ -164,6 +164,9 @@ const PLUGIN_CONFIG = '/api/v1/management/plugins/{id}/config';
 /** One quota window's capacity details. */
 const QUOTA_CAPACITY = '/api/v1/management/quota/{authIndex}/capacity';
 
+/** One credential's subscription billing-cycle usage totals. */
+const QUOTA_SUBSCRIPTION_CYCLE = '/api/v1/management/quota/{authIndex}/subscription-cycle';
+
 /** One model's price editor read. */
 const PRICING_MODEL = '/api/v1/pricing/models/{model}';
 
@@ -217,6 +220,16 @@ const PARAMETERISED_ROUTES = [
     pattern: /^\/api\/v1\/management\/quota\/[A-Za-z0-9._-]+\/capacity$/,
     resolve: (url) => {
       const name = `quota-capacity-${url.pathname.split('/').at(-2)}-${url.searchParams.get('window') ?? ''}`;
+      return Object.hasOwn(dataset.responses, name) ? name : undefined;
+    },
+  },
+  // One credential's subscription billing-cycle consumption, captured for each standard demo
+  // credential so switching to the Subscription cycle tab works on the static demo Worker too.
+  {
+    path: QUOTA_SUBSCRIPTION_CYCLE,
+    pattern: /^\/api\/v1\/management\/quota\/[A-Za-z0-9._-]+\/subscription-cycle$/,
+    resolve: (url) => {
+      const name = `quota-subscription-cycle-${url.pathname.split('/').at(-2)}`;
       return Object.hasOwn(dataset.responses, name) ? name : undefined;
     },
   },

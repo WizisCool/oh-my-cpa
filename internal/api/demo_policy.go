@@ -291,6 +291,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/management/quota", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/quota/{authIndex}", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/quota/{authIndex}/capacity", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/quota/{authIndex}/subscription-cycle", demoAllow, ""},
 	{http.MethodPost, "/api/v1/management/quota/refresh", demoAllow, ""},
 
 	// A manual capture pass is answered locally: it reports a pass that found an

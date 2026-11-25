@@ -5,6 +5,8 @@ import { currencyReadout } from '../../types/currencyDisplay';
 import type {
   QuotaCapacityCycle,
   QuotaCapacityUnavailableReason,
+  QuotaPlan,
+  QuotaSubscriptionProjectionUnavailableReason,
   QuotaWindow,
   QuotaWindowCapacity,
 } from '../../types/quota';
@@ -39,6 +41,42 @@ const REASON_KEYS: Record<QuotaCapacityUnavailableReason, MessageKey | null> = {
 export function quotaCapacityNote(reason: QuotaCapacityUnavailableReason | undefined, t: TFunc): string | null {
   const key = reason ? REASON_KEYS[reason] : null;
   return key ? t(key) : null;
+}
+
+const SUBSCRIPTION_REASON_KEYS: Record<QuotaSubscriptionProjectionUnavailableReason, MessageKey> = {
+  no_traffic: 'quota.capacity_reason_no_traffic',
+  insufficient_elapsed: 'quota.subscription_reason_insufficient_elapsed',
+  usage_unavailable: 'quota.capacity_reason_usage_unavailable',
+};
+
+export function subscriptionProjectionNote(
+  reason: QuotaSubscriptionProjectionUnavailableReason | undefined,
+  t: TFunc,
+): string | null {
+  return reason ? t(SUBSCRIPTION_REASON_KEYS[reason]) : null;
+}
+
+/**
+ * True only when the credential carries verified upstream start and expiry
+ * instants covering `nowMS`.
+ */
+export function hasActiveSubscriptionPeriod(
+  plan: Pick<QuotaPlan, 'starts_at_ms' | 'expires_at_ms' | 'expires_source'> | undefined,
+  nowMS: number,
+): boolean {
+  if (!plan || plan.expires_source === 'credential_snapshot') return false;
+  const start = plan.starts_at_ms;
+  const end = plan.expires_at_ms;
+  if (start == null || end == null || !Number.isFinite(start) || !Number.isFinite(end)) return false;
+  return start > 0 && start <= nowMS && nowMS < end;
+}
+
+/** Subscription billing-cycle tab requires verified billing boundaries and a plan-level window. */
+export function supportsSubscriptionCycleTab(
+  window: Pick<QuotaWindow, 'scope'> | undefined,
+  hasSubscriptionCycle: boolean,
+): boolean {
+  return hasSubscriptionCycle && (window == null || window.scope === 'standard');
 }
 
 export interface CycleCardFigures {

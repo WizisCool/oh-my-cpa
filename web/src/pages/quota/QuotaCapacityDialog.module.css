@@ -96,14 +96,17 @@
   border-block-end: 1px solid var(--float-rule);
   font-size: var(--text-sm);
   font-weight: 600;
+  line-height: 20px;
 }
 
 .caption {
   min-inline-size: 0;
+  block-size: 18px;
   overflow: clip;
   color: var(--capacity-quiet-color);
   font-size: var(--text-2xs);
   font-weight: 400;
+  line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -121,15 +124,23 @@
 .row dt {
   color: var(--capacity-label-color);
   font-size: var(--text-xs);
+  line-height: 18px;
+}
+
+.label {
+  block-size: 18px;
 }
 
 .lead-value {
+  display: flex;
+  align-items: center;
+  block-size: 28px;
   overflow: clip;
   color: var(--fg);
   font-family: var(--font-mono);
   font-size: var(--text-xl);
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 28px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -141,20 +152,25 @@
 
 .row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   min-inline-size: 0;
-  padding: 9px 0;
+  block-size: 38px;
   border-block-start: 1px solid var(--float-rule);
 }
 
 .row dd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  block-size: 22px;
   margin: 0;
   overflow: clip;
   color: var(--fg);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
+  line-height: 22px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -184,8 +200,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-block-size: 38px;
-  padding: 8px 14px;
+  block-size: 38px;
+  padding: 0 14px;
   border-block-start: 1px solid var(--float-rule);
   background: var(--surface);
   color: var(--capacity-quiet-color);
@@ -216,27 +232,31 @@
   margin-inline-start: auto;
 }
 
-/* A note too long for the foot wraps beside the tag instead of pushing it out of the card. */
+/* Single-line truncation keeps all three cards' footer track at one locked height across tabs;
+   overflowing notes remain readable via the shared overflow tooltip. */
 .foot-text {
   flex: 1 1 auto;
   min-inline-size: 0;
+  overflow: clip;
   line-height: 1.5;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .note {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  min-block-size: 20px;
   margin-block-start: 14px;
   color: var(--capacity-quiet-color);
   font-size: var(--text-2xs);
-  line-height: 1.6;
+  line-height: 20px;
 }
 
 .note-glyph {
   flex: none;
-  margin-block-start: 3px;
+  margin-block-start: 4px;
 }
 
 /* A phone reads the dialog top to bottom, so the forecast - what the dialog is opened for - leads,
@@ -295,6 +315,7 @@
     align-items: flex-start;
     justify-content: flex-start;
     gap: 2px;
+    block-size: auto;
     padding: 10px 12px;
     border-block-start: 0;
   }
@@ -311,7 +332,9 @@
 
   .lead-value,
   .row dd {
+    justify-content: flex-start;
     max-inline-size: 100%;
+    block-size: auto;
     font-size: var(--text-base);
     line-height: 1.3;
   }
@@ -325,8 +348,14 @@
   .foot {
     grid-column: 1 / -1;
     flex-wrap: wrap;
-    min-block-size: 0;
+    block-size: auto;
+    min-block-size: 38px;
     padding: 8px 12px;
+  }
+
+  .foot-text {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .card[data-empty] {

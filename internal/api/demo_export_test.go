@@ -200,6 +200,8 @@ func demoExportCases() []demoExportCase {
 		{Name: "quota-capacity-auth-antigravity-01-ag_Claude and GPT models_aerolith-5h", Path: "/api/v1/management/quota/auth-antigravity-01/capacity?window=ag_Claude+and+GPT+models_aerolith-5h", Route: "/api/v1/management/quota/{authIndex}/capacity"},
 		{Name: "quota-capacity-auth-antigravity-01-ag_Claude and GPT models_aerolith-week", Path: "/api/v1/management/quota/auth-antigravity-01/capacity?window=ag_Claude+and+GPT+models_aerolith-week", Route: "/api/v1/management/quota/{authIndex}/capacity"},
 		{Name: "quota-capacity-auth-antigravity-01-ag_Gemini 4 Argon_gemini-4-argon-week", Path: "/api/v1/management/quota/auth-antigravity-01/capacity?window=ag_Gemini+4+Argon_gemini-4-argon-week", Route: "/api/v1/management/quota/{authIndex}/capacity"},
+		// Subscription billing-cycle usage totals for demo credentials with verified upstream billing dates.
+		{Name: "quota-subscription-cycle-auth-codex-01", Path: "/api/v1/management/quota/auth-codex-01/subscription-cycle", Route: "/api/v1/management/quota/{authIndex}/subscription-cycle"},
 		{Name: "logs", Path: "/api/v1/management/logs?limit=200"},
 		{Name: "logs-status", Path: "/api/v1/management/logs/status"},
 		{Name: "service-logs", Path: "/api/v1/management/service-logs"},

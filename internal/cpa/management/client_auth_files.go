@@ -224,17 +224,25 @@ type AuthFile struct {
 	LastRefresh json.RawMessage `json:"last_refresh"`
 }
 
-// CodexChatgptAccountID extracts the ChatGPT account id from CPA-projected
-// id_token claims. CPA returns decoded JSON claims (never the raw JWT), and
-// older builds omit the field entirely, so every shape degrades to "".
-func (f AuthFile) CodexChatgptAccountID() string {
+func (f AuthFile) idTokenClaims() map[string]any {
 	if len(f.IDToken) == 0 {
-		return ""
+		return nil
 	}
 	var claims map[string]any
 	decoder := json.NewDecoder(bytes.NewReader(f.IDToken))
 	decoder.UseNumber()
 	if err := decoder.Decode(&claims); err != nil || len(claims) == 0 {
+		return nil
+	}
+	return claims
+}
+
+// CodexChatgptAccountID extracts the ChatGPT account id from CPA-projected
+// id_token claims. CPA returns decoded JSON claims (never the raw JWT), and
+// older builds omit the field entirely, so every shape degrades to "".
+func (f AuthFile) CodexChatgptAccountID() string {
+	claims := f.idTokenClaims()
+	if claims == nil {
 		return ""
 	}
 	for _, key := range []string{"chatgpt_account_id", "chatgptAccountId"} {
@@ -248,13 +256,8 @@ func (f AuthFile) CodexChatgptAccountID() string {
 // CodexPlanType extracts the plan type from CPA-projected id_token claims
 // (e.g. "plus"). Empty when the build does not project the claim.
 func (f AuthFile) CodexPlanType() string {
-	if len(f.IDToken) == 0 {
-		return ""
-	}
-	var claims map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(f.IDToken))
-	decoder.UseNumber()
-	if err := decoder.Decode(&claims); err != nil || len(claims) == 0 {
+	claims := f.idTokenClaims()
+	if claims == nil {
 		return ""
 	}
 	for _, key := range []string{"plan_type", "planType"} {
@@ -265,20 +268,26 @@ func (f AuthFile) CodexPlanType() string {
 	return ""
 }
 
+// CodexSubscriptionActiveStart extracts the subscription start from
+// CPA-projected id_token claims as a Unix-millisecond instant. Zero and false
+// mean the build did not project the claim.
+func (f AuthFile) CodexSubscriptionActiveStart() (int64, bool) {
+	return f.idTokenInstant("chatgpt_subscription_active_start", "chatgptSubscriptionActiveStart", "subscription_active_start", "subscriptionActiveStart")
+}
+
 // CodexSubscriptionActiveUntil extracts the subscription expiry from
 // CPA-projected id_token claims as a Unix-millisecond instant. Zero and false
 // mean the build did not project the claim.
 func (f AuthFile) CodexSubscriptionActiveUntil() (int64, bool) {
-	if len(f.IDToken) == 0 {
+	return f.idTokenInstant("chatgpt_subscription_active_until", "chatgptSubscriptionActiveUntil", "subscription_active_until", "subscriptionActiveUntil")
+}
+
+func (f AuthFile) idTokenInstant(keys ...string) (int64, bool) {
+	claims := f.idTokenClaims()
+	if claims == nil {
 		return 0, false
 	}
-	var claims map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(f.IDToken))
-	decoder.UseNumber()
-	if err := decoder.Decode(&claims); err != nil || len(claims) == 0 {
-		return 0, false
-	}
-	for _, key := range []string{"chatgpt_subscription_active_until", "chatgptSubscriptionActiveUntil", "subscription_active_until", "subscriptionActiveUntil"} {
+	for _, key := range keys {
 		value, ok := claims[key]
 		if !ok || value == nil {
 			continue
