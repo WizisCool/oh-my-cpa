@@ -720,6 +720,7 @@ describe('quota consumption and window capacity dialog', () => {
   it('lazy-loads subscription-cycle totals when switching to Subscription cycle and omits the tab on group windows', async () => {
     const api = installOmcApi();
     let subscriptionCalls = 0;
+    let failSubscription = false;
     const fiveHour: QuotaWindow = {
       ...quotaWindow('five_hour', 60, 3), period_hours: 5,
       usage: { from_ms: NOW_MS - 2 * HOUR_MS, to_ms: NOW_MS, requests: 40, priced_requests: 40, tokens: 500_000, cost_nanos: 5_000_000_000 },
@@ -732,6 +733,7 @@ describe('quota consumption and window capacity dialog', () => {
     }));
     api.on('GET', '/management/quota/codex-sub/subscription-cycle', () => {
       subscriptionCalls += 1;
+      if (failSubscription) throw new Error('subscription cycle unavailable');
       return {
         source: 'live_subscription',
         plan_label: 'Pro 200',
@@ -799,6 +801,15 @@ describe('quota consumption and window capacity dialog', () => {
       expect(projectedCard.textContent).toContain('≥ $240.00');
       expect(projectedCard.textContent).toContain('4,000');
       expect(dialog.textContent).toContain('Tracks actual subscription-cycle usage');
+
+      // A failed background refresh keeps the cached totals intact and surfaces the error note.
+      failSubscription = true;
+      await view.client.invalidateQueries({ queryKey: ['quota-subscription-cycle', 'codex-sub'] });
+      await waitFor(() => expect(subscriptionCalls).toBe(2));
+      await waitFor(() => expect(dialog.textContent).toContain('Could not load usage'));
+      expect(thisCard.textContent).toContain('≥ $120.00');
+      expect(lastCard.textContent).toContain('$260.00');
+      expect(projectedCard.textContent).toContain('≥ $240.00');
     } finally { view.unmount(); }
 
     // Without verified subscription boundaries (e.g. Claude / Antigravity), the Subscription cycle tab is absent.

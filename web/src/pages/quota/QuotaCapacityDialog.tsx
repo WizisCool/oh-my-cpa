@@ -127,12 +127,15 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
     ? t('quota.capacity_from_previous')
     : untilText ?? '\u00a0';
 
-  // Subscription billing-cycle state
-  const subCurrent = subscription.isError ? null : subscription.data?.current ?? null;
-  const subPrevious = subscription.isError ? null : subscription.data?.previous ?? null;
-  const subProjection: QuotaWindowCapacity | null = subscription.isError ? null : subscription.data?.projection ?? null;
+  // Subscription billing-cycle state: preserve cached totals if a background refresh fails,
+  // reserving the empty error state for an initial load failure without data.
+  const hasSubData = subscription.data != null;
+  const subInitialError = subscription.isError && !hasSubData;
+  const subCurrent = subscription.data?.current ?? null;
+  const subPrevious = subscription.data?.previous ?? null;
+  const subProjection: QuotaWindowCapacity | null = subscription.data?.projection ?? null;
   const subPendingNote = subscriptionProjectionNote(
-    subscription.isError ? 'usage_unavailable' : subscription.data?.projection_unavailable,
+    subInitialError ? 'usage_unavailable' : subscription.data?.projection_unavailable,
     t,
   );
   const subProjectionFigures = describeCapacityCard(subProjection, tokenStyle, t);
@@ -147,7 +150,7 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
       title: t('quota.subscription_previous_cycle'),
       caption: subPrevious
         ? subscriptionSpan(subPrevious)
-        : t(subscription.isError ? 'quota.capacity_reason_history_unavailable' : 'quota.subscription_no_previous'),
+        : t(subInitialError ? 'quota.capacity_reason_history_unavailable' : 'quota.subscription_no_previous'),
       figures: formatCycleCardFigures(asCapacityCycle(subPrevious), tokenStyle, t),
       isEmpty: !subPrevious,
       isPending: subscription.isPending,
@@ -173,7 +176,7 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
       title: t('quota.subscription_current_cycle'),
       caption: subCurrent
         ? subscriptionSpan(subCurrent)
-        : t(subscription.isError ? 'quota.capacity_reason_usage_unavailable' : 'quota.capacity_reason_no_traffic'),
+        : t(subInitialError ? 'quota.capacity_reason_usage_unavailable' : 'quota.capacity_reason_no_traffic'),
       figures: formatCycleCardFigures(asCapacityCycle(subCurrent), tokenStyle, t),
       isEmpty: !subCurrent,
       isPending: subscription.isPending,
@@ -284,7 +287,11 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
         <span>
           {t(
             isSubscriptionTab
-              ? (subCurrent?.widened || subPrevious?.widened ? 'insights.widened' : 'quota.subscription_hint_live')
+              ? (subscription.isError
+                ? 'quota.capacity_reason_usage_unavailable'
+                : subCurrent?.widened || subPrevious?.widened
+                  ? 'insights.widened'
+                  : 'quota.subscription_hint_live')
               : 'quota.capacity_hint',
           )}
         </span>
