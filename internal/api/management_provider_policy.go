@@ -85,12 +85,14 @@ func providerPolicyCapabilitiesFor(family string) providerPolicyCapabilities {
 	case management.ConfigFamilyClaude:
 		return providerPolicyCapabilities{hasErrorRules: true, hasRebuildMidSystemMessage: true, hasNativeToolSearch: true}
 	case management.ConfigFamilyVertex:
-		return providerPolicyCapabilities{hasVertexInteractions: true}
+		return providerPolicyCapabilities{hasErrorRules: true, hasVertexInteractions: true}
+	case management.ConfigFamilyGemini, management.ConfigFamilyMeta, management.ConfigFamilyInteractions:
+		return providerPolicyCapabilities{hasErrorRules: true}
 	}
 	if family == openAICompatibilityFamily {
 		return providerPolicyCapabilities{hasErrorRules: true, hasPromptCacheKey: true}
 	}
-	return providerPolicyCapabilities{hasErrorRules: true}
+	return providerPolicyCapabilities{}
 }
 
 func overrideState(disabled *bool) string {

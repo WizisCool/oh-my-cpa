@@ -160,7 +160,7 @@ func TestProviderPolicyRefusesWhatCPAWouldSkipOrReject(t *testing.T) {
 		{"switch of another family", "codex-0", codex(`"behavior":{"rebuild_mid_system_message":true}`), "does not have"},
 		{"native tool search outside Claude", "codex-0", codex(`"behavior":{"native_tool_search":true}`), "does not have"},
 		{"websockets outside Codex and xAI", "vertex-0", `{"family":"vertex","name":"Vertex","keys":[{"api_key":""}],"behavior":{"websockets":true}}`, "does not have"},
-		{"rules on a family without them", "vertex-0", `{"family":"vertex","name":"Vertex","keys":[{"api_key":""}],"runtime_policy":{"cooling":"inherit","error_rules":[{"status":500,"match":["x"],"action":"stop"}]}}`, "does not support"},
+		{"invalid error rule on Vertex", "vertex-0", `{"family":"vertex","name":"Vertex","keys":[{"api_key":""}],"runtime_policy":{"cooling":"inherit","error_rules":[{"status":500,"match_regex":["("],"action":"stop"}]}}`, "invalid regular expression"},
 	}
 	for _, tc := range cases {
 		resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/"+tc.id, tc.body)
@@ -169,14 +169,174 @@ func TestProviderPolicyRefusesWhatCPAWouldSkipOrReject(t *testing.T) {
 		}
 	}
 
+	// Strict-decode boundary: a family CPA does not declare request-scoped error rules on is still refused.
+	if resp, payload := doJSON(t, fixture.client, http.MethodPost, fixture.baseURL+providersEndpoint,
+		`{"family":"undeclared-family","name":"Future","api_key":"sk-future-1","runtime_policy":{"cooling":"inherit","error_rules":[{"status":500,"match":["x"],"action":"stop"}]}}`); resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(payload), "does not support") {
+		t.Errorf("rules on undeclared family: got %d %s, want 400 naming %q", resp.StatusCode, payload, "does not support")
+	}
+
 	fixture.state.mu.Lock()
 	defer fixture.state.mu.Unlock()
+	if fixture.state.putCount != 0 {
+		t.Fatalf("putCount = %d, want no refused request to reach CPA", fixture.state.putCount)
+	}
 	if len(fixture.state.codexProviders[0]) != 3 {
 		t.Fatalf("codex entry = %#v, want no refused request to have written anything", fixture.state.codexProviders[0])
 	}
 	if _, isStored := (*fixture.state.providerList("vertex"))[0]["request-scoped-errors"]; isStored {
 		t.Fatal("vertex entry gained error rules")
 	}
+}
+
+func TestProviderVertexErrorRulesRoundTripAndGroupSemantics(t *testing.T) {
+	t.Run("standalone", func(t *testing.T) {
+		fixture := newProviderTestFixture(t)
+		fixture.state.mu.Lock()
+		*fixture.state.providerList("vertex") = []map[string]any{{
+			"api-key": "sk-vertex-1", "auth-index": "vx-1", "base-url": "https://vertex.test/v1",
+			"request-scoped-errors": []any{
+				map[string]any{"status": float64(400), "match": []any{"INVALID_ARGUMENT"}, "action": "stop", "future-field": "kept"},
+			},
+		}}
+		fixture.state.mu.Unlock()
+
+		listed := listedProvider(t, fixture, "vertex-0")
+		if listed.RuntimePolicy == nil || !listed.RuntimePolicy.SupportsErrorRules || len(listed.RuntimePolicy.ErrorRules) != 1 {
+			t.Fatalf("listed policy = %+v, want supports_error_rules=true and the stored rule", listed.RuntimePolicy)
+		}
+
+		body := `{"family":"vertex","name":"Vertex","base_url":"https://vertex.test/v1","keys":[{"api_key":""}],
+			"runtime_policy":{"cooling":"inherit","error_rules":[
+				{"status":400,"match":["INVALID_ARGUMENT"],"action":"stop"},
+				{"status":429,"match":["RESOURCE_EXHAUSTED"],"match_regex":["quota.?exceeded"],"action":" Stop-And-Cooldown "}
+			]}}`
+		if resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/vertex-0", body); resp.StatusCode != http.StatusOK {
+			t.Fatalf("update = %d %s", resp.StatusCode, payload)
+		}
+
+		fixture.state.mu.Lock()
+		stored := (*fixture.state.providerList("vertex"))[0]
+		fixture.state.mu.Unlock()
+		storedRules := anyList(stored["request-scoped-errors"])
+		if len(storedRules) != 2 {
+			t.Fatalf("stored rules = %#v, want 2 entries", storedRules)
+		}
+		first := storedRules[0].(map[string]any)
+		if first["future-field"] != "kept" {
+			t.Fatalf("first stored rule = %#v, want unmodelled field preserved on unchanged rule", first)
+		}
+		second := storedRules[1].(map[string]any)
+		if second["status"] != float64(429) || second["action"] != "stop-and-cooldown" || fmt.Sprint(second["match"]) != "[RESOURCE_EXHAUSTED]" || fmt.Sprint(second["match-regexr"]) != "[quota.?exceeded]" {
+			t.Fatalf("second stored rule = %#v, want CPA wire keys and normalized action", second)
+		}
+
+		listed = listedProvider(t, fixture, "vertex-0")
+		if listed.RuntimePolicy == nil || !listed.RuntimePolicy.SupportsErrorRules || len(listed.RuntimePolicy.ErrorRules) != 2 {
+			t.Fatalf("listed policy after save = %+v", listed.RuntimePolicy)
+		}
+
+		// Clearing all rules on a standalone Vertex key removes request-scoped-errors cleanly.
+		body = `{"family":"vertex","name":"Vertex","base_url":"https://vertex.test/v1","keys":[{"api_key":""}],"runtime_policy":{"cooling":"inherit"}}`
+		if resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/vertex-0", body); resp.StatusCode != http.StatusOK {
+			t.Fatalf("clear update = %d %s", resp.StatusCode, payload)
+		}
+		fixture.state.mu.Lock()
+		stored = (*fixture.state.providerList("vertex"))[0]
+		fixture.state.mu.Unlock()
+		if _, isStored := stored["request-scoped-errors"]; isStored {
+			t.Fatalf("request-scoped-errors = %#v after clearing, want it absent", stored["request-scoped-errors"])
+		}
+	})
+
+	t.Run("v8_group_inherit_override_and_clear", func(t *testing.T) {
+		fixture := newProviderTestFixture(t)
+		var groups []map[string]any
+		if err := json.Unmarshal([]byte(`[{
+			"name": "vertex-team",
+			"base-url": "https://vertex.test/v1",
+			"request-scoped-errors": [{"status": 429, "match": ["quota"], "action": "stop-and-cooldown"}],
+			"keys": [
+				{"api-key": "sk-vx-1"},
+				{"api-key": "sk-vx-2"},
+				{"api-key": "sk-vx-3"}
+			]
+		}]`), &groups); err != nil {
+			t.Fatal(err)
+		}
+		fixture.state.mu.Lock()
+		fixture.state.storedGroups = map[string][]map[string]any{"vertex": groups}
+		*fixture.state.providerList("vertex") = flattenGroups("vertex", groups, []map[string]any{
+			{"api-key": "sk-vx-1", "auth-index": "vx-1"},
+			{"api-key": "sk-vx-2", "auth-index": "vx-2"},
+			{"api-key": "sk-vx-3", "auth-index": "vx-3"},
+		})
+		fixture.state.mu.Unlock()
+
+		for _, id := range []string{"vertex-0", "vertex-1", "vertex-2"} {
+			listed := listedProvider(t, fixture, id)
+			if listed.RuntimePolicy == nil || !listed.RuntimePolicy.SupportsErrorRules || len(listed.RuntimePolicy.ErrorRules) != 1 || listed.RuntimePolicy.ErrorRules[0].Status != 429 {
+				t.Fatalf("%s initial policy = %+v, want inherited group rule", id, listed.RuntimePolicy)
+			}
+		}
+
+		// Key 1 overrides the group's error rules and must stay in vertex-team.
+		overrideBody := `{"family":"vertex","name":"Vertex","base_url":"https://vertex.test/v1","keys":[{"api_key":""}],
+			"runtime_policy":{"cooling":"inherit","error_rules":[{"status":400,"match":["safety"],"action":"stop"}]}}`
+		if resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/vertex-1", overrideBody); resp.StatusCode != http.StatusOK {
+			t.Fatalf("override update = %d %s", resp.StatusCode, payload)
+		}
+
+		// Key 2 explicitly clears error rules and must stay in vertex-team with [].
+		clearBody := `{"family":"vertex","name":"Vertex","base_url":"https://vertex.test/v1","keys":[{"api_key":""}],
+			"runtime_policy":{"cooling":"inherit"}}`
+		if resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/vertex-2", clearBody); resp.StatusCode != http.StatusOK {
+			t.Fatalf("clear update = %d %s", resp.StatusCode, payload)
+		}
+
+		// An unrelated edit on key 0 must keep inheritance, override, and [] clear intact inside one group.
+		unrelatedBody := `{"family":"vertex","name":"Vertex","base_url":"https://vertex.test/v1","keys":[{"api_key":""}],
+			"behavior":{"interactions":true}}`
+		if resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+providersEndpoint+"/vertex-0", unrelatedBody); resp.StatusCode != http.StatusOK {
+			t.Fatalf("unrelated update = %d %s", resp.StatusCode, payload)
+		}
+
+		fixture.state.mu.Lock()
+		gotGroups := fixture.state.storedGroups["vertex"]
+		fixture.state.mu.Unlock()
+		if len(gotGroups) != 1 || gotGroups[0]["name"] != "vertex-team" {
+			t.Fatalf("stored groups = %#v, want all three keys kept in vertex-team", gotGroups)
+		}
+		groupRules := anyList(gotGroups[0]["request-scoped-errors"])
+		if len(groupRules) != 1 || groupRules[0].(map[string]any)["status"] != float64(429) {
+			t.Fatalf("group request-scoped-errors = %#v, want original 429 rule kept on group", groupRules)
+		}
+		keys := anyList(gotGroups[0]["keys"])
+		if len(keys) != 3 {
+			t.Fatalf("group keys = %#v, want 3 keys", keys)
+		}
+		key0 := keys[0].(map[string]any)
+		key1 := keys[1].(map[string]any)
+		key2 := keys[2].(map[string]any)
+		if _, has := key0["request-scoped-errors"]; has || key0["interactions"] != true {
+			t.Fatalf("key 0 = %#v, want inherited error rules and interactions=true", key0)
+		}
+		if key1Rules := anyList(key1["request-scoped-errors"]); len(key1Rules) != 1 || key1Rules[0].(map[string]any)["status"] != float64(400) {
+			t.Fatalf("key 1 = %#v, want 400 override", key1)
+		}
+		if key2Rules, has := key2["request-scoped-errors"]; !has || !reflect.DeepEqual(key2Rules, []any{}) {
+			t.Fatalf("key 2 = %#v, want explicit empty [] override", key2)
+		}
+
+		if got := listedProvider(t, fixture, "vertex-0").RuntimePolicy.ErrorRules; len(got) != 1 || got[0].Status != 429 {
+			t.Fatalf("vertex-0 listed rules = %+v, want inherited 429 rule", got)
+		}
+		if got := listedProvider(t, fixture, "vertex-1").RuntimePolicy.ErrorRules; len(got) != 1 || got[0].Status != 400 {
+			t.Fatalf("vertex-1 listed rules = %+v, want 400 override", got)
+		}
+		if got := listedProvider(t, fixture, "vertex-2").RuntimePolicy.ErrorRules; len(got) != 0 {
+			t.Fatalf("vertex-2 listed rules = %+v, want no rules after [] clear", got)
+		}
+	})
 }
 
 func TestProviderVertexInteractionsRoundTrip(t *testing.T) {
