@@ -72,12 +72,26 @@ func (r *Repository) ReplacePricingModels(ctx context.Context, models map[string
 	// A model that left the catalog, or whose alias target changed, loses its
 	// automatic price. A pinned price is the operator's choice like a custom one:
 	// the pin, not the catalog or the alias, decides what a linked model costs, so
-	// it is kept for the model's return rather than tombstoned.
+	// it is kept for the model's return rather than tombstoned. An automatic price
+	// for a purely observed execution model (never in the static catalog, still
+	// active in recent facts or unfolded events) is likewise kept across catalog refreshes.
+	fromMS, fineFrom, dailyFrom, err := observedActivityWindow(ctx, tx, time.Now().Add(-pricing.ObservedPricingWindow).UnixMilli())
+	if err != nil {
+		return 0, fmt.Errorf("compute observed pricing activity window: %w", err)
+	}
+	const checkpoint = `(SELECT COALESCE((SELECT last_usage_event_id FROM usage_aggregation_checkpoints WHERE name = '` + CheckpointFacts + `'), 0))`
 	result, err := tx.ExecContext(ctx, `DELETE FROM model_prices WHERE source<>'manual'
  AND NOT EXISTS(SELECT 1 FROM pricing_model_links l WHERE l.model=model_prices.model) AND (
- NOT EXISTS(SELECT 1 FROM next_pricing_catalog n WHERE n.model=model_prices.model)
+ (NOT EXISTS(SELECT 1 FROM next_pricing_catalog n WHERE n.model=model_prices.model)
+  AND (EXISTS(SELECT 1 FROM pricing_model_catalog old WHERE old.model=model_prices.model)
+   OR model_prices.model='' OR model_prices.model='unknown'
+   OR NOT (
+    EXISTS(SELECT 1 FROM `+usageFactsDailyTable+` d WHERE d.model=model_prices.model AND d.bucket_start_ms>=?3 AND d.requests>0)
+    OR EXISTS(SELECT 1 FROM `+usageFactsFineTable+` f WHERE f.model=model_prices.model AND f.bucket_start_ms>=?2 AND f.bucket_start_ms<?3 AND f.requests>0)
+    OR EXISTS(SELECT 1 FROM usage_events u WHERE u.model=model_prices.model AND u.timestamp_ms>=?1 AND (u.timestamp_ms<?2 OR u.id>`+checkpoint+`))
+   )))
  OR EXISTS(SELECT 1 FROM pricing_model_catalog old JOIN next_pricing_catalog n ON n.model=old.model
- WHERE old.model=model_prices.model AND old.price_model<>n.price_model))`)
+ WHERE old.model=model_prices.model AND old.price_model<>n.price_model))`, fromMS, fineFrom, dailyFrom)
 	if err != nil {
 		return 0, fmt.Errorf("retire automatic prices: %w", err)
 	}

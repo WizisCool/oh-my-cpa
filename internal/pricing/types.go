@@ -287,3 +287,16 @@ type ModelCatalogSnapshot struct {
 	Models    map[string]string
 	Providers []CatalogProvider
 }
+
+// ObservedPricingWindow matches the 30-day traffic window shown beside prices.
+const ObservedPricingWindow = 30 * 24 * time.Hour
+
+// ObservedModel summarizes real execution traffic observed for one model so
+// runtime-selected variants not enumerated by CPA's static catalog can still be
+// priced, shown in the book, scoped by channel, and kept synced while active.
+type ObservedModel struct {
+	Model          string
+	HasUnpriced    bool
+	HasRecentUsage bool
+	Channels       []string
+}

@@ -313,6 +313,24 @@ func ResolveOAuthModelAlias(callPoint string, rules []OAuthModelAlias) string {
 	return callPoint
 }
 
+// StripModelPrefix removes a configured credential prefix ("team/model" -> "model")
+// matching CPA's case-insensitive prefix stripping before alias resolution.
+func StripModelPrefix(modelID, prefix string) (string, bool) {
+	modelID = strings.TrimSpace(modelID)
+	prefix = strings.Trim(strings.TrimSpace(prefix), "/")
+	if prefix == "" || len(modelID) <= len(prefix)+1 {
+		return modelID, false
+	}
+	if !strings.EqualFold(modelID[:len(prefix)], prefix) || modelID[len(prefix)] != '/' {
+		return modelID, false
+	}
+	stripped := strings.TrimSpace(modelID[len(prefix)+1:])
+	if stripped == "" {
+		return modelID, false
+	}
+	return stripped, true
+}
+
 // sanitizeOAuthModelAliases mirrors CPA's SanitizeOAuthModelAlias: providers
 // are lower-cased, and an alias without a name, equal to its model verbatim or
 // repeated within a provider is ignored. The stored document is what the operator
@@ -364,9 +382,17 @@ func sanitizeOAuthModelAliasList(entries []OAuthModelAlias) []OAuthModelAlias {
 // file is downloaded for this read alone, so only the alias metadata is decoded
 // and the credential's own material is dropped with the buffer.
 func (c *Client) CredentialModelAliases(ctx context.Context, name string) ([]OAuthModelAlias, error) {
+	aliases, _, err := c.credentialCatalogMeta(ctx, name)
+	return aliases, err
+}
+
+// credentialCatalogMeta reads both credential-local model aliases (snake_case or
+// hyphenated, matching CPA) and credential prefix in a single download, zeroing
+// the credential bytes before returning.
+func (c *Client) credentialCatalogMeta(ctx context.Context, name string) ([]OAuthModelAlias, string, error) {
 	data, _, err := c.DownloadAuthFile(ctx, name)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer func() {
 		for i := range data {
@@ -374,12 +400,18 @@ func (c *Client) CredentialModelAliases(ctx context.Context, name string) ([]OAu
 		}
 	}()
 	var document struct {
-		ModelAliases []OAuthModelAlias `json:"model_aliases"`
+		ModelAliases       []OAuthModelAlias `json:"model_aliases"`
+		LegacyModelAliases []OAuthModelAlias `json:"model-aliases"`
+		Prefix             string            `json:"prefix"`
 	}
 	if err := json.Unmarshal(data, &document); err != nil {
-		return nil, fmt.Errorf("decode credential model aliases: %w", err)
+		return nil, "", fmt.Errorf("decode credential model aliases: %w", err)
 	}
-	return sanitizeOAuthModelAliasList(document.ModelAliases), nil
+	rawAliases := document.ModelAliases
+	if len(rawAliases) == 0 && len(document.LegacyModelAliases) > 0 {
+		rawAliases = document.LegacyModelAliases
+	}
+	return sanitizeOAuthModelAliasList(rawAliases), strings.Trim(strings.TrimSpace(document.Prefix), "/"), nil
 }
 
 // PatchOAuthModelAliases replaces one provider's alias list, and removes the

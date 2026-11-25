@@ -40,7 +40,7 @@ export const CostBreakdownView: React.FC<CostBreakdownViewProps> = ({ breakdown,
   const formatCost = (usd: number | null | undefined) => formatCurrency(usd, currency);
   const t = useT();
   const openEditor = useOpenPriceEditor();
-  const setPrice = openEditor ? (
+  const setPrice = openEditor && model && model !== 'unknown' ? (
     <div className={styles['breakdown-action']}>
       <Button size="sm" icon={<DollarOutlined />} onClick={() => openEditor(model)} data-testid="cost-set-price">
         {t('cost.set_price', { model })}

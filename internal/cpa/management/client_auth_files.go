@@ -176,6 +176,7 @@ type AuthFile struct {
 	Name      string `json:"name"`
 	Type      string `json:"type"`
 	Provider  string `json:"provider"`
+	Prefix    string `json:"prefix,omitempty"`
 	// OAuthProvider is the login entry that issued the credential, for a plugin
 	// that declares several (Harbor and Harbor CN share the type "harbor"). Gateways
 	// that do not report it leave it empty.

@@ -93,13 +93,22 @@ func (s *Service) ListPrices(ctx context.Context, input PriceQuery) (PricePage, 
 	}
 	output.Providers = []pricing.CatalogProvider{}
 	if s.Repo != nil {
-		providers, err := s.Repo.ListPricingProviders(ctx)
-		if err != nil {
-			return PricePage{}, err
-		}
 		selected := make(map[string]bool, len(output.Items))
+		activeModels := make(map[string]struct{}, len(output.Items))
 		for _, item := range output.Items {
 			selected[item.Model] = true
+			activeModels[item.Model] = struct{}{}
+		}
+		var providers []pricing.CatalogProvider
+		if effective, ok := s.Pricing.(interface {
+			EffectiveProviders(context.Context, map[string]struct{}) ([]pricing.CatalogProvider, error)
+		}); ok {
+			providers, err = effective.EffectiveProviders(ctx, activeModels)
+		} else {
+			providers, err = s.Repo.ListPricingProviders(ctx)
+		}
+		if err != nil {
+			return PricePage{}, err
 		}
 		for _, provider := range providers {
 			models := []string{}
@@ -224,15 +233,27 @@ func (s *Service) GetPrice(ctx context.Context, input PriceModelInput) (PriceDet
 	if model == "" {
 		return PriceDetail{}, invalidParameters{"model is required"}
 	}
-	rows, err := s.Pricing.ListPrices(ctx)
-	if err != nil {
-		return PriceDetail{}, err
-	}
 	output := PriceDetail{Model: model, Suggestions: []pricing.UpstreamModel{}, Channels: []string{}}
-	for index := range rows {
-		if rows[index].Model == model {
-			output.Price = &rows[index]
-			break
+	if direct, ok := s.Pricing.(interface {
+		GetPrice(context.Context, string) (pricing.ModelPrice, bool, error)
+	}); ok {
+		row, found, err := direct.GetPrice(ctx, model)
+		if err != nil {
+			return PriceDetail{}, err
+		}
+		if found {
+			output.Price = &row
+		}
+	} else {
+		rows, err := s.Pricing.ListPrices(ctx)
+		if err != nil {
+			return PriceDetail{}, err
+		}
+		for index := range rows {
+			if rows[index].Model == model {
+				output.Price = &rows[index]
+				break
+			}
 		}
 	}
 	// Matches, suggestions and candidates are advice from the stored snapshot: a
@@ -262,7 +283,16 @@ func (s *Service) GetPrice(ctx context.Context, input PriceModelInput) (PriceDet
 	if profile, err := s.Repo.QueryModelTokenProfile(ctx, model, now.Add(-PricingProfileWindow).UnixMilli()); err == nil {
 		output.Profile = profile
 	}
-	if providers, err := s.Repo.ListPricingProviders(ctx); err == nil {
+	var providers []pricing.CatalogProvider
+	var provErr error
+	if effective, ok := s.Pricing.(interface {
+		EffectiveProviders(context.Context, map[string]struct{}) ([]pricing.CatalogProvider, error)
+	}); ok {
+		providers, provErr = effective.EffectiveProviders(ctx, map[string]struct{}{model: {}})
+	} else {
+		providers, provErr = s.Repo.ListPricingProviders(ctx)
+	}
+	if provErr == nil {
 		seen := map[string]bool{}
 		for _, provider := range providers {
 			for _, served := range provider.Models {
@@ -522,15 +552,27 @@ func (s *Service) QuotePrice(ctx context.Context, input QuoteInput) (QuoteResult
 			return QuoteResult{}, pricingRefusal(err)
 		}
 	case model != "":
-		rows, err := s.Pricing.ListPrices(ctx)
-		if err != nil {
-			return QuoteResult{}, err
-		}
 		found := false
-		for _, row := range rows {
-			if row.Model == model {
+		if direct, ok := s.Pricing.(interface {
+			GetPrice(context.Context, string) (pricing.ModelPrice, bool, error)
+		}); ok {
+			row, okRow, err := direct.GetPrice(ctx, model)
+			if err != nil {
+				return QuoteResult{}, err
+			}
+			if okRow {
 				output.Price, found = row, true
-				break
+			}
+		} else {
+			rows, err := s.Pricing.ListPrices(ctx)
+			if err != nil {
+				return QuoteResult{}, err
+			}
+			for _, row := range rows {
+				if row.Model == model {
+					output.Price, found = row, true
+					break
+				}
 			}
 		}
 		if !found {
@@ -601,6 +643,24 @@ func (s *Service) registerPricing(registry *capability.Registry) error {
 	}); err != nil {
 		return err
 	}
+	priceRevision := func(ctx context.Context) (string, error) {
+		if s.Pricing == nil {
+			return "", errors.New("capability_unavailable")
+		}
+		var rows []pricing.ModelPrice
+		var err error
+		if stored, ok := s.Pricing.(interface {
+			ListStoredPrices(context.Context) ([]pricing.ModelPrice, error)
+		}); ok {
+			rows, err = stored.ListStoredPrices(ctx)
+		} else {
+			rows, err = s.Pricing.ListPrices(ctx)
+		}
+		if err != nil {
+			return "", err
+		}
+		return s.revision(rows), nil
+	}
 	metadata = Meta("pricing_set", "Decide how one model is priced for future requests: mode custom (operator rates in USD per 1M tokens and optional tiers), linked (follow one OpenRouter model id) or auto (automatic OpenRouter match). A time-of-day tier is read on its own time_zone, the vendor's billing clock, so off-peak hours published in Beijing time take Asia/Shanghai as written rather than a conversion to UTC. Verify with pricing_quote first. Historical snapshots never change.", "write", "high")
 	metadata.Invalidates = []string{"pricing"}
 	if err := capability.Register(registry, metadata, func(ctx context.Context, input PriceInput) (capability.Preview, error) {
@@ -616,8 +676,8 @@ func (s *Service) registerPricing(registry *capability.Registry) error {
 		if _, err := s.Pricing.PreviewModeChange(ctx, change); err != nil {
 			return capability.Preview{}, pricingRefusal(err)
 		}
-		current, err := s.ListPrices(ctx, PriceQuery{})
-		return capability.Preview{Target: change.Model, Revision: current.Revision, Changes: input}, err
+		revision, err := priceRevision(ctx)
+		return capability.Preview{Target: change.Model, Revision: revision, Changes: input}, err
 	}, func(ctx context.Context, input PriceInput, revision, _ string) (Done, error) {
 		if s.Pricing == nil {
 			return Done{}, errors.New("capability_unavailable")
@@ -640,8 +700,8 @@ func (s *Service) registerPricing(registry *capability.Registry) error {
 		if strings.TrimSpace(input.Model) == "" {
 			return capability.Preview{}, errors.New("invalid_parameters")
 		}
-		current, err := s.ListPrices(ctx, PriceQuery{})
-		return capability.Preview{Target: input.Model, Revision: current.Revision, Changes: input}, err
+		revision, err := priceRevision(ctx)
+		return capability.Preview{Target: input.Model, Revision: revision, Changes: input}, err
 	}, func(ctx context.Context, input DeleteInput, revision, _ string) (Done, error) {
 		if s.Pricing == nil {
 			return Done{}, errors.New("capability_unavailable")

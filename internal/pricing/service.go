@@ -75,6 +75,9 @@ type Store interface {
 	DeleteChannelMultiplier(context.Context, string) (bool, error)
 	ListMatchReviews(context.Context) (map[string]string, error)
 	SaveMatchReview(ctx context.Context, model, upstreamID string) error
+	HasObservedModel(ctx context.Context, model string) (bool, error)
+	HasObservedChannelModel(ctx context.Context, channel, model string) (bool, error)
+	ListObservedPricingModels(ctx context.Context, sinceMS int64) (map[string]ObservedModel, error)
 }
 
 // SyncResult summarizes one sync run for logs, API and audit. Pruned counts
@@ -448,6 +451,10 @@ func (s *Service) syncOnce(ctx context.Context, refreshPrices bool) (result Sync
 	if err != nil {
 		return result, err
 	}
+	observed, err := s.observedModels(ctx)
+	if err != nil {
+		return result, err
+	}
 	result.Pruned = pruned
 	needCatalog := refreshPrices
 	if !needCatalog {
@@ -465,6 +472,16 @@ func (s *Service) syncOnce(ctx context.Context, refreshPrices bool) (result Sync
 				break
 			}
 		}
+		if !needCatalog {
+			for model, obs := range observed {
+				if obs.HasUnpriced {
+					if _, ok := priced[model]; !ok {
+						needCatalog = true
+						break
+					}
+				}
+			}
+		}
 	}
 	var catalog Catalog
 	if needCatalog {
@@ -478,7 +495,7 @@ func (s *Service) syncOnce(ctx context.Context, refreshPrices bool) (result Sync
 	// Prices and links are re-read under the write lock, so a link an operator set
 	// while the catalog was downloading is honoured rather than overwritten.
 	s.priceWrites.Lock()
-	result, err = s.reconcilePrices(ctx, models, catalog, refreshPrices, pruned)
+	result, err = s.reconcilePrices(ctx, models, observed, catalog, refreshPrices, pruned)
 	s.priceWrites.Unlock()
 	if err != nil {
 		return result, err
@@ -492,8 +509,13 @@ func (s *Service) syncOnce(ctx context.Context, refreshPrices bool) (result Sync
 	return result, err
 }
 
+func (s *Service) observedModels(ctx context.Context) (map[string]ObservedModel, error) {
+	sinceMS := s.clock().Add(-ObservedPricingWindow).UnixMilli()
+	return s.store.ListObservedPricingModels(ctx, sinceMS)
+}
+
 // reconcilePrices runs with priceWrites held.
-func (s *Service) reconcilePrices(ctx context.Context, models map[string]string, catalog Catalog, refreshPrices bool, pruned int64) (SyncResult, error) {
+func (s *Service) reconcilePrices(ctx context.Context, models map[string]string, observed map[string]ObservedModel, catalog Catalog, refreshPrices bool, pruned int64) (SyncResult, error) {
 	result := SyncResult{Pruned: pruned}
 	existing, err := s.store.ListModelPrices(ctx)
 	if err != nil {
@@ -507,8 +529,21 @@ func (s *Service) reconcilePrices(ctx context.Context, models map[string]string,
 	for _, p := range existing {
 		prices[p.Model] = p
 	}
-	names := make([]string, 0, len(models))
-	for model := range models {
+	effective := make(map[string]string, len(models)+len(observed))
+	for model, target := range models {
+		effective[model] = target
+	}
+	for model, obs := range observed {
+		if _, inCatalog := effective[model]; inCatalog {
+			continue
+		}
+		_, hasPrice := prices[model]
+		if obs.HasUnpriced || (obs.HasRecentUsage && hasPrice) {
+			effective[model] = model
+		}
+	}
+	names := make([]string, 0, len(effective))
+	for model := range effective {
 		names = append(names, model)
 	}
 	sort.Strings(names)
@@ -520,7 +555,7 @@ func (s *Service) reconcilePrices(ctx context.Context, models map[string]string,
 			result.Matched++
 			continue
 		}
-		upstream, kind, found := resolveUpstream(catalog, model, models[model], links[model])
+		upstream, kind, found := resolveUpstream(catalog, model, effective[model], links[model])
 		if !found {
 			// A temporary omission upstream is not an instruction to erase a known rate.
 			if hasPrice {
@@ -571,7 +606,8 @@ func (s *Service) recordFailure(ctx context.Context, syncErr error) {
 	_ = s.store.SavePricingSyncState(ctx, state)
 }
 
-// ListPrices exposes the price table of the current CPA catalog, each row
+// ListPrices exposes the active price table: the current CPA catalog plus any
+// execution model observed in recent traffic that has a stored price, each row
 // carrying its derived mode.
 func (s *Service) ListPrices(ctx context.Context) ([]ModelPrice, error) {
 	rows, err := s.store.ListModelPrices(ctx)
@@ -582,13 +618,19 @@ func (s *Service) ListPrices(ctx context.Context) ([]ModelPrice, error) {
 	if err != nil {
 		return nil, err
 	}
+	observed, err := s.observedModels(ctx)
+	if err != nil {
+		return nil, err
+	}
 	links, err := s.store.ListModelLinks(ctx)
 	if err != nil {
 		return nil, err
 	}
 	current := make([]ModelPrice, 0, len(rows))
 	for _, p := range rows {
-		if _, ok := models[p.Model]; ok {
+		_, inCatalog := models[p.Model]
+		obs, isObserved := observed[p.Model]
+		if inCatalog || (isObserved && (obs.HasRecentUsage || obs.HasUnpriced)) {
 			_, linked := links[p.Model]
 			p.Mode = DeriveMode(p.Source, linked)
 			current = append(current, p)
@@ -597,10 +639,62 @@ func (s *Service) ListPrices(ctx context.Context) ([]ModelPrice, error) {
 	return current, nil
 }
 
-// UsedUnpricedModels lists only current CPA models without a price. Historical
-// usage does not create an operator maintenance obligation.
+// ListStoredPrices returns every stored shared model price with its derived
+// mode, including archived or historical models excluded from the active price
+// book, so write revision checks cover edits to any priceable model.
+func (s *Service) ListStoredPrices(ctx context.Context) ([]ModelPrice, error) {
+	if s == nil || s.store == nil {
+		return nil, errors.New("pricing service is not initialized")
+	}
+	rows, err := s.store.ListModelPrices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	links, err := s.store.ListModelLinks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	all := make([]ModelPrice, len(rows))
+	for i, p := range rows {
+		_, linked := links[p.Model]
+		p.Mode = DeriveMode(p.Source, linked)
+		all[i] = p
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].Model < all[j].Model })
+	return all, nil
+}
+
+// GetPrice returns the stored shared price for model (if any) regardless of
+// whether the model is in the current static catalog or recent window, so
+// opening the price editor from any retained request always shows its saved rate.
+func (s *Service) GetPrice(ctx context.Context, model string) (ModelPrice, bool, error) {
+	if s == nil || s.store == nil {
+		return ModelPrice{}, false, errors.New("pricing service is not initialized")
+	}
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return ModelPrice{}, false, nil
+	}
+	rows, err := s.ListStoredPrices(ctx)
+	if err != nil {
+		return ModelPrice{}, false, err
+	}
+	for _, p := range rows {
+		if p.Model == model {
+			return p, true, nil
+		}
+	}
+	return ModelPrice{}, false, nil
+}
+
+// UsedUnpricedModels lists current CPA models without a price plus any execution
+// model observed with unpriced complete-accounting requests in the recent window.
 func (s *Service) UsedUnpricedModels(ctx context.Context, limit int) ([]string, error) {
 	models, err := s.store.ListPricingModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	observed, err := s.observedModels(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -612,11 +706,26 @@ func (s *Service) UsedUnpricedModels(ctx context.Context, limit int) ([]string, 
 	for _, row := range prices {
 		priced[row.Model] = struct{}{}
 	}
+	seen := make(map[string]struct{}, len(models)+len(observed))
 	result := make([]string, 0, len(models))
 	for model := range models {
 		if _, ok := priced[model]; ok {
 			continue
 		}
+		seen[model] = struct{}{}
+		result = append(result, model)
+	}
+	for model, obs := range observed {
+		if !obs.HasUnpriced {
+			continue
+		}
+		if _, ok := priced[model]; ok {
+			continue
+		}
+		if _, ok := seen[model]; ok {
+			continue
+		}
+		seen[model] = struct{}{}
 		result = append(result, model)
 	}
 	sort.Strings(result)
@@ -779,7 +888,7 @@ func (s *Service) SetModelModeChecked(ctx context.Context, change ModeChange, ch
 	s.priceWrites.Lock()
 	defer s.priceWrites.Unlock()
 	if check != nil {
-		current, err := s.ListPrices(ctx)
+		current, err := s.ListStoredPrices(ctx)
 		if err != nil {
 			return ModelPrice{}, err
 		}
@@ -837,7 +946,14 @@ func (s *Service) resolveModeChange(ctx context.Context, change ModeChange) (Mod
 	}
 	target, inCatalog := models[change.Model]
 	if !inCatalog {
-		return ModelPrice{}, "", "", fmt.Errorf("%w: %q", ErrModelNotInCatalog, change.Model)
+		observed, err := s.store.HasObservedModel(ctx, change.Model)
+		if err != nil {
+			return ModelPrice{}, "", "", err
+		}
+		if !observed {
+			return ModelPrice{}, "", "", fmt.Errorf("%w: %q", ErrModelNotInCatalog, change.Model)
+		}
+		target = change.Model
 	}
 	multiplier := change.Multiplier
 	if multiplier == 0 {
@@ -965,7 +1081,11 @@ func (s *Service) Candidates(ctx context.Context, prices []ModelPrice) (map[stri
 		return nil, err
 	}
 	for _, price := range prices {
-		candidate, found := candidateFor(catalog, models[price.Model], price.Mode, links[price.Model])
+		target, inCatalog := models[price.Model]
+		if !inCatalog {
+			target = price.Model
+		}
+		candidate, found := candidateFor(catalog, target, price.Mode, links[price.Model])
 		if found && reviews[price.Model] != candidate.Model.ID {
 			result[price.Model] = candidate
 		}
@@ -1001,7 +1121,7 @@ func (s *Service) DeletePriceChecked(ctx context.Context, model string, check fu
 	s.priceWrites.Lock()
 	defer s.priceWrites.Unlock()
 	if check != nil {
-		current, err := s.ListPrices(ctx)
+		current, err := s.ListStoredPrices(ctx)
 		if err != nil {
 			return false, err
 		}

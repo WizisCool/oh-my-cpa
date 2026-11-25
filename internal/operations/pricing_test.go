@@ -358,3 +358,118 @@ func TestRequestDetailsExposeStructuredEvidenceOnlyOnSingleReads(t *testing.T) {
 		}
 	}
 }
+
+func TestPricingWriteRevisionsCoverHistoricalObservedModels(t *testing.T) {
+	ctx := context.Background()
+	database, err := repository.Open(ctx, filepath.Join(t.TempDir(), "historical-pricing.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { database.Close() })
+	repo := repository.New(database)
+	if err := repo.UpsertInstance(ctx, domain.CPAInstance{ID: "default", Name: "Fixture", BaseURL: "http://127.0.0.1:8317", ManagementKeyCiphertext: []byte{0}, ManagementKeyNonce: []byte{0}, Status: "unknown"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ReplacePricingModels(ctx, map[string]string{"active-model": "active-model"}); err != nil {
+		t.Fatal(err)
+	}
+	oldTS := time.Now().Add(-45 * 24 * time.Hour).UnixMilli()
+	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{{
+		InstanceID: "default", EventKey: "hist-1", Provider: "antigravity",
+		Model: "legacy-variant", TimestampMS: oldTS, InputTokens: 1_000_000,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	pricingSvc := pricing.NewService(repo, nil, nil)
+	if _, err := pricingSvc.SetModelMode(ctx, pricing.ModeChange{
+		Model: "legacy-variant", Mode: pricing.ModeCustom,
+		Price: pricing.ModelPrice{PromptPricePer1M: 1, CompletionPer1M: 2}, Multiplier: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Active price-book list still excludes the >30d historical model.
+	active, err := pricingSvc.ListPrices(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range active {
+		if row.Model == "legacy-variant" {
+			t.Fatalf("active ListPrices unexpectedly included >30d historical model: %+v", active)
+		}
+	}
+
+	cipher, err := appcrypto.New(strings.Repeat("p", 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := capability.NewRegistry()
+	service := &Service{Pricing: pricingSvc, Repo: repo, Cipher: cipher}
+	if err := service.registerPricing(registry); err != nil {
+		t.Fatal(err)
+	}
+	executor := &capability.Executor{Registry: registry, Store: repository.AgentStore{Repo: repo, Cipher: cipher}}
+	principal := capability.Principal{ID: "administrator", Adapter: "agent", IsAdmin: true}
+
+	// Prepare a pricing_set edit against legacy-variant.
+	prepared, err := executor.Invoke(ctx, principal, "pricing_set",
+		json.RawMessage(`{"model":"legacy-variant","mode":"custom","prompt_price_per_1m":3,"completion_price_per_1m":6,"price_multiplier":1}`), "")
+	if err != nil || prepared.Status != "pending" || prepared.OperationID == "" {
+		t.Fatalf("prepare pricing_set = %+v, err=%v", prepared, err)
+	}
+	// A second writer updates the historical model before approval commits.
+	if _, err := pricingSvc.SetModelMode(ctx, pricing.ModeChange{
+		Model: "legacy-variant", Mode: pricing.ModeCustom,
+		Price: pricing.ModelPrice{PromptPricePer1M: 5, CompletionPer1M: 10}, Multiplier: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Approving the stale prepared operation must fail with resource_conflict and leave $5/$10 intact.
+	operation, err := executor.Decide(ctx, principal, prepared.OperationID, true, "")
+	if err != nil {
+		t.Fatalf("Decide returned unexpected transport err: %v", err)
+	}
+	if operation.Status != "error" || operation.Result.Code != "resource_conflict" {
+		t.Fatalf("stale historical pricing_set was not rejected: %+v", operation)
+	}
+	stored, found, err := pricingSvc.GetPrice(ctx, "legacy-variant")
+	if err != nil || !found || stored.PromptPricePer1M != 5 || stored.CompletionPer1M != 10 {
+		t.Fatalf("concurrent price was overwritten: %+v found=%v err=%v", stored, found, err)
+	}
+
+	// Verify pricing_delete also rejects stale approvals on the historical model.
+	delPrepared, err := executor.Invoke(ctx, principal, "pricing_delete",
+		json.RawMessage(`{"model":"legacy-variant"}`), "")
+	if err != nil || delPrepared.Status != "pending" || delPrepared.OperationID == "" {
+		t.Fatalf("prepare pricing_delete = %+v, err=%v", delPrepared, err)
+	}
+	if _, err := pricingSvc.SetModelMode(ctx, pricing.ModeChange{
+		Model: "legacy-variant", Mode: pricing.ModeCustom,
+		Price: pricing.ModelPrice{PromptPricePer1M: 7, CompletionPer1M: 14}, Multiplier: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	delOp, err := executor.Decide(ctx, principal, delPrepared.OperationID, true, "")
+	if err != nil {
+		t.Fatalf("Decide delete returned unexpected err: %v", err)
+	}
+	if delOp.Status != "error" || delOp.Result.Code != "resource_conflict" {
+		t.Fatalf("stale historical pricing_delete was not rejected: %+v", delOp)
+	}
+	if stored, found, err := pricingSvc.GetPrice(ctx, "legacy-variant"); err != nil || !found || stored.PromptPricePer1M != 7 {
+		t.Fatalf("concurrent price was deleted by stale operation: %+v found=%v err=%v", stored, found, err)
+	}
+
+	// A fresh pricing_set without intervening edits succeeds.
+	freshPrepared, err := executor.Invoke(ctx, principal, "pricing_set",
+		json.RawMessage(`{"model":"legacy-variant","mode":"custom","prompt_price_per_1m":9,"completion_price_per_1m":18,"price_multiplier":1}`), "")
+	if err != nil || freshPrepared.Status != "pending" {
+		t.Fatalf("prepare fresh pricing_set = %+v, err=%v", freshPrepared, err)
+	}
+	freshOp, err := executor.Decide(ctx, principal, freshPrepared.OperationID, true, "")
+	if err != nil || freshOp.Status != "success" {
+		t.Fatalf("fresh pricing_set failed: %+v, err=%v", freshOp, err)
+	}
+	if stored, found, err := pricingSvc.GetPrice(ctx, "legacy-variant"); err != nil || !found || stored.PromptPricePer1M != 9 || stored.CompletionPer1M != 18 {
+		t.Fatalf("fresh historical price not stored: %+v found=%v err=%v", stored, found, err)
+	}
+}
