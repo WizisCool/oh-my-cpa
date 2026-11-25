@@ -490,7 +490,22 @@ func (h *Handler) listPricing(writer http.ResponseWriter, request *http.Request)
 	}
 	providers := []pricingProviderDTO{}
 	if h.repo != nil {
-		memberships, readErr := h.repo.ListPricingProviders(ctx)
+		activeModels := make(map[string]struct{}, len(rows)+len(unpriced))
+		for _, row := range rows {
+			activeModels[row.Model] = struct{}{}
+		}
+		for _, model := range unpriced {
+			activeModels[model] = struct{}{}
+		}
+		var memberships []pricing.CatalogProvider
+		var readErr error
+		if effective, ok := h.pricing.(interface {
+			EffectiveProviders(context.Context, map[string]struct{}) ([]pricing.CatalogProvider, error)
+		}); ok {
+			memberships, readErr = effective.EffectiveProviders(ctx, activeModels)
+		} else {
+			memberships, readErr = h.repo.ListPricingProviders(ctx)
+		}
 		if readErr != nil {
 			slog.Warn("pricing provider membership unavailable", "error", readErr)
 			partial = append(partial, "providers")
@@ -647,16 +662,29 @@ func (h *Handler) getPricingModel(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	ctx := request.Context()
-	rows, err := h.pricing.ListPrices(ctx)
-	if err != nil {
-		writeInternalError(writer, err)
-		return
-	}
 	var current *pricing.ModelPrice
-	for index := range rows {
-		if rows[index].Model == model {
-			current = &rows[index]
-			break
+	if direct, ok := h.pricing.(interface {
+		GetPrice(context.Context, string) (pricing.ModelPrice, bool, error)
+	}); ok {
+		row, found, err := direct.GetPrice(ctx, model)
+		if err != nil {
+			writeInternalError(writer, err)
+			return
+		}
+		if found {
+			current = &row
+		}
+	} else {
+		rows, err := h.pricing.ListPrices(ctx)
+		if err != nil {
+			writeInternalError(writer, err)
+			return
+		}
+		for index := range rows {
+			if rows[index].Model == model {
+				current = &rows[index]
+				break
+			}
 		}
 	}
 	channel := strings.TrimSpace(request.URL.Query().Get("channel"))

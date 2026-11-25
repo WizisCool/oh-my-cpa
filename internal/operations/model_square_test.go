@@ -72,3 +72,21 @@ func TestModelSquareNativeExclusionsApplyWithoutGuessingAliases(t *testing.T) {
 		}
 	}
 }
+
+func TestModelSquareUsesResolvedOAuthRoutesWhenPresent(t *testing.T) {
+	snapshot := management.ConfiguredModelSnapshot{
+		Providers: []management.ConfiguredModelProvider{{
+			ID:      "oauth:antigravity",
+			Family:  "antigravity",
+			IsOAuth: true,
+			Models:  []string{"team/gemini-4-hydrogen"},
+			Routes:  []management.ConfiguredModelRoute{{UpstreamModel: "gemini-4-hydrogen-xhigh", CallPoint: "team/gemini-4-hydrogen"}},
+		}},
+	}
+	directory := ProjectModelSquare(snapshot, map[string][]management.OAuthModelAlias{
+		"antigravity": {{Name: "gemini-4-hydrogen-xhigh", Alias: "gemini-4-hydrogen"}},
+	}, true)
+	if len(directory.Routes) != 1 || directory.Routes[0].CallPoint != "team/gemini-4-hydrogen" || directory.Routes[0].UpstreamModel != "gemini-4-hydrogen-xhigh" {
+		t.Fatalf("routes = %+v", directory.Routes)
+	}
+}

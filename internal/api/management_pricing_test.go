@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -915,5 +916,109 @@ func TestPricingUpstreamModelProjectionAllowlist(t *testing.T) {
 				t.Fatalf("%s leaked non-allowlisted field %q: %s", path, field, text)
 			}
 		}
+	}
+}
+
+func TestObservedModelPricingEndToEndHTTP(t *testing.T) {
+	ctx := context.Background()
+	client, baseURL, repo := startDashboardTestServer(t, nil, func(handler *Handler) {
+		handler.SetPricing(pricing.NewService(handler.repo, nil, nil))
+	})
+	if err := repo.ReplaceUpstreamCatalog(ctx, []pricing.UpstreamModel{{
+		ID: "google/gemini-4-hydrogen", Name: "Gemini 4 Hydrogen", Author: "google",
+		PromptPricePer1M: 1.5, CompletionPer1M: 7.5, CacheReadPer1M: 0.075, CacheWritePer1M: 0.083333,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ReplacePricingModels(ctx, map[string]string{
+		"gemini-4-hydrogen":       "gemini-4-hydrogen-xhigh",
+		"gemini-4-hydrogen-xhigh": "gemini-4-hydrogen-xhigh",
+	}, pricing.CatalogProvider{
+		ID: "oauth:antigravity", Family: "antigravity", Name: "antigravity", Channel: "antigravity", IsOAuth: true,
+		Models: []string{"gemini-4-hydrogen", "gemini-4-hydrogen-xhigh"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UnixMilli()
+	alias := "gemini-4-hydrogen"
+	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{
+		{InstanceID: "default", EventKey: "obs-http-1", Provider: "antigravity", Model: "gemini-4-hydrogen-high", ModelAlias: &alias, TimestampMS: now - 5_000, InputTokens: 1_000_000},
+		// An event older than 30d tests direct detail lookup after saving a price from older request history.
+		{InstanceID: "default", EventKey: "obs-http-old", Provider: "antigravity", Model: "legacy-variant", TimestampMS: now - int64(45*24*time.Hour/time.Millisecond), InputTokens: 1_000_000},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/pricing")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET /pricing = %d %s", response.StatusCode, payload)
+	}
+	var book struct {
+		Unpriced []struct {
+			Model string `json:"model"`
+		} `json:"unpriced"`
+		Providers []struct {
+			ID     string   `json:"id"`
+			Models []string `json:"models"`
+		} `json:"providers"`
+	}
+	if err := json.Unmarshal(payload, &book); err != nil {
+		t.Fatal(err)
+	}
+	foundUnpriced := false
+	for _, item := range book.Unpriced {
+		if item.Model == "gemini-4-hydrogen-high" {
+			foundUnpriced = true
+		}
+	}
+	if !foundUnpriced {
+		t.Fatalf("observed runtime variant missing from /pricing unpriced: %s", payload)
+	}
+	foundInProvider := false
+	for _, provider := range book.Providers {
+		if provider.ID == "oauth:antigravity" && slices.Contains(provider.Models, "gemini-4-hydrogen-high") {
+			foundInProvider = true
+		}
+	}
+	if !foundInProvider {
+		t.Fatalf("observed runtime variant missing from oauth:antigravity provider models: %s", payload)
+	}
+
+	// Saving a linked price for the observed runtime variant succeeds (previously 400 pricing_model_not_in_catalog).
+	response, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/pricing/models/gemini-4-hydrogen-high", `{"mode":"linked","upstream_id":"google/gemini-4-hydrogen","price_multiplier":1}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("PUT /pricing/models/gemini-4-hydrogen-high = %d %s", response.StatusCode, payload)
+	}
+	// Backfilling prices the existing unpriced request.
+	response, payload = postJSON(t, client, baseURL+"/omc/api/v1/pricing/models/gemini-4-hydrogen-high/price-unpriced")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("POST price-unpriced = %d %s", response.StatusCode, payload)
+	}
+	var backfill PricingUnpricedPricedResponseDTO
+	if err := json.Unmarshal(payload, &backfill); err != nil {
+		t.Fatalf("decode POST price-unpriced: %v (%s)", err, payload)
+	}
+	if backfill.Priced != 1 {
+		t.Fatalf("POST price-unpriced priced = %d, want 1 (%s)", backfill.Priced, payload)
+	}
+	// Saving and reading back a price for an observed model older than 30 days also works.
+	response, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/pricing/models/legacy-variant", `{"mode":"custom","prompt_price_per_1m":1,"completion_price_per_1m":2,"price_multiplier":1}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("PUT /pricing/models/legacy-variant = %d %s", response.StatusCode, payload)
+	}
+	response, payload = getJSON(t, client, baseURL+"/omc/api/v1/pricing/models/legacy-variant")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET /pricing/models/legacy-variant = %d %s", response.StatusCode, payload)
+	}
+	var detail PricingModelDetailResponseDTO
+	if err := json.Unmarshal(payload, &detail); err != nil {
+		t.Fatalf("decode GET /pricing/models/legacy-variant: %v (%s)", err, payload)
+	}
+	if detail.Model != "legacy-variant" || detail.Price == nil {
+		t.Fatalf("GET /pricing/models/legacy-variant missing top-level price: %+v (%s)", detail, payload)
+	}
+	if detail.Price.Model != "legacy-variant" || detail.Price.Mode != pricing.ModeCustom ||
+		detail.Price.PromptPricePer1M != 1 || detail.Price.CompletionPer1M != 2 || detail.Price.PriceMultiplier != 1 {
+		t.Fatalf("GET /pricing/models/legacy-variant price = %+v, want legacy-variant custom 1/2 x1", detail.Price)
 	}
 }

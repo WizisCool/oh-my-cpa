@@ -420,6 +420,7 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 		// fetched list only describes that credential, never its entire family.
 		resolved := make([][]AuthModel, len(authResp.Files))
 		credentialRules := make([][]OAuthModelAlias, len(authResp.Files))
+		credentialPrefixes := make([]string, len(authResp.Files))
 		failures := make([]error, len(authResp.Files))
 		aliasFailures := make([]error, len(authResp.Files))
 		reads := 0
@@ -481,12 +482,13 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 				wg.Add(1)
 				go func(i int, name string) {
 					defer wg.Done()
-					rules, err := c.CredentialModelAliases(ctx, name)
+					rules, prefix, err := c.credentialCatalogMeta(ctx, name)
 					if err != nil {
 						aliasFailures[i] = fmt.Errorf("auth-file %q model aliases: %w", name, err)
 						return
 					}
 					credentialRules[i] = rules
+					credentialPrefixes[i] = prefix
 				}(i, file.Name)
 			}
 			wg.Wait()
@@ -520,6 +522,10 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 			// and they stay this credential's own: a rule another credential of the
 			// family stores must not retarget this one's call point.
 			rules := append(slices.Clone(credentialRules[i]), aliases[family]...)
+			prefix := strings.Trim(strings.TrimSpace(file.Prefix), "/")
+			if prefix == "" {
+				prefix = credentialPrefixes[i]
+			}
 			identities := make([]string, 0, len(models))
 			routes := make([]ConfiguredModelRoute, 0, len(models))
 			for _, model := range models {
@@ -527,9 +533,16 @@ func (c *Client) listConfiguredModelSnapshot(ctx context.Context, maxModelReads 
 				if callPoint == "" {
 					continue
 				}
-				target := ResolveOAuthModelAlias(callPoint, rules)
+				unprefixed := callPoint
+				if prefix != "" {
+					if stripped, ok := StripModelPrefix(callPoint, prefix); ok {
+						unprefixed = stripped
+					}
+				}
+				target := ResolveOAuthModelAlias(unprefixed, rules)
 				// The registered call point proves this rule is active. Its hidden
-				// upstream is billable even when fork=false, but is not a callable ID.
+				// upstream is billable even when fork=false or force-model-prefix=true,
+				// but is not a callable ID.
 				if target != callPoint {
 					add(target, target)
 				}

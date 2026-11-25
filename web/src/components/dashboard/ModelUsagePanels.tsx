@@ -521,7 +521,7 @@ export const ModelUsagePanel: React.FC<ModelUsagePanelProps> = React.memo(functi
                       group={group}
                       // Only the model view names what a price is keyed on: a call point may be an alias
                       // whose requests are priced under the upstream model it resolved to.
-                      onPrice={openPriceEditor && !isClients && modelView === 'model' && !group.folded && group.model ? () => openPriceEditor(group.model) : undefined}
+                      onPrice={openPriceEditor && !isClients && modelView === 'model' && !group.folded && group.model && group.model !== 'unknown' ? () => openPriceEditor(group.model) : undefined}
                     />
                     <span
                       className="model-usage-tokens"

@@ -7,8 +7,13 @@ catalog downloads, edits and credential changes must not rewrite that evidence.
 ## Price selection
 
 OpenRouter's public model catalog is the only automatic source, fetched from a fixed
-server-side URL. A persisted CPA catalog defines current model/provider membership;
-usage history does not define what the gateway currently serves.
+server-side URL. A persisted CPA catalog defines configured gateway routing and
+provider membership. Execution models and serving channels observed in recorded
+traffic (such as runtime-selected thinking-effort variants or pass-through models not
+enumerated by static discovery) extend **observed pricing membership** so those
+models can be priced, channel-scoped, and backfilled; usage-derived models and
+providers describe observed pricing membership rather than authoritative current
+gateway routing configuration.
 
 - **Auto** follows a safe catalog match.
 - **Linked** follows the OpenRouter identity the operator selected.

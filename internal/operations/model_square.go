@@ -122,6 +122,12 @@ func ProjectModelSquare(snapshot management.ConfiguredModelSnapshot, aliases map
 			}
 			continue
 		}
+		if hasAliases && len(provider.Routes) > 0 {
+			for _, route := range provider.Routes {
+				addRoute(ModelSquareRoute{provider.ID, route.UpstreamModel, route.CallPoint})
+			}
+			continue
+		}
 		for _, model := range provider.Models {
 			// CPA's OAuth directory is already alias/exclusion-aware. Only invert a mapping
 			// that actually appears there; fabricating a native call point would bypass fork semantics.

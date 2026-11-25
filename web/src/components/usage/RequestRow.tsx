@@ -485,7 +485,7 @@ export const RequestRow = React.memo<RequestRowProps>(
               >
                 —
               </span>
-              {openPriceEditor && event.model && event.pricing_status !== 'legacy_unpriced' && (!event.token_accounting || event.token_accounting.status === 'complete') && (
+              {openPriceEditor && event.model && event.model !== 'unknown' && event.pricing_status !== 'legacy_unpriced' && (!event.token_accounting || event.token_accounting.status === 'complete') && (
                 <button
                   type="button"
                   className="req-cost-set"

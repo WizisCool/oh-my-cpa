@@ -29,10 +29,11 @@ type fakeStore struct {
 	state         SyncState
 	stateKnown    bool
 	reviews       map[string]string
+	observed      map[string]ObservedModel
 }
 
 func newFakeStore(models ...string) *fakeStore {
-	store := &fakeStore{models: map[string]string{}, links: map[string]string{}, channels: map[string]ChannelMultiplier{}, reviews: map[string]string{}}
+	store := &fakeStore{models: map[string]string{}, links: map[string]string{}, channels: map[string]ChannelMultiplier{}, reviews: map[string]string{}, observed: map[string]ObservedModel{}}
 	for _, model := range models {
 		store.models[model] = model
 	}
@@ -241,6 +242,39 @@ func (s *fakeStore) SaveMatchReview(_ context.Context, model, upstreamID string)
 		s.reviews[model] = upstreamID
 	}
 	return nil
+}
+
+func (s *fakeStore) HasObservedModel(_ context.Context, model string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.observed[model]
+	return ok, nil
+}
+
+func (s *fakeStore) HasObservedChannelModel(_ context.Context, channel, model string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	obs, ok := s.observed[model]
+	if !ok {
+		return false, nil
+	}
+	for _, item := range obs.Channels {
+		if item == channel {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (s *fakeStore) ListObservedPricingModels(_ context.Context, _ int64) (map[string]ObservedModel, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]ObservedModel, len(s.observed))
+	for k, v := range s.observed {
+		v.Channels = append([]string(nil), v.Channels...)
+		out[k] = v
+	}
+	return out, nil
 }
 
 func (s *fakeStore) price(model string) (ModelPrice, bool) {
@@ -922,5 +956,115 @@ func TestServiceMatchMetadataIsLocalAndDegradesGracefully(t *testing.T) {
 	}
 	if _, exists := resolved["unknown-model"]; exists {
 		t.Fatalf("unknown model unexpectedly resolved: %+v", resolved)
+	}
+}
+
+func TestObservedExecutionModelsArePriceableScopedAndSynced(t *testing.T) {
+	ctx := context.Background()
+	store := newFakeStore("gemini-4-hydrogen-xhigh")
+	store.providers = []CatalogProvider{{ID: "oauth:antigravity", Family: "antigravity", Name: "antigravity", Channel: "antigravity", IsOAuth: true, Models: []string{"gemini-4-hydrogen-xhigh"}}}
+	store.observed = map[string]ObservedModel{
+		"gemini-4-hydrogen-high": {Model: "gemini-4-hydrogen-high", HasUnpriced: true, HasRecentUsage: true, Channels: []string{"antigravity"}},
+		"claude-opus-5.5":        {Model: "claude-opus-5.5", HasUnpriced: true, HasRecentUsage: true, Channels: []string{"claude"}},
+		"retired-priced-only":    {Model: "retired-priced-only", HasUnpriced: false, HasRecentUsage: true, Channels: []string{"qoder"}},
+	}
+	fixture := loadFixtureCatalog(t)
+	hydrogen := UpstreamModel{ID: "google/gemini-4-hydrogen", CanonicalSlug: "google/gemini-4-hydrogen", Name: "Gemini 4 Hydrogen", Author: "google", PromptPricePer1M: 1.5, CompletionPer1M: 7.5, CacheReadPer1M: 0.075, CacheWritePer1M: 0.083333}
+	models := append(append([]UpstreamModel(nil), fixture.Models...), hydrogen)
+	fetcher := &fakeFetcher{catalog: NewCatalog(models, fixture.FetchedAt)}
+	svc := NewService(store, fetcher, nil)
+
+	// Unpriced observed models appear, while a retired model with no unpriced rows does not.
+	unpriced, err := svc.UsedUnpricedModels(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(unpriced, ",") != "claude-opus-5.5,gemini-4-hydrogen-high,gemini-4-hydrogen-xhigh" {
+		t.Fatalf("unpriced = %v", unpriced)
+	}
+
+	// Sync auto-prices auto-matchable observed models (claude-opus-5.5), never effort-suffixed ones.
+	if _, err := svc.SyncOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.price("claude-opus-5.5"); !ok {
+		t.Fatal("auto-matchable observed model was not priced during sync")
+	}
+	if _, ok := store.price("gemini-4-hydrogen-high"); ok {
+		t.Fatal("effort-suffixed observed model must not be auto-matched")
+	}
+
+	// Linking and channel-scoping the observed runtime variant succeed; unknown models/channels stay refused.
+	linked, err := svc.SetModelMode(ctx, ModeChange{Model: "gemini-4-hydrogen-high", Mode: ModeLinked, UpstreamID: "google/gemini-4-hydrogen", Multiplier: 1})
+	if err != nil || linked.Mode != ModeLinked || linked.PromptPricePer1M != 1.5 {
+		t.Fatalf("linked observed model = %+v, err=%v", linked, err)
+	}
+	if _, err := svc.SetModelMode(ctx, ModeChange{Model: "gemini-4-hydrogen-high", Channel: "antigravity", Mode: ModeCustom, Price: ModelPrice{PromptPricePer1M: 2, CompletionPer1M: 8}, Multiplier: 1}); err != nil {
+		t.Fatalf("channel override on observed model failed: %v", err)
+	}
+	if _, err := svc.SetModelMode(ctx, ModeChange{Model: "gemini-4-hydrogen-high", Channel: "wrong-channel", Mode: ModeCustom, Price: ModelPrice{PromptPricePer1M: 2, CompletionPer1M: 8}, Multiplier: 1}); !errors.Is(err, ErrModelNotInCatalog) {
+		t.Fatalf("unobserved channel must still be refused: %v", err)
+	}
+	if _, err := svc.SetModelMode(ctx, ModeChange{Model: "never-seen-model", Mode: ModeCustom, Price: ModelPrice{PromptPricePer1M: 1, CompletionPer1M: 2}, Multiplier: 1}); !errors.Is(err, ErrModelNotInCatalog) {
+		t.Fatalf("unobserved model must still be refused: %v", err)
+	}
+
+	// After unpriced rows are cleared, the priced observed model remains listed and keeps syncing upstream updates.
+	obs := store.observed["gemini-4-hydrogen-high"]
+	obs.HasUnpriced = false
+	store.observed["gemini-4-hydrogen-high"] = obs
+
+	listed, err := svc.ListPrices(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundHigh := false
+	for _, row := range listed {
+		if row.Model == "gemini-4-hydrogen-high" && row.Mode == ModeLinked {
+			foundHigh = true
+		}
+	}
+	if !foundHigh {
+		t.Fatalf("priced observed model missing from ListPrices: %+v", listed)
+	}
+	got, ok, err := svc.GetPrice(ctx, "gemini-4-hydrogen-high")
+	if err != nil || !ok || got.UpstreamID != "google/gemini-4-hydrogen" {
+		t.Fatalf("GetPrice = %+v, ok=%v, err=%v", got, ok, err)
+	}
+
+	// EffectiveProviders merges observed models into existing providers and synthesizes observed-only channels.
+	providers, err := svc.EffectiveProviders(ctx, map[string]struct{}{
+		"gemini-4-hydrogen-high": {},
+		"claude-opus-5.5":        {},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hasAntigravityHigh, hasObservedClaude bool
+	for _, provider := range providers {
+		if provider.ID == "oauth:antigravity" {
+			for _, m := range provider.Models {
+				if m == "gemini-4-hydrogen-high" {
+					hasAntigravityHigh = true
+				}
+			}
+		}
+		if provider.ID == "observed:claude" && provider.Channel == "claude" && len(provider.Models) == 1 && provider.Models[0] == "claude-opus-5.5" {
+			hasObservedClaude = true
+		}
+	}
+	if !hasAntigravityHigh || !hasObservedClaude {
+		t.Fatalf("EffectiveProviders = %+v", providers)
+	}
+
+	// Upstream rate change propagates to the linked observed model on next sync.
+	hydrogen.PromptPricePer1M = 2.25
+	updatedModels := append(append([]UpstreamModel(nil), fixture.Models...), hydrogen)
+	fetcher.catalog = NewCatalog(updatedModels, fixture.FetchedAt)
+	if _, err := svc.SyncOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if row, _ := store.price("gemini-4-hydrogen-high"); row.PromptPricePer1M != 2.25 {
+		t.Fatalf("linked observed model was not refreshed by sync: %+v", row)
 	}
 }

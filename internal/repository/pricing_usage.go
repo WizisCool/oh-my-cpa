@@ -2,10 +2,14 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 )
 
 // PricingUsage is one model's or channel's recorded traffic over a window, the
@@ -164,4 +168,188 @@ func median(values []int64) int64 {
 	}
 	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
 	return values[len(values)/2]
+}
+
+// HasObservedModel reports whether model has been recorded in real execution
+// traffic (retained events or daily usage facts). The placeholder "unknown" is
+// never admitted as a priceable model.
+func (r *Repository) HasObservedModel(ctx context.Context, model string) (bool, error) {
+	if r == nil || r.SQL() == nil {
+		return false, errors.New("repository is not initialized")
+	}
+	model = strings.TrimSpace(model)
+	if model == "" || model == "unknown" {
+		return false, nil
+	}
+	var marker int
+	err := r.SQL().QueryRowContext(ctx, `SELECT 1 FROM usage_events WHERE model = ? LIMIT 1`, model).Scan(&marker)
+	if err == nil {
+		return true, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return false, fmt.Errorf("check observed model: %w", err)
+	}
+	err = r.SQL().QueryRowContext(ctx, `SELECT 1 FROM `+usageFactsDailyTable+` WHERE model = ? LIMIT 1`, model).Scan(&marker)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return false, fmt.Errorf("check observed model facts: %w", err)
+}
+
+// HasObservedChannelModel reports whether (channel, model) has been recorded in
+// real execution traffic, enabling channel-specific custom pricing for runtime
+// model variants that CPA's static discovery does not enumerate.
+func (r *Repository) HasObservedChannelModel(ctx context.Context, channel, model string) (bool, error) {
+	if r == nil || r.SQL() == nil {
+		return false, errors.New("repository is not initialized")
+	}
+	channel, model = strings.TrimSpace(channel), strings.TrimSpace(model)
+	if channel == "" || model == "" || model == "unknown" {
+		return false, nil
+	}
+	var marker int
+	err := r.SQL().QueryRowContext(ctx, `SELECT 1 FROM usage_events WHERE model = ? AND provider = ? LIMIT 1`, model, channel).Scan(&marker)
+	if err == nil {
+		return true, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return false, fmt.Errorf("check observed channel model: %w", err)
+	}
+	err = r.SQL().QueryRowContext(ctx, `SELECT 1 FROM `+usageFactsDailyTable+` WHERE model = ? AND provider = ? LIMIT 1`, model, channel).Scan(&marker)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return false, fmt.Errorf("check observed channel model facts: %w", err)
+}
+
+// observedActivityWindow aligns fromMS to the quarter-hour fact boundary when
+// it reaches past the retained detail horizon, returning (fromMS, fineFrom, dailyFrom).
+func observedActivityWindow(ctx context.Context, q sqlQuerier, fromMS int64) (int64, int64, int64, error) {
+	horizonMS, err := lifecycleHorizonMS(ctx, q, LifecycleUsageDetail)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	if fromMS < horizonMS {
+		fromMS = alignDown(fromMS, QuarterHourBucketMS)
+	}
+	return fromMS, alignUp(fromMS, QuarterHourBucketMS), alignUp(fromMS, DayBucketMS), nil
+}
+
+// ListObservedPricingModels summarizes models observed in recent execution
+// traffic (since fromMS), their serving channels, and whether they have any
+// retained unpriced complete-accounting requests in that window.
+func (r *Repository) ListObservedPricingModels(ctx context.Context, fromMS int64) (map[string]pricing.ObservedModel, error) {
+	if r == nil || r.SQL() == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	fromMS, fineFrom, dailyFrom, err := observedActivityWindow(ctx, r.SQL(), fromMS)
+	if err != nil {
+		return nil, err
+	}
+	const checkpoint = `(SELECT COALESCE((SELECT last_usage_event_id FROM usage_aggregation_checkpoints WHERE name = '` + CheckpointFacts + `'), 0))`
+
+	var parts []string
+	var args []any
+
+	parts = append(parts, `
+		SELECT model, provider, SUM(requests) AS requests, SUM(costed_requests) AS costed_requests
+		FROM `+usageFactsDailyTable+`
+		WHERE bucket_start_ms >= ? AND model <> '' AND model <> 'unknown'
+		GROUP BY model, provider`)
+	args = append(args, dailyFrom)
+
+	if fineFrom < dailyFrom {
+		parts = append(parts, `
+			SELECT model, provider, SUM(requests) AS requests, SUM(costed_requests) AS costed_requests
+			FROM `+usageFactsFineTable+`
+			WHERE bucket_start_ms >= ? AND bucket_start_ms < ? AND model <> '' AND model <> 'unknown'
+			GROUP BY model, provider`)
+		args = append(args, fineFrom, dailyFrom)
+	}
+
+	if fromMS < fineFrom {
+		parts = append(parts, `
+			SELECT model, provider, COUNT(1) AS requests, COALESCE(SUM(cost_nanos IS NOT NULL), 0) AS costed_requests
+			FROM usage_events
+			WHERE timestamp_ms >= ? AND timestamp_ms < ? AND id <= `+checkpoint+` AND model <> '' AND model <> 'unknown'
+			GROUP BY model, provider`)
+		args = append(args, fromMS, fineFrom)
+	}
+
+	parts = append(parts, `
+		SELECT model, provider, COUNT(1) AS requests, COALESCE(SUM(cost_nanos IS NOT NULL), 0) AS costed_requests
+		FROM usage_events
+		WHERE id > `+checkpoint+` AND timestamp_ms >= ? AND model <> '' AND model <> 'unknown'
+		GROUP BY model, provider`)
+	args = append(args, fromMS)
+
+	query := `
+		SELECT model, provider, COALESCE(SUM(requests), 0), COALESCE(SUM(costed_requests), 0)
+		FROM (` + strings.Join(parts, ` UNION ALL `) + `)
+		GROUP BY model, provider`
+
+	rows, err := r.SQL().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list observed pricing models: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]pricing.ObservedModel)
+	unpricedCandidates := make(map[string]struct{})
+	for rows.Next() {
+		var model, provider string
+		var requests, costed int64
+		if err := rows.Scan(&model, &provider, &requests, &costed); err != nil {
+			return nil, fmt.Errorf("scan observed pricing model: %w", err)
+		}
+		if requests <= 0 {
+			continue
+		}
+		entry := result[model]
+		entry.Model = model
+		entry.HasRecentUsage = true
+		if provider = strings.TrimSpace(provider); provider != "" && !slices.Contains(entry.Channels, provider) {
+			entry.Channels = append(entry.Channels, provider)
+		}
+		result[model] = entry
+		if requests > costed {
+			unpricedCandidates[model] = struct{}{}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for model, entry := range result {
+		if len(entry.Channels) > 1 {
+			sort.Strings(entry.Channels)
+			result[model] = entry
+		}
+	}
+	// Verify each candidate has at least one retained unpriced event with complete
+	// accounting, so unresolved-accounting or legacy rows never surface as unpriced.
+	for model := range unpricedCandidates {
+		var hasUnpriced int
+		if err := r.SQL().QueryRowContext(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM usage_events
+				WHERE model = ?1 AND timestamp_ms >= ?2
+				  AND pricing_status = 'unpriced' AND cost_nanos IS NULL
+				  AND (token_accounting IS NULL OR json_extract(token_accounting, '$.status') = 'complete')
+				LIMIT 1
+			)`, model, fromMS).Scan(&hasUnpriced); err != nil {
+			return nil, fmt.Errorf("check observed unpriced model %q: %w", model, err)
+		}
+		if hasUnpriced == 1 {
+			entry := result[model]
+			entry.HasUnpriced = true
+			result[model] = entry
+		}
+	}
+	return result, nil
 }
