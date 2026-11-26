@@ -14,9 +14,11 @@ export default defineConfig({
     fsModuleCache: true,
     reporters: process.env.CI ? ['default', 'junit'] : ['default'],
     outputFile: { junit: 'tmp/frontend-tests/junit.xml' },
-    // Heavy jsdom/antd renders compete for CPU before their assertions run. Bound
-    // the pool even on an otherwise idle host, and yield when other gates share it.
-    maxWorkers: process.env.OMC_SHARED_CPU ? 2 : Math.min(4, availableParallelism()),
+    // Bound the worker pool even on an otherwise idle host, and yield when sibling
+    // verification gates (`pnpm test:fast`) share the host's CPUs.
+    maxWorkers: process.env.OMC_SHARED_CPU
+      ? Math.min(2, availableParallelism())
+      : Math.min(4, availableParallelism()),
     projects: [
       {
         resolve: {
