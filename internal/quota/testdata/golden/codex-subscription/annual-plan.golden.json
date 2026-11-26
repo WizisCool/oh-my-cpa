@@ -1,0 +1,7 @@
+{
+  "billing_period": "yearly",
+  "is_read": true,
+  "should_renew": true,
+  "start_ms": 1737331200000,
+  "until_ms": 1800403200000
+}

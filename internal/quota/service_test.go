@@ -554,7 +554,7 @@ func TestCodexRenewalPrefersLiveSubscriptionOverStaleSnapshot(t *testing.T) {
 				subscriptionURL = req.URL
 				return management.ApiCallResponse{
 					StatusCode: 200,
-					Body:       json.RawMessage(`{"plan_type":"plus","active_start":"2026-08-29T14:02:31Z","active_until":"2026-09-29T14:02:31Z","will_renew":true}`),
+					Body:       json.RawMessage(`{"plan_type":"plus","active_start":"2026-08-29T14:02:31Z","active_until":"2026-09-29T14:02:31Z","billing_period":"monthly","will_renew":true}`),
 				}, nil
 			case req.URL == CodexUsageURL:
 				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(codexUsageFixture)}, nil
@@ -588,6 +588,9 @@ func TestCodexRenewalPrefersLiveSubscriptionOverStaleSnapshot(t *testing.T) {
 	}
 	if res.Plan.ExpiresSource != PlanSourceLiveSubscription {
 		t.Errorf("ExpiresSource = %q, want %q", res.Plan.ExpiresSource, PlanSourceLiveSubscription)
+	}
+	if res.Plan.BillingPeriod != BillingPeriodMonthly {
+		t.Errorf("BillingPeriod = %q, want %q", res.Plan.BillingPeriod, BillingPeriodMonthly)
 	}
 	if res.Plan.IsAutoRenewing == nil || !*res.Plan.IsAutoRenewing {
 		t.Errorf("IsAutoRenewing = %v, want true", res.Plan.IsAutoRenewing)

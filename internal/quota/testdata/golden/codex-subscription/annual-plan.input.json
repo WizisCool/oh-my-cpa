@@ -1,0 +1,11 @@
+{
+  "why": "Annual synonym normalizes to yearly and preserves multi-year active_start.",
+  "now_ms": 1735689600000,
+  "body": {
+    "plan_type": "team",
+    "active_start": "2025-01-20T00:00:00Z",
+    "active_until": "2027-01-20T00:00:00Z",
+    "billing_period": "Annual",
+    "will_renew": true
+  }
+}

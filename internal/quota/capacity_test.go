@@ -329,6 +329,174 @@ func TestResolveSubscriptionCycleSourcesAndBoundaries(t *testing.T) {
 	}
 }
 
+func TestResolveSubscriptionCycleBillingPeriodSlicing(t *testing.T) {
+	utc := func(y int, m time.Month, d, h, min int) int64 {
+		return time.Date(y, m, d, h, min, 0, 0, time.UTC).UnixMilli()
+	}
+
+	for raw, want := range map[string]string{
+		"monthly":    BillingPeriodMonthly,
+		" Month ":    BillingPeriodMonthly,
+		"quarterly":  BillingPeriodQuarterly,
+		"quarter":    BillingPeriodQuarterly,
+		"yearly":     BillingPeriodYearly,
+		"annual":     BillingPeriodYearly,
+		"ANNUALLY":   BillingPeriodYearly,
+		"year":       BillingPeriodYearly,
+		"weekly":     BillingPeriodWeekly,
+		"week":       BillingPeriodWeekly,
+		"":           "",
+		"unexpected": "",
+	} {
+		if got := NormalizeBillingPeriod(raw); got != want {
+			t.Errorf("NormalizeBillingPeriod(%q) = %q, want %q", raw, got, want)
+		}
+	}
+
+	cases := []struct {
+		name          string
+		start         int64
+		end           int64
+		now           int64
+		billingPeriod string
+		wantCurr      SubscriptionCycleBounds
+		wantPrev      SubscriptionCycleBounds
+	}{
+		{
+			// Issue #756: Codex keeps active_start at initial activation (09/20) while
+			// advancing active_until across monthly renewals (12/20).
+			name:          "renewed_3_month_monthly_plan",
+			start:         utc(2026, time.September, 20, 8, 20),
+			end:           utc(2026, time.December, 20, 8, 20),
+			now:           utc(2026, time.November, 26, 8, 20),
+			billingPeriod: BillingPeriodMonthly,
+			wantCurr:      SubscriptionCycleBounds{FromMS: utc(2026, time.November, 20, 8, 20), ToMS: utc(2026, time.December, 20, 8, 20)},
+			wantPrev:      SubscriptionCycleBounds{FromMS: utc(2026, time.October, 20, 8, 20), ToMS: utc(2026, time.November, 20, 8, 20)},
+		},
+		{
+			name:          "monthly_exact_boundary_enters_new_cycle",
+			start:         utc(2026, time.September, 20, 8, 20),
+			end:           utc(2026, time.December, 20, 8, 20),
+			now:           utc(2026, time.November, 20, 8, 20),
+			billingPeriod: BillingPeriodMonthly,
+			wantCurr:      SubscriptionCycleBounds{FromMS: utc(2026, time.November, 20, 8, 20), ToMS: utc(2026, time.December, 20, 8, 20)},
+			wantPrev:      SubscriptionCycleBounds{FromMS: utc(2026, time.October, 20, 8, 20), ToMS: utc(2026, time.November, 20, 8, 20)},
+		},
+		{
+			name:          "monthly_1ms_before_boundary_stays_in_prior_cycle",
+			start:         utc(2026, time.September, 20, 8, 20),
+			end:           utc(2026, time.December, 20, 8, 20),
+			now:           utc(2026, time.November, 20, 8, 20) - 1,
+			billingPeriod: BillingPeriodMonthly,
+			wantCurr:      SubscriptionCycleBounds{FromMS: utc(2026, time.October, 20, 8, 20), ToMS: utc(2026, time.November, 20, 8, 20)},
+			wantPrev:      SubscriptionCycleBounds{FromMS: utc(2026, time.September, 20, 8, 20), ToMS: utc(2026, time.October, 20, 8, 20)},
+		},
+		{
+			name:          "prepaid_multi_month_span_selects_first_month_covering_now",
+			start:         utc(2026, time.September, 20, 8, 20),
+			end:           utc(2026, time.December, 20, 8, 20),
+			now:           utc(2026, time.October, 5, 8, 20),
+			billingPeriod: BillingPeriodMonthly,
+			wantCurr:      SubscriptionCycleBounds{FromMS: utc(2026, time.September, 20, 8, 20), ToMS: utc(2026, time.October, 20, 8, 20)},
+			wantPrev:      SubscriptionCycleBounds{FromMS: utc(2026, time.August, 20, 8, 20), ToMS: utc(2026, time.September, 20, 8, 20)},
+		},
+		{
+			name:          "month_end_anchor_31_preserved_across_renewals",
+			start:         utc(2026, time.January, 31, 14, 0),
+			end:           utc(2026, time.April, 30, 14, 0),
+			now:           utc(2026, time.April, 15, 14, 0),
+			billingPeriod: BillingPeriodMonthly,
+			wantCurr:      SubscriptionCycleBounds{FromMS: utc(2026, time.March, 31, 14, 0), ToMS: utc(2026, time.April, 30, 14, 0)},
+			wantPrev:      SubscriptionCycleBounds{FromMS: utc(2026, time.February, 28, 14, 0), ToMS: utc(2026, time.March, 31, 14, 0)},
+		},
+		{
+			name:          "actual_28th_anchor_not_promoted_to_month_end",
+			start:         utc(2026, time.February, 28, 14, 0),
+			end:           utc(2026, time.May, 28, 14, 0),
+			now:           utc(2026, time.May, 10, 14, 0),
+			billingPeriod: BillingPeriodMonthly,
+			wantCurr:      SubscriptionCycleBounds{FromMS: utc(2026, time.April, 28, 14, 0), ToMS: utc(2026, time.May, 28, 14, 0)},
+			wantPrev:      SubscriptionCycleBounds{FromMS: utc(2026, time.March, 28, 14, 0), ToMS: utc(2026, time.April, 28, 14, 0)},
+		},
+		{
+			name:          "prorated_short_first_cycle_clamps_to_active_start",
+			start:         utc(2026, time.November, 12, 8, 20),
+			end:           utc(2026, time.November, 26, 8, 20),
+			now:           utc(2026, time.November, 20, 8, 20),
+			billingPeriod: BillingPeriodMonthly,
+			wantCurr:      SubscriptionCycleBounds{FromMS: utc(2026, time.November, 12, 8, 20), ToMS: utc(2026, time.November, 26, 8, 20)},
+			wantPrev:      SubscriptionCycleBounds{FromMS: utc(2026, time.October, 29, 8, 20), ToMS: utc(2026, time.November, 12, 8, 20)},
+		},
+		{
+			name:          "yearly_plan_renewed_into_second_year_slices_to_current_year",
+			start:         utc(2025, time.January, 20, 0, 0),
+			end:           utc(2027, time.January, 20, 0, 0),
+			now:           utc(2026, time.November, 26, 0, 0),
+			billingPeriod: BillingPeriodYearly,
+			wantCurr:      SubscriptionCycleBounds{FromMS: utc(2026, time.January, 20, 0, 0), ToMS: utc(2027, time.January, 20, 0, 0)},
+			wantPrev:      SubscriptionCycleBounds{FromMS: utc(2025, time.January, 20, 0, 0), ToMS: utc(2026, time.January, 20, 0, 0)},
+		},
+		{
+			name:          "quarterly_plan_keeps_3_month_cycle_and_slices_renewals",
+			start:         utc(2026, time.June, 20, 8, 20),
+			end:           utc(2026, time.December, 20, 8, 20),
+			now:           utc(2026, time.November, 26, 8, 20),
+			billingPeriod: BillingPeriodQuarterly,
+			wantCurr:      SubscriptionCycleBounds{FromMS: utc(2026, time.September, 20, 8, 20), ToMS: utc(2026, time.December, 20, 8, 20)},
+			wantPrev:      SubscriptionCycleBounds{FromMS: utc(2026, time.June, 20, 8, 20), ToMS: utc(2026, time.September, 20, 8, 20)},
+		},
+		{
+			name:          "weekly_plan_slices_by_7_days",
+			start:         utc(2026, time.November, 1, 0, 0),
+			end:           utc(2026, time.November, 22, 0, 0),
+			now:           utc(2026, time.November, 18, 0, 0),
+			billingPeriod: BillingPeriodWeekly,
+			wantCurr:      SubscriptionCycleBounds{FromMS: utc(2026, time.November, 15, 0, 0), ToMS: utc(2026, time.November, 22, 0, 0)},
+			wantPrev:      SubscriptionCycleBounds{FromMS: utc(2026, time.November, 8, 0, 0), ToMS: utc(2026, time.November, 15, 0, 0)},
+		},
+		{
+			name:          "missing_billing_period_preserves_upstream_span_without_guessing",
+			start:         utc(2026, time.September, 20, 8, 20),
+			end:           utc(2026, time.December, 20, 8, 20),
+			now:           utc(2026, time.November, 26, 8, 20),
+			billingPeriod: "",
+			wantCurr:      SubscriptionCycleBounds{FromMS: utc(2026, time.September, 20, 8, 20), ToMS: utc(2026, time.December, 20, 8, 20)},
+			wantPrev:      PreviousSubscriptionPeriod(utc(2026, time.September, 20, 8, 20), utc(2026, time.December, 20, 8, 20)),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			start, end := tc.start, tc.end
+			got, ok := ResolveSubscriptionCycle(&QuotaPlan{
+				StartsAtMS:    &start,
+				ExpiresAtMS:   &end,
+				BillingPeriod: tc.billingPeriod,
+				ExpiresSource: PlanSourceLiveSubscription,
+			}, tc.now)
+			if !ok {
+				t.Fatalf("ResolveSubscriptionCycle returned false, want true")
+			}
+			if got.Current != tc.wantCurr {
+				t.Fatalf("Current = [%s, %s), want [%s, %s)",
+					time.UnixMilli(got.Current.FromMS).UTC().Format(time.RFC3339Nano),
+					time.UnixMilli(got.Current.ToMS).UTC().Format(time.RFC3339Nano),
+					time.UnixMilli(tc.wantCurr.FromMS).UTC().Format(time.RFC3339Nano),
+					time.UnixMilli(tc.wantCurr.ToMS).UTC().Format(time.RFC3339Nano),
+				)
+			}
+			if got.Previous != tc.wantPrev {
+				t.Fatalf("Previous = [%s, %s), want [%s, %s)",
+					time.UnixMilli(got.Previous.FromMS).UTC().Format(time.RFC3339Nano),
+					time.UnixMilli(got.Previous.ToMS).UTC().Format(time.RFC3339Nano),
+					time.UnixMilli(tc.wantPrev.FromMS).UTC().Format(time.RFC3339Nano),
+					time.UnixMilli(tc.wantPrev.ToMS).UTC().Format(time.RFC3339Nano),
+				)
+			}
+		})
+	}
+}
+
 func TestProjectSubscriptionCyclePaceAndGuards(t *testing.T) {
 	start := time.Date(2026, time.November, 1, 0, 0, 0, 0, time.UTC).UnixMilli()
 	end := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC).UnixMilli() // 30 days
