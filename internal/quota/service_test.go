@@ -195,15 +195,32 @@ func TestRecommendationEngine(t *testing.T) {
 	}
 }
 
+const availableCodexResetCreditsJSON = `{"available_count":3,"credits":[
+  {"id":"credit-oldest-grant","status":"available","reset_type":"codex_rate_limits","granted_at":"2026-11-13T00:00:00Z","expires_at":"2099-12-13T00:00:00Z"},
+  {"id":"credit-earliest-expiry","status":"available","reset_type":"codex_rate_limits","granted_at":"2026-11-25T00:00:00Z","expires_at":"2099-12-03T00:00:00Z"},
+  {"id":"credit-latest-expiry","status":"available","reset_type":"codex_rate_limits","granted_at":"2026-11-26T00:00:00Z","expires_at":"2099-12-26T00:00:00Z"}
+]}`
+
 func TestRedeemCodexCreditCallsConsumeEndpoint(t *testing.T) {
 	var calledURL string
 	var calledMethod string
 	var calledAuthIndex string
 	var calledBody string
 	var calledHeaders map[string]string
+	var creditRequests []string
 
 	client := &mockCPAClient{
 		apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+			creditRequests = append(creditRequests, req.URL)
+			if req.URL == CodexResetCreditsURL {
+				if req.Method != http.MethodGet || req.Data != "" || req.AuthIndex != "auth-codex" {
+					t.Errorf("credit list request = %+v, want a fresh read for auth-codex", req)
+				}
+				if req.Header["Chatgpt-Account-Id"] != "acct-openai-123" || req.Header["Authorization"] != management.QuotaTokenPlaceholder {
+					t.Errorf("credit list was not scoped to the redemption account: %+v", req.Header)
+				}
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(availableCodexResetCreditsJSON)}, nil
+			}
 			calledURL = req.URL
 			calledMethod = req.Method
 			calledAuthIndex = req.AuthIndex
@@ -229,6 +246,9 @@ func TestRedeemCodexCreditCallsConsumeEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RedeemCodexCredit error: %v", err)
 	}
+	if len(creditRequests) != 2 || creditRequests[0] != CodexResetCreditsURL || creditRequests[1] != CodexRedeemCreditURL {
+		t.Fatalf("credit requests = %v, want one fresh list read followed by one consume", creditRequests)
+	}
 
 	if calledURL != CodexRedeemCreditURL {
 		t.Errorf("calledURL = %q, want %q", calledURL, CodexRedeemCreditURL)
@@ -247,6 +267,7 @@ func TestRedeemCodexCreditCallsConsumeEndpoint(t *testing.T) {
 	}
 
 	var body struct {
+		CreditID        string `json:"credit_id"`
 		RedeemRequestID string `json:"redeem_request_id"`
 	}
 	if err := json.Unmarshal([]byte(calledBody), &body); err != nil {
@@ -254,6 +275,9 @@ func TestRedeemCodexCreditCallsConsumeEndpoint(t *testing.T) {
 	}
 	if _, err := uuid.Parse(body.RedeemRequestID); err != nil {
 		t.Errorf("redeem_request_id = %q, want a UUID: %v", body.RedeemRequestID, err)
+	}
+	if body.CreditID != "credit-earliest-expiry" {
+		t.Errorf("credit_id = %q, want the earliest expiry rather than the oldest grant", body.CreditID)
 	}
 }
 
@@ -265,6 +289,9 @@ func TestRedeemCodexCreditOmitsAccountHeaderWhenUnresolved(t *testing.T) {
 	client := &mockCPAClient{
 		apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
 			calledHeaders = req.Header
+			if req.URL == CodexResetCreditsURL {
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(availableCodexResetCreditsJSON)}, nil
+			}
 			return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(`{"code":"reset"}`)}, nil
 		},
 	}
@@ -301,6 +328,9 @@ func TestRedeemCodexCreditRequiresUpstreamConfirmation(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			client := &mockCPAClient{
 				apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+					if req.URL == CodexResetCreditsURL {
+						return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(availableCodexResetCreditsJSON)}, nil
+					}
 					return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(testCase.body)}, nil
 				},
 			}
@@ -317,6 +347,77 @@ func TestRedeemCodexCreditRequiresUpstreamConfirmation(t *testing.T) {
 				t.Fatalf("RedeemCodexCredit with body %q failed: %v", testCase.body, err)
 			}
 		})
+	}
+}
+
+func TestRedeemCodexCreditRejectsUnreadableOrUnusableBankWithoutConsuming(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		status  int
+		body    string
+		wantErr error
+	}{
+		{name: "read unavailable", status: http.StatusServiceUnavailable, body: `{}`, wantErr: ErrCodexResetCreditBankUnreadable},
+		{name: "invalid response", status: http.StatusOK, body: `not json`, wantErr: ErrCodexResetCreditBankUnreadable},
+		{name: "count without ids", status: http.StatusOK, body: `{"available_count":3}`, wantErr: ErrNoEligibleCodexResetCredit},
+		{name: "empty bank", status: http.StatusOK, body: `{"available_count":0,"credits":[]}`, wantErr: ErrNoEligibleCodexResetCredit},
+		{name: "expired card", status: http.StatusOK, body: `{"available_count":1,"credits":[{"id":"expired","status":"available","expires_at":"2000-01-01T00:00:00Z"}]}`, wantErr: ErrNoEligibleCodexResetCredit},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			consumeCalls := 0
+			client := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+				if req.URL == CodexResetCreditsURL && req.Method == http.MethodGet {
+					return management.ApiCallResponse{StatusCode: testCase.status, Body: json.RawMessage(testCase.body)}, nil
+				}
+				consumeCalls++
+				return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(`{"code":"reset"}`)}, nil
+			}}
+			err := NewService(client).RedeemCodexCredit(context.Background(), management.AuthFile{AuthIndex: "auth-codex"})
+			if !errors.Is(err, testCase.wantErr) || consumeCalls != 0 {
+				t.Fatalf("unusable credit bank: err=%v (want %v) consume calls=%d, want rejection without consumption", err, testCase.wantErr, consumeCalls)
+			}
+		})
+	}
+}
+
+func TestRedeemCodexCreditSkipsUnusableCardsAndOrdersByExpiryThenGrant(t *testing.T) {
+	// Padded whitespace on the winning credit verifies selection normalizes
+	// status/ID the same way parseCodexResetCreditsSummary does.
+	const bank = `{"available_count":5,"credits":[
+        {"id":"undated","status":"available","granted_at":"2020-01-01T00:00:00Z"},
+        {"id":"expired","status":"available","expires_at":"2000-01-01T00:00:00Z"},
+        {"id":"clock-expired","status":"available","expires_at":"2098-01-01T00:00:00Z"},
+        {"id":"spent","status":"used","expires_at":"2098-01-01T00:00:00Z"},
+        {"id":"wrong-reset-type","status":"available","reset_type":"other","expires_at":"2098-01-01T00:00:00Z"},
+        {"id":"later-grant","status":"available","granted_at":"2026-11-26T00:00:00Z","expires_at":"2099-01-01T00:00:00Z"},
+        {"id":" earlier-grant ","status":" available ","granted_at":"2026-11-13T00:00:00Z","expires_at":"2099-01-01T00:00:00Z"}
+    ]}`
+	consumeCalls := 0
+	client := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+		if req.URL == CodexResetCreditsURL {
+			return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(bank)}, nil
+		}
+		consumeCalls++
+		var body struct {
+			CreditID string `json:"credit_id"`
+		}
+		if err := json.Unmarshal([]byte(req.Data), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.CreditID != "earlier-grant" {
+			t.Errorf("credit_id = %q, want earliest eligible expiry and then earliest grant", body.CreditID)
+		}
+		return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(`{"code":"reset"}`)}, nil
+	}}
+	// A card that still appears valid to wall time has expired under this clock.
+	svc := NewServiceWithClock(client, func() time.Time {
+		return time.Date(2098, time.December, 31, 0, 0, 0, 0, time.UTC)
+	})
+	if err := svc.RedeemCodexCredit(context.Background(), management.AuthFile{AuthIndex: "auth-codex"}); err != nil {
+		t.Fatal(err)
+	}
+	if consumeCalls != 1 {
+		t.Fatalf("consume calls = %d, want exactly one", consumeCalls)
 	}
 }
 
