@@ -1,6 +1,7 @@
 import { ApiError, api, describeError } from '../api/client';
 import { MUTATION_KEYS, QUERY_KEYS } from '../api/queryKeys';
 import type { ConfigScalars, ConfigScalarsResponse } from '../types/configManagement';
+import type { LogsStatus } from '../api/client';
 import type { ManagementAuthFilesResponse } from '../types/managementAuthFile';
 import type {
   ManagementOAuthExcludedModelsResponse,
@@ -41,6 +42,17 @@ export function useOptimisticConfigScalarMutation(options?: {
               ...current.scalars,
               [key]: value,
             },
+          };
+        },
+      ),
+      defineOptimisticTarget<ConfigScalarMutationInput, LogsStatus>(
+        QUERY_KEYS.logsStatus,
+        (current, { key, value }) => {
+          if (!current) return current;
+          if (key !== 'request_log' && key !== 'logging_to_file') return current;
+          return {
+            ...current,
+            [key]: Boolean(value),
           };
         },
       ),

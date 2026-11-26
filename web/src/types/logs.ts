@@ -182,13 +182,16 @@ export interface ErrorLogFile {
 }
 
 /**
- * What the log viewer shows: the file CPA holds for one request id, or one named error log.
+ * What the log viewer shows: the file CPA holds for one request id, one stored usage event's
+ * CPA request log, or one named error log.
  *
  * A request refused before a credential was chosen publishes no usage record, so the id on
- * its gateway log line is the only handle the console has on it.
+ * its gateway log line is the only handle the console has on it. A usage event fetches through
+ * its own event route so the server validates ownership and resolves the stored request id.
  */
 export type LogViewerTarget =
   | { kind: 'request'; requestId: string }
+  | { kind: 'usageEvent'; eventId: number; requestId: string }
   | { kind: 'file'; file: ErrorLogFile };
 
 /**
@@ -204,9 +207,17 @@ export function isViewableRequestId(requestId: string | undefined): requestId is
   return requestId !== undefined && REQUEST_LOG_ID.test(requestId);
 }
 
+/** Keeps an arbitrary CPA request id safe as a local filename stem. */
+function sanitizeRequestLogStem(requestId: string): string {
+  const cleaned = requestId.trim().replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[._-]+|[._-]+$/g, '');
+  return (cleaned || 'request').slice(0, 80);
+}
+
 /** The name the viewer is titled with and a download is saved under. */
 export function logViewerFileName(target: LogViewerTarget): string {
-  return target.kind === 'file' ? target.file.name : `request-${target.requestId}.log`;
+  if (target.kind === 'file') return target.file.name;
+  if (target.kind === 'usageEvent') return `request-${sanitizeRequestLogStem(target.requestId)}.log`;
+  return `request-${target.requestId}.log`;
 }
 
 export function canPreviewLog(sizeBytes: number): boolean {
