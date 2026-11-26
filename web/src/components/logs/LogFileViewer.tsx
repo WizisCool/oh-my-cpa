@@ -31,7 +31,9 @@ interface LoadedLogFile {
 async function loadLogFile(target: LogViewerTarget): Promise<LoadedLogFile> {
   const blob = target.kind === 'file'
     ? await api.downloadRequestErrorLog(target.file.name)
-    : await api.downloadRequestLogById(target.requestId);
+    : target.kind === 'usageEvent'
+      ? await api.downloadUsageEventRequestLog(target.eventId)
+      : await api.downloadRequestLogById(target.requestId);
   return canPreviewLog(blob.size) ? { blob, text: await blob.text() } : { blob };
 }
 
@@ -39,6 +41,8 @@ export interface LogFileViewerProps {
   /** The file on display; null closes the viewer. */
   target: LogViewerTarget | null;
   onClose: () => void;
+  /** Optional action shown on the missing-file notice (e.g. enabling CPA request logging). */
+  missingAction?: React.ReactNode;
 }
 
 /**
@@ -48,7 +52,7 @@ export interface LogFileViewerProps {
  * downloading is one audited read rather than two. Nothing is kept after the viewer closes: the
  * text quotes request content.
  */
-export const LogFileViewer: React.FC<LogFileViewerProps> = ({ target, onClose }) => {
+export const LogFileViewer: React.FC<LogFileViewerProps> = ({ target, onClose, missingAction }) => {
   useTimeZone();
   const t = useT();
   const isOpen = target !== null;
@@ -58,7 +62,12 @@ export const LogFileViewer: React.FC<LogFileViewerProps> = ({ target, onClose })
   const shown = shownRef.current;
 
   const query = useQuery({
-    queryKey: ['log-file', shown?.kind, shown ? logViewerFileName(shown) : ''],
+    queryKey: [
+      'log-file',
+      shown?.kind,
+      shown?.kind === 'usageEvent' ? shown.eventId : undefined,
+      shown ? logViewerFileName(shown) : '',
+    ],
     queryFn: () => loadLogFile(shown as LogViewerTarget),
     enabled: isOpen,
     meta: { silent: true },
@@ -77,7 +86,14 @@ export const LogFileViewer: React.FC<LogFileViewerProps> = ({ target, onClose })
   if (query.isPending) {
     body = <ParagraphPlaceholder rows={10} />;
   } else if (isMissing) {
-    body = <Notice tone="warning" title={t('logs.viewer_missing')} description={t('logs.viewer_missing_desc')} />;
+    body = (
+      <Notice
+        tone="warning"
+        title={t('logs.viewer_missing')}
+        description={t('logs.viewer_missing_desc')}
+        action={missingAction}
+      />
+    );
   } else if (query.isError) {
     body = <LoadFailure title={t('logs.viewer_failed')} error={query.error} onRetry={() => void query.refetch()} />;
   } else if (loaded?.text === undefined) {

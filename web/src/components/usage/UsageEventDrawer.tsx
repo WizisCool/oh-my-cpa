@@ -6,13 +6,25 @@ import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Tabs } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import { ButtonGroup } from '@/components/ui/button-group';
+import { DropdownCaret } from '@/components/ui/dropdown-caret';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { FactList } from '../common/FactList';
 import { ParagraphPlaceholder } from '../common/ContentPlaceholder';
 import {
+  CodeOutlined,
+  CopyOutlined,
   NonStreamOutlined,
   WebsocketOutlined,
   DownloadOutlined,
   DownOutlined,
+  EyeOutlined,
+  FileTextOutlined,
   SwapOutlined,
   ThunderboltFilled,
   UpOutlined,
@@ -20,7 +32,13 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { groupResponseHeaders, responseHeadersText } from '../../types/responseHeaderGroups';
 import dayjs from '../../utils/time';
-import { api, ApiError } from '../../api/client';
+import { api, ApiError, describeError } from '../../api/client';
+import { QUERY_KEYS } from '../../api/queryKeys';
+import { useOptimisticConfigScalarMutation } from '../../hooks/useConfigMutations';
+import { isDemoMode } from '../../types/demoMode';
+import type { LogViewerTarget } from '../../types/logs';
+import { copyText } from '../../utils/clipboard';
+import { saveBlob } from '../../utils/download';
 import { displayEffortName } from '../../theme/effortScale';
 import { durationScaleMix } from '../../theme/durationScale';
 import { useT } from '../../i18n';
@@ -39,6 +57,8 @@ import {
 } from '../../types/usageEventIdentity';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { RequestOverview } from './RequestOverview';
+import { buildRequestRecordLogBlob, type RequestRecordLogFormat } from './requestRecordLog';
+import { LogFileViewer } from '../logs/LogFileViewer';
 import {
   formatEventDuration,
   eventTokensPerSecond,
@@ -103,12 +123,15 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const { style: tokenStyle, modelView, tpsMode } = useTokenDisplayStyle();
   const isCallView = modelView === 'call';
   const toast = useToast();
+  const isDemo = isDemoMode();
   const [downloadModalOpen, setDownloadModalOpen] = React.useState(false);
+  const [rawLogTarget, setRawLogTarget] = React.useState<LogViewerTarget | null>(null);
 
   const [downloading, setDownloading] = React.useState(false);
   const [tab, setTab] = React.useState('overview');
   React.useEffect(() => {
     setDownloadModalOpen(false);
+    setRawLogTarget(null);
     // A record opens on its overview; a panel on its way out keeps the tab it was showing.
     if (eventId != null) setTab('overview');
   }, [eventId]);
@@ -121,6 +144,22 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
     queryKey: replay === 'calendar' ? ['usage-event', recordId, 'calendar'] : ['usage-event', recordId],
     queryFn: () => api.getUsageEvent(recordId!, replay),
     enabled: eventId != null,
+  });
+  // Read CPA's logging switch only when the operator reaches diagnostics or opens a raw log,
+  // so skimming records on the overview tab never adds an extra round trip.
+  const logsStatus = useQuery({
+    queryKey: QUERY_KEYS.logsStatus,
+    queryFn: api.getLogsStatus,
+    enabled: eventId != null && (tab === 'diagnostics' || rawLogTarget !== null),
+    meta: { silent: true },
+    staleTime: 30_000,
+    retry: false,
+  });
+  const enableRequestLog = useOptimisticConfigScalarMutation({
+    onSuccess: () => {
+      toast.success(t('events.enable_request_log_success'));
+    },
+    formatError: (error) => t('events.enable_request_log_failed', { msg: describeError(error) }),
   });
   const event = result.data?.event;
   const failureCause = requestFailureCause(undefined, event?.fail_code);
@@ -171,19 +210,69 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
       {content}
     </section>
   );
+  const canReadRawLog = Boolean(event?.has_request_log && event?.request_id);
+  const isCpaRequestLogDisabled = logsStatus.isSuccess && logsStatus.data.request_log === false;
+
+  const openRawLogViewer = () => {
+    if (!event || !canReadRawLog || !event.request_id) return;
+    setRawLogTarget({ kind: 'usageEvent', eventId: event.id, requestId: event.request_id });
+  };
+
+  const buildRecordLog = (format: RequestRecordLogFormat) => {
+    if (!result.data) return null;
+    return buildRequestRecordLogBlob(
+      {
+        detail: result.data,
+        tpsMode,
+        credentials,
+        configuredProviders,
+        pluginLogos,
+        multiPortalKeys,
+        pluginTitles,
+        isProviderCatalogUnknown,
+        archive,
+      },
+      format,
+      t,
+    );
+  };
+
+  const downloadRecordLog = (format: RequestRecordLogFormat) => {
+    const artifact = buildRecordLog(format);
+    if (!artifact) return;
+    saveBlob(artifact.blob, artifact.fileName);
+    toast.success(t('events.record_log_downloaded'));
+  };
+
+  const copyRecordLogJson = async () => {
+    const artifact = buildRecordLog('json');
+    if (!artifact) return;
+    if (await copyText(artifact.text)) {
+      toast.success(t('events.export_json_copied'));
+    } else {
+      toast.error(t('events.export_failed'));
+    }
+  };
+
+  const enableRequestLogAction = isCpaRequestLogDisabled ? (
+    <Button
+      size="sm"
+      loading={enableRequestLog.isPending}
+      disabled={isDemo}
+      data-tip={isDemo ? t('demo.blocked') : undefined}
+      onClick={() => enableRequestLog.mutate({ key: 'request_log', value: true })}
+      data-testid="enable-cpa-request-log"
+    >
+      {t('events.enable_request_log')}
+    </Button>
+  ) : undefined;
+
   const download = async () => {
     if (eventId == null || !event?.request_id) return;
     setDownloading(true);
     try {
       const blob = await api.downloadUsageEventRequestLog(eventId);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `${event.request_id.replace(/[^a-zA-Z0-9._-]/g, '_')}.log`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      saveBlob(blob, `${event.request_id.replace(/[^a-zA-Z0-9._-]/g, '_')}.log`);
       setDownloadModalOpen(false);
       toast.success(t('events.download_success'));
     } catch (error) {
@@ -218,7 +307,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   }, [nextEvent, onSelectEvent]);
 
   React.useEffect(() => {
-    if (eventId == null) return;
+    if (eventId == null || rawLogTarget !== null || downloadModalOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
@@ -232,7 +321,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [eventId, handlePrev, handleNext]);
+  }, [eventId, rawLogTarget, downloadModalOpen, handlePrev, handleNext]);
 
   const drawerTitle = (
     <div className="req-drawer-title-wrapper">
@@ -284,6 +373,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const displayModel = event ? (isCallView ? (event.model_alias || event.model) : event.model) : undefined;
 
   return (
+    <>
     <AppDrawer
       widthKey="request_detail"
       title={drawerTitle}
@@ -526,15 +616,34 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                       t('events.raw_log'),
                       <>
                         <p className="request-detail-note">{t('events.raw_log_note')}</p>
-                        <Button
-                          aria-label={t('events.download_log')}
-                          icon={<DownloadOutlined />}
-                          disabled={!event.has_request_log || !event.request_id}
-                          onClick={() => setDownloadModalOpen(true)}
-                        >
-                          {t('events.download_log')}
-                        </Button>
-                        {(!event.has_request_log || !event.request_id) && (
+                        {isCpaRequestLogDisabled && (
+                          <Notice
+                            className="request-raw-log-notice"
+                            tone="info"
+                            title={t('events.raw_log_disabled_title')}
+                            description={t('events.raw_log_disabled_desc')}
+                            action={enableRequestLogAction}
+                          />
+                        )}
+                        <div className="request-raw-log-actions">
+                          <Button
+                            aria-label={t('events.view_raw_log')}
+                            icon={<EyeOutlined />}
+                            disabled={!canReadRawLog}
+                            onClick={openRawLogViewer}
+                          >
+                            {t('events.view_raw_log')}
+                          </Button>
+                          <Button
+                            aria-label={t('events.download_log')}
+                            icon={<DownloadOutlined />}
+                            disabled={!canReadRawLog}
+                            onClick={() => setDownloadModalOpen(true)}
+                          >
+                            {t('events.download_log')}
+                          </Button>
+                        </div>
+                        {!canReadRawLog && (
                           <p className="request-detail-note">{t('events.log_unavailable')}</p>
                         )}
                       </>,
@@ -630,6 +739,60 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
               },
             ]}
           />
+          <div className="request-detail-actions">
+            {canReadRawLog && (
+              <Button
+                icon={<EyeOutlined />}
+                onClick={openRawLogViewer}
+                data-testid="drawer-view-raw-log"
+              >
+                {t('events.view_raw_log')}
+              </Button>
+            )}
+            <ButtonGroup>
+              <Button
+                variant="primary"
+                icon={<DownloadOutlined />}
+                onClick={() => downloadRecordLog('log')}
+                data-testid="drawer-download-record-log"
+              >
+                {t('events.download_record_log')}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="primary"
+                      data-split-caret=""
+                      icon={<DropdownCaret />}
+                      aria-label={t('events.download_record_log_more')}
+                      data-testid="drawer-record-log-menu"
+                    />
+                  }
+                />
+                <DropdownMenuContent side="top" align="end">
+                  <DropdownMenuItem
+                    icon={<FileTextOutlined />}
+                    onClick={() => downloadRecordLog('log')}
+                  >
+                    {t('events.download_record_log_text')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    icon={<CodeOutlined />}
+                    onClick={() => downloadRecordLog('json')}
+                  >
+                    {t('events.download_record_log_json')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    icon={<CopyOutlined />}
+                    onClick={() => void copyRecordLogJson()}
+                  >
+                    {t('events.export_copy_json')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </ButtonGroup>
+          </div>
         </>
       ) : null}
       <AppModal
@@ -645,5 +808,11 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
         <p className="request-detail-id">Request ID: {event?.request_id}</p>
       </AppModal>
     </AppDrawer>
+    <LogFileViewer
+      target={rawLogTarget}
+      onClose={() => setRawLogTarget(null)}
+      missingAction={enableRequestLogAction}
+    />
+    </>
   );
 };

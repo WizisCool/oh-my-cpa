@@ -460,3 +460,22 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+.request-raw-log-notice {
+  margin: 0 0 12px;
+}
+.request-raw-log-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.request-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: var(--hairline) solid var(--border);
+}

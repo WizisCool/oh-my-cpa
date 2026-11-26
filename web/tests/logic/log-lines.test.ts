@@ -100,6 +100,8 @@ test('the id on a gateway line names the request log it opens', () => {
     logViewerFileName({ kind: 'file', file: { name: 'error-v1-messages-2026-10-11T091825-41dbb9ee.log', size: 1, modified: 0 } }),
     'error-v1-messages-2026-10-11T091825-41dbb9ee.log',
   );
+  assert.equal(logViewerFileName({ kind: 'usageEvent', eventId: 42, requestId: '41dbb9ee' }), 'request-41dbb9ee.log');
+  assert.equal(logViewerFileName({ kind: 'usageEvent', eventId: 42, requestId: '../unsafe/id' }), 'request-unsafe-id.log');
   // A line outside any request carries CPA's placeholder, which is not an id at all.
   assert.equal(isViewableRequestId(startupLine.requestId), false);
   // Only a plain token is offered: the server resolves the id as a filename suffix.

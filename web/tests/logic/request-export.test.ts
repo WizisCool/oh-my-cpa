@@ -10,7 +10,16 @@ import {
   toggleSelection,
 } from '../../src/components/usage/requestSelection.ts';
 import { buildRequestExport, REQUEST_EXPORT_SCHEMA } from '../../src/components/usage/requestExportJson.ts';
+import {
+  buildRequestRecordLog,
+  formatRequestRecordLog,
+  REQUEST_RECORD_LOG_SCHEMA,
+  requestRecordLogFileName,
+} from '../../src/components/usage/requestRecordLog.ts';
 import { buildRequestSheet, sheetStrings } from '../../src/components/usage/requestSheetModel.ts';
+import type { Catalog, MessageKey, MessageVars, TFunc } from '../../src/i18n/catalog.ts';
+import enCatalog from '../../src/i18n/locales/en/index.ts';
+import zhCatalog from '../../src/i18n/locales/zh/index.ts';
 import { modelMarkIconId } from '../../src/types/modelSquare.ts';
 import { indexCredentialFiles } from '../../src/types/usageEventIdentity.ts';
 import { pluginMultiPortalKeys, pluginOAuthProviderLogos, pluginOAuthProviderTitles } from '../../src/types/pluginOAuthProviders.ts';
@@ -345,4 +354,176 @@ test('request export', () => {
   assert.equal(outboundExport.resolved_service_tier_source, 'outbound');
   const hiddenOutboundExport = buildRequestExport({ rows: [outboundEvent], masks: effectiveMasks([], ['mode']), exportedAt: new Date(0), tpsMode: 'exclude_ttft', credentials }).requests[0];
   assert.ok(!('effective_service_tier' in hiddenOutboundExport));
+});
+
+test('single-record OMC log captures full diagnostics, masks identities, and formats .log/.json cleanly', () => {
+  const RAW_EMAIL = 'alice.operator@example.com';
+  const SECRET_FINGERPRINT = 'hmac:deadbeef-client-key-fingerprint';
+  const credentials = indexCredentialFiles([
+    { name: `codex-${RAW_EMAIL}.json`, auth_index: 'oauth-1', provider: 'codex', type: 'oauth', email: RAW_EMAIL },
+  ]);
+
+  const doc = buildRequestRecordLog({
+    detail: {
+      event: {
+        id: 88,
+        event_key: 'evt-88',
+        request_id: 'req-abc-88',
+        timestamp_ms: 1_700_000_000_000,
+        provider: 'codex',
+        endpoint: '/v1/responses',
+        executor_type: 'CodexWebsocketsExecutor',
+        auth_type: 'oauth',
+        auth_index: 'oauth-1',
+        api_group_key: SECRET_FINGERPRINT,
+        api_group_label: 'api_key',
+        api_key_alias: 'cli-laptop',
+        api_key_mask: 'sk-ab••••••••90',
+        source: `codex-${RAW_EMAIL}.json`,
+        resource_name: `codex-${RAW_EMAIL}.json`,
+        model: 'gpt-5',
+        model_alias: 'fast-gpt',
+        response_model: 'gpt-5-2026-01',
+        model_substituted: true,
+        reasoning_effort: 'high',
+        service_tier: 'auto',
+        effective_service_tier: 'priority',
+        response_service_tier: 'priority',
+        resolved_service_tier: 'priority',
+        resolved_service_tier_source: 'outbound',
+        failed: true,
+        fail_status_code: 429,
+        fail_code: 'force_cooldown',
+        fail_body: `{"error":{"message":"Account ${RAW_EMAIL} is disabled due to rate limit"}}`,
+        response_headers: [
+          { name: 'retry-after', value: '30' },
+          { name: 'x-account-hint', value: `owner=${RAW_EMAIL}` },
+          { name: 'x-request-id', value: 'up-88' },
+        ],
+        access_provider: 'native-config',
+        is_native_key: true,
+        generate: true,
+        stream: true,
+        latency_ms: 2500,
+        ttft_ms: 500,
+        tokens: { input: 1000, output: 200, reasoning: 50, cached: 400, cache_read: 400, cache_creation: 0, total: 1200 },
+        accounting_status: 'complete',
+        has_request_log: false,
+        cost_usd: 0.042,
+        pricing_status: 'priced',
+        price_version_id: 7,
+        client_ip: '203.0.113.10',
+        x_forwarded_for: '198.51.100.2',
+        user_agent: 'codex-cli/0.41',
+        client_agent: 'codex-cli',
+        client_agent_category: 'agent',
+        structured_usage: { tool_usage_details: { web_search_calls: 0, mcp_calls: 2 }, is_partial: false },
+      },
+      related_errors: [{
+        id: 19,
+        status_code: 429,
+        code: 'rate_limit',
+        body: `Account ${RAW_EMAIL} exceeded quota`,
+        retryable: true,
+        quota_exceeded: true,
+        quota_reason: `rpm_exceeded for ${RAW_EMAIL}`,
+        timestamp_ms: 1_700_000_005_000,
+      }],
+      cost_breakdown: {
+        status: 'priced',
+        stored_nanos: 42_000_000,
+        service_tier: 'priority',
+        service_tier_source: 'outbound',
+        recomputed_matches: true,
+      },
+    },
+    tpsMode: 'exclude_ttft',
+    exportedAt: new Date(1_700_000_010_000),
+    credentials,
+  });
+
+  const makeT = (catalog: Catalog): TFunc => (key: MessageKey, vars?: MessageVars) =>
+    Object.entries(vars ?? {}).reduce(
+      (text, [name, value]) => text.split(`{${name}}`).join(String(value)),
+      catalog[key],
+    );
+
+  assert.equal(doc.schema, REQUEST_RECORD_LOG_SCHEMA);
+  assert.equal(doc.request.status, 'failed');
+  assert.equal(doc.request.transport, 'websocket');
+  assert.equal(doc.model.served, 'gpt-5-2026-01');
+  assert.equal(doc.model.substituted, true);
+  assert.equal(doc.timing.ttft_ms, 500);
+  assert.equal(doc.upstream?.fail_status_code, 429);
+  assert.equal(doc.upstream?.fail_code, 'force_cooldown');
+  assert.ok(doc.upstream?.fail_body?.includes('is disabled due to rate limit'), 'diagnostic message stays intact after account masking');
+  assert.equal(doc.related_errors?.length, 1);
+  assert.ok(doc.related_errors?.[0].body?.includes('exceeded quota'), 'correlated error diagnostic message stays intact');
+  assert.ok(doc.related_errors?.[0].quota_reason?.includes('rpm_exceeded'), 'quota reason diagnostic text stays intact');
+  assert.equal(doc.structured_usage?.tool_usage_details?.web_search_calls, 0);
+
+  const jsonBody = JSON.stringify(doc);
+  const enTextBody = formatRequestRecordLog(doc, makeT(enCatalog));
+  const zhTextBody = formatRequestRecordLog(doc, makeT(zhCatalog));
+  for (const serialized of [jsonBody, enTextBody, zhTextBody]) {
+    assert.ok(!serialized.includes(SECRET_FINGERPRINT), 'HMAC key fingerprint must never appear in record logs');
+    assert.ok(!serialized.includes(RAW_EMAIL), 'raw OAuth email must stay masked in record logs and error bodies');
+  }
+  assert.ok(enTextBody.includes('=== Request details ==='));
+  assert.ok(enTextBody.includes('=== Request parameters ==='));
+  assert.ok(enTextBody.includes('=== Source & routing ==='));
+  assert.ok(enTextBody.includes('=== Timing & tokens ==='));
+  assert.ok(enTextBody.includes('=== Cost breakdown ==='));
+  assert.ok(enTextBody.includes('=== Upstream usage details ==='));
+  assert.ok(enTextBody.includes('=== Client information ==='));
+  assert.ok(enTextBody.includes('=== Upstream response ==='));
+  assert.ok(enTextBody.includes('retry-after: 30'));
+  assert.ok(enTextBody.includes('is disabled due to rate limit'));
+  assert.ok(enTextBody.includes('=== Correlated Errors & Credential Status ==='));
+  assert.ok(enTextBody.includes('Quota reason: rpm_exceeded'));
+
+  assert.ok(zhTextBody.includes('=== 请求详情 ==='));
+  assert.ok(zhTextBody.includes('=== 耗时与 Token ==='));
+  assert.ok(zhTextBody.includes('总耗时: 2500 毫秒'));
+  assert.ok(zhTextBody.includes('首 Token 耗时: 500 毫秒'));
+  assert.ok(zhTextBody.includes('计量状态: 完整'));
+  assert.ok(zhTextBody.includes('=== 费用构成 ==='));
+  assert.ok(zhTextBody.includes('费用状态: 已定价'));
+  assert.ok(zhTextBody.includes('=== 上游响应 ==='));
+  assert.ok(zhTextBody.includes(`格式版本: ${REQUEST_RECORD_LOG_SCHEMA}`));
+
+  // When auth_type and credential metadata are absent, provider_title can fall back to resource_name
+  // and must still mask account-bearing filenames in both JSON and text outputs.
+  const fallbackDoc = buildRequestRecordLog({
+    detail: {
+      event: {
+        id: 89,
+        event_key: 'evt-89',
+        timestamp_ms: 1_700_000_000_000,
+        provider: '',
+        resource_name: `oauth-${RAW_EMAIL}.json`,
+        model: 'gpt-5',
+        failed: false,
+        generate: true,
+        latency_ms: 100,
+        tokens: { input: 10, output: 5, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, total: 15 },
+        has_request_log: false,
+        pricing_status: 'invalid_price',
+      },
+    },
+    tpsMode: 'exclude_ttft',
+    exportedAt: new Date(1_700_000_010_000),
+    credentials: new Map(),
+  });
+  assert.ok(!JSON.stringify(fallbackDoc).includes(RAW_EMAIL), 'fallback provider_title must mask account-bearing filenames');
+  const fallbackZh = formatRequestRecordLog(fallbackDoc, makeT(zhCatalog));
+  assert.ok(!fallbackZh.includes(RAW_EMAIL));
+  assert.ok(fallbackZh.includes('费用状态: 价格无效'));
+
+  // Distinct from CPA's `request-<id>.log` so saving both never collides, and safe when request_id is absent.
+  assert.equal(requestRecordLogFileName({ id: 88, request_id: 'req-abc-88' }, 'log'), 'record-req-abc-88.log');
+  assert.equal(requestRecordLogFileName({ id: 88, request_id: 'req-abc-88' }, 'json'), 'record-req-abc-88.json');
+  assert.equal(requestRecordLogFileName({ id: 88, request_id: '../bad/id' }, 'log'), 'record-bad-id.log');
+  assert.equal(requestRecordLogFileName({ id: 88 }, 'log'), 'record-event-88.log');
+  assert.equal(requestRecordLogFileName({ id: 88, request_id: '' }, 'json'), 'record-event-88.json');
 });

@@ -9,12 +9,12 @@ import { installOmcApi } from './support/omcApi';
 
 const REFUSED_LOG = '=== REQUEST INFO ===\nURL: /v1/messages\n\n=== RESPONSE ===\nStatus: 503\nauth_unavailable: no auth available\n';
 
-function Surface({ target, onClose = () => {} }: { target: LogViewerTarget | null; onClose?: () => void }) {
+function Surface({ target, onClose = () => {}, missingAction }: { target: LogViewerTarget | null; onClose?: () => void; missingAction?: React.ReactNode }) {
   const [client] = React.useState(() => new QueryClient());
   return (
     <React.StrictMode>
       <QueryClientProvider client={client}>
-        <I18nProvider><LogFileViewer target={target} onClose={onClose} /></I18nProvider>
+        <I18nProvider><LogFileViewer target={target} onClose={onClose} missingAction={missingAction} /></I18nProvider>
       </QueryClientProvider>
     </React.StrictMode>
   );
@@ -23,7 +23,12 @@ function Surface({ target, onClose = () => {} }: { target: LogViewerTarget | nul
 /** Answers every read with one response and records the paths that were asked for. */
 function stubLogRead(respond: () => Response): string[] {
   const paths: string[] = [];
-  installOmcApi().on('GET', /^\/management\/request(-error)?-logs\//, request => {
+  const api = installOmcApi();
+  api.on('GET', /^\/management\/request(-error)?-logs\//, request => {
+    paths.push(`/api/v1${request.path}`);
+    return respond();
+  });
+  api.on('GET', /^\/usage\/events\/\d+\/request-log$/, request => {
     paths.push(`/api/v1${request.path}`);
     return respond();
   });
@@ -103,5 +108,27 @@ describe('LogFileViewer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads a usage event raw log through its event route and surfaces missingAction on 404', async () => {
+    const paths = stubLogRead(() => new Response(REFUSED_LOG, { status: 200, headers: { 'Content-Type': 'text/plain' } }));
+    const first = render(<Surface target={{ kind: 'usageEvent', eventId: 42, requestId: '41dbb9ee' }} />);
+    await screen.findByText(/auth_unavailable: no auth available/);
+    expect(new Set(paths)).toEqual(new Set(['/api/v1/usage/events/42/request-log']));
+    first.unmount();
+
+    stubLogRead(() => new Response(
+      JSON.stringify({ error: 'CPA holds no log file for this request', code: 'request_log_not_found' }),
+      { status: 404, headers: { 'Content-Type': 'application/json' } },
+    ));
+    const onEnable = vi.fn();
+    render(
+      <Surface
+        target={{ kind: 'usageEvent', eventId: 43, requestId: 'deadbeef' }}
+        missingAction={<button type="button" onClick={onEnable}>Enable request logging</button>}
+      />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Enable request logging' }));
+    expect(onEnable).toHaveBeenCalledTimes(1);
   });
 });
