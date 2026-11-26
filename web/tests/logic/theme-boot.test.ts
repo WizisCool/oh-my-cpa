@@ -596,7 +596,7 @@ function needsJsxAstCheck(src: string): boolean {
   const hasTipOverflow = src.includes('data-tip-overflow');
   const hasTitle = /\btitle\b/.test(src);
   if (!hasTipOverflow && !hasTitle) return false;
-  if (src.includes('</*') || src.includes('<//')) return true;
+  if (/<\s*\/[/*]/.test(src)) return true;
 
   const tagRe = /<\s*([\p{ID_Start}_$][\p{ID_Continue}$.:-]*)(?=[\s</{])/gu;
   let match: RegExpExecArray | null;
@@ -752,14 +752,20 @@ function needsJsxAstCheck(src: string): boolean {
         if (isTargetForTitle && ch === 116 && src.startsWith('title', i)) {
           const prev = i > 0 ? src.charCodeAt(i - 1) : 0;
           const next = i + 5 < len ? src.charCodeAt(i + 5) : 0;
+          if (prev >= 128 || next >= 128) return true;
           if (!isJsxAttrIdentChar(prev) && !isJsxAttrIdentChar(next)) sawTitleAttr = true;
         } else if (hasTipOverflow && ch === 100 && src.startsWith('data-tip', i)) {
           const prev = i > 0 ? src.charCodeAt(i - 1) : 0;
+          if (prev >= 128) return true;
           if (!isJsxDataTipBoundaryChar(prev)) {
-            if (src.startsWith('data-tip-overflow', i) && !isJsxDataTipBoundaryChar(src.charCodeAt(i + 17) || 0)) {
-              sawTipOverflow = true;
-            } else if (!isJsxDataTipBoundaryChar(src.charCodeAt(i + 8) || 0)) {
-              sawTip = true;
+            if (src.startsWith('data-tip-overflow', i)) {
+              const next = i + 17 < len ? src.charCodeAt(i + 17) : 0;
+              if (next >= 128) return true;
+              if (!isJsxDataTipBoundaryChar(next)) sawTipOverflow = true;
+            } else {
+              const next = i + 8 < len ? src.charCodeAt(i + 8) : 0;
+              if (next >= 128) return true;
+              if (!isJsxDataTipBoundaryChar(next)) sawTip = true;
             }
           }
         }
@@ -823,6 +829,7 @@ test('JSX title and overflow-tip pre-filter preserves exact AST detection on edg
     { name: 'intrinsic string title', src: 'export const A = () => <div title="raw" />;', expectedTitles: 1, expectedOrphans: 0 },
     { name: 'boolean title attribute', src: 'export const A = () => <span title />;', expectedTitles: 1, expectedOrphans: 0 },
     { name: 'whitespace after lt', src: 'export const A = () => < div title="raw" />;', expectedTitles: 1, expectedOrphans: 0 },
+    { name: 'whitespace and comment after lt', src: 'export const A = () => < /*c*/div title="raw" />;', expectedTitles: 1, expectedOrphans: 0 },
     { name: 'comment after tag', src: 'export const A = () => <div/*c*/title="raw" />;', expectedTitles: 1, expectedOrphans: 0 },
     { name: 'adjacent spread before title', src: 'export const A = (p: Record<string, unknown>) => <div{...p} title="raw" />;', expectedTitles: 1, expectedOrphans: 0 },
     { name: 'primitive generic arrow', src: 'export const A = () => <Select<(v: string) => void> title="raw" />;', expectedTitles: 1, expectedOrphans: 0 },
@@ -834,6 +841,7 @@ test('JSX title and overflow-tip pre-filter preserves exact AST detection on edg
     { name: 'underscore-prefixed component orphan tip', src: 'export const A = () => <_Button data-tip-overflow />;', expectedTitles: 0, expectedOrphans: 1 },
     { name: 'dollar-prefixed component orphan tip', src: 'export const A = () => <$Slot data-tip-overflow />;', expectedTitles: 0, expectedOrphans: 1 },
     { name: 'similar data-tip prefix does not satisfy data-tip', src: 'export const A = () => <span data-tip-overflow data-tip-extra="x" />;', expectedTitles: 0, expectedOrphans: 1 },
+    { name: 'unicode continuation does not satisfy data-tip', src: 'export const A = () => <span data-tip-overflow data-tipé="label" />;', expectedTitles: 0, expectedOrphans: 1 },
   ];
   for (const sample of badSamples) {
     const found = inspectJsxTitleAndTipViolations('sample.tsx', 'sample.tsx', sample.src);
