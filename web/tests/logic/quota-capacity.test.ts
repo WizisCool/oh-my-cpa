@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import type { TFunc } from '../../src/i18n/index.tsx';
 import type { QuotaWindowCapacity } from '../../src/types/quota.ts';
 import {
+  activeSubscriptionPeriodKey,
   compactQuotaCapacity,
   describeCapacityCard,
   formatCycleCardFigures,
@@ -131,6 +132,7 @@ test('subscription cycle helpers require verified active start and expiry bounda
   const now = Date.UTC(2026, 10, 15, 12, 0);
   const start = Date.UTC(2026, 10, 1, 12, 0);
   const end = Date.UTC(2026, 11, 1, 12, 0);
+  const nextEnd = Date.UTC(2027, 0, 1, 12, 0);
 
   assert.equal(hasActiveSubscriptionPeriod({ starts_at_ms: start, expires_at_ms: end, expires_source: 'live_subscription' }, now), true);
   assert.equal(hasActiveSubscriptionPeriod({ starts_at_ms: start, expires_at_ms: end }, now), true);
@@ -140,6 +142,20 @@ test('subscription cycle helpers require verified active start and expiry bounda
   assert.equal(hasActiveSubscriptionPeriod({ starts_at_ms: start, expires_at_ms: end, expires_source: 'live_subscription' }, end), false);
   assert.equal(hasActiveSubscriptionPeriod({ starts_at_ms: start, expires_at_ms: end, expires_source: 'live_subscription' }, start - 1), false);
   assert.equal(hasActiveSubscriptionPeriod(undefined, now), false);
+
+  const livePlan = { starts_at_ms: start, expires_at_ms: end, expires_source: 'live_subscription' as const };
+  const periodKey = activeSubscriptionPeriodKey(livePlan, now);
+  assert.ok(periodKey);
+  // Advancing the clock within the same verified period keeps the cache key stable.
+  assert.equal(activeSubscriptionPeriodKey(livePlan, now + 60_000), periodKey);
+  // Rolling expiry forward (Codex renewal), rolling both bounds, or changing cadence produces a new key.
+  assert.notEqual(activeSubscriptionPeriodKey({ ...livePlan, expires_at_ms: nextEnd }, end + 1_000), periodKey);
+  assert.notEqual(activeSubscriptionPeriodKey({ ...livePlan, starts_at_ms: end, expires_at_ms: nextEnd }, end + 1_000), periodKey);
+  assert.notEqual(activeSubscriptionPeriodKey({ ...livePlan, billing_period: 'monthly' }, now), periodKey);
+  assert.equal(activeSubscriptionPeriodKey({ ...livePlan, expires_source: 'credential_snapshot' }, now), null);
+  assert.equal(activeSubscriptionPeriodKey(livePlan, end), null);
+  assert.equal(activeSubscriptionPeriodKey(livePlan, start - 1), null);
+  assert.equal(activeSubscriptionPeriodKey(undefined, now), null);
 
   assert.equal(supportsSubscriptionCycleTab(undefined, true), true);
   assert.equal(supportsSubscriptionCycleTab({ scope: 'standard' }, true), true);

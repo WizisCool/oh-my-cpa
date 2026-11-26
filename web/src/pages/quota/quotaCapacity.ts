@@ -57,18 +57,30 @@ export function subscriptionProjectionNote(
 }
 
 /**
+ * Returns a stable cache identity for the credential's verified upstream
+ * subscription billing period covering `nowMS`, or `null` when unavailable.
+ */
+export function activeSubscriptionPeriodKey(
+  plan: Pick<QuotaPlan, 'starts_at_ms' | 'expires_at_ms' | 'expires_source' | 'billing_period'> | undefined,
+  nowMS: number,
+): string | null {
+  if (!plan || plan.expires_source === 'credential_snapshot') return null;
+  const start = plan.starts_at_ms;
+  const end = plan.expires_at_ms;
+  if (start == null || end == null || !Number.isFinite(start) || !Number.isFinite(end)) return null;
+  if (start <= 0 || start > nowMS || nowMS >= end) return null;
+  return `${start}:${end}:${plan.billing_period ?? ''}`;
+}
+
+/**
  * True only when the credential carries verified upstream start and expiry
  * instants covering `nowMS`.
  */
 export function hasActiveSubscriptionPeriod(
-  plan: Pick<QuotaPlan, 'starts_at_ms' | 'expires_at_ms' | 'expires_source'> | undefined,
+  plan: Pick<QuotaPlan, 'starts_at_ms' | 'expires_at_ms' | 'expires_source' | 'billing_period'> | undefined,
   nowMS: number,
 ): boolean {
-  if (!plan || plan.expires_source === 'credential_snapshot') return false;
-  const start = plan.starts_at_ms;
-  const end = plan.expires_at_ms;
-  if (start == null || end == null || !Number.isFinite(start) || !Number.isFinite(end)) return false;
-  return start > 0 && start <= nowMS && nowMS < end;
+  return activeSubscriptionPeriodKey(plan, nowMS) !== null;
 }
 
 /** Subscription billing-cycle tab requires verified billing boundaries and a plan-level window. */

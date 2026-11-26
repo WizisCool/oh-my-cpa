@@ -10,7 +10,7 @@ import { m } from '../../motion';
 import type { DropSide } from '../../types/displayOrder';
 import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import type { QuotaCapacityOwner } from '../quota/QuotaCapacityButton';
-import { hasActiveSubscriptionPeriod } from '../quota/quotaCapacity';
+import { activeSubscriptionPeriodKey } from '../quota/quotaCapacity';
 import {
   CredentialMenu,
   CredentialName,
@@ -209,7 +209,7 @@ function CredentialRow({ record, isSelected, isSelecting, hasHandle, nowMS, acti
       authIndex: file.auth_index,
       credentialName: maskedCredentialLabel(record),
       mark: <CredentialMark credential={{ provider: record.displayProvider, hint: file.name }} pluginLogos={pluginLogos} size={22} />,
-      hasSubscriptionCycle: hasActiveSubscriptionPeriod(record.quota?.plan, nowMS),
+      subscriptionPeriodKey: activeSubscriptionPeriodKey(record.quota?.plan, nowMS),
     }
     : undefined;
   const hasLines = facts.quotaLines.length > 0;

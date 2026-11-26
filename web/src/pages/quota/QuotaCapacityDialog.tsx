@@ -48,7 +48,8 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
     () => (window ? siblingCapacityWindows(window, windows) : []),
     [window, windows],
   );
-  const canShowSubscriptionTab = supportsSubscriptionCycleTab(window, Boolean(owner.hasSubscriptionCycle));
+  const subscriptionPeriodKey = owner.subscriptionPeriodKey || null;
+  const canShowSubscriptionTab = supportsSubscriptionCycleTab(window, Boolean(subscriptionPeriodKey));
   const defaultTab = canShowSubscriptionTab && (initialTab === 'subscription_cycle' || !window)
     ? SUBSCRIPTION_CYCLE_TAB
     : window?.id ?? SUBSCRIPTION_CYCLE_TAB;
@@ -75,9 +76,9 @@ export default function QuotaCapacityDialog({ open, onClose, owner, window, wind
   });
 
   const subscription = useQuery({
-    queryKey: ['quota-subscription-cycle', owner.authIndex],
+    queryKey: ['quota-subscription-cycle', owner.authIndex, subscriptionPeriodKey],
     queryFn: () => api.getQuotaSubscriptionCycle(owner.authIndex),
-    enabled: open && isSubscriptionTab,
+    enabled: open && isSubscriptionTab && Boolean(subscriptionPeriodKey),
     staleTime: 30_000,
   });
 
@@ -332,7 +333,7 @@ function Card({ tone, icon, title, caption, figures, isEmpty, isPending = false,
     <section className={styles.card} data-tone={tone} data-empty={isEmpty || undefined} aria-label={title} aria-busy={isPending || undefined}>
       <header className={styles.head}>
         <PanelTitle icon={icon}>{title}</PanelTitle>
-        <span className={styles.caption} data-tip={caption} data-tip-overflow="">
+        <span className={styles.caption} data-tip={isPending ? undefined : caption} data-tip-overflow="">
           {isPending ? '…' : caption}
         </span>
       </header>
