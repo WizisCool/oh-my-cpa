@@ -20,6 +20,42 @@ const PNPM_BIN = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const GO_BIN = process.platform === 'win32' ? 'go.exe' : 'go';
 const GOFMT_BIN = process.platform === 'win32' ? 'gofmt.exe' : 'gofmt';
 
+// Warn when a passing logic test crosses 30% of Vitest's 5s default timeout so
+// expensive cases surface before they flake under parallel load.
+export const SLOW_LOGIC_TEST_WARN_MS = 1500;
+const ANSI_ESCAPE = /\x1b\[[0-9;]*m/g;
+
+export function extractSlowVitestCases(output, thresholdMs = SLOW_LOGIC_TEST_WARN_MS) {
+  if (!output) return [];
+  const plain = output.replace(ANSI_ESCAPE, '');
+  const slow = [];
+  let currentFile = '';
+  for (const rawLine of plain.split(/\r?\n/)) {
+    const fileMatch = /^\s*[✓×❯]\s+(?:(?:\|[^|]+\||[^\s|]+)\s+)?(\S+\.test\.[cm]?[jt]sx?)\s+\(/.exec(rawLine);
+    if (fileMatch) {
+      currentFile = fileMatch[1];
+      continue;
+    }
+    const verboseMatch = /^\s*[✓×]\s+(?:(?:\|[^|]+\||[^\s|]+)\s+)?(\S+\.test\.[cm]?[jt]sx?)\s+>\s+(.+?)\s+(\d+(?:\.\d+)?)(ms|s)\s*$/.exec(rawLine);
+    if (verboseMatch) {
+      const durationMs = verboseMatch[4] === 's' ? Math.round(Number(verboseMatch[3]) * 1000) : Math.round(Number(verboseMatch[3]));
+      if (durationMs >= thresholdMs) {
+        slow.push({ file: verboseMatch[1], title: verboseMatch[2], durationMs });
+      }
+      continue;
+    }
+    const caseMatch = /^\s{2,}[✓×]\s+(.+?)\s+(\d+(?:\.\d+)?)(ms|s)\s*$/.exec(rawLine);
+    if (caseMatch) {
+      const durationMs = caseMatch[3] === 's' ? Math.round(Number(caseMatch[2]) * 1000) : Math.round(Number(caseMatch[2]));
+      if (durationMs >= thresholdMs) {
+        slow.push({ file: currentFile, title: caseMatch[1], durationMs });
+      }
+    }
+  }
+  slow.sort((left, right) => right.durationMs - left.durationMs);
+  return slow;
+}
+
 export function listGoFiles(root = ROOT, execute = execFileSync) {
   const output = execute(
     'git',
@@ -202,6 +238,9 @@ export async function runParallelTasks(tasks, { log = console.log, error = conso
       const result = await task(controller.signal);
       if (result.ok) {
         log(`[gate] PASS ${result.label} (${(result.durationMs / 1000).toFixed(2)}s)`);
+        for (const diagnostic of result.diagnostics ?? []) {
+          log(diagnostic);
+        }
       } else if (!result.aborted && !failedResult) {
         failedResult = result;
         controller.abort();
@@ -276,11 +315,24 @@ export async function runGateMode(mode, { root = ROOT } = {}) {
     }
 
     case 'fast': {
+      const sharedCpuEnv = { ...process.env, OMC_SHARED_CPU: process.env.OMC_SHARED_CPU ?? '1' };
       return runParallelTasks([
         (signal) => runBufferedCommand('gofmt', process.execPath, [path.join('scripts', 'run-gates.mjs'), 'gofmt'], { cwd: root, signal }),
         (signal) => runBufferedCommand('web-type-check', PNPM_BIN, ['--dir', 'web', 'type-check'], { cwd: root, signal }),
         (signal) => runBufferedCommand('tooling-type-check', PNPM_BIN, ['type-check:tooling'], { cwd: root, signal }),
-        (signal) => runBufferedCommand('logic-tests', PNPM_BIN, ['test:logic'], { cwd: root, signal }),
+        (signal) =>
+          runBufferedCommand('logic-tests', PNPM_BIN, ['test:logic'], { cwd: root, env: sharedCpuEnv, signal }).then((result) => {
+            if (!result.ok) return result;
+            const slowCases = extractSlowVitestCases(result.output);
+            if (slowCases.length === 0) return result;
+            return {
+              ...result,
+              diagnostics: slowCases.map(
+                ({ file, title, durationMs }) =>
+                  `[gate] SLOW logic-tests: ${file ? `${file} > ` : ''}${title} (${durationMs}ms)`,
+              ),
+            };
+          }),
         (signal) => runBufferedCommand('go-test-short', GO_BIN, ['test', '-short', './...'], { cwd: root, signal }),
       ]);
     }

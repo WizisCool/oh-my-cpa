@@ -32,8 +32,8 @@ import {
   resolvePalette,
   resolvedBuiltInPalette,
   unregisterTheme,
-  validateThemeManifest,
-} from '../../src/theme/index.ts';
+} from '../../src/theme/palette.ts';
+import { validateThemeManifest } from '../../src/theme/themeContract.ts';
 import { migrateLegacyThemeValue, parseThemePreferences, THEME_STORAGE_KEY } from '../../src/theme/themePreference.ts';
 import { mixSrgb, oklchLightness } from '../../src/theme/colorMath.ts';
 import { RADIUS } from '../../src/theme/radius.ts';
@@ -153,16 +153,75 @@ function stripCodeComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 }
 
-function sourceFiles(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+interface SourceEntry {
+  file: string;
+  relative: string;
+  raw: string;
+  isCss: boolean;
+  isTs: boolean;
+  isTsx: boolean;
+  isUiFile: boolean;
+  stripped?: string;
+}
+
+const uiSegment = `${path.sep}components${path.sep}ui${path.sep}`;
+let cachedSourceEntries: readonly SourceEntry[] | undefined;
+let cachedSourcesByRelative: Map<string, SourceEntry> | undefined;
+
+function walkSourceFiles(directory: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const full = path.join(directory, entry.name);
-    if (entry.isDirectory()) return sourceFiles(full);
-    return /\.(css|tsx?)$/.test(entry.name) ? [full] : [];
-  });
+    if (entry.isDirectory()) walkSourceFiles(full, out);
+    else if (/\.(css|tsx?)$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+/** Walks and reads `web/src` once per test-file run so every source check shares one snapshot. */
+function getSourceEntries(): readonly SourceEntry[] {
+  if (cachedSourceEntries) return cachedSourceEntries;
+  const entries: SourceEntry[] = [];
+  const byRelative = new Map<string, SourceEntry>();
+  for (const file of walkSourceFiles(sourceRoot)) {
+    const relative = path.relative(sourceRoot, file);
+    const entry: SourceEntry = {
+      file,
+      relative,
+      raw: readFileSync(file, 'utf8'),
+      isCss: file.endsWith('.css'),
+      isTs: /\.(tsx?)$/.test(file),
+      isTsx: file.endsWith('.tsx'),
+      isUiFile: file.includes(uiSegment),
+    };
+    entries.push(entry);
+    byRelative.set(relative.split(path.sep).join('/'), entry);
+  }
+  cachedSourceEntries = entries;
+  cachedSourcesByRelative = byRelative;
+  return entries;
+}
+
+function strippedSource(entry: SourceEntry): string {
+  entry.stripped ??= stripCodeComments(entry.raw);
+  return entry.stripped;
+}
+
+function readSource(relativePosixPath: string): string {
+  getSourceEntries();
+  const entry = cachedSourcesByRelative?.get(relativePosixPath);
+  if (entry) return entry.raw;
+  return readFileSync(path.join(sourceRoot, relativePosixPath), 'utf8');
+}
+
+function readStrippedSource(relativePosixPath: string): string {
+  getSourceEntries();
+  const entry = cachedSourcesByRelative?.get(relativePosixPath);
+  if (entry) return strippedSource(entry);
+  return stripCodeComments(readFileSync(path.join(sourceRoot, relativePosixPath), 'utf8'));
 }
 
 test('the stylesheet declares the corner scale the theme module exports', () => {
-  const css = readFileSync(path.join(sourceRoot, 'index.css'), 'utf8');
+  const css = readSource('index.css');
   const declared = Object.fromEntries(
     [...css.matchAll(/--radius-([a-z0-9]+):\s*(\d+)px;/g)].map(([, step, value]) => [step, Number(value)]),
   );
@@ -170,7 +229,7 @@ test('the stylesheet declares the corner scale the theme module exports', () => 
 });
 
 test('the first frame draws edges with the shares and shade the default palettes solve to', () => {
-  const css = readFileSync(path.join(sourceRoot, 'index.css'), 'utf8');
+  const css = readSource('index.css');
   const block = (selector: string) => {
     const start = css.indexOf(`${selector} {`);
     return css.slice(start, css.indexOf('\n}', start));
@@ -285,7 +344,7 @@ test('every built-in palette clears all text, hint, quiet, primary and accent co
 });
 
 test('status label chips clear WCAG AA contrast on bg and surface in every built-in palette and match CSS shares', () => {
-  const css = readFileSync(path.join(sourceRoot, 'index.css'), 'utf8');
+  const css = readSource('index.css');
   const block = (selector: string) => {
     const start = css.indexOf(`${selector} {`);
     return css.slice(start, css.indexOf('\n}', start));
@@ -390,24 +449,25 @@ test('open theme SDK validates manifests, registers external themes, and falls b
 
 test('every corner in the console sits on the scale', () => {
   const offScale: string[] = [];
-  for (const file of sourceFiles(sourceRoot)) {
-    const text = readFileSync(file, 'utf8');
-    for (const [, raw] of text.matchAll(/border(?:-[a-z]+)*-radius\s*:\s*([^;}"`]+)/g)) {
-      const value = (raw ?? '').replace('!important', '').trim();
-      const corners = value.match(/(?:[a-z]+\((?:[^()]|\([^()]*\))*\)|\S)+/g) ?? [];
-      if (corners.some((corner) => !ON_SCALE.test(corner))) {
-        offScale.push(`${path.relative(sourceRoot, file)}: ${value}`);
+  for (const entry of getSourceEntries()) {
+    if (entry.raw.includes('radius')) {
+      for (const [, raw] of entry.raw.matchAll(/border(?:-[a-z]+)*-radius\s*:\s*([^;}"`]+)/g)) {
+        const value = (raw ?? '').replace('!important', '').trim();
+        const corners = value.match(/(?:[a-z]+\((?:[^()]|\([^()]*\))*\)|\S)+/g) ?? [];
+        if (corners.some((corner) => !ON_SCALE.test(corner))) {
+          offScale.push(`${entry.relative}: ${value}`);
+        }
       }
     }
-    if (/\.(tsx?)$/.test(file)) {
-      const code = stripCodeComments(text);
-      const isUiFile = file.includes(`${path.sep}components${path.sep}ui${path.sep}`);
+    if (entry.isTs) {
+      const code = strippedSource(entry);
+      if (!code.includes('rounded')) continue;
       for (const [, literal] of code.matchAll(/(['"`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
         for (const rawToken of (literal ?? '').split(/\s+/)) {
           const token = rawToken.split(':').at(-1) ?? '';
-          if (token.startsWith('rounded-') || (isUiFile && token === 'rounded')) {
+          if (token.startsWith('rounded-') || (entry.isUiFile && token === 'rounded')) {
             if (!TAILWIND_ROUNDED_ON_SCALE.test(token)) {
-              offScale.push(`${path.relative(sourceRoot, file)}: ${rawToken}`);
+              offScale.push(`${entry.relative}: ${rawToken}`);
             }
           }
         }
@@ -425,23 +485,25 @@ const STROKED_GLYPHS = new Set(['.theme-swatch', '.country-flag', '.markdown-bod
 
 test('nothing encloses content with a neutral border', () => {
   const enclosed: string[] = [];
-  for (const file of sourceFiles(sourceRoot).filter((name) => name.endsWith('.css'))) {
-    const css = readFileSync(file, 'utf8');
-    for (const [, prelude, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      if (!/(?:^|[\s;])border:\s*1px solid var\(--(?:border|border-soft|thread-hairline)\)/.test(body ?? '')) continue;
-      const selector = (prelude ?? '').split('*/').at(-1)!.trim().replace(/\s+/g, ' ');
-      if (/border-radius:\s*50%/.test(body ?? '') || STROKED_GLYPHS.has(selector)) continue;
-      enclosed.push(`${path.relative(sourceRoot, file)}: ${selector}`);
+  for (const entry of getSourceEntries()) {
+    if (entry.isCss && entry.raw.includes('border:')) {
+      for (const [, prelude, body] of entry.raw.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        if (!/(?:^|[\s;])border:\s*1px solid var\(--(?:border|border-soft|thread-hairline)\)/.test(body ?? '')) continue;
+        const selector = (prelude ?? '').split('*/').at(-1)!.trim().replace(/\s+/g, ' ');
+        if (/border-radius:\s*50%/.test(body ?? '') || STROKED_GLYPHS.has(selector)) continue;
+        enclosed.push(`${entry.relative}: ${selector}`);
+      }
     }
-  }
-  for (const file of sourceFiles(sourceRoot).filter((name) => name.includes(`${path.sep}components${path.sep}ui${path.sep}`))) {
-    const code = stripCodeComments(readFileSync(file, 'utf8'));
-    for (const [, , literal] of code.matchAll(/(['"`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
-      const tokens = (literal ?? '').trim().split(/\s+/).map((item) => item.split(':').at(-1) ?? '');
-      if (!tokens.includes('border')) continue;
-      if (tokens.includes('border-dashed') || tokens.includes('rounded-full') || tokens.includes('border-transparent')) continue;
-      if (tokens.some((token) => /^border-(?:border|border-soft|hairline)$/.test(token)) || !tokens.some((token) => /^border-(?!0$)/.test(token))) {
-        enclosed.push(`${path.relative(sourceRoot, file)}: ${literal}`);
+    if (entry.isUiFile) {
+      const code = strippedSource(entry);
+      if (!code.includes('border')) continue;
+      for (const [, , literal] of code.matchAll(/(['"`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
+        const tokens = (literal ?? '').trim().split(/\s+/).map((item) => item.split(':').at(-1) ?? '');
+        if (!tokens.includes('border')) continue;
+        if (tokens.includes('border-dashed') || tokens.includes('rounded-full') || tokens.includes('border-transparent')) continue;
+        if (tokens.some((token) => /^border-(?:border|border-soft|hairline)$/.test(token)) || !tokens.some((token) => /^border-(?!0$)/.test(token))) {
+          enclosed.push(`${entry.relative}: ${literal}`);
+        }
       }
     }
   }
@@ -461,19 +523,20 @@ const LIBRARY_PROPERTIES = new Set([
 
 test('every custom property the console reads is one it declares', () => {
   const declared = new Set(LIBRARY_PROPERTIES);
-  const files = sourceFiles(sourceRoot);
-  for (const file of files) {
-    const text = readFileSync(file, 'utf8');
-    for (const [, name] of text.matchAll(/(--[a-zA-Z][\w-]*)\s*:/g)) declared.add(name!);
-    for (const [, name] of text.matchAll(/['"`](--[a-zA-Z][\w-]*)['"`]/g)) declared.add(name!);
+  const entries = getSourceEntries();
+  for (const entry of entries) {
+    if (!entry.raw.includes('--')) continue;
+    for (const [, name] of entry.raw.matchAll(/(--[a-zA-Z][\w-]*)\s*:/g)) declared.add(name!);
+    for (const [, name] of entry.raw.matchAll(/['"`](--[a-zA-Z][\w-]*)['"`]/g)) declared.add(name!);
   }
   const unresolved: string[] = [];
-  for (const file of files) {
-    const text = stripCodeComments(readFileSync(file, 'utf8'));
+  for (const entry of entries) {
+    const text = strippedSource(entry);
+    if (!text.includes('var(--')) continue;
     for (const [, name] of text.matchAll(/var\((--[a-zA-Z][\w-]*)/g)) {
       // A name built at run time (`var(--effort-${step})`) is checked by the palette tests instead.
       if (name!.endsWith('-') || declared.has(name!)) continue;
-      unresolved.push(`${path.relative(sourceRoot, file)}: ${name}`);
+      unresolved.push(`${entry.relative}: ${name}`);
     }
   }
   assert.deepEqual([...new Set(unresolved)], []);
@@ -485,9 +548,9 @@ test('every custom property the console reads is one it declares', () => {
  * operating system directly keeps animating after the operator turned motion off in the console.
  */
 test('stylesheets follow the console reduced-motion policy, not the system query', () => {
-  const direct = sourceFiles(sourceRoot)
-    .filter((file) => file.endsWith('.css') && /@media[^{]*prefers-reduced-motion/.test(readFileSync(file, 'utf8')))
-    .map((file) => path.relative(sourceRoot, file));
+  const direct = getSourceEntries()
+    .filter((entry) => entry.isCss && /@media[^{]*prefers-reduced-motion/.test(entry.raw))
+    .map((entry) => entry.relative);
   assert.deepEqual(direct, []);
 });
 
@@ -499,37 +562,294 @@ const DOM_FORWARDING_PRIMITIVES = new Set([
   'ToolButton', 'HeaderAction', 'RefreshButton', 'CopyButton', 'SecretInput', 'SearchInput',
 ]);
 
+function isJsxAttrIdentChar(code: number): boolean {
+  return (
+    (code >= 48 && code <= 57) || // 0-9
+    (code >= 65 && code <= 90) || // A-Z
+    (code >= 97 && code <= 122) || // a-z
+    code === 95 || // _
+    code === 36 || // $
+    code === 45 // -
+  );
+}
+
+function isJsxDataTipBoundaryChar(code: number): boolean {
+  return isJsxAttrIdentChar(code) || code === 58 || code === 46; // : or .
+}
+
+function hasAnotherSlashOnLine(src: string, index: number): boolean {
+  for (let i = index + 1; i < src.length; i += 1) {
+    const ch = src.charCodeAt(i);
+    if (ch === 10 || ch === 13 || ch === 0x2028 || ch === 0x2029) return false;
+    if (ch === 47) return true;
+  }
+  return false;
+}
+
+/**
+ * Conservative JSX opening-tag pre-filter. Returns `false` only when a file is proven to have
+ * neither a `title` attribute on a checked tag nor an orphan `data-tip-overflow`; any candidate
+ * match or lexically ambiguous construct (regex literal inside an expression, comment after `<`,
+ * unclosed delimiter) returns `true` so TypeScript's TSX parser decides with full AST fidelity.
+ */
+function needsJsxAstCheck(src: string): boolean {
+  const hasTipOverflow = src.includes('data-tip-overflow');
+  const hasTitle = /\btitle\b/.test(src);
+  if (!hasTipOverflow && !hasTitle) return false;
+  if (src.includes('</*') || src.includes('<//')) return true;
+
+  const tagRe = /<\s*([\p{ID_Start}_$][\p{ID_Continue}$.:-]*)(?=[\s</{])/gu;
+  let match: RegExpExecArray | null;
+  while ((match = tagRe.exec(src)) !== null) {
+    const tag = match[1]!;
+    const afterTag = match.index + match[0].length;
+    if (src.charCodeAt(afterTag) === 47 && src.charCodeAt(afterTag + 1) === 62) continue;
+
+    const isTargetForTitle =
+      hasTitle && ((/^[a-z]/.test(tag) && tag !== 'iframe') || DOM_FORWARDING_PRIMITIVES.has(tag));
+    if (!isTargetForTitle && !hasTipOverflow) continue;
+
+    let i = afterTag;
+    const len = src.length;
+
+    // Optional TypeScript generic type arguments immediately after the tag name (`<Select<T> ...>`).
+    if (src.charCodeAt(i) === 60) {
+      let angleDepth = 1;
+      i += 1;
+      while (i < len && angleDepth > 0) {
+        const ch = src.charCodeAt(i);
+        if (ch === 34 || ch === 39) {
+          const quote = ch;
+          i += 1;
+          let closed = false;
+          while (i < len) {
+            const c = src.charCodeAt(i);
+            if (c === 92) { i += 2; continue; }
+            if (c === quote) { i += 1; closed = true; break; }
+            i += 1;
+          }
+          if (!closed) return true;
+          continue;
+        }
+        if (ch === 47 && src.charCodeAt(i + 1) === 47) {
+          const nl = src.indexOf('\n', i + 2);
+          i = nl === -1 ? len : nl + 1;
+          continue;
+        }
+        if (ch === 47 && src.charCodeAt(i + 1) === 42) {
+          const end = src.indexOf('*/', i + 2);
+          if (end === -1) return true;
+          i = end + 2;
+          continue;
+        }
+        if (ch === 96) return true;
+        if (ch === 60) { angleDepth += 1; i += 1; continue; }
+        if (ch === 62) {
+          if (src.charCodeAt(i - 1) === 61) { i += 1; continue; } // arrow type `=>`
+          angleDepth -= 1;
+          i += 1;
+          continue;
+        }
+        i += 1;
+      }
+      if (angleDepth !== 0) return true;
+    }
+
+    const braceStack: Array<'expr' | 'tpl'> = [];
+    let sawTitleAttr = false;
+    let sawTipOverflow = false;
+    let sawTip = false;
+
+    while (i < len) {
+      const ch = src.charCodeAt(i);
+      if (ch === 47 && src.charCodeAt(i + 1) === 47) {
+        const nl = src.indexOf('\n', i + 2);
+        i = nl === -1 ? len : nl + 1;
+        continue;
+      }
+      if (ch === 47 && src.charCodeAt(i + 1) === 42) {
+        const end = src.indexOf('*/', i + 2);
+        if (end === -1) return true;
+        i = end + 2;
+        continue;
+      }
+      // Inside `{...}`, any regex literal must close on the same line (ECMAScript grammar).
+      // Bail to the TS AST if another `/` exists on this line so regexes containing quotes or
+      // braces can never desynchronize scanning; plain single-slash divisions stay fast.
+      if (
+        ch === 47 &&
+        braceStack.length > 0 &&
+        src.charCodeAt(i + 1) !== 62 &&
+        src.charCodeAt(i - 1) !== 60 &&
+        hasAnotherSlashOnLine(src, i)
+      ) {
+        return true;
+      }
+      if (ch === 34 || ch === 39) {
+        const quote = ch;
+        i += 1;
+        let closed = false;
+        while (i < len) {
+          const c = src.charCodeAt(i);
+          if (c === 92) { i += 2; continue; }
+          if (c === quote) { i += 1; closed = true; break; }
+          i += 1;
+        }
+        if (!closed) return true;
+        continue;
+      }
+      if (ch === 96) {
+        i += 1;
+        let ended = false;
+        while (i < len) {
+          const c = src.charCodeAt(i);
+          if (c === 92) { i += 2; continue; }
+          if (c === 36 && src.charCodeAt(i + 1) === 123) {
+            braceStack.push('tpl');
+            i += 2;
+            ended = true;
+            break;
+          }
+          if (c === 96) { i += 1; ended = true; break; }
+          i += 1;
+        }
+        if (!ended) return true;
+        continue;
+      }
+      if (ch === 123) {
+        braceStack.push('expr');
+        i += 1;
+        continue;
+      }
+      if (ch === 125) {
+        if (braceStack.length === 0) break;
+        const top = braceStack.pop();
+        i += 1;
+        if (top === 'tpl') {
+          let ended = false;
+          while (i < len) {
+            const c = src.charCodeAt(i);
+            if (c === 92) { i += 2; continue; }
+            if (c === 36 && src.charCodeAt(i + 1) === 123) {
+              braceStack.push('tpl');
+              i += 2;
+              ended = true;
+              break;
+            }
+            if (c === 96) { i += 1; ended = true; break; }
+            i += 1;
+          }
+          if (!ended) return true;
+        }
+        continue;
+      }
+      if (braceStack.length === 0) {
+        // `;`, `,`, `)`, `]` cannot appear at top-level JSX attribute position;
+        // seeing one means `<name` was a JS comparison (`a < b`) rather than a JSX tag.
+        if (ch === 59 || ch === 44 || ch === 41 || ch === 93) break;
+        if (ch === 60) return true;
+        if (ch === 62) break;
+        if (isTargetForTitle && ch === 116 && src.startsWith('title', i)) {
+          const prev = i > 0 ? src.charCodeAt(i - 1) : 0;
+          const next = i + 5 < len ? src.charCodeAt(i + 5) : 0;
+          if (!isJsxAttrIdentChar(prev) && !isJsxAttrIdentChar(next)) sawTitleAttr = true;
+        } else if (hasTipOverflow && ch === 100 && src.startsWith('data-tip', i)) {
+          const prev = i > 0 ? src.charCodeAt(i - 1) : 0;
+          if (!isJsxDataTipBoundaryChar(prev)) {
+            if (src.startsWith('data-tip-overflow', i) && !isJsxDataTipBoundaryChar(src.charCodeAt(i + 17) || 0)) {
+              sawTipOverflow = true;
+            } else if (!isJsxDataTipBoundaryChar(src.charCodeAt(i + 8) || 0)) {
+              sawTip = true;
+            }
+          }
+        }
+      }
+      i += 1;
+    }
+    if (sawTitleAttr || (sawTipOverflow && !sawTip)) return true;
+  }
+  return false;
+}
+
+function inspectJsxTitleAndTipViolations(file: string, relative: string, src: string): {
+  rawTitles: string[];
+  orphanOverflowTips: string[];
+} {
+  if (!needsJsxAstCheck(src)) return { rawTitles: [], orphanOverflowTips: [] };
+
+  const rawTitles: string[] = [];
+  const orphanOverflowTips: string[] = [];
+  const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const tag = ts.isIdentifier(node.tagName) ? node.tagName.text : node.tagName.getText(sf);
+      const isIntrinsic = /^[a-z]/.test(tag) && tag !== 'iframe';
+      const attrNames = new Set<string>();
+      for (const prop of node.attributes.properties) {
+        if (!ts.isJsxAttribute(prop)) continue;
+        const attrName = ts.isIdentifier(prop.name) ? prop.name.text : prop.name.getText(sf);
+        attrNames.add(attrName);
+        if (attrName === 'title' && (isIntrinsic || DOM_FORWARDING_PRIMITIVES.has(tag))) {
+          const { line } = sf.getLineAndCharacterOfPosition(prop.getStart(sf));
+          rawTitles.push(`${relative}:${line + 1} <${tag} title=...>`);
+        }
+      }
+      if (attrNames.has('data-tip-overflow') && !attrNames.has('data-tip')) {
+        const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+        orphanOverflowTips.push(`${relative}:${line + 1} <${tag} data-tip-overflow>`);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return { rawTitles, orphanOverflowTips };
+}
+
 test('no JSX intrinsic or DOM-forwarding primitive uses a raw browser title attribute or orphan data-tip-overflow', () => {
   const rawTitles: string[] = [];
   const orphanOverflowTips: string[] = [];
-  for (const file of sourceFiles(sourceRoot).filter((name) => name.endsWith('.tsx'))) {
-    const src = readFileSync(file, 'utf8');
-    const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    const visit = (node: ts.Node) => {
-      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
-        const tag = node.tagName.getText(sf);
-        const isIntrinsic = /^[a-z]/.test(tag) && tag !== 'iframe';
-        const attrNames = new Set<string>();
-        for (const prop of node.attributes.properties) {
-          if (!ts.isJsxAttribute(prop)) continue;
-          const attrName = prop.name.getText(sf);
-          attrNames.add(attrName);
-          if (attrName === 'title' && (isIntrinsic || DOM_FORWARDING_PRIMITIVES.has(tag))) {
-            const { line } = sf.getLineAndCharacterOfPosition(prop.getStart(sf));
-            rawTitles.push(`${path.relative(sourceRoot, file)}:${line + 1} <${tag} title=...>`);
-          }
-        }
-        if (attrNames.has('data-tip-overflow') && !attrNames.has('data-tip')) {
-          const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
-          orphanOverflowTips.push(`${path.relative(sourceRoot, file)}:${line + 1} <${tag} data-tip-overflow>`);
-        }
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(sf);
+  for (const entry of getSourceEntries()) {
+    if (!entry.isTsx) continue;
+    const found = inspectJsxTitleAndTipViolations(entry.file, entry.relative, entry.raw);
+    rawTitles.push(...found.rawTitles);
+    orphanOverflowTips.push(...found.orphanOverflowTips);
   }
   assert.deepEqual(rawTitles, []);
   assert.deepEqual(orphanOverflowTips, []);
+});
+
+test('JSX title and overflow-tip pre-filter preserves exact AST detection on edge cases', () => {
+  const badSamples: Array<{ name: string; src: string; expectedTitles: number; expectedOrphans: number }> = [
+    { name: 'intrinsic string title', src: 'export const A = () => <div title="raw" />;', expectedTitles: 1, expectedOrphans: 0 },
+    { name: 'boolean title attribute', src: 'export const A = () => <span title />;', expectedTitles: 1, expectedOrphans: 0 },
+    { name: 'whitespace after lt', src: 'export const A = () => < div title="raw" />;', expectedTitles: 1, expectedOrphans: 0 },
+    { name: 'comment after tag', src: 'export const A = () => <div/*c*/title="raw" />;', expectedTitles: 1, expectedOrphans: 0 },
+    { name: 'adjacent spread before title', src: 'export const A = (p: Record<string, unknown>) => <div{...p} title="raw" />;', expectedTitles: 1, expectedOrphans: 0 },
+    { name: 'primitive generic arrow', src: 'export const A = () => <Select<(v: string) => void> title="raw" />;', expectedTitles: 1, expectedOrphans: 0 },
+    { name: 'template expr before title', src: 'export const A = ({ b }: { b: number }) => <div className={`a ${b > 1 ? "c" : "d"}`} title="raw" />;', expectedTitles: 1, expectedOrphans: 0 },
+    { name: 'regex with quote before title', src: 'export const A = () => <Button onClick={() => /"/.test("x")} title="raw" />;', expectedTitles: 1, expectedOrphans: 0 },
+    { name: 'nested intrinsic inside prop', src: 'export const A = () => <AppModal title="ok" header={<div title="raw" />} />;', expectedTitles: 1, expectedOrphans: 0 },
+    { name: 'orphan data-tip-overflow', src: 'export const A = () => <span data-tip-overflow />;', expectedTitles: 0, expectedOrphans: 1 },
+    { name: 'adjacent spread before orphan tip', src: 'export const A = (p: Record<string, unknown>) => <span{...p} data-tip-overflow />;', expectedTitles: 0, expectedOrphans: 1 },
+    { name: 'underscore-prefixed component orphan tip', src: 'export const A = () => <_Button data-tip-overflow />;', expectedTitles: 0, expectedOrphans: 1 },
+    { name: 'dollar-prefixed component orphan tip', src: 'export const A = () => <$Slot data-tip-overflow />;', expectedTitles: 0, expectedOrphans: 1 },
+    { name: 'similar data-tip prefix does not satisfy data-tip', src: 'export const A = () => <span data-tip-overflow data-tip-extra="x" />;', expectedTitles: 0, expectedOrphans: 1 },
+  ];
+  for (const sample of badSamples) {
+    const found = inspectJsxTitleAndTipViolations('sample.tsx', 'sample.tsx', sample.src);
+    assert.equal(found.rawTitles.length, sample.expectedTitles, `${sample.name} titles`);
+    assert.equal(found.orphanOverflowTips.length, sample.expectedOrphans, `${sample.name} orphans`);
+  }
+
+  const okSamples = [
+    'export const A = () => <iframe title="allowed" />;',
+    'export const A = () => <AppModal title="allowed" />;',
+    'export const A = () => <span data-tip="label" data-tip-overflow />;',
+  ];
+  for (const src of okSamples) {
+    const found = inspectJsxTitleAndTipViolations('ok.tsx', 'ok.tsx', src);
+    assert.deepEqual(found, { rawTitles: [], orphanOverflowTips: [] }, src);
+  }
 });
 
 test('no retired Ant Design, rc-component, dayjs or ECharts packages or selectors remain', () => {
@@ -548,22 +868,22 @@ test('no retired Ant Design, rc-component, dayjs or ECharts packages or selector
   assert.deepEqual(foundPackages, []);
 
   const legacySelectors: string[] = [];
-  for (const file of sourceFiles(sourceRoot)) {
-    const text = stripCodeComments(readFileSync(file, 'utf8'));
+  for (const entry of getSourceEntries()) {
+    const text = strippedSource(entry);
     if (/(?:\.ant-[a-z]|\banticon\b|--rc-virtual-list|\.rc-virtual-list)/.test(text)) {
-      legacySelectors.push(path.relative(sourceRoot, file));
+      legacySelectors.push(entry.relative);
     }
   }
   assert.deepEqual(legacySelectors, []);
 });
 
 test('foldable panels, Collapse variants, and payload builder do not clip edge shadows or focus rings', () => {
-  const indexCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'index.css'), 'utf8'));
-  const configCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/config/config.css'), 'utf8'));
-  const agentCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'pages/agent/AgentPage.module.css'), 'utf8'));
-  const accordionTsx = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/ui/accordion.tsx'), 'utf8'));
-  const payloadEditorTsx = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/config/PayloadRulesEditor.tsx'), 'utf8'));
-  const configRenderersTsx = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/config/configSectionRenderers.tsx'), 'utf8'));
+  const indexCss = readStrippedSource('index.css');
+  const configCss = readStrippedSource('components/config/config.css');
+  const agentCss = readStrippedSource('pages/agent/AgentPage.module.css');
+  const accordionTsx = readStrippedSource('components/ui/accordion.tsx');
+  const payloadEditorTsx = readStrippedSource('components/config/PayloadRulesEditor.tsx');
+  const configRenderersTsx = readStrippedSource('components/config/configSectionRenderers.tsx');
 
   assert.match(indexCss, /\.omc-fold-panel\[data-open\]:not\(\[data-starting-style\]\):not\(\[data-ending-style\]\)\s*\{[^}]*overflow:\s*visible\s*;/);
   assert.match(agentCss, /\.fold\[data-open\]\s*>\s*\.fold-inner\s*\{[^}]*overflow:\s*visible\s*;/);
@@ -598,17 +918,17 @@ test('foldable panels, Collapse variants, and payload builder do not clip edge s
 
 test('no retired input-wrapper slot selectors remain and alignment invariants hold', () => {
   const retiredInputWrapper: string[] = [];
-  for (const file of sourceFiles(sourceRoot)) {
-    const text = stripCodeComments(readFileSync(file, 'utf8'));
+  for (const entry of getSourceEntries()) {
+    const text = strippedSource(entry);
     if (/\[\s*data-slot\s*[~|^$*]?=\s*(?:['"`]input-wrapper['"`]|input-wrapper)(?:\s+[is])?\s*\]/i.test(text)) {
-      retiredInputWrapper.push(path.relative(sourceRoot, file));
+      retiredInputWrapper.push(entry.relative);
     }
   }
   assert.deepEqual(retiredInputWrapper, []);
 
-  const indexCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'index.css'), 'utf8'));
-  const configCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/config/config.css'), 'utf8'));
-  const dashboardCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/dashboard/dashboard.css'), 'utf8'));
+  const indexCss = readStrippedSource('index.css');
+  const configCss = readStrippedSource('components/config/config.css');
+  const dashboardCss = readStrippedSource('components/dashboard/dashboard.css');
 
   assert.match(
     indexCss,
@@ -629,10 +949,10 @@ test('no retired input-wrapper slot selectors remain and alignment invariants ho
 });
 
 test('chip primitives keep unified breathing room, centered icons, and unclipped status labels', () => {
-  const indexCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'index.css'), 'utf8'));
-  const glyphCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/common/GlyphBadge.module.css'), 'utf8'));
-  const prefixCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/providers/ProviderTable.module.css'), 'utf8'));
-  const requestListCss = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/usage/RequestList.css'), 'utf8'));
+  const indexCss = readStrippedSource('index.css');
+  const glyphCss = readStrippedSource('components/common/GlyphBadge.module.css');
+  const prefixCss = readStrippedSource('components/providers/ProviderTable.module.css');
+  const requestListCss = readStrippedSource('components/usage/RequestList.css');
 
   // Small chips share a 20px box with 7px inline padding so 12px UI/CJK text and icons have room.
   assert.match(indexCss, /\.tag\.is-small\s*\{[^}]*height:\s*20px;[^}]*padding:\s*0 7px;/);
@@ -651,12 +971,12 @@ test('chip primitives keep unified breathing room, centered icons, and unclipped
 
   // StatusLabel's ellipsizing text span and Combobox's chip LineSlot keep descender headroom inside overflow: hidden.
   assert.match(indexCss, /\.status-label-text\s*\{[^}]*overflow:\s*hidden;[^}]*line-height:\s*1\.25;/);
-  const comboboxTsx = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/ui/combobox.tsx'), 'utf8'));
+  const comboboxTsx = readStrippedSource('components/ui/combobox.tsx');
   assert.equal((comboboxTsx.match(/<LineSlot className="leading-\[1\.25\]">\{renderChipLabel\(val\)\}<\/LineSlot>/g) ?? []).length, 2);
 
   // Secondary destructive buttons share the calm `--shadow-control` secondary material at rest and
   // reveal the WCAG-AA danger wash/ink when approached or open, never a bespoke red outline ring.
-  const buttonTsx = stripCodeComments(readFileSync(path.join(sourceRoot, 'components/ui/button.tsx'), 'utf8'));
+  const buttonTsx = readStrippedSource('components/ui/button.tsx');
   const destructiveSecondary = buttonTsx.match(/'destructive-secondary':\s*\n?\s*'([^']+)'/)?.[1] ?? '';
   assert.ok(destructiveSecondary.length > 0);
   assert.match(destructiveSecondary, /\bbg-secondary\b/);
