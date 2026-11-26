@@ -573,7 +573,7 @@ export const OAuthManagementPage: React.FC = () => {
           isRefreshing={isRefreshing}
           onRefresh={() => void actions.refreshQuotaForRecord(record)}
           onClearCooldown={() => void actions.clearCooldown(record)}
-          onRedeemCredit={() => void actions.redeemCredit(record)}
+          onRedeemCredit={(_authIndex, creditId) => actions.redeemCredit(record, creditId)}
         />
       );
     }
@@ -627,7 +627,7 @@ export const OAuthManagementPage: React.FC = () => {
     onRename: (record, displayName) => renameCredential(record.file, displayName),
     onRefreshQuota: (record) => void actions.refreshQuotaForRecord(record),
     onClearCooldown: (record) => void actions.clearCooldown(record),
-    onRedeemCredit: (record) => void actions.redeemCredit(record),
+    onRedeemCredit: (record, creditId) => actions.redeemCredit(record, creditId),
     onReauthenticate: openConnectForRecord,
     onOpenSIWC: (record) => {
       if (hasActiveOverlay) return;

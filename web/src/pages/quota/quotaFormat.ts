@@ -245,19 +245,97 @@ function creditSortTimestamp(ms: number | undefined): number {
   return ms != null && Number.isFinite(ms) && ms > 0 ? ms : Number.MAX_SAFE_INTEGER;
 }
 
+function compareCreditID(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
 /**
  * Available Codex reset credits ordered soonest-expiring first so an operator can plan manual
  * redemptions without missing an earlier expiry; undated entries trail deterministically.
  */
 export function orderCodexResetCredits(credits: readonly CodexResetCredit[] | undefined): CodexResetCredit[] {
   return (credits ?? [])
-    .filter((credit) => !credit.status || credit.status === 'available')
+    .filter((credit) => !credit.status || credit.status.trim() === 'available')
     .slice()
     .sort((left, right) => {
       const expDiff = creditSortTimestamp(left.expires_at_ms) - creditSortTimestamp(right.expires_at_ms);
       if (expDiff !== 0) return expDiff;
       const grantDiff = creditSortTimestamp(left.granted_at_ms) - creditSortTimestamp(right.granted_at_ms);
       if (grantDiff !== 0) return grantDiff;
-      return left.id.localeCompare(right.id);
+      return compareCreditID(left.id.trim(), right.id.trim());
     });
+}
+
+/**
+ * Whether a single Codex reset credit can be explicitly selected and spent at `nowMS`.
+ * Mirrors the backend preflight gate: non-empty ID, available status, and not expired.
+ */
+export function isCodexResetCreditEligible(credit: CodexResetCredit, nowMS: number): boolean {
+  if (!credit.id || credit.id.trim() === '') return false;
+  if (credit.status && credit.status.trim() !== 'available') return false;
+  if (credit.expires_at_ms != null && Number.isFinite(credit.expires_at_ms) && credit.expires_at_ms > 0 && credit.expires_at_ms <= nowMS) {
+    return false;
+  }
+  return true;
+}
+
+export interface SelectedCodexResetCredit {
+  /** Earliest-expiring eligible credit (auto-default), or null if none can be spent. */
+  defaultCredit: CodexResetCredit | null;
+  /** Currently active choice: the user's pick when still eligible, otherwise `defaultCredit`. */
+  selectedCredit: CodexResetCredit | null;
+  /** Number of eligible credits available to pick from. */
+  eligibleCount: number;
+}
+
+/**
+ * Resolves the active Codex reset credit choice from an already-ordered list.
+ * Automatically defaults to the earliest-expiring eligible card and falls back to it
+ * whenever the user's previous pick disappears or expires.
+ */
+export function resolveSelectedCodexResetCredit(
+  orderedCredits: readonly CodexResetCredit[],
+  pickedId: string | null | undefined,
+  nowMS: number,
+): SelectedCodexResetCredit {
+  const eligible = orderedCredits.filter((credit) => isCodexResetCreditEligible(credit, nowMS));
+  const defaultCredit = eligible[0] ?? null;
+  const trimmedPick = pickedId?.trim();
+  const matched = trimmedPick
+    ? eligible.find((credit) => credit.id.trim() === trimmedPick) ?? null
+    : null;
+  return {
+    defaultCredit,
+    selectedCredit: matched ?? defaultCredit,
+    eligibleCount: eligible.length,
+  };
+}
+
+export interface FormattedCodexResetCreditExpiry {
+  /** Primary scannable status, e.g. "28天后到期" / "28d left" / "已过期" / "—". */
+  primary: string;
+  /** Exact short timestamp ("12/25 02:42"), omitted for undated credits. */
+  dateText: string | null;
+  isExpired: boolean;
+  hasExpiry: boolean;
+}
+
+export function formatCodexResetCreditExpiry(
+  credit: CodexResetCredit,
+  nowMS: number,
+  t: TFunc,
+): FormattedCodexResetCreditExpiry {
+  const hasExpiry = credit.expires_at_ms != null && Number.isFinite(credit.expires_at_ms) && credit.expires_at_ms > 0;
+  if (!hasExpiry) {
+    return { primary: '—', dateText: null, isExpired: false, hasExpiry: false };
+  }
+  const expiresAt = credit.expires_at_ms!;
+  const dateText = formatShortDateTime(expiresAt);
+  const countdown = formatCountdown(expiresAt, nowMS, t);
+  if (!countdown) {
+    return { primary: t('quota.reset_credit_expired'), dateText, isExpired: true, hasExpiry: true };
+  }
+  return { primary: t('quota.reset_credit_expires', { when: countdown }), dateText, isExpired: false, hasExpiry: true };
 }

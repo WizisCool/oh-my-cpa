@@ -35,7 +35,7 @@ interface CredentialQuotaBodyProps {
   isRefreshing?: boolean;
   onRefresh?: (authIndex: string) => void;
   onClearCooldown?: (authIndex: string) => void;
-  onRedeemCredit?: (authIndex: string) => void;
+  onRedeemCredit?: (authIndex: string, creditId?: string) => unknown | Promise<unknown>;
 }
 
 /**
@@ -337,11 +337,14 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
 
 
       <QuotaResetCards
+        key={item.auth_index}
         credits={item.reset_credits}
         grants={item.reset_grants}
+        credentialLabel={credentialLabel}
         nowMS={nowMS}
         isDemo={isDemo}
-        onRedeem={canRedeem ? () => onRedeemCredit?.(item.auth_index) : undefined}
+        isRedeeming={isRefreshing}
+        onRedeem={canRedeem ? (creditId) => onRedeemCredit?.(item.auth_index, creditId) : undefined}
       />
 
       {balances.length > 0 && (

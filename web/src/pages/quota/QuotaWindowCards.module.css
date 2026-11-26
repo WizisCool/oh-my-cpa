@@ -155,52 +155,62 @@ button.card:focus-visible {
   -webkit-line-clamp: 2;
 }
 
-/* The bank of Codex reset credits spans the section so every credit's expiry and countdown sit
-   on one line without squeezing or hiding behind a hover hint. */
-.credits-card {
-  grid-column: 1 / -1;
-}
-
-.credit-list {
+/* Codex reset credits keep the quota windows' flat card rhythm: one quiet header line holding the
+   count and the action, then the credits as peer cards in the same grid. */
+.reset-bar {
   display: flex;
-  flex-direction: column;
-  margin: 0;
-}
-
-.credit-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 2px 12px;
-  min-width: 0;
-  padding: 7px 0;
-  border-block-start: 1px solid var(--float-rule);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  min-block-size: 28px;
 }
 
-.credit-row:last-child {
-  padding-bottom: 2px;
+.reset-bar-info {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+.reset-bar-meta {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.reset-bar-meta b {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* A credit card only reads: the drawer is for looking, and spending waits for the dialog. */
+.credit-card {
+  gap: 4px;
 }
 
 .credit-label {
-  color: var(--muted);
-  flex-shrink: 0;
-}
-
-.credit-expiry {
-  margin: 0;
-  margin-inline-start: auto;
   color: var(--fg-2);
-  text-align: end;
+  font-size: var(--text-sm);
+  white-space: nowrap;
 }
 
-.credit-expiry[data-expired='true'] {
+.credit-primary {
+  min-width: 0;
+  color: var(--fg);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.credit-primary[data-expired='true'] {
   color: var(--danger);
 }
 
-.reset-foot {
-  align-items: center;
-  flex-wrap: wrap;
+.credit-date {
+  color: var(--meta);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
 }

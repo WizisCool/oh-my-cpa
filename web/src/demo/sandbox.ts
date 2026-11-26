@@ -56,7 +56,7 @@ import type {
   SaveProviderModelItem,
   SaveProviderPayload,
 } from '../types/providers';
-import type { QuotaOverviewResponse } from '../types/quota';
+import type { CodexResetCredit, CodexResetCreditsInfo, QuotaOverviewResponse } from '../types/quota';
 import type {
   RoutingBoard,
   RoutingMember,
@@ -189,6 +189,7 @@ export interface DemoSandboxState {
     refreshedAt: Record<string, number>;
     resetAt: Record<string, number>;
     redeemedCredits: Record<string, number>;
+    redeemedCreditIds?: Record<string, string[]>;
     warmupTasks?: WarmupTask[];
     warmupRunsAdded: WarmupRun[];
     warmupRunsClearedAtMs?: number;
@@ -237,7 +238,7 @@ function emptySandboxState(): DemoSandboxState {
     routing: { settingsOverrides: {}, memberOverrides: {} },
     plugins: { enabledOverrides: {}, deletedIds: [], installed: [], configs: {} },
     pricing: { modelOverrides: {}, channelModelOverrides: {}, dismissedCandidates: {}, channelOverrides: {} },
-    quota: { clearedCooldowns: {}, refreshedAt: {}, resetAt: {}, redeemedCredits: {}, warmupRunsAdded: [] },
+    quota: { clearedCooldowns: {}, refreshedAt: {}, resetAt: {}, redeemedCredits: {}, redeemedCreditIds: {}, warmupRunsAdded: [] },
     customIcons: { created: [], updated: {}, deletedIds: [], dataUrls: {} },
     fonts: { deletedIds: [] },
     system: {},
@@ -453,6 +454,38 @@ function jsonResponse(data: unknown, status = 200): Response {
       'X-OMCPA-Demo-Sandbox': 'browser',
     },
   });
+}
+
+function projectSandboxCodexResetCredits(
+  credits: CodexResetCreditsInfo,
+  redeemedCount: number,
+  redeemedIds: readonly string[],
+): { availableCount: number; applicableCount: number; remainingCredits?: CodexResetCredit[] } {
+  const nextCount = Math.max(0, credits.available_count - redeemedCount);
+  const applicableCount = Math.min(credits.applicable_available_count, nextCount);
+  if (!credits.credits) {
+    return { availableCount: nextCount, applicableCount };
+  }
+  const spentSet = new Set(redeemedIds.map((id) => id.trim()).filter(Boolean));
+  const orderedAvailable = credits.credits
+    .filter((credit) => !credit.status || credit.status.trim() === 'available')
+    .sort((a, b) => {
+      const expDiff = (a.expires_at_ms ?? Number.MAX_SAFE_INTEGER) - (b.expires_at_ms ?? Number.MAX_SAFE_INTEGER);
+      if (expDiff !== 0) return expDiff;
+      const grantDiff = (a.granted_at_ms ?? Number.MAX_SAFE_INTEGER) - (b.granted_at_ms ?? Number.MAX_SAFE_INTEGER);
+      if (grantDiff !== 0) return grantDiff;
+      const left = a.id.trim();
+      const right = b.id.trim();
+      return left < right ? -1 : left > right ? 1 : 0;
+    });
+  const withoutSpent = orderedAvailable.filter((credit) => !spentSet.has(credit.id.trim()));
+  const removedById = orderedAvailable.length - withoutSpent.length;
+  const extraUntargeted = Math.max(0, redeemedCount - removedById);
+  return {
+    availableCount: nextCount,
+    applicableCount,
+    remainingCredits: withoutSpent.slice(extraUntargeted),
+  };
 }
 
 function errorResponse(error: string, code: string, status = 400): Response {
@@ -2378,17 +2411,16 @@ export async function interceptDemoRequest(
             next.windows = next.windows.map((w) => ({ ...w, used_percent: 0, remaining_percent: 100 }));
             next.active_cooldown = undefined;
             next.quota_exceeded = false;
-            const nextCount = Math.max(0, next.reset_credits.available_count - redeemed);
-            const nextCredits = next.reset_credits.credits
-              ? [...next.reset_credits.credits]
-                  .sort((a, b) => (a.expires_at_ms ?? Number.MAX_SAFE_INTEGER) - (b.expires_at_ms ?? Number.MAX_SAFE_INTEGER))
-                  .slice(redeemed)
-              : undefined;
+            const projected = projectSandboxCodexResetCredits(
+              next.reset_credits,
+              redeemed,
+              state.quota.redeemedCreditIds?.[q.auth_index] ?? [],
+            );
             next.reset_credits = {
               ...next.reset_credits,
-              available_count: nextCount,
-              applicable_available_count: Math.min(next.reset_credits.applicable_available_count, nextCount),
-              ...(nextCredits !== undefined ? { credits: nextCredits } : {}),
+              available_count: projected.availableCount,
+              applicable_available_count: projected.applicableCount,
+              ...(projected.remainingCredits !== undefined ? { credits: projected.remainingCredits } : {}),
             };
           }
           return next;
@@ -3803,15 +3835,49 @@ export async function interceptDemoRequest(
   }
 
   if (pathname === '/management/quota/redeem-credit' && method === 'POST') {
-    const body = parseJsonBody<{ auth_index?: string }>(options);
+    const body = parseJsonBody<{ auth_index?: string; credit_id?: string }>(options);
     const authIndex = body?.auth_index ?? '';
-    state.quota.redeemedCredits[authIndex] = (state.quota.redeemedCredits[authIndex] ?? 0) + 1;
-    state.quota.clearedCooldowns[authIndex] = Date.now();
+    const requestedCreditId = body?.credit_id?.trim() ?? '';
     const base = await ensureBaseline<QuotaOverviewResponse>('quota', '/management/quota', fetchBaseline);
     const quota = base?.quotas.find((q) => q.auth_index === authIndex);
-    recordSandboxAudit(state, 'quota.redeem_credit', 'quota', authIndex);
+    const redeemedCount = state.quota.redeemedCredits[authIndex] ?? 0;
+    const spentIds = state.quota.redeemedCreditIds?.[authIndex] ?? [];
+    const projected = quota?.reset_credits
+      ? projectSandboxCodexResetCredits(quota.reset_credits, redeemedCount, spentIds)
+      : null;
+    const nowMS = Date.now();
+    const eligibleCredits = (projected?.remainingCredits ?? []).filter(
+      (credit) =>
+        credit.id.trim() !== '' &&
+        !(credit.expires_at_ms != null && Number.isFinite(credit.expires_at_ms) && credit.expires_at_ms > 0 && credit.expires_at_ms <= nowMS),
+    );
+    let chosenCreditId = '';
+    if (requestedCreditId) {
+      const matched = eligibleCredits.find((credit) => credit.id.trim() === requestedCreditId);
+      if (!matched) {
+        return errorResponse('Requested Codex reset credit is not available', 'reset_credit_not_available', 409);
+      }
+      chosenCreditId = matched.id.trim();
+    } else {
+      if (!projected || projected.availableCount <= 0) {
+        return errorResponse('No available Codex reset credit', 'reset_credit_unavailable', 409);
+      }
+      if (projected.remainingCredits !== undefined) {
+        if (eligibleCredits.length === 0) {
+          return errorResponse('No available Codex reset credit', 'reset_credit_unavailable', 409);
+        }
+        chosenCreditId = eligibleCredits[0].id.trim();
+      }
+    }
+    if (chosenCreditId) {
+      state.quota.redeemedCreditIds = state.quota.redeemedCreditIds ?? {};
+      state.quota.redeemedCreditIds[authIndex] = [...spentIds, chosenCreditId];
+    }
+    state.quota.redeemedCredits[authIndex] = redeemedCount + 1;
+    state.quota.clearedCooldowns[authIndex] = nowMS;
+    recordSandboxAudit(state, 'quota.redeem_credit', 'quota', authIndex, chosenCreditId ? { credit_id: chosenCreditId } : undefined);
     saveState(state);
-    return jsonResponse({ status: 'ok', quota, cooldown_cleared: true });
+    return jsonResponse({ status: 'ok', ...(chosenCreditId ? { credit_id: chosenCreditId } : {}), quota, cooldown_cleared: true });
   }
 
   if (pathname === '/management/quota/warmup/tasks' && method === 'POST') {

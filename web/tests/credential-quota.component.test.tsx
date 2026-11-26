@@ -31,7 +31,7 @@ import { renderWithOmc } from './support/render';
 import { buildCredentialSections } from '../src/pages/oauthManagement/credentialSections';
 import { buildOAuthWorkspaceProjection } from '../src/pages/oauthManagement/oauthWorkspaceLogic';
 import type { ManagementAuthFile } from '../src/types/managementAuthFile';
-import type { QuotaItem, QuotaWindow, QuotaWindowCapacity } from '../src/types/quota';
+import type { CodexResetCreditsInfo, QuotaItem, QuotaWindow, QuotaWindowCapacity } from '../src/types/quota';
 
 vi.mock('../src/components/dashboard/RollingNumber', () => ({
   RollingNumber: ({ readout }: { readout?: { number: number; prefix?: string; suffix: string; format: Intl.NumberFormatOptions } }) =>
@@ -309,7 +309,7 @@ describe('credential quota body details', () => {
     );
     const staleRows = Array.from(document.querySelectorAll<HTMLElement>('[data-quota-reset-credit]'));
     expect(staleRows).toHaveLength(2);
-    expect(staleRows[0].querySelector('[data-expired="true"]')?.textContent).toMatch(/^Expired /);
+    expect(staleRows[0].querySelector('[data-expired="true"]')?.textContent).toBe('Expired');
     expect(staleRows[1].textContent).toContain('—');
 
     rerender(
@@ -354,14 +354,164 @@ describe('credential quota body details', () => {
     expect(document.querySelector('[data-quota-reset="credits"]')).toBeNull();
   });
 
+  it('keeps the drawer read-only and spends a credit only through the redemption dialog', async () => {
+    const onRedeem = vi.fn(async () => undefined);
+    const body = (resetCredits: CodexResetCreditsInfo, isDemo = false) => (
+      <MemoryRouter>
+        <I18nProvider>
+          <CredentialQuotaBody
+            item={quota('codex-select', [quotaWindow('five_hour', 20, 3)], {
+              capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: true },
+              reset_credits: resetCredits,
+            })}
+            credentialLabel="Primary Codex"
+            nowMS={NOW_MS}
+            isDemo={isDemo}
+            onRedeemCredit={onRedeem}
+          />
+        </I18nProvider>
+      </MemoryRouter>
+    );
+    const threeCredits: CodexResetCreditsInfo = {
+      available_count: 3,
+      applicable_available_count: 3,
+      credits: [
+        { id: 'c-3', status: 'available', expires_at_ms: NOW_MS + 20 * 24 * HOUR_MS },
+        { id: 'c-1', status: 'available', expires_at_ms: NOW_MS + 3 * 24 * HOUR_MS },
+        { id: 'c-2', status: 'available', expires_at_ms: NOW_MS + 10 * 24 * HOUR_MS },
+      ],
+    };
+    const { rerender } = render(body(threeCredits));
+    const openDialog = async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Reset quota' }));
+      return screen.findByRole('dialog');
+    };
+    const choices = (dialog: HTMLElement) =>
+      within(within(dialog).getByRole('radiogroup', { name: 'Credit to redeem' })).getAllByRole('radio');
+
+    // Browsing carries no choice: no radios, nothing preselected, and a card click opens nothing.
+    const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-quota-reset-credit]'));
+    expect(cards.map((card) => card.getAttribute('data-quota-reset-credit'))).toEqual(['c-1', 'c-2', 'c-3']);
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(document.querySelector('[data-quota-reset="credits"] [aria-checked], [data-quota-reset="credits"] [data-selected]')).toBeNull();
+    fireEvent.click(cards[0]);
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    // Reset quota opens the dialog on the earliest-expiring credit; picking only moves the choice.
+    let dialog = await openDialog();
+    expect(dialog.textContent).toContain('Primary Codex');
+    let radios = choices(dialog);
+    expect(radios.map((radio) => radio.getAttribute('data-redeem-credit'))).toEqual(['c-1', 'c-2', 'c-3']);
+    expect(radios[0].getAttribute('aria-checked')).toBe('true');
+    expect(radios[0].textContent).toContain('Expires first');
+    fireEvent.click(radios[1]);
+    expect(radios[1].getAttribute('aria-checked')).toBe('true');
+    fireEvent.keyDown(radios[1], { key: 'ArrowDown' });
+    expect(radios[2].getAttribute('aria-checked')).toBe('true');
+    fireEvent.keyDown(radios[2], { key: 'Home' });
+    expect(radios[0].getAttribute('aria-checked')).toBe('true');
+    fireEvent.keyDown(radios[0], { key: 'End' });
+    expect(radios[2].getAttribute('aria-checked')).toBe('true');
+
+    // Cancel spends nothing, and the next opening starts from the default again.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(onRedeem).not.toHaveBeenCalled();
+    dialog = await openDialog();
+    radios = choices(dialog);
+    expect(radios[0].getAttribute('aria-checked')).toBe('true');
+
+    // If a background refresh removes the selected credit while the dialog is open, confirmation is
+    // blocked instead of silently switching to another credit; the operator must pick again.
+    rerender(body({
+      available_count: 1,
+      applicable_available_count: 1,
+      credits: [{ id: 'c-2', status: 'available', expires_at_ms: NOW_MS + 10 * 24 * HOUR_MS }],
+    }));
+    const confirmWhileStale = within(dialog).getByRole('button', { name: 'Redeem credit' }) as HTMLButtonElement;
+    expect(confirmWhileStale.disabled).toBe(true);
+    expect(dialog.textContent).toContain(makeT('en')('quota.reset_credit_selection_changed'));
+    const remainingRadios = choices(dialog);
+    expect(remainingRadios.map((radio) => radio.getAttribute('data-redeem-credit'))).toEqual(['c-2']);
+    expect(remainingRadios[0].getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(remainingRadios[0]);
+    expect(remainingRadios[0].getAttribute('aria-checked')).toBe('true');
+    expect(confirmWhileStale.disabled).toBe(false);
+    // If a refresh drops the credit details entirely after an explicit credit was chosen,
+    // confirmation stays blocked rather than downgrading to automatic backend selection.
+    rerender(body({ available_count: 1, applicable_available_count: 1 }));
+    expect(confirmWhileStale.disabled).toBe(true);
+    expect(dialog.textContent).toContain(makeT('en')('quota.reset_credit_none_eligible'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(onRedeem).not.toHaveBeenCalled();
+
+    rerender(body(threeCredits));
+    dialog = await openDialog();
+    radios = choices(dialog);
+    expect(radios[0].getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(radios[2]);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Redeem credit' }));
+    await waitFor(() => expect(onRedeem).toHaveBeenCalledWith('codex-select', 'c-3'));
+    expect(onRedeem).toHaveBeenCalledTimes(1);
+
+    // One spendable credit is shown plainly and still confirmed by its ID.
+    rerender(body({
+      available_count: 2,
+      applicable_available_count: 2,
+      credits: [
+        { id: 'c-expired', status: 'available', expires_at_ms: NOW_MS - HOUR_MS },
+        { id: 'c-undated', status: 'available' },
+      ],
+    }));
+    dialog = await openDialog();
+    expect(within(dialog).queryByRole('radio')).toBeNull();
+    expect(dialog.querySelector('[data-redeem-credit="c-undated"]')?.textContent).toContain('Credit #2');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Redeem credit' }));
+    await waitFor(() => expect(onRedeem).toHaveBeenLastCalledWith('codex-select', 'c-undated'));
+
+    // Without a listed bank the dialog says the earliest-expiring credit goes and sends no ID.
+    rerender(body({ available_count: 2, applicable_available_count: 2 }));
+    dialog = await openDialog();
+    expect(dialog.textContent).toContain('earliest-expiring reset credit for Primary Codex');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Redeem credit' }));
+    await waitFor(() => expect(onRedeem).toHaveBeenLastCalledWith('codex-select', undefined));
+
+    // Opening unlisted, then picking a credit after details load, still blocks automatic fallback
+    // if details vanish again while the dialog remains open.
+    dialog = await openDialog();
+    rerender(body(threeCredits));
+    fireEvent.click(choices(dialog)[1]);
+    rerender(body({ available_count: 2, applicable_available_count: 2 }));
+    const blockedAfterUnlist = within(dialog).getByRole('button', { name: 'Redeem credit' }) as HTMLButtonElement;
+    expect(blockedAfterUnlist.disabled).toBe(true);
+    expect(dialog.textContent).toContain(makeT('en')('quota.reset_credit_none_eligible'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    // Every listed credit expired: the entry is disabled and says why.
+    rerender(body({
+      available_count: 1,
+      applicable_available_count: 1,
+      credits: [{ id: 'c-expired', status: 'available', expires_at_ms: NOW_MS - HOUR_MS }],
+    }));
+    let entry = screen.getByRole('button', { name: 'Reset quota' }) as HTMLButtonElement;
+    expect(entry.disabled).toBe(true);
+    expect(entry.getAttribute('data-tip')).toBe(makeT('en')('quota.reset_credit_none_eligible'));
+
+    rerender(body(threeCredits, true));
+    entry = screen.getByRole('button', { name: 'Reset quota' }) as HTMLButtonElement;
+    expect(entry.disabled).toBe(true);
+    expect(entry.getAttribute('data-tip')).toBe(makeT('en')('demo.blocked'));
+    expect(onRedeem).toHaveBeenCalledTimes(3);
+  });
+
 });
 
 function renderCredentialRow(
   item: QuotaItem,
-  { onRefresh, onOpen = vi.fn(), onRename = vi.fn(async () => true), fileOverrides = {} }: {
+  { onRefresh, onOpen = vi.fn(), onRename = vi.fn(async () => true), onRedeemCredit = vi.fn(), fileOverrides = {} }: {
     onRefresh?: () => void;
     onOpen?: CredentialActions['onOpen'];
     onRename?: CredentialActions['onRename'];
+    onRedeemCredit?: CredentialActions['onRedeemCredit'];
     fileOverrides?: Partial<ManagementAuthFile>;
   } = {},
 ) {
@@ -370,7 +520,7 @@ function renderCredentialRow(
   const actions: CredentialActions = {
     isBusy: () => false, isRefreshingQuota: () => false, siwcBadge: () => undefined,
     onSelect: vi.fn(), onPick: vi.fn(), onToggle: vi.fn(), onDownload: vi.fn(), onDelete: vi.fn(), onOpen, onRename,
-    onRefreshQuota: onRefresh ?? vi.fn(), onClearCooldown: vi.fn(), onRedeemCredit: vi.fn(), onReauthenticate: vi.fn(), onOpenSIWC: vi.fn(), onOpenModelRules: vi.fn(),
+    onRefreshQuota: onRefresh ?? vi.fn(), onClearCooldown: vi.fn(), onRedeemCredit, onReauthenticate: vi.fn(), onOpenSIWC: vi.fn(), onOpenModelRules: vi.fn(),
   };
   if (!onRefresh) section.records = section.records.map((record) => ({ ...record, canRefreshQuota: false }));
   return render(
@@ -521,6 +671,43 @@ describe('credential list row', () => {
     await waitFor(() => expect(screen.queryByTestId('oauth-credential-name-input')).toBeNull());
     expect(onRename).toHaveBeenCalledTimes(1);
     expect(onRename.mock.calls[0][1]).toBe('Team seat');
+  });
+
+  it('opens the shared redemption dialog from the row menu and spends only after confirmation', async () => {
+    const onRedeemCredit = vi.fn(async () => undefined);
+    renderCredentialRow(
+      quota('codex-menu-redeem', [quotaWindow('five_hour', 20, 3)], {
+        capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: true },
+        reset_credits: {
+          available_count: 2,
+          applicable_available_count: 2,
+          credits: [
+            { id: 'c-late', status: 'available', expires_at_ms: Date.now() + 14 * 24 * HOUR_MS },
+            { id: 'c-early', status: 'available', expires_at_ms: Date.now() + 3 * 24 * HOUR_MS },
+          ],
+        },
+      }),
+      { onRedeemCredit, fileOverrides: { display_name: 'Primary Codex' } },
+    );
+    const openFromMenu = async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'More actions: codex-menu-redeem' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Use a reset' }));
+      return screen.findByRole('dialog');
+    };
+
+    let dialog = await openFromMenu();
+    expect(onRedeemCredit).not.toHaveBeenCalled();
+    expect(dialog.textContent).toContain('Primary Codex');
+    const radios = within(dialog).getAllByRole('radio');
+    expect(radios.map((radio) => radio.getAttribute('data-redeem-credit'))).toEqual(['c-early', 'c-late']);
+    expect(radios[0].getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(onRedeemCredit).not.toHaveBeenCalled();
+
+    dialog = await openFromMenu();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Redeem credit' }));
+    await waitFor(() => expect(onRedeemCredit).toHaveBeenCalledWith(expect.objectContaining({ authIndex: 'codex-menu-redeem' }), 'c-early'));
+    expect(onRedeemCredit).toHaveBeenCalledTimes(1);
   });
 });
 

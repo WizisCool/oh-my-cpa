@@ -1594,10 +1594,15 @@ export const api = {
     });
   },
 
-  async redeemCodexResetCredit(authIndex: string): Promise<{ status: string; quota: QuotaItem; cooldown_cleared?: boolean; cooldown_error?: string }> {
-    return request<{ status: string; quota: QuotaItem; cooldown_cleared?: boolean; cooldown_error?: string }>('/management/quota/redeem-credit', {
+  async redeemCodexResetCredit(
+    authIndex: string,
+    creditId?: string,
+  ): Promise<{ status: string; credit_id?: string; quota: QuotaItem; cooldown_cleared?: boolean; cooldown_error?: string }> {
+    const trimmedCreditId = creditId?.trim();
+    const payload = trimmedCreditId ? { auth_index: authIndex, credit_id: trimmedCreditId } : { auth_index: authIndex };
+    return request<{ status: string; credit_id?: string; quota: QuotaItem; cooldown_cleared?: boolean; cooldown_error?: string }>('/management/quota/redeem-credit', {
       method: 'POST',
-      body: JSON.stringify({ auth_index: authIndex }),
+      body: JSON.stringify(payload),
     });
   },
 

@@ -931,21 +931,28 @@ func (s *Service) fetchDevinQuota(ctx context.Context, file management.AuthFile,
 // these with errors.Is to separate refusals before POST /consume from an
 // uncertain consume outcome.
 var (
-	ErrCodexResetCreditBankUnreadable = errors.New("could not read available reset credits; no credit redeemed")
-	ErrNoEligibleCodexResetCredit     = errors.New("no available unexpired reset credit with an id; no credit redeemed")
+	ErrCodexResetCreditBankUnreadable       = errors.New("could not read available reset credits; no credit redeemed")
+	ErrNoEligibleCodexResetCredit           = errors.New("no available unexpired reset credit with an id; no credit redeemed")
+	ErrRequestedCodexResetCreditUnavailable = errors.New("selected reset credit is unavailable or expired; no credit redeemed")
 )
 
-// RedeemCodexCredit consumes an available rate limit reset credit for a Codex credential.
+// RedeemCodexCredit consumes an available rate limit reset credit for a Codex credential
+// and returns the redeemed credit ID.
+//
+// When requestedCreditID is non-empty, only that exact available unexpired credit may be
+// redeemed; if it is missing, used, or expired, redemption refuses rather than falling back
+// to another card. When requestedCreditID is empty, the earliest-expiring eligible credit
+// is selected automatically.
 //
 // The consume route carries the same ChatGPT account id as the read probes, so spending a
 // credit stays scoped to the credential it was read from.
-func (s *Service) RedeemCodexCredit(ctx context.Context, file management.AuthFile) error {
+func (s *Service) RedeemCodexCredit(ctx context.Context, file management.AuthFile, requestedCreditID string) (string, error) {
 	if s.client == nil {
-		return errors.New("CPA client is not configured")
+		return "", errors.New("CPA client is not configured")
 	}
 	authIndex := strings.TrimSpace(file.AuthIndex)
 	if authIndex == "" {
-		return errors.New("auth_index is required")
+		return "", errors.New("auth_index is required")
 	}
 	file.AuthIndex = authIndex
 	headers := management.WithQuotaCredential(map[string]string{
@@ -958,33 +965,33 @@ func (s *Service) RedeemCodexCredit(ctx context.Context, file management.AuthFil
 	}
 
 	// Without credit_id, upstream may spend a later-expiring credit first.
-	// Read the current bank and explicitly name the soonest-expiring credit.
+	// Read the current bank and verify the requested credit or select the soonest-expiring one.
 	credits := s.fetchCodexResetCredits(ctx, file, headers, nil)
 	if credits == nil {
-		return ErrCodexResetCreditBankUnreadable
+		return "", ErrCodexResetCreditBankUnreadable
 	}
-	credit, ok := earliestCodexResetCredit(credits.Credits, s.Now().UnixMilli())
-	if !ok {
-		return ErrNoEligibleCodexResetCredit
+	credit, err := selectCodexResetCredit(credits.Credits, s.Now().UnixMilli(), requestedCreditID)
+	if err != nil {
+		return "", err
 	}
 	body, err := json.Marshal(struct {
 		CreditID        string `json:"credit_id"`
 		RedeemRequestID string `json:"redeem_request_id"`
 	}{CreditID: credit.ID, RedeemRequestID: uuid.New().String()})
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	resp, err := s.SafeApiCall(ctx, authIndex, "POST", CodexRedeemCreditURL, headers, string(body))
 	if err != nil {
-		return fmt.Errorf("redeem codex credit: %w", err)
+		return "", fmt.Errorf("redeem codex credit: %w", err)
 	}
 	normBody, err := resp.NormalizedBody()
 	if err != nil {
-		return err
+		return "", err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errors.New(sanitizeError(resp.StatusCode, normBody))
+		return "", errors.New(sanitizeError(resp.StatusCode, normBody))
 	}
 	// A 2xx alone does not spend a credit: only an explicit confirmation does.
 	// Anything else is an unknown outcome, so the operator refreshes and decides
@@ -993,15 +1000,15 @@ func (s *Service) RedeemCodexCredit(ctx context.Context, file management.AuthFil
 		Code string `json:"code"`
 	}
 	if err := json.Unmarshal(normBody, &consumeOutcome); err != nil {
-		return fmt.Errorf("redeem codex credit: unexpected upstream response: %w", err)
+		return "", fmt.Errorf("redeem codex credit: unexpected upstream response: %w", err)
 	}
 	if consumeOutcome.Code != "reset" && consumeOutcome.Code != "already_redeemed" {
-		return errors.New("redeem codex credit: upstream did not confirm the reset; refresh the quota before trying again")
+		return "", errors.New("redeem codex credit: upstream did not confirm the reset; refresh the quota before trying again")
 	}
-	return nil
+	return credit.ID, nil
 }
 
-func earliestCodexResetCredit(credits []CodexResetCredit, nowMS int64) (CodexResetCredit, bool) {
+func selectCodexResetCredit(credits []CodexResetCredit, nowMS int64, requestedCreditID string) (CodexResetCredit, error) {
 	available := make([]CodexResetCredit, 0, len(credits))
 	for _, credit := range credits {
 		creditID := strings.TrimSpace(credit.ID)
@@ -1014,6 +1021,14 @@ func earliestCodexResetCredit(credits []CodexResetCredit, nowMS int64) (CodexRes
 		credit.ID = creditID
 		available = append(available, credit)
 	}
+	if targetID := strings.TrimSpace(requestedCreditID); targetID != "" {
+		for _, credit := range available {
+			if credit.ID == targetID {
+				return credit, nil
+			}
+		}
+		return CodexResetCredit{}, ErrRequestedCodexResetCreditUnavailable
+	}
 	sort.Slice(available, func(i, j int) bool {
 		left, right := available[i], available[j]
 		if order := compareCreditInstant(left.ExpiresAtMS, right.ExpiresAtMS); order != 0 {
@@ -1025,9 +1040,9 @@ func earliestCodexResetCredit(credits []CodexResetCredit, nowMS int64) (CodexRes
 		return left.ID < right.ID
 	})
 	if len(available) == 0 {
-		return CodexResetCredit{}, false
+		return CodexResetCredit{}, ErrNoEligibleCodexResetCredit
 	}
-	return available[0], true
+	return available[0], nil
 }
 
 func compareCreditInstant(left, right *int64) int {

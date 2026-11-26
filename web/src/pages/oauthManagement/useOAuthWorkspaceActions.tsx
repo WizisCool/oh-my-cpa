@@ -48,7 +48,7 @@ export interface OAuthWorkspaceActions {
     allRecords: OAuthWorkspaceRecord[],
   ) => Promise<void>;
   clearCooldown: (record: OAuthWorkspaceRecord) => Promise<void>;
-  redeemCredit: (record: OAuthWorkspaceRecord) => Promise<void>;
+  redeemCredit: (record: OAuthWorkspaceRecord, creditId?: string) => Promise<void>;
   isRecordBusy: (record: OAuthWorkspaceRecord) => boolean;
   /** Whether a write to the credential's file holds it; a quota read does not. */
   isFileBusy: (record: OAuthWorkspaceRecord) => boolean;
@@ -56,8 +56,24 @@ export interface OAuthWorkspaceActions {
 
 const BATCH_REFRESH_CONCURRENCY = 3;
 
+function apiErrorCode(error: unknown): string | undefined {
+  if (!(error instanceof ApiError) || !error.data || typeof error.data !== 'object') return undefined;
+  const code = (error.data as { code?: unknown }).code;
+  return typeof code === 'string' && code.trim() !== '' ? code.trim() : undefined;
+}
+
 function errorMessage(error: unknown, t: TFunc): string {
   if (error instanceof ApiError && error.status === 501) return t('af.unsupported');
+  switch (apiErrorCode(error)) {
+    case 'reset_credit_bank_unreadable':
+      return t('quota.redeem_error_bank_unreadable');
+    case 'reset_credit_unavailable':
+      return t('quota.redeem_error_unavailable');
+    case 'reset_credit_not_available':
+      return t('quota.redeem_error_selected_unavailable');
+    default:
+      break;
+  }
   return error instanceof Error ? error.message : t('af.request_failed');
 }
 
@@ -713,7 +729,7 @@ export function useOAuthWorkspaceActions(
     }
   }, [markQuotaBusy, toast, queryClient, releaseTargets, reserveTargets, t]);
 
-  const redeemCredit = React.useCallback(async (record: OAuthWorkspaceRecord) => {
+  const redeemCredit = React.useCallback(async (record: OAuthWorkspaceRecord, creditId?: string) => {
     // Redemption spends an entitlement, so the target is re-resolved from the latest
     // records: the row's own projection may predate a refresh that took the credit away
     // or left it ambiguous.
@@ -726,7 +742,7 @@ export function useOAuthWorkspaceActions(
     }
     markQuotaBusy([latest.authIndex], true);
     try {
-      const outcome = await api.redeemCodexResetCredit(latest.authIndex);
+      const outcome = await api.redeemCodexResetCredit(latest.authIndex, creditId);
       // The credit is already spent when the gateway cooldown cannot be
       // cleared: warn and point at Clear cooldown instead of reporting success,
       // so the operator does not spend a second credit on retry.
@@ -740,7 +756,11 @@ export function useOAuthWorkspaceActions(
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trendsQuota }),
       ]);
     } catch (error) {
+      const code = apiErrorCode(error);
       toast.error(t('quota.redeem_credit_failed', { msg: errorMessage(error, t) }));
+      if (code === 'reset_credit_not_available' || code === 'reset_credit_unavailable') {
+        void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.quota });
+      }
     } finally {
       markQuotaBusy([latest.authIndex], false);
       releaseTargets(reserved);

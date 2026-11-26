@@ -54,9 +54,10 @@ import { Switch } from '../../components/common/Switch';
 import { Tag } from '../../components/common/Tag';
 import { outlivedResetLine, refreshFailureLine } from '../quota/quotaAttempt';
 import { describeQuotaCooldown } from '../quota/quotaCooldown';
+import { RedeemResetCreditDialog } from '../quota/RedeemResetCreditDialog';
 import { isRangeCheckboxClick } from '../../types/rowSelection';
 import { credentialStatusOf, quotaLinesOf, type CredentialStatus, type QuotaLine } from './credentialSections';
-import type { OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
+import { maskedCredentialLabel, type OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
 import styles from './CredentialParts.module.css';
 
 export type DetailSection = 'overview' | 'renewal' | 'configuration' | 'models';
@@ -83,7 +84,7 @@ export interface CredentialActions {
   onRename: (record: OAuthWorkspaceRecord, displayName: string) => Promise<boolean>;
   onRefreshQuota: (record: OAuthWorkspaceRecord) => void;
   onClearCooldown: (record: OAuthWorkspaceRecord) => void;
-  onRedeemCredit: (record: OAuthWorkspaceRecord) => void;
+  onRedeemCredit: (record: OAuthWorkspaceRecord, creditId?: string) => unknown | Promise<unknown>;
   onReauthenticate: (record: OAuthWorkspaceRecord) => void;
   onOpenSIWC: (record: OAuthWorkspaceRecord) => void;
   /** Opens the provider's model rules on the disabled-models tab, at this credential's provider. */
@@ -476,7 +477,7 @@ function actionList(record: OAuthWorkspaceRecord, facts: CredentialFacts, t: TFu
   ].filter((action) => !action.hidden);
 }
 
-function useRunAction(record: OAuthWorkspaceRecord, actions: CredentialActions, onRename: () => void) {
+function useRunAction(record: OAuthWorkspaceRecord, actions: CredentialActions, onRename: () => void, onRedeem: () => void) {
   const t = useT();
   const modal = useConfirmModal();
   return (key: ActionKey) => {
@@ -490,7 +491,7 @@ function useRunAction(record: OAuthWorkspaceRecord, actions: CredentialActions, 
       case 'rename': onRename(); break;
       case 'reauth': actions.onReauthenticate(record); break;
       case 'clear-cooldown': actions.onClearCooldown(record); break;
-      case 'redeem': actions.onRedeemCredit(record); break;
+      case 'redeem': onRedeem(); break;
       case 'siwc': actions.onOpenSIWC(record); break;
       case 'download': actions.onDownload(record); break;
       case 'delete':
@@ -516,43 +517,58 @@ export function CredentialMenu({ record, facts, actions, onRename, hasRefresh = 
   hasRefresh?: boolean;
 }) {
   const t = useT();
-  const run = useRunAction(record, actions, onRename);
+  // The redemption dialog reads the credits as they stood when it opened, so a background tick
+  // does not reshuffle the choice under the pointer.
+  const [redeemOpenedAtMS, setRedeemOpenedAtMS] = React.useState<number | null>(null);
+  const run = useRunAction(record, actions, onRename, () => setRedeemOpenedAtMS(Date.now()));
   const list = actionList(record, facts, t, hasRefresh);
   const [isOpen, setIsOpen] = React.useState(false);
   return (
-    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-      <DropdownMenuTrigger
-        render={
-          <Tooltip title={t('keys.actions_more')} open={isOpen ? false : undefined}>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={styles['icon-action']}
-              icon={<MoreOutlined />}
-              onClick={(event) => event.stopPropagation()}
-              aria-label={`${t('keys.actions_more')}: ${record.file.name}`}
-            />
-          </Tooltip>
-        }
-      />
-      <DropdownMenuContent placement="bottomRight" onClick={(event) => event.stopPropagation()}>
-        {list.map((action) => (
-          <React.Fragment key={action.key}>
-            {action.key === 'download' && <DropdownMenuSeparator />}
-            <DropdownMenuItem
-              icon={action.icon}
-              disabled={action.disabled}
-              danger={action.danger}
-              onClick={(event) => {
-                event.stopPropagation();
-                run(action.key as ActionKey);
-              }}
-            >
-              {action.label}
-            </DropdownMenuItem>
-          </React.Fragment>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+        <DropdownMenuTrigger
+          render={
+            <Tooltip title={t('keys.actions_more')} open={isOpen ? false : undefined}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={styles['icon-action']}
+                icon={<MoreOutlined />}
+                onClick={(event) => event.stopPropagation()}
+                aria-label={`${t('keys.actions_more')}: ${record.file.name}`}
+              />
+            </Tooltip>
+          }
+        />
+        <DropdownMenuContent placement="bottomRight" onClick={(event) => event.stopPropagation()}>
+          {list.map((action) => (
+            <React.Fragment key={action.key}>
+              {action.key === 'download' && <DropdownMenuSeparator />}
+              <DropdownMenuItem
+                icon={action.icon}
+                disabled={action.disabled}
+                danger={action.danger}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  run(action.key as ActionKey);
+                }}
+              >
+                {action.label}
+              </DropdownMenuItem>
+            </React.Fragment>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {(record.canRedeemCredit || redeemOpenedAtMS !== null) && (
+        <RedeemResetCreditDialog
+          open={redeemOpenedAtMS !== null}
+          credits={record.quota?.reset_credits}
+          targetName={maskedCredentialLabel(record)}
+          nowMS={redeemOpenedAtMS ?? Date.now()}
+          onConfirm={(creditId) => actions.onRedeemCredit(record, creditId)}
+          onClose={() => setRedeemOpenedAtMS(null)}
+        />
+      )}
+    </>
   );
 }

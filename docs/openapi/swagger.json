@@ -8025,7 +8025,7 @@
             "CookieAuth": []
           }
         ],
-        "description": "Redeem a Codex quota reset credit, clear gateway cooldown, and refresh the credential quota reading.",
+        "description": "Redeem a specific or earliest-expiring Codex quota reset credit, clear gateway cooldown, and refresh the credential quota reading.",
         "consumes": [
           "application/json"
         ],
@@ -8038,12 +8038,12 @@
         "summary": "Redeem Codex rate-limit reset credit",
         "parameters": [
           {
-            "description": "Codex credential auth_index",
+            "description": "Codex credential auth_index and optional credit_id",
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/api.quotaActionRequest"
+              "$ref": "#/definitions/api.quotaRedeemCreditRequest"
             }
           }
         ],
@@ -17248,6 +17248,9 @@
         "cooldown_error": {
           "type": "string"
         },
+        "credit_id": {
+          "type": "string"
+        },
         "quota": {
           "$ref": "#/definitions/quota.NormalizedQuota"
         },
@@ -22647,6 +22650,17 @@
         },
         "total": {
           "type": "integer"
+        }
+      }
+    },
+    "api.quotaRedeemCreditRequest": {
+      "type": "object",
+      "properties": {
+        "auth_index": {
+          "type": "string"
+        },
+        "credit_id": {
+          "type": "string"
         }
       }
     },

@@ -146,6 +146,7 @@ type QuotaCooldownClearResponseDTO struct {
 // QuotaRedeemCreditResponseDTO confirms Codex credit redemption and cooldown clearing.
 type QuotaRedeemCreditResponseDTO struct {
 	Status          string                 `json:"status"`
+	CreditID        string                 `json:"credit_id,omitempty"`
 	Quota           *quota.NormalizedQuota `json:"quota"`
 	CooldownCleared bool                   `json:"cooldown_cleared"`
 	CooldownError   string                 `json:"cooldown_error,omitempty"`
@@ -709,6 +710,11 @@ type quotaActionRequest struct {
 	AuthIndex string `json:"auth_index"`
 }
 
+type quotaRedeemCreditRequest struct {
+	AuthIndex string `json:"auth_index"`
+	CreditID  string `json:"credit_id,omitempty"`
+}
+
 func (h *Handler) clearCredentialCooldownWithAction(writer http.ResponseWriter, request *http.Request, action string) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var req quotaActionRequest
@@ -788,12 +794,12 @@ func (h *Handler) resetCredentialQuota(writer http.ResponseWriter, request *http
 }
 
 // @Summary Redeem Codex rate-limit reset credit
-// @Description Redeem a Codex quota reset credit, clear gateway cooldown, and refresh the credential quota reading.
+// @Description Redeem a specific or earliest-expiring Codex quota reset credit, clear gateway cooldown, and refresh the credential quota reading.
 // @Tags Quota
 // @Accept json
 // @Produce json
 // @Security CookieAuth
-// @Param body body quotaActionRequest true "Codex credential auth_index"
+// @Param body body quotaRedeemCreditRequest true "Codex credential auth_index and optional credit_id"
 // @Success 200 {object} QuotaRedeemCreditResponseDTO
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
@@ -806,7 +812,7 @@ func (h *Handler) resetCredentialQuota(writer http.ResponseWriter, request *http
 // @Router /v1/management/quota/redeem-credit [post]
 func (h *Handler) redeemCodexResetCredit(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	var req quotaActionRequest
+	var req quotaRedeemCreditRequest
 	if err := decodeManagementJSON(writer, request, 8*1024, &req); err != nil {
 		return
 	}
@@ -831,7 +837,7 @@ func (h *Handler) redeemCodexResetCredit(writer http.ResponseWriter, request *ht
 		writeCPAFacadeError(writer, err)
 		return
 	}
-	result, err := h.redeemQuotaCredit(request.Context(), client, authIndex, func(action, targetType, targetID, result string, details map[string]any) error {
+	result, err := h.redeemQuotaCredit(request.Context(), client, authIndex, strings.TrimSpace(req.CreditID), func(action, targetType, targetID, result string, details map[string]any) error {
 		return h.recordAudit(request, action, targetType, targetID, result, details)
 	})
 	if err != nil {

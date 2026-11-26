@@ -275,7 +275,7 @@ func (h *Handler) operationsService() *operations.Service {
 		}
 		audited := func(string, string, string, string, map[string]any) error { return nil }
 		if action == "redeem" {
-			_, err = h.redeemQuotaCredit(ctx, client, target.AuthIndex, audited)
+			_, err = h.redeemQuotaCredit(ctx, client, target.AuthIndex, "", audited)
 		} else {
 			_, err = h.clearQuotaCooldown(ctx, client, target.AuthIndex, "quota.clear_cooldown", audited)
 		}

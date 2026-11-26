@@ -13,7 +13,13 @@ import {
   subscriptionProjectionNote,
   supportsSubscriptionCycleTab,
 } from '../../src/pages/quota/quotaCapacity.ts';
-import { formatQuotaMetric, orderCodexResetCredits, quotaPayloadSummary } from '../../src/pages/quota/quotaFormat.ts';
+import {
+  formatQuotaMetric,
+  isCodexResetCreditEligible,
+  orderCodexResetCredits,
+  quotaPayloadSummary,
+  resolveSelectedCodexResetCredit,
+} from '../../src/pages/quota/quotaFormat.ts';
 import { siblingCapacityWindows } from '../../src/pages/quota/quotaWindowSelection.ts';
 
 const t = ((key: string, params?: Record<string, unknown>) => params ? `${key}(${Object.values(params).join(',')})` : key) as TFunc;
@@ -127,6 +133,50 @@ test('orderCodexResetCredits excludes spent credits and orders soonest-expiring 
     ['c-early', 'c-tie-a', 'c-tie-b', 'c-late', 'c-undated'],
   );
   assert.deepEqual(orderCodexResetCredits(undefined), []);
+});
+
+test('resolveSelectedCodexResetCredit defaults to earliest eligible card, preserves valid picks, and falls back when expired or gone', () => {
+  const nowMS = 2000;
+  const ordered = orderCodexResetCredits([
+    { id: 'c-expired', status: 'available', expires_at_ms: 1500 },
+    { id: 'c-blank-id', status: 'available', expires_at_ms: 2100 },
+    { id: '  ', status: 'available', expires_at_ms: 2050 },
+    { id: 'c-later', status: 'available', expires_at_ms: 5000 },
+    { id: 'c-soonest', status: ' available ', expires_at_ms: 3000 },
+    { id: 'c-undated', status: 'available' },
+  ]);
+
+  assert.equal(isCodexResetCreditEligible({ id: 'c-expired', status: 'available', expires_at_ms: 1500 }, nowMS), false);
+  assert.equal(isCodexResetCreditEligible({ id: '  ', status: 'available', expires_at_ms: 5000 }, nowMS), false);
+  assert.equal(isCodexResetCreditEligible({ id: 'c-soonest', status: ' available ', expires_at_ms: 3000 }, nowMS), true);
+  assert.equal(isCodexResetCreditEligible({ id: 'c-undated', status: 'available' }, nowMS), true);
+
+  // Auto-defaults to earliest unexpired credit, skipping expired and blank-ID entries.
+  const initial = resolveSelectedCodexResetCredit(ordered, null, nowMS);
+  assert.equal(initial.defaultCredit?.id, 'c-blank-id');
+  assert.equal(initial.selectedCredit?.id, 'c-blank-id');
+  assert.equal(initial.eligibleCount, 4);
+
+  // Keeps explicit pick while still eligible.
+  const picked = resolveSelectedCodexResetCredit(ordered, 'c-later', nowMS);
+  assert.equal(picked.defaultCredit?.id, 'c-blank-id');
+  assert.equal(picked.selectedCredit?.id, 'c-later');
+
+  // Falls back to earliest eligible card if the picked card is expired or removed.
+  const expiredPick = resolveSelectedCodexResetCredit(ordered, 'c-expired', nowMS);
+  assert.equal(expiredPick.selectedCredit?.id, 'c-blank-id');
+  const gonePick = resolveSelectedCodexResetCredit(ordered, 'c-spent', nowMS);
+  assert.equal(gonePick.selectedCredit?.id, 'c-blank-id');
+
+  // Returns null when every listed card is expired.
+  const noneEligible = resolveSelectedCodexResetCredit(
+    [{ id: 'c-old', status: 'available', expires_at_ms: 1000 }],
+    'c-old',
+    nowMS,
+  );
+  assert.equal(noneEligible.defaultCredit, null);
+  assert.equal(noneEligible.selectedCredit, null);
+  assert.equal(noneEligible.eligibleCount, 0);
 });
 
 test('subscription cycle helpers require verified active start and expiry boundaries', () => {
