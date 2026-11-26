@@ -52,9 +52,10 @@ func (h *Handler) clearQuotaCooldown(ctx context.Context, client *management.Cli
 const (
 	quotaResetCreditBankUnreadableCode = "reset_credit_bank_unreadable"
 	quotaResetCreditUnavailableCode    = "reset_credit_unavailable"
+	quotaResetCreditNotAvailableCode   = "reset_credit_not_available"
 )
 
-func (h *Handler) redeemQuotaCredit(ctx context.Context, client *management.Client, authIndex string, audit providerAudit) (map[string]any, error) {
+func (h *Handler) redeemQuotaCredit(ctx context.Context, client *management.Client, authIndex string, creditID string, audit providerAudit) (map[string]any, error) {
 	filesResp, err := client.AuthFiles(ctx)
 	if err != nil {
 		return nil, err
@@ -74,15 +75,28 @@ func (h *Handler) redeemQuotaCredit(ctx context.Context, client *management.Clie
 		return nil, newProviderWriteError(http.StatusBadRequest, "rate limit reset credit is only supported for Codex credentials")
 	}
 
-	if auditErr := audit("quota.redeem_credit", "quota", authIndex, "attempt", nil); auditErr != nil {
+	requestedCreditID := strings.TrimSpace(creditID)
+	var attemptDetails map[string]any
+	if requestedCreditID != "" {
+		attemptDetails = map[string]any{"credit_id": requestedCreditID}
+	}
+	if auditErr := audit("quota.redeem_credit", "quota", authIndex, "attempt", attemptDetails); auditErr != nil {
 		return nil, newProviderWriteError(http.StatusInternalServerError, "audit failure; redeem credit aborted")
 	}
 
 	svc := quota.NewServiceWithClock(client, h.now)
-	if err := svc.RedeemCodexCredit(ctx, *foundFile); err != nil {
-		_ = audit("quota.redeem_credit", "quota", authIndex, "failure", map[string]any{"error": err.Error()})
+	redeemedCreditID, err := svc.RedeemCodexCredit(ctx, *foundFile, requestedCreditID)
+	if err != nil {
+		failureDetails := map[string]any{"error": err.Error()}
+		if requestedCreditID != "" {
+			failureDetails["credit_id"] = requestedCreditID
+		}
+		_ = audit("quota.redeem_credit", "quota", authIndex, "failure", failureDetails)
 		if errors.Is(err, quota.ErrCodexResetCreditBankUnreadable) {
 			return nil, newProviderWriteErrorWithCode(http.StatusBadGateway, fmt.Sprintf("redeem reset credit failed: %v", err), quotaResetCreditBankUnreadableCode)
+		}
+		if errors.Is(err, quota.ErrRequestedCodexResetCreditUnavailable) {
+			return nil, newProviderWriteErrorWithCode(http.StatusConflict, fmt.Sprintf("redeem reset credit failed: %v", err), quotaResetCreditNotAvailableCode)
 		}
 		if errors.Is(err, quota.ErrNoEligibleCodexResetCredit) {
 			return nil, newProviderWriteErrorWithCode(http.StatusConflict, fmt.Sprintf("redeem reset credit failed: %v", err), quotaResetCreditUnavailableCode)
@@ -121,10 +135,14 @@ func (h *Handler) redeemQuotaCredit(ctx context.Context, client *management.Clie
 	}
 	h.attachQuotaCapacity(ctx, refreshed, h.now().UnixMilli())
 
-	_ = audit("quota.redeem_credit", "quota", authIndex, "success", map[string]any{"cooldown_cleared": cooldownCleared})
+	_ = audit("quota.redeem_credit", "quota", authIndex, "success", map[string]any{
+		"credit_id":        redeemedCreditID,
+		"cooldown_cleared": cooldownCleared,
+	})
 
 	result := map[string]any{
 		"status":           "ok",
+		"credit_id":        redeemedCreditID,
 		"quota":            refreshed,
 		"cooldown_cleared": cooldownCleared,
 	}

@@ -234,7 +234,7 @@ func TestRedeemCodexCreditCallsConsumeEndpoint(t *testing.T) {
 	}
 
 	svc := NewService(client)
-	err := svc.RedeemCodexCredit(context.Background(), management.AuthFile{
+	redeemedID, err := svc.RedeemCodexCredit(context.Background(), management.AuthFile{
 		AuthIndex: "auth-codex",
 		Name:      "codex.json",
 		Type:      "codex",
@@ -242,9 +242,12 @@ func TestRedeemCodexCreditCallsConsumeEndpoint(t *testing.T) {
 		// The consume route must carry the credential's own ChatGPT account, exactly like
 		// the read probes, so a credit is spent under the account it was read from.
 		IDToken: json.RawMessage(`{"chatgpt_account_id":"acct-openai-123"}`),
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("RedeemCodexCredit error: %v", err)
+	}
+	if redeemedID != "credit-earliest-expiry" {
+		t.Errorf("redeemed credit ID = %q, want credit-earliest-expiry", redeemedID)
 	}
 	if len(creditRequests) != 2 || creditRequests[0] != CodexResetCreditsURL || creditRequests[1] != CodexRedeemCreditURL {
 		t.Fatalf("credit requests = %v, want one fresh list read followed by one consume", creditRequests)
@@ -296,12 +299,12 @@ func TestRedeemCodexCreditOmitsAccountHeaderWhenUnresolved(t *testing.T) {
 		},
 	}
 
-	err := NewService(client).RedeemCodexCredit(context.Background(), management.AuthFile{
+	_, err := NewService(client).RedeemCodexCredit(context.Background(), management.AuthFile{
 		AuthIndex: "auth-codex",
 		Name:      "codex.json",
 		Type:      "codex",
 		Provider:  "codex",
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("RedeemCodexCredit error: %v", err)
 	}
@@ -334,12 +337,12 @@ func TestRedeemCodexCreditRequiresUpstreamConfirmation(t *testing.T) {
 					return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(testCase.body)}, nil
 				},
 			}
-			err := NewService(client).RedeemCodexCredit(context.Background(), management.AuthFile{
+			_, err := NewService(client).RedeemCodexCredit(context.Background(), management.AuthFile{
 				AuthIndex: "auth-codex",
 				Name:      "codex.json",
 				Type:      "codex",
 				Provider:  "codex",
-			})
+			}, "")
 			if testCase.wantErr && err == nil {
 				t.Fatalf("RedeemCodexCredit with body %q succeeded, want an error", testCase.body)
 			}
@@ -372,7 +375,7 @@ func TestRedeemCodexCreditRejectsUnreadableOrUnusableBankWithoutConsuming(t *tes
 				consumeCalls++
 				return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(`{"code":"reset"}`)}, nil
 			}}
-			err := NewService(client).RedeemCodexCredit(context.Background(), management.AuthFile{AuthIndex: "auth-codex"})
+			_, err := NewService(client).RedeemCodexCredit(context.Background(), management.AuthFile{AuthIndex: "auth-codex"}, "")
 			if !errors.Is(err, testCase.wantErr) || consumeCalls != 0 {
 				t.Fatalf("unusable credit bank: err=%v (want %v) consume calls=%d, want rejection without consumption", err, testCase.wantErr, consumeCalls)
 			}
@@ -413,11 +416,68 @@ func TestRedeemCodexCreditSkipsUnusableCardsAndOrdersByExpiryThenGrant(t *testin
 	svc := NewServiceWithClock(client, func() time.Time {
 		return time.Date(2098, time.December, 31, 0, 0, 0, 0, time.UTC)
 	})
-	if err := svc.RedeemCodexCredit(context.Background(), management.AuthFile{AuthIndex: "auth-codex"}); err != nil {
+	if redeemedID, err := svc.RedeemCodexCredit(context.Background(), management.AuthFile{AuthIndex: "auth-codex"}, ""); err != nil {
 		t.Fatal(err)
+	} else if redeemedID != "earlier-grant" {
+		t.Errorf("redeemed credit ID = %q, want earlier-grant", redeemedID)
 	}
 	if consumeCalls != 1 {
 		t.Fatalf("consume calls = %d, want exactly one", consumeCalls)
+	}
+}
+
+func TestRedeemCodexCreditHonorsExplicitCreditIDAndFailsClosedWhenUnavailable(t *testing.T) {
+	t.Run("redeems explicitly requested non-earliest credit", func(t *testing.T) {
+		var sentCreditID string
+		client := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+			if req.URL == CodexResetCreditsURL {
+				return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(availableCodexResetCreditsJSON)}, nil
+			}
+			var body struct {
+				CreditID string `json:"credit_id"`
+			}
+			if err := json.Unmarshal([]byte(req.Data), &body); err != nil {
+				t.Fatal(err)
+			}
+			sentCreditID = body.CreditID
+			return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(`{"code":"reset"}`)}, nil
+		}}
+		redeemedID, err := NewService(client).RedeemCodexCredit(context.Background(), management.AuthFile{AuthIndex: "auth-codex"}, " credit-latest-expiry ")
+		if err != nil {
+			t.Fatalf("RedeemCodexCredit error: %v", err)
+		}
+		if sentCreditID != "credit-latest-expiry" || redeemedID != "credit-latest-expiry" {
+			t.Fatalf("sent=%q returned=%q, want credit-latest-expiry", sentCreditID, redeemedID)
+		}
+	})
+
+	for _, tc := range []struct {
+		name      string
+		requested string
+	}{
+		{name: "unknown id", requested: "credit-missing"},
+		{name: "spent card", requested: "spent"},
+		{name: "expired card", requested: "expired"},
+	} {
+		t.Run("refuses "+tc.name+" without falling back", func(t *testing.T) {
+			const bank = `{"available_count":2,"credits":[
+				{"id":"valid-earliest","status":"available","expires_at":"2099-01-01T00:00:00Z"},
+				{"id":"spent","status":"used","expires_at":"2099-02-01T00:00:00Z"},
+				{"id":"expired","status":"available","expires_at":"2000-01-01T00:00:00Z"}
+			]}`
+			consumeCalls := 0
+			client := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+				if req.URL == CodexResetCreditsURL {
+					return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(bank)}, nil
+				}
+				consumeCalls++
+				return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(`{"code":"reset"}`)}, nil
+			}}
+			redeemedID, err := NewService(client).RedeemCodexCredit(context.Background(), management.AuthFile{AuthIndex: "auth-codex"}, tc.requested)
+			if !errors.Is(err, ErrRequestedCodexResetCreditUnavailable) || redeemedID != "" || consumeCalls != 0 {
+				t.Fatalf("requested %q: id=%q err=%v consumeCalls=%d, want ErrRequestedCodexResetCreditUnavailable with 0 consumes", tc.requested, redeemedID, err, consumeCalls)
+			}
+		})
 	}
 }
 

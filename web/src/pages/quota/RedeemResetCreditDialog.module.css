@@ -1,0 +1,120 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* The credits are a vertical segmented track: a well set into the dialog's face, holding rows that
+   rest flat on it. The dialog is already `--elevated`, the selected face's own tone, so the well
+   steps down to `--surface` and the chosen row is picked up back to the dialog's tone with the
+   selected ring. 4px inside a `lg` well keeps an `md` row concentric. */
+.tray {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-well);
+}
+
+.option {
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: start;
+  font-variant-numeric: tabular-nums;
+}
+
+.is-choice {
+  cursor: pointer;
+  transition: var(--select-transition);
+}
+
+.is-choice:hover:not(:disabled):not(.is-selected) {
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+
+.is-choice:active:not(:disabled) {
+  transform: scale(var(--press-scale));
+}
+
+.is-choice:focus-visible {
+  outline: 0;
+  box-shadow: var(--shadow-focus);
+}
+
+.is-choice:disabled {
+  cursor: default;
+}
+
+/* Line-initial so check-css-modules exports `styles['is-selected']`. */
+.is-selected,
+.is-choice.is-selected {
+  background: var(--select-surface);
+  box-shadow: var(--shadow-selected);
+  color: var(--fg);
+}
+
+.is-choice.is-selected:focus-visible {
+  box-shadow: var(--shadow-selected), var(--shadow-focus);
+}
+
+.option-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.option-label {
+  white-space: nowrap;
+}
+
+.is-selected .option-label {
+  font-weight: 600;
+}
+
+.option-soonest {
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  white-space: nowrap;
+}
+
+.option-expiry {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  min-width: 0;
+}
+
+.option-countdown {
+  color: inherit;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.option-countdown b {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.option-date {
+  color: var(--meta);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  white-space: nowrap;
+}

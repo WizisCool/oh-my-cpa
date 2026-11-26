@@ -307,13 +307,14 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 	}
 	var redeemResult struct {
 		Status          string `json:"status"`
+		CreditID        string `json:"credit_id"`
 		CooldownCleared bool   `json:"cooldown_cleared"`
 	}
 	if err := json.NewDecoder(redeemResp.Body).Decode(&redeemResult); err != nil {
 		t.Fatalf("decode redeem result failed: %v", err)
 	}
-	if redeemResult.Status != "ok" || !redeemResult.CooldownCleared {
-		t.Errorf("redeem result = %+v, want status ok with cooldown cleared", redeemResult)
+	if redeemResult.Status != "ok" || redeemResult.CreditID != "credit-1" || !redeemResult.CooldownCleared {
+		t.Errorf("redeem result = %+v, want status ok, credit_id credit-1, cooldown cleared", redeemResult)
 	}
 	if cpaResetCalledWith != "codex-idx-1" {
 		t.Errorf("redeem cpaResetCalledWith = %q, want codex-idx-1", cpaResetCalledWith)
@@ -338,6 +339,32 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 	}
 	if selectedCredit.CreditID != "credit-1" {
 		t.Errorf("consume credit_id = %q, want the earliest-expiring available credit", selectedCredit.CreditID)
+	}
+
+	// Explicit credit_id spends the requested card instead of the earliest one.
+	explicitResp, err := client.Post(appServer.URL+"/api/v1/management/quota/redeem-credit", "application/json", bytes.NewBufferString(`{"auth_index":"codex-idx-1","credit_id":"credit-2"}`))
+	if err != nil {
+		t.Fatalf("POST /redeem-credit with explicit credit_id failed: %v", err)
+	}
+	defer explicitResp.Body.Close()
+	if explicitResp.StatusCode != http.StatusOK {
+		t.Fatalf("explicit redeem status = %d, want 200", explicitResp.StatusCode)
+	}
+	var explicitResult struct {
+		Status   string `json:"status"`
+		CreditID string `json:"credit_id"`
+	}
+	if err := json.NewDecoder(explicitResp.Body).Decode(&explicitResult); err != nil {
+		t.Fatalf("decode explicit redeem result failed: %v", err)
+	}
+	if explicitResult.Status != "ok" || explicitResult.CreditID != "credit-2" {
+		t.Errorf("explicit redeem result = %+v, want status ok and credit_id credit-2", explicitResult)
+	}
+	if err := json.Unmarshal([]byte(cpaConsumeBody), &selectedCredit); err != nil {
+		t.Fatal(err)
+	}
+	if selectedCredit.CreditID != "credit-2" {
+		t.Errorf("explicit consume credit_id = %q, want credit-2", selectedCredit.CreditID)
 	}
 
 	// Redemption remains successful when the separate gateway clear fails, but
@@ -590,6 +617,7 @@ func TestRedeemQuotaCreditDistinguishesPreflightRefusalsFromUnknownConsumeOutcom
 
 	for _, tc := range []struct {
 		name             string
+		requestBody      string
 		bankStatus       int
 		bankBody         string
 		consumeBody      string
@@ -599,6 +627,7 @@ func TestRedeemQuotaCreditDistinguishesPreflightRefusalsFromUnknownConsumeOutcom
 	}{
 		{
 			name:             "unreadable credit bank refuses without consuming",
+			requestBody:      `{"auth_index":"codex-idx-1"}`,
 			bankStatus:       http.StatusServiceUnavailable,
 			bankBody:         `{}`,
 			wantHTTPStatus:   http.StatusBadGateway,
@@ -607,6 +636,7 @@ func TestRedeemQuotaCreditDistinguishesPreflightRefusalsFromUnknownConsumeOutcom
 		},
 		{
 			name:             "no eligible credit refuses without consuming",
+			requestBody:      `{"auth_index":"codex-idx-1"}`,
 			bankStatus:       http.StatusOK,
 			bankBody:         `{"available_count":0,"credits":[]}`,
 			wantHTTPStatus:   http.StatusConflict,
@@ -614,7 +644,17 @@ func TestRedeemQuotaCreditDistinguishesPreflightRefusalsFromUnknownConsumeOutcom
 			wantConsumeCalls: 0,
 		},
 		{
+			name:             "unavailable explicit credit refuses without falling back to another card",
+			requestBody:      `{"auth_index":"codex-idx-1","credit_id":"credit-gone"}`,
+			bankStatus:       http.StatusOK,
+			bankBody:         fmt.Sprintf(`{"available_count":1,"credits":[{"id":"credit-1","status":"available","reset_type":"codex_rate_limits","expires_at":"%d"}]}`, validExpiry),
+			wantHTTPStatus:   http.StatusConflict,
+			wantCode:         quotaResetCreditNotAvailableCode,
+			wantConsumeCalls: 0,
+		},
+		{
 			name:             "unconfirmed consume response remains an unknown outcome without preflight code",
+			requestBody:      `{"auth_index":"codex-idx-1"}`,
 			bankStatus:       http.StatusOK,
 			bankBody:         fmt.Sprintf(`{"available_count":1,"credits":[{"id":"credit-1","status":"available","reset_type":"codex_rate_limits","expires_at":"%d"}]}`, validExpiry),
 			consumeBody:      `{}`,
@@ -681,7 +721,7 @@ func TestRedeemQuotaCreditDistinguishesPreflightRefusalsFromUnknownConsumeOutcom
 			}
 
 			client := signedInClient(t, appServer.URL+"/api/auth/login", managementKey)
-			resp, err := client.Post(appServer.URL+"/api/v1/management/quota/redeem-credit", "application/json", bytes.NewBufferString(`{"auth_index":"codex-idx-1"}`))
+			resp, err := client.Post(appServer.URL+"/api/v1/management/quota/redeem-credit", "application/json", bytes.NewBufferString(tc.requestBody))
 			if err != nil {
 				t.Fatalf("POST /redeem-credit failed: %v", err)
 			}
