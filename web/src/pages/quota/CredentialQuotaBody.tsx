@@ -10,8 +10,8 @@ import { formatObservedAgo, formatQuotaMetric, formatQuotaMoney, formatSnapshotR
 import { QuotaWindowCards } from './QuotaWindowCards';
 import { QuotaResetCards } from './QuotaResetCards';
 import QuotaCapacityDialog from './QuotaCapacityDialog';
-import { useQuotaCapacityBlocked } from './QuotaCapacityButton';
-import { hasActiveSubscriptionPeriod } from './quotaCapacity';
+import { useQuotaCapacityBlocked, type QuotaCapacityOwner } from './QuotaCapacityButton';
+import { quotaSubscriptionPeriodKey } from './quotaCapacity';
 import { ToolButton } from '../../components/common/ToolButton';
 import { AppModal } from '../../components/common/AppModal';
 import { isEstimableQuotaWindow, orderQuotaWindows } from './quotaWindowSelection';
@@ -72,18 +72,13 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
   }, [isCapacityBlocked, isSubscriptionOpen]);
   const windows = orderQuotaWindows(item.windows ?? []);
   const standardCapacityWindows = windows.filter((window) => window.scope === 'standard' && isEstimableQuotaWindow(window));
-  const hasSubscriptionCycle = Boolean(
-    item.auth_index
-    && item.observed_at_ms > 0
-    && item.status !== 'idle'
-    && item.status !== 'error'
-    && hasActiveSubscriptionPeriod(item.plan, nowMS),
-  );
-  const owner = {
+  const subscriptionPeriodKey = quotaSubscriptionPeriodKey(item, nowMS);
+  const hasSubscriptionCycle = subscriptionPeriodKey !== null;
+  const owner: QuotaCapacityOwner = {
     authIndex: item.auth_index,
     credentialName: credentialLabel,
     mark: credentialMark,
-    hasSubscriptionCycle,
+    subscriptionPeriodKey,
   };
   const planLabel = quotaPlanLabel(item.plan, t);
   const availableCredits = item.reset_credits?.available_count ?? 0;

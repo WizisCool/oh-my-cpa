@@ -26,8 +26,8 @@ export interface QuotaCapacityOwner {
   credentialName: string;
   /** The credential's brand mark, drawn beside the details' title. */
   mark?: React.ReactNode;
-  /** True when the credential has verified upstream subscription start and expiry dates covering now. */
-  hasSubscriptionCycle?: boolean;
+  /** Verified active subscription billing-period identity covering now; absent when unavailable. */
+  subscriptionPeriodKey?: string | null;
 }
 
 export interface QuotaCapacityButtonProps {

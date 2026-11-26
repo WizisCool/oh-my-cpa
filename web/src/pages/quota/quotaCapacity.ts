@@ -5,6 +5,7 @@ import { currencyReadout } from '../../types/currencyDisplay';
 import type {
   QuotaCapacityCycle,
   QuotaCapacityUnavailableReason,
+  QuotaItem,
   QuotaPlan,
   QuotaSubscriptionProjectionUnavailableReason,
   QuotaWindow,
@@ -56,19 +57,47 @@ export function subscriptionProjectionNote(
   return reason ? t(SUBSCRIPTION_REASON_KEYS[reason]) : null;
 }
 
+type SubscriptionPeriodPlan = Pick<QuotaPlan, 'starts_at_ms' | 'expires_at_ms' | 'expires_source' | 'billing_period'>;
+
+/**
+ * Returns a stable cache identity for the credential's verified upstream
+ * subscription billing period covering `nowMS`, or `null` when unavailable.
+ */
+export function activeSubscriptionPeriodKey(
+  plan: SubscriptionPeriodPlan | undefined,
+  nowMS: number,
+): string | null {
+  if (!plan || plan.expires_source === 'credential_snapshot') return null;
+  const start = plan.starts_at_ms;
+  const end = plan.expires_at_ms;
+  if (start == null || end == null || !Number.isFinite(start) || !Number.isFinite(end)) return null;
+  if (start <= 0 || start > nowMS || nowMS >= end) return null;
+  return `${start}:${end}:${plan.billing_period ?? ''}`;
+}
+
+/**
+ * Returns the verified active subscription billing-period identity for an
+ * observed, non-error quota reading, or `null` when unavailable.
+ */
+export function quotaSubscriptionPeriodKey(
+  item: (Pick<QuotaItem, 'auth_index' | 'observed_at_ms' | 'status'> & { plan?: SubscriptionPeriodPlan }) | undefined,
+  nowMS: number,
+): string | null {
+  if (!item || !item.auth_index || item.observed_at_ms <= 0 || item.status === 'idle' || item.status === 'error') {
+    return null;
+  }
+  return activeSubscriptionPeriodKey(item.plan, nowMS);
+}
+
 /**
  * True only when the credential carries verified upstream start and expiry
  * instants covering `nowMS`.
  */
 export function hasActiveSubscriptionPeriod(
-  plan: Pick<QuotaPlan, 'starts_at_ms' | 'expires_at_ms' | 'expires_source'> | undefined,
+  plan: SubscriptionPeriodPlan | undefined,
   nowMS: number,
 ): boolean {
-  if (!plan || plan.expires_source === 'credential_snapshot') return false;
-  const start = plan.starts_at_ms;
-  const end = plan.expires_at_ms;
-  if (start == null || end == null || !Number.isFinite(start) || !Number.isFinite(end)) return false;
-  return start > 0 && start <= nowMS && nowMS < end;
+  return activeSubscriptionPeriodKey(plan, nowMS) !== null;
 }
 
 /** Subscription billing-cycle tab requires verified billing boundaries and a plan-level window. */

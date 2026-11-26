@@ -781,7 +781,7 @@ describe('quota consumption and window capacity dialog', () => {
       <QuotaCapacityDialog
         open
         onClose={vi.fn()}
-        owner={{ authIndex: 'codex-sub', credentialName: 'sa...6@gmail.com', hasSubscriptionCycle: true }}
+        owner={{ authIndex: 'codex-sub', credentialName: 'sa...6@gmail.com', subscriptionPeriodKey: `${NOW_MS - 15 * 24 * HOUR_MS}:${NOW_MS + 15 * 24 * HOUR_MS}:monthly` }}
         window={fiveHour}
         windows={[fiveHour, weekly]}
       />,
@@ -817,7 +817,7 @@ describe('quota consumption and window capacity dialog', () => {
       <QuotaCapacityDialog
         open
         onClose={vi.fn()}
-        owner={{ authIndex: 'codex-sub', credentialName: 'Claude Max', hasSubscriptionCycle: false }}
+        owner={{ authIndex: 'codex-sub', credentialName: 'Claude Max', subscriptionPeriodKey: null }}
         window={fiveHour}
         windows={[fiveHour, weekly]}
       />,
@@ -837,7 +837,7 @@ describe('quota consumption and window capacity dialog', () => {
     };
     api.on('GET', '/management/quota/ag-seat/capacity', () => ({ window_id: groupWindow.id, current: null, previous: null }));
     const groupView = renderWithOmc(
-      <QuotaCapacityDialog open onClose={vi.fn()} owner={{ authIndex: 'ag-seat', credentialName: 'AG Ultra', hasSubscriptionCycle: false }} window={groupWindow} />,
+      <QuotaCapacityDialog open onClose={vi.fn()} owner={{ authIndex: 'ag-seat', credentialName: 'AG Ultra', subscriptionPeriodKey: null }} window={groupWindow} />,
     );
     try {
       const dialog = await screen.findByRole('dialog');
@@ -902,6 +902,130 @@ describe('quota consumption and window capacity dialog', () => {
     try {
       expect(screen.queryByRole('button', { name: 'Subscription cycle usage' })).toBeNull();
     } finally { agView.unmount(); }
+  });
+
+  it('refreshes an open subscription-cycle dialog when the verified billing period rolls over while preserving same-period cache reuse', async () => {
+    const api = installOmcApi();
+    const DAY_MS = 24 * HOUR_MS;
+    const period1Start = NOW_MS - 30 * DAY_MS;
+    const period1End = NOW_MS + 1_000;
+    const period2Start = period1End;
+    const period2End = period2Start + 30 * DAY_MS;
+    const period3Start = period2End;
+    const period3End = period3Start + 30 * DAY_MS;
+
+    const fiveHour: QuotaWindow = { ...quotaWindow('five_hour', 100, 5), period_hours: 5, capacity_unavailable: 'low_usage' };
+    const weekly: QuotaWindow = { ...quotaWindow('weekly', 80, 100), period_hours: 168, capacity_unavailable: 'low_usage' };
+    const subscriptionReads = () => api.requests.filter((req) => req.path === '/management/quota/codex-rollover/subscription-cycle').length;
+
+    const makeSubscriptionPayload = (fromMS: number, toMS: number, measuredAtMS: number, costNanos: number, previousCostNanos?: number) => ({
+      source: 'live_subscription' as const,
+      plan_label: 'Pro 200',
+      current: {
+        from_ms: fromMS,
+        to_ms: toMS,
+        measured_at_ms: measuredAtMS,
+        elapsed_percent: 5,
+        usage: { from_ms: fromMS, to_ms: measuredAtMS, requests: 20, priced_requests: 20, tokens: 1_000_000, cost_nanos: costNanos },
+      },
+      previous: previousCostNanos == null
+        ? null
+        : {
+          from_ms: fromMS - 30 * DAY_MS,
+          to_ms: fromMS,
+          usage: { from_ms: fromMS - 30 * DAY_MS, to_ms: fromMS, requests: 120, priced_requests: 120, tokens: 8_000_000, cost_nanos: previousCostNanos },
+        },
+      projection_unavailable: 'insufficient_elapsed' as const,
+    });
+
+    const makeItem = (startsAtMS: number, expiresAtMS: number) => quota('codex-rollover', [fiveHour, weekly], {
+      plan: {
+        plan_type: 'pro',
+        plan_label: 'Pro 200',
+        tier: 'elite',
+        starts_at_ms: startsAtMS,
+        expires_at_ms: expiresAtMS,
+        billing_period: 'monthly',
+        expires_source: 'live_subscription',
+      },
+    });
+
+    let activePayload = makeSubscriptionPayload(period1Start, period1End, NOW_MS, 18_500_000_000);
+    api.on('GET', '/management/quota/codex-rollover/subscription-cycle', () => activePayload);
+    api.on('GET', '/management/quota/codex-rollover/capacity', (req) => ({
+      window_id: req.query.get('window') ?? 'five_hour',
+      current: null,
+      previous: null,
+    }));
+
+    let setState!: React.Dispatch<React.SetStateAction<{ item: QuotaItem; nowMS: number }>>;
+    const Host = () => {
+      const [state, _setState] = React.useState(() => ({
+        item: makeItem(period1Start, period1End),
+        nowMS: NOW_MS,
+      }));
+      setState = _setState;
+      return <CredentialQuotaBody item={state.item} credentialLabel="codex...rollover" nowMS={state.nowMS} isDemo={false} />;
+    };
+
+    const view = renderWithOmc(<Host />);
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Subscription cycle usage' }));
+      const dialog = await screen.findByRole('dialog');
+      const thisCard = () => within(dialog).getByRole('region', { name: 'This cycle' });
+      const lastCard = () => within(dialog).getByRole('region', { name: 'Last cycle' });
+
+      await waitFor(() => expect(thisCard().textContent).toContain('$18.50'));
+      expect(subscriptionReads()).toBe(1);
+
+      // Keep the dialog open across rollover and hold the second fetch to verify the loading state
+      // clears old totals immediately instead of labeling them as the new current cycle.
+      const heldRollover = api.hold('GET', '/management/quota/codex-rollover/subscription-cycle');
+      activePayload = makeSubscriptionPayload(period2Start, period2End, period2Start + 1_000, 2_000_000_000, 18_500_000_000);
+      act(() => setState({ item: makeItem(period2Start, period2End), nowMS: period2Start + 1_000 }));
+
+      await waitFor(() => expect(subscriptionReads()).toBe(2));
+      expect(thisCard().getAttribute('aria-busy')).toBe('true');
+      expect(thisCard().textContent).toContain('…');
+      expect(thisCard().textContent).not.toContain('$18.50');
+
+      heldRollover.release();
+      await waitFor(() => {
+        expect(thisCard().getAttribute('aria-busy')).toBeNull();
+        expect(thisCard().textContent).toContain('$2.00');
+      });
+      expect(lastCard().textContent).toContain('$18.50');
+
+      // Clock ticks within the same billing period do not re-fetch.
+      act(() => setState((prev) => ({ ...prev, nowMS: period2Start + 16_000 })));
+      expect(subscriptionReads()).toBe(2);
+
+      // Switching tabs within the same billing period reuses the cached response.
+      fireEvent.click(within(dialog).getByRole('radio', { name: 'Weekly limit' }));
+      await waitFor(() => expect(within(dialog).getByRole('region', { name: 'This window' })).toBeTruthy());
+      fireEvent.click(within(dialog).getByRole('radio', { name: 'Subscription cycle' }));
+      await waitFor(() => expect(thisCard().textContent).toContain('$2.00'));
+      expect(subscriptionReads()).toBe(2);
+
+      // Closing and reopening within the same billing period also reuses the cache.
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      fireEvent.click(screen.getByRole('button', { name: 'Subscription cycle usage' }));
+      const reopened = await screen.findByRole('dialog');
+      await waitFor(() => expect(within(reopened).getByRole('region', { name: 'This cycle' }).textContent).toContain('$2.00'));
+      expect(subscriptionReads()).toBe(2);
+
+      // Crossing expiry before the refreshed snapshot arrives hides the stale subscription view
+      // without issuing a request, then fetches Period 3 once verified dates land.
+      act(() => setState((prev) => ({ ...prev, nowMS: period2End + 1_000 })));
+      await waitFor(() => expect(within(reopened).queryByRole('radio', { name: 'Subscription cycle' })).toBeNull());
+      expect(subscriptionReads()).toBe(2);
+
+      activePayload = makeSubscriptionPayload(period3Start, period3End, period3Start + 1_000, 500_000_000, 2_000_000_000);
+      act(() => setState({ item: makeItem(period3Start, period3End), nowMS: period3Start + 1_000 }));
+      await waitFor(() => expect(subscriptionReads()).toBe(3));
+      await waitFor(() => expect(within(reopened).getByRole('region', { name: 'This cycle' }).textContent).toContain('$0.50'));
+    } finally { view.unmount(); }
   });
 });
 
