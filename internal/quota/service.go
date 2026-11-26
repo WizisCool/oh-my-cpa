@@ -1,12 +1,14 @@
 package quota
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -937,8 +939,6 @@ func (s *Service) RedeemCodexCredit(ctx context.Context, file management.AuthFil
 	if authIndex == "" {
 		return errors.New("auth_index is required")
 	}
-	redeemID := uuid.New().String()
-	body := fmt.Sprintf(`{"redeem_request_id":%q}`, redeemID)
 	headers := management.WithQuotaCredential(map[string]string{
 		"Content-Type": "application/json",
 		"Accept":       "application/json",
@@ -948,7 +948,25 @@ func (s *Service) RedeemCodexCredit(ctx context.Context, file management.AuthFil
 		headers["Chatgpt-Account-Id"] = accountID
 	}
 
-	resp, err := s.SafeApiCall(ctx, authIndex, "POST", CodexRedeemCreditURL, headers, body)
+	// Without credit_id, upstream may spend a later-expiring credit first.
+	// Read the current bank and explicitly name the soonest-expiring credit.
+	credits := s.fetchCodexResetCredits(ctx, file, headers, nil)
+	if credits == nil {
+		return errors.New("could not read available reset credits; no credit redeemed")
+	}
+	credit, ok := earliestCodexResetCredit(credits.Credits, s.Now().UnixMilli())
+	if !ok {
+		return errors.New("no available unexpired reset credit with an id; no credit redeemed")
+	}
+	body, err := json.Marshal(struct {
+		CreditID        string `json:"credit_id"`
+		RedeemRequestID string `json:"redeem_request_id"`
+	}{CreditID: credit.ID, RedeemRequestID: uuid.New().String()})
+	if err != nil {
+		return err
+	}
+
+	resp, err := s.SafeApiCall(ctx, authIndex, "POST", CodexRedeemCreditURL, headers, string(body))
 	if err != nil {
 		return fmt.Errorf("redeem codex credit: %w", err)
 	}
@@ -972,6 +990,46 @@ func (s *Service) RedeemCodexCredit(ctx context.Context, file management.AuthFil
 		return errors.New("redeem codex credit: upstream did not confirm the reset; refresh the quota before trying again")
 	}
 	return nil
+}
+
+func earliestCodexResetCredit(credits []CodexResetCredit, nowMS int64) (CodexResetCredit, bool) {
+	available := make([]CodexResetCredit, 0, len(credits))
+	for _, credit := range credits {
+		if strings.TrimSpace(credit.ID) == "" || credit.Status != "available" {
+			continue
+		}
+		if credit.ExpiresAtMS != nil && *credit.ExpiresAtMS <= nowMS {
+			continue
+		}
+		available = append(available, credit)
+	}
+	sort.Slice(available, func(i, j int) bool {
+		left, right := available[i], available[j]
+		if order := compareCreditInstant(left.ExpiresAtMS, right.ExpiresAtMS); order != 0 {
+			return order < 0
+		}
+		if order := compareCreditInstant(left.GrantedAtMS, right.GrantedAtMS); order != 0 {
+			return order < 0
+		}
+		return left.ID < right.ID
+	})
+	if len(available) == 0 {
+		return CodexResetCredit{}, false
+	}
+	return available[0], true
+}
+
+func compareCreditInstant(left, right *int64) int {
+	if left == nil && right == nil {
+		return 0
+	}
+	if left == nil {
+		return 1
+	}
+	if right == nil {
+		return -1
+	}
+	return cmp.Compare(*left, *right)
 }
 
 // ClearCPACooldown resets the CPA error cooldown for an auth_index.

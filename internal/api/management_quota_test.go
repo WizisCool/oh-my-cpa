@@ -323,6 +323,15 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 	if !strings.Contains(cpaConsumeBody, "redeem_request_id") {
 		t.Errorf("consume body = %q, want a redeem_request_id", cpaConsumeBody)
 	}
+	var selectedCredit struct {
+		CreditID string `json:"credit_id"`
+	}
+	if err := json.Unmarshal([]byte(cpaConsumeBody), &selectedCredit); err != nil {
+		t.Fatal(err)
+	}
+	if selectedCredit.CreditID != "credit-1" {
+		t.Errorf("consume credit_id = %q, want the earliest-expiring available credit", selectedCredit.CreditID)
+	}
 
 	// Redemption remains successful when the separate gateway clear fails, but
 	// the ordinary response must not expose CPA's raw diagnostic body.
