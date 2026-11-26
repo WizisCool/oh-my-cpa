@@ -354,7 +354,7 @@ export default {
   'events.record_log_stream': '流式传输',
   'events.record_log_provider_name': '提供商名称',
   'events.record_log_api_key_alias': '调用方密钥名称',
-  'events.record_log_api_key_mask': '调用方密钥掩码',
+  'events.record_log_api_key_mask': '调用方密钥遮罩',
   'events.record_log_accounting_status': '计量状态',
   'events.record_log_price_version': '价格版本 ID',
   'events.record_log_pricing_channel': '计费渠道',

@@ -355,7 +355,7 @@ export default {
   "events.record_log_exported_at": "Dieksport pada",
   "events.record_log_event_id": "ID acara",
   "events.record_log_stream": "Strim",
-  "events.record_log_provider_name": "Nama pembekal",
+  "events.record_log_provider_name": "Nama penyedia",
   "events.record_log_api_key_alias": "Alias kunci API",
   "events.record_log_api_key_mask": "Topeng kunci API",
   "events.record_log_accounting_status": "Status perakaunan",

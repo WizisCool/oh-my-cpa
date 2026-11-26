@@ -355,7 +355,7 @@ export default {
   "events.record_log_exported_at": "匯出時間",
   "events.record_log_event_id": "記錄 ID",
   "events.record_log_stream": "串流傳輸",
-  "events.record_log_provider_name": "提供商名稱",
+  "events.record_log_provider_name": "供應商名稱",
   "events.record_log_api_key_alias": "呼叫方金鑰名稱",
   "events.record_log_api_key_mask": "呼叫方金鑰遮罩",
   "events.record_log_accounting_status": "計量狀態",
