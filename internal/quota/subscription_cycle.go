@@ -136,7 +136,11 @@ func resolveCalendarMonthCycle(startMS, endMS, nowMS int64, cadenceMonths int) (
 		return current, PreviousSubscriptionPeriod(current.FromMS, current.ToMS)
 	}
 	current := SubscriptionCycleBounds{FromMS: rawFrom, ToMS: cycleTo}
-	previous := SubscriptionCycleBounds{FromMS: boundary(step + 2), ToMS: rawFrom}
+	prevFrom := boundary(step + 2)
+	if prevFrom < startMS && startMS < rawFrom {
+		prevFrom = startMS
+	}
+	previous := SubscriptionCycleBounds{FromMS: prevFrom, ToMS: rawFrom}
 	return current, previous
 }
 
@@ -149,7 +153,11 @@ func resolveFixedSpanCycle(startMS, endMS, nowMS, spanMS int64) (SubscriptionCyc
 		return current, PreviousSubscriptionPeriod(current.FromMS, current.ToMS)
 	}
 	current := SubscriptionCycleBounds{FromMS: rawFrom, ToMS: cycleTo}
-	previous := SubscriptionCycleBounds{FromMS: max(0, rawFrom-spanMS), ToMS: rawFrom}
+	prevFrom := max(0, rawFrom-spanMS)
+	if prevFrom < startMS && startMS < rawFrom {
+		prevFrom = startMS
+	}
+	previous := SubscriptionCycleBounds{FromMS: prevFrom, ToMS: rawFrom}
 	return current, previous
 }
 
