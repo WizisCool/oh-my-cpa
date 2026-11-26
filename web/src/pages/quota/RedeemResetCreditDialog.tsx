@@ -60,7 +60,7 @@ export function RedeemResetCreditDialog({ open, credits, targetName, nowMS, onCo
   const selectedCredit = activeId
     ? eligible.find(({ credit }) => credit.id.trim() === activeId)?.credit ?? null
     : null;
-  const isAutoMode = isUnlisted && isOpenedUnlisted;
+  const isAutoMode = isUnlisted && isOpenedUnlisted && !activeId;
   const hasNoneEligible = !isAutoMode && eligible.length === 0;
   const isSelectionUnavailable = !isAutoMode && Boolean(activeId) && !selectedCredit && eligible.length > 0;
   const canConfirm = !isSubmitting && (isAutoMode ? (credits?.available_count ?? 0) > 0 : Boolean(selectedCredit));

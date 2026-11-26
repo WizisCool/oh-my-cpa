@@ -475,6 +475,17 @@ describe('credential quota body details', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Redeem credit' }));
     await waitFor(() => expect(onRedeem).toHaveBeenLastCalledWith('codex-select', undefined));
 
+    // Opening unlisted, then picking a credit after details load, still blocks automatic fallback
+    // if details vanish again while the dialog remains open.
+    dialog = await openDialog();
+    rerender(body(threeCredits));
+    fireEvent.click(choices(dialog)[1]);
+    rerender(body({ available_count: 2, applicable_available_count: 2 }));
+    const blockedAfterUnlist = within(dialog).getByRole('button', { name: 'Redeem credit' }) as HTMLButtonElement;
+    expect(blockedAfterUnlist.disabled).toBe(true);
+    expect(dialog.textContent).toContain(makeT('en')('quota.reset_credit_none_eligible'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
     // Every listed credit expired: the entry is disabled and says why.
     rerender(body({
       available_count: 1,
