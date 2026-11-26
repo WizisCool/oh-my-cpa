@@ -86,6 +86,7 @@ export interface RequestRecordLogDocument {
   routing: {
     provider: string;
     provider_title?: string;
+    provider_identity_unconfirmed?: true;
     is_oauth: boolean;
     credential?: string;
     identity_basis?: 'resource' | 'current_file' | 'source' | 'index' | 'unknown';
@@ -232,6 +233,7 @@ export function buildRequestRecordLog(input: RequestRecordLogInput): RequestReco
   const routing: RequestRecordLogDocument['routing'] = {
     provider: event.provider,
     ...(nonEmpty(providerInfo.title) ? { provider_title: maskText(nonEmpty(providerInfo.title)!) } : {}),
+    ...(providerInfo.isIdentityUnknown ? { provider_identity_unconfirmed: true } : {}),
     is_oauth: providerInfo.isOAuth,
     ...(safeCredential ? { credential: safeCredential } : {}),
     ...(identity ? { identity_basis: identity.kind } : {}),
@@ -405,9 +407,15 @@ export function formatRequestRecordLog(doc: RequestRecordLogDocument, t: TFunc):
     kv(t('events.resolved_tier'), resolvedTierText),
   ]));
 
+  const providerNameLine = doc.routing.provider_title
+    ? (doc.routing.provider_identity_unconfirmed
+      ? `${doc.routing.provider_title} (${t('events.provider_unresolved_badge')})`
+      : doc.routing.provider_title)
+    : undefined;
+
   appendSection(sections, t('events.routing'), presentLines([
     kv(t('events.provider'), doc.routing.provider),
-    kv(t('events.record_log_provider_name'), doc.routing.provider_title),
+    kv(t('events.record_log_provider_name'), providerNameLine),
     kv(t('events.auth_type'), doc.routing.auth_type),
     kv(t('events.auth_index'), doc.routing.auth_index),
     kv(t('events.executor'), doc.routing.executor_type),

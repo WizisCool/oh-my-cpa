@@ -449,6 +449,7 @@ test('single-record OMC log captures full diagnostics, masks identities, and for
     );
 
   assert.equal(doc.schema, REQUEST_RECORD_LOG_SCHEMA);
+  assert.equal(doc.routing.provider_identity_unconfirmed, undefined);
   assert.equal(doc.request.status, 'failed');
   assert.equal(doc.request.transport, 'websocket');
   assert.equal(doc.model.served, 'gpt-5-2026-01');
@@ -519,6 +520,32 @@ test('single-record OMC log captures full diagnostics, masks identities, and for
   const fallbackZh = formatRequestRecordLog(fallbackDoc, makeT(zhCatalog));
   assert.ok(!fallbackZh.includes(RAW_EMAIL));
   assert.ok(fallbackZh.includes('费用状态: 价格无效'));
+
+  // When the provider catalog could not be verified, exports mark the provider name as unconfirmed.
+  const unconfirmedDoc = buildRequestRecordLog({
+    detail: {
+      event: {
+        id: 90,
+        event_key: 'evt-90',
+        timestamp_ms: 1_700_000_000_000,
+        provider: 'openai',
+        auth_type: 'apikey',
+        model: 'gpt-5',
+        failed: false,
+        generate: true,
+        latency_ms: 120,
+        tokens: { input: 10, output: 5, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, total: 15 },
+        has_request_log: false,
+      },
+    },
+    tpsMode: 'exclude_ttft',
+    exportedAt: new Date(1_700_000_010_000),
+    credentials: new Map(),
+    isProviderCatalogUnknown: true,
+  });
+  assert.equal(unconfirmedDoc.routing.provider_identity_unconfirmed, true);
+  assert.ok(formatRequestRecordLog(unconfirmedDoc, makeT(enCatalog)).includes('(Unconfirmed)'));
+  assert.ok(formatRequestRecordLog(unconfirmedDoc, makeT(zhCatalog)).includes('(待确认)'));
 
   // Distinct from CPA's `request-<id>.log` so saving both never collides, and safe when request_id is absent.
   assert.equal(requestRecordLogFileName({ id: 88, request_id: 'req-abc-88' }, 'log'), 'record-req-abc-88.log');
