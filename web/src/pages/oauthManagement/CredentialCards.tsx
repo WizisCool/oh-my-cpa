@@ -24,7 +24,7 @@ import { activityOf } from './fleetPresentation';
 import { maskedCredentialLabel, type OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
 import { ActivitySpark, QuotaLines, QuotaMetrics } from './QuotaGauges';
 import type { QuotaCapacityOwner } from '../quota/QuotaCapacityButton';
-import { activeSubscriptionPeriodKey } from '../quota/quotaCapacity';
+import { quotaSubscriptionPeriodKey } from '../quota/quotaCapacity';
 import styles from './CredentialCards.module.css';
 
 /**
@@ -99,7 +99,7 @@ function CredentialCard({ record, providerName, isSelected, isSelecting, nowMS, 
       authIndex: file.auth_index,
       credentialName: maskedCredentialLabel(record),
       mark: <CredentialMark credential={{ provider: record.displayProvider, hint: file.name }} pluginLogos={pluginLogos} size={22} />,
-      subscriptionPeriodKey: activeSubscriptionPeriodKey(record.quota?.plan, nowMS),
+      subscriptionPeriodKey: quotaSubscriptionPeriodKey(record.quota, nowMS),
     }
     : undefined;
   return (

@@ -9,6 +9,7 @@ import {
   formatCycleCardFigures,
   hasActiveSubscriptionPeriod,
   quotaCapacityNote,
+  quotaSubscriptionPeriodKey,
   subscriptionProjectionNote,
   supportsSubscriptionCycleTab,
 } from '../../src/pages/quota/quotaCapacity.ts';
@@ -156,6 +157,13 @@ test('subscription cycle helpers require verified active start and expiry bounda
   assert.equal(activeSubscriptionPeriodKey(livePlan, end), null);
   assert.equal(activeSubscriptionPeriodKey(livePlan, start - 1), null);
   assert.equal(activeSubscriptionPeriodKey(undefined, now), null);
+
+  assert.equal(quotaSubscriptionPeriodKey({ auth_index: 'codex-1', observed_at_ms: now, status: 'healthy', plan: livePlan }, now), periodKey);
+  assert.equal(quotaSubscriptionPeriodKey({ auth_index: 'codex-1', observed_at_ms: now, status: 'idle', plan: livePlan }, now), null);
+  assert.equal(quotaSubscriptionPeriodKey({ auth_index: 'codex-1', observed_at_ms: now, status: 'error', plan: livePlan }, now), null);
+  assert.equal(quotaSubscriptionPeriodKey({ auth_index: 'codex-1', observed_at_ms: 0, status: 'healthy', plan: livePlan }, now), null);
+  assert.equal(quotaSubscriptionPeriodKey({ auth_index: '', observed_at_ms: now, status: 'healthy', plan: livePlan }, now), null);
+  assert.equal(quotaSubscriptionPeriodKey(undefined, now), null);
 
   assert.equal(supportsSubscriptionCycleTab(undefined, true), true);
   assert.equal(supportsSubscriptionCycleTab({ scope: 'standard' }, true), true);
