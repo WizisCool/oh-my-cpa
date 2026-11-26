@@ -156,6 +156,8 @@ export interface QuotaPlan {
   tier: 'elite' | 'premium' | 'standard' | 'free' | 'unknown';
   starts_at_ms?: number;
   expires_at_ms?: number;
+  /** Authoritative upstream billing cadence when reported by the provider. */
+  billing_period?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
   expires_label?: string;
   /** Where the expiry came from; absent on snapshots written before provenance was tracked. */
   expires_source?: 'live_subscription' | 'credential_snapshot';

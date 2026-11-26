@@ -38,6 +38,7 @@ func seedQuotaObservations(ctx context.Context, repo *repository.Repository, now
 							untilMS := sub.UntilAtMS
 							plan.StartsAtMS = sub.StartAtMS
 							plan.ExpiresAtMS = &untilMS
+							plan.BillingPeriod = sub.BillingPeriod
 							plan.ExpiresLabel = ""
 							plan.ExpiresSource = quota.PlanSourceLiveSubscription
 							plan.IsAutoRenewing = sub.ShouldRenew

@@ -688,3 +688,84 @@ func TestQuotaSubscriptionCyclePreservesEffectiveBoundsAfterPruning(t *testing.T
 		t.Fatalf("after pruning previous usage = %+v, want disjoint [Oct 1 00:00, Nov 1 00:00) and 1 req / 100 tokens", afterPrevUsage)
 	}
 }
+
+func TestQuotaSubscriptionCycleSlicesRenewedMonthlyTenure(t *testing.T) {
+	handler := capacityTestHandler(t)
+	ctx := context.Background()
+
+	// Reproduces issue #756: active_start stays at original signup (09/20) across
+	// renewals while active_until advances to 12/20 with billing_period="monthly".
+	subStart := time.Date(2026, time.September, 20, 8, 20, 0, 0, time.UTC)
+	subEnd := time.Date(2026, time.December, 20, 8, 20, 0, 0, time.UTC)
+	now := time.Date(2026, time.November, 26, 8, 20, 0, 0, time.UTC) // 6 / 30 days = 20% elapsed in current month
+	handler.nowFn = func() time.Time { return now }
+
+	startMS, endMS := subStart.UnixMilli(), subEnd.UnixMilli()
+	reading := capacityReading(now.UnixMilli()-60_000, now.UnixMilli()+2*3600*1000, 5, 30)
+	reading.AuthIndex = "codex-renewed"
+	reading.Plan = &quota.QuotaPlan{
+		PlanType:      "plus",
+		PlanLabel:     "Plus",
+		Tier:          "standard",
+		StartsAtMS:    &startMS,
+		ExpiresAtMS:   &endMS,
+		BillingPeriod: quota.BillingPeriodMonthly,
+		ExpiresSource: quota.PlanSourceLiveSubscription,
+	}
+	if err := handler.persistNormalizedQuotaSnapshot(ctx, reading); err != nil {
+		t.Fatal(err)
+	}
+
+	insert := func(key string, at time.Time, tokens, costNanos int64) {
+		t.Helper()
+		if _, err := handler.repo.SQL().ExecContext(ctx, `
+			INSERT INTO usage_events (
+				instance_id, event_key, api_group_key, auth_index, provider, model,
+				timestamp_ms, created_at_ms, input_tokens, total_tokens, cost_nanos, pricing_status
+			) VALUES ('default', ?, 'group', 'codex-renewed', 'codex', 'gpt-5', ?, ?, ?, ?, ?, 'priced')`,
+			key, at.UnixMilli(), at.UnixMilli(), tokens, tokens, costNanos,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Month 1 (09/20 - 10/20): excluded from both current and previous cycles.
+	insert("month-1", time.Date(2026, time.September, 25, 12, 0, 0, 0, time.UTC), 1000, 10_000_000_000)
+	// Month 2 (10/20 - 11/20): lands in previous cycle.
+	insert("month-2", time.Date(2026, time.October, 25, 12, 0, 0, 0, time.UTC), 2000, 25_000_000_000)
+	// Month 3 (11/20 - 12/20): lands in current cycle.
+	insert("month-3", time.Date(2026, time.November, 23, 12, 0, 0, 0, time.UTC), 3000, 15_000_000_000)
+
+	code, body := getSubscriptionCycle(t, handler, "codex-renewed")
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, body = %+v", code, body)
+	}
+	wantCurrFrom := float64(time.Date(2026, time.November, 20, 8, 20, 0, 0, time.UTC).UnixMilli())
+	wantCurrTo := float64(subEnd.UnixMilli())
+	wantPrevFrom := float64(time.Date(2026, time.October, 20, 8, 20, 0, 0, time.UTC).UnixMilli())
+
+	curr := body["current"].(map[string]any)
+	currUsage := curr["usage"].(map[string]any)
+	if curr["from_ms"] != wantCurrFrom || curr["to_ms"] != wantCurrTo || curr["elapsed_percent"] != float64(20) {
+		t.Fatalf("current period = %+v, want [Nov 20, Dec 20) at 20%% elapsed", curr)
+	}
+	if currUsage["requests"] != float64(1) || currUsage["tokens"] != float64(3000) || currUsage["cost_nanos"] != float64(15_000_000_000) {
+		t.Fatalf("current usage = %+v, want only month-3 ($15)", currUsage)
+	}
+
+	prev, ok := body["previous"].(map[string]any)
+	if !ok {
+		t.Fatalf("previous = %v, want non-nil Oct 20 - Nov 20 cycle", body["previous"])
+	}
+	prevUsage := prev["usage"].(map[string]any)
+	if prev["from_ms"] != wantPrevFrom || prev["to_ms"] != wantCurrFrom {
+		t.Fatalf("previous period = %+v, want [Oct 20, Nov 20)", prev)
+	}
+	if prevUsage["requests"] != float64(1) || prevUsage["tokens"] != float64(2000) || prevUsage["cost_nanos"] != float64(25_000_000_000) {
+		t.Fatalf("previous usage = %+v, want only month-2 ($25)", prevUsage)
+	}
+
+	proj := body["projection"].(map[string]any)
+	if proj["cost_nanos"] != float64(75_000_000_000) || proj["requests"] != float64(5) || proj["tokens"] != float64(15000) {
+		t.Fatalf("projection = %+v, want $75 / 5 req / 15k tokens scaled from 20%% elapsed", proj)
+	}
+}

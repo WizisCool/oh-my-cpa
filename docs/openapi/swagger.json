@@ -24280,6 +24280,10 @@
             "$ref": "#/definitions/quota.QuotaBalance"
           }
         },
+        "billing_period": {
+          "description": "\"weekly\", \"monthly\", \"quarterly\", \"yearly\"",
+          "type": "string"
+        },
         "credits": {
           "description": "Credits is the account's prepaid credit standing. Nil when the provider\nreports none.",
           "allOf": [

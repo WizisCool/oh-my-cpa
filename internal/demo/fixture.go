@@ -913,11 +913,12 @@ func quotaPayloads(now time.Time) map[string]any {
 			},
 		},
 		codexSubscriptionURL: map[string]any{
-			"plan_type":     "pro",
-			"active_start":  now.Add(21*24*time.Hour).AddDate(0, -1, 0).UTC().Format(time.RFC3339),
-			"active_until":  now.Add(21 * 24 * time.Hour).UTC().Format(time.RFC3339),
-			"will_renew":    true,
-			"is_delinquent": false,
+			"plan_type":      "pro",
+			"active_start":   now.Add(21*24*time.Hour).AddDate(0, -3, 0).UTC().Format(time.RFC3339),
+			"active_until":   now.Add(21 * 24 * time.Hour).UTC().Format(time.RFC3339),
+			"billing_period": "monthly",
+			"will_renew":     true,
+			"is_delinquent":  false,
 		},
 		claudeUsageURL: map[string]any{
 			"five_hour":   map[string]any{"utilization": 16.0, "resets_at": resetAt},

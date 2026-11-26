@@ -935,8 +935,9 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
           header: { 'content-type': ['application/json'] },
           body: {
             plan_type: 'pro',
-            active_start: new Date(Date.now() - 21 * 86400000).toISOString(),
+            active_start: new Date(Date.now() - 80 * 86400000).toISOString(),
             active_until: new Date(Date.now() + 21 * 86400000).toISOString(),
+            billing_period: 'monthly',
             will_renew: false,
           },
         });

@@ -1,4 +1,5 @@
 {
+  "billing_period": "",
   "is_read": false,
   "should_renew": null,
   "start_ms": null,

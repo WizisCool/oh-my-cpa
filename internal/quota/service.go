@@ -558,6 +558,7 @@ func (s *Service) applyCodexSubscription(ctx context.Context, file management.Au
 					untilMS := sub.UntilAtMS
 					plan.StartsAtMS = sub.StartAtMS
 					plan.ExpiresAtMS = &untilMS
+					plan.BillingPeriod = sub.BillingPeriod
 					plan.ExpiresLabel = ""
 					plan.ExpiresSource = PlanSourceLiveSubscription
 					plan.IsAutoRenewing = sub.ShouldRenew

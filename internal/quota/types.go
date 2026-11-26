@@ -82,14 +82,23 @@ const (
 	PlanSourceCredentialSnapshot = "credential_snapshot"
 )
 
+// Upstream-reported subscription billing cadences.
+const (
+	BillingPeriodWeekly    = "weekly"
+	BillingPeriodMonthly   = "monthly"
+	BillingPeriodQuarterly = "quarterly"
+	BillingPeriodYearly    = "yearly"
+)
+
 // QuotaPlan represents the normalized subscription plan and tier.
 type QuotaPlan struct {
 	IsSubscriptionActive *bool            `json:"subscription_active,omitempty"`
-	PlanType             string           `json:"plan_type"`               // e.g. "pro", "plus", "ultra", "team", "free"
-	PlanLabel            string           `json:"plan_label"`              // e.g. "Pro 200", "Pro", "Ultra", "Team"
-	Tier                 string           `json:"tier"`                    // "elite", "premium", "standard", "free", "unknown"
-	StartsAtMS           *int64           `json:"starts_at_ms,omitempty"`  // epoch ms
-	ExpiresAtMS          *int64           `json:"expires_at_ms,omitempty"` // epoch ms
+	PlanType             string           `json:"plan_type"`                // e.g. "pro", "plus", "ultra", "team", "free"
+	PlanLabel            string           `json:"plan_label"`               // e.g. "Pro 200", "Pro", "Ultra", "Team"
+	Tier                 string           `json:"tier"`                     // "elite", "premium", "standard", "free", "unknown"
+	StartsAtMS           *int64           `json:"starts_at_ms,omitempty"`   // epoch ms
+	ExpiresAtMS          *int64           `json:"expires_at_ms,omitempty"`  // epoch ms
+	BillingPeriod        string           `json:"billing_period,omitempty"` // "weekly", "monthly", "quarterly", "yearly"
 	ExpiresLabel         string           `json:"expires_label,omitempty"`
 	ExtraUsage           *QuotaExtraUsage `json:"extra_usage,omitempty"`
 
