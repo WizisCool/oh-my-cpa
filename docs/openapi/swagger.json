@@ -8072,6 +8072,12 @@
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
           },
+          "409": {
+            "description": "Conflict",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
           "413": {
             "description": "Request Entity Too Large",
             "schema": {

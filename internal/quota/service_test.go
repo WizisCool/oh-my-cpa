@@ -352,15 +352,16 @@ func TestRedeemCodexCreditRequiresUpstreamConfirmation(t *testing.T) {
 
 func TestRedeemCodexCreditRejectsUnreadableOrUnusableBankWithoutConsuming(t *testing.T) {
 	for _, testCase := range []struct {
-		name   string
-		status int
-		body   string
+		name    string
+		status  int
+		body    string
+		wantErr error
 	}{
-		{name: "read unavailable", status: http.StatusServiceUnavailable, body: `{}`},
-		{name: "invalid response", status: http.StatusOK, body: `not json`},
-		{name: "count without ids", status: http.StatusOK, body: `{"available_count":3}`},
-		{name: "empty bank", status: http.StatusOK, body: `{"available_count":0,"credits":[]}`},
-		{name: "expired card", status: http.StatusOK, body: `{"available_count":1,"credits":[{"id":"expired","status":"available","expires_at":"2000-01-01T00:00:00Z"}]}`},
+		{name: "read unavailable", status: http.StatusServiceUnavailable, body: `{}`, wantErr: ErrCodexResetCreditBankUnreadable},
+		{name: "invalid response", status: http.StatusOK, body: `not json`, wantErr: ErrCodexResetCreditBankUnreadable},
+		{name: "count without ids", status: http.StatusOK, body: `{"available_count":3}`, wantErr: ErrNoEligibleCodexResetCredit},
+		{name: "empty bank", status: http.StatusOK, body: `{"available_count":0,"credits":[]}`, wantErr: ErrNoEligibleCodexResetCredit},
+		{name: "expired card", status: http.StatusOK, body: `{"available_count":1,"credits":[{"id":"expired","status":"available","expires_at":"2000-01-01T00:00:00Z"}]}`, wantErr: ErrNoEligibleCodexResetCredit},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			consumeCalls := 0
@@ -372,14 +373,16 @@ func TestRedeemCodexCreditRejectsUnreadableOrUnusableBankWithoutConsuming(t *tes
 				return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(`{"code":"reset"}`)}, nil
 			}}
 			err := NewService(client).RedeemCodexCredit(context.Background(), management.AuthFile{AuthIndex: "auth-codex"})
-			if err == nil || consumeCalls != 0 {
-				t.Fatalf("unusable credit bank: err=%v consume calls=%d, want rejection without consumption", err, consumeCalls)
+			if !errors.Is(err, testCase.wantErr) || consumeCalls != 0 {
+				t.Fatalf("unusable credit bank: err=%v (want %v) consume calls=%d, want rejection without consumption", err, testCase.wantErr, consumeCalls)
 			}
 		})
 	}
 }
 
 func TestRedeemCodexCreditSkipsUnusableCardsAndOrdersByExpiryThenGrant(t *testing.T) {
+	// Padded whitespace on the winning credit verifies selection normalizes
+	// status/ID the same way parseCodexResetCreditsSummary does.
 	const bank = `{"available_count":5,"credits":[
         {"id":"undated","status":"available","granted_at":"2020-01-01T00:00:00Z"},
         {"id":"expired","status":"available","expires_at":"2000-01-01T00:00:00Z"},
@@ -387,7 +390,7 @@ func TestRedeemCodexCreditSkipsUnusableCardsAndOrdersByExpiryThenGrant(t *testin
         {"id":"spent","status":"used","expires_at":"2098-01-01T00:00:00Z"},
         {"id":"wrong-reset-type","status":"available","reset_type":"other","expires_at":"2098-01-01T00:00:00Z"},
         {"id":"later-grant","status":"available","granted_at":"2026-11-26T00:00:00Z","expires_at":"2099-01-01T00:00:00Z"},
-        {"id":"earlier-grant","status":"available","granted_at":"2026-11-13T00:00:00Z","expires_at":"2099-01-01T00:00:00Z"}
+        {"id":" earlier-grant ","status":" available ","granted_at":"2026-11-13T00:00:00Z","expires_at":"2099-01-01T00:00:00Z"}
     ]}`
 	consumeCalls := 0
 	client := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {

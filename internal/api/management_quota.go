@@ -798,6 +798,7 @@ func (h *Handler) resetCredentialQuota(writer http.ResponseWriter, request *http
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
 // @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO

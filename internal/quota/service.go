@@ -927,6 +927,14 @@ func (s *Service) fetchDevinQuota(ctx context.Context, file management.AuthFile,
 	return ParseDevinSeatStatus(normBody, nowMS)
 }
 
+// Preflight refusal errors for Codex reset credit redemption. Callers inspect
+// these with errors.Is to separate refusals before POST /consume from an
+// uncertain consume outcome.
+var (
+	ErrCodexResetCreditBankUnreadable = errors.New("could not read available reset credits; no credit redeemed")
+	ErrNoEligibleCodexResetCredit     = errors.New("no available unexpired reset credit with an id; no credit redeemed")
+)
+
 // RedeemCodexCredit consumes an available rate limit reset credit for a Codex credential.
 //
 // The consume route carries the same ChatGPT account id as the read probes, so spending a
@@ -939,6 +947,7 @@ func (s *Service) RedeemCodexCredit(ctx context.Context, file management.AuthFil
 	if authIndex == "" {
 		return errors.New("auth_index is required")
 	}
+	file.AuthIndex = authIndex
 	headers := management.WithQuotaCredential(map[string]string{
 		"Content-Type": "application/json",
 		"Accept":       "application/json",
@@ -952,11 +961,11 @@ func (s *Service) RedeemCodexCredit(ctx context.Context, file management.AuthFil
 	// Read the current bank and explicitly name the soonest-expiring credit.
 	credits := s.fetchCodexResetCredits(ctx, file, headers, nil)
 	if credits == nil {
-		return errors.New("could not read available reset credits; no credit redeemed")
+		return ErrCodexResetCreditBankUnreadable
 	}
 	credit, ok := earliestCodexResetCredit(credits.Credits, s.Now().UnixMilli())
 	if !ok {
-		return errors.New("no available unexpired reset credit with an id; no credit redeemed")
+		return ErrNoEligibleCodexResetCredit
 	}
 	body, err := json.Marshal(struct {
 		CreditID        string `json:"credit_id"`
@@ -995,12 +1004,14 @@ func (s *Service) RedeemCodexCredit(ctx context.Context, file management.AuthFil
 func earliestCodexResetCredit(credits []CodexResetCredit, nowMS int64) (CodexResetCredit, bool) {
 	available := make([]CodexResetCredit, 0, len(credits))
 	for _, credit := range credits {
-		if strings.TrimSpace(credit.ID) == "" || credit.Status != "available" {
+		creditID := strings.TrimSpace(credit.ID)
+		if creditID == "" || strings.TrimSpace(credit.Status) != "available" {
 			continue
 		}
 		if credit.ExpiresAtMS != nil && *credit.ExpiresAtMS <= nowMS {
 			continue
 		}
+		credit.ID = creditID
 		available = append(available, credit)
 	}
 	sort.Slice(available, func(i, j int) bool {

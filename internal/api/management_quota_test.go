@@ -23,6 +23,14 @@ import (
 func TestManagementQuotaEndpoints(t *testing.T) {
 	const managementKey = "management-secret"
 
+	// Derive credit expiries from a single test-start instant so credit-1 stays
+	// eligible and earlier than credit-2 regardless of the calendar date.
+	now := time.Now().UTC().Truncate(time.Second)
+	creditGrantedAt := now.Add(-24 * time.Hour).Unix()
+	credit1ExpiresAt := now.Add(24 * time.Hour).Unix()
+	credit2ExpiresAt := now.Add(48 * time.Hour).Unix()
+	credit3ExpiresAt := now.Add(12 * time.Hour).Unix()
+
 	var cpaResetCalledWith string
 	var shouldFailReset bool
 	var cpaApiCallCalledWith string
@@ -101,7 +109,7 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 					"body": {"code": "reset"}
 				}`))
 			} else if strings.Contains(payload.URL, "rate-limit-reset-credits") {
-				_, _ = writer.Write([]byte(`{
+				_, _ = fmt.Fprintf(writer, `{
 					"status_code": 200,
 					"body": {
 						"available_count": 2,
@@ -110,26 +118,26 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 								"id": "credit-1",
 								"status": "available",
 								"reset_type": "codex_rate_limits",
-								"granted_at": "1790000000",
-								"expires_at": "1810000000"
+								"granted_at": "%d",
+								"expires_at": "%d"
 							},
 							{
 								"id": "credit-2",
 								"status": "available",
 								"reset_type": "codex_rate_limits",
-								"granted_at": "1790000000",
-								"expires_at": "1820000000"
+								"granted_at": "%d",
+								"expires_at": "%d"
 							},
 							{
 								"id": "credit-3",
 								"status": "used",
 								"reset_type": "codex_rate_limits",
-								"granted_at": "1790000000",
-								"expires_at": "1805000000"
+								"granted_at": "%d",
+								"expires_at": "%d"
 							}
 						]
 					}
-				}`))
+				}`, creditGrantedAt, credit1ExpiresAt, creditGrantedAt, credit2ExpiresAt, creditGrantedAt, credit3ExpiresAt)
 			} else if strings.Contains(payload.URL, "backend-api/wham/usage") {
 				_, _ = writer.Write([]byte(`{
 					"status_code": 200,
@@ -171,7 +179,6 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now().UTC().Truncate(time.Second)
 	if err := handler.repo.UpsertInstance(context.Background(), domain.CPAInstance{
 		ID:                      "default",
 		Name:                    "Default",
@@ -571,5 +578,131 @@ func TestBatchQuotaRefreshPreservesEmptyQuotasAndTotal(t *testing.T) {
 	const want = `{"status":"ok","quotas":[],"total":0}`
 	if strings.TrimSpace(rawBody.String()) != want {
 		t.Fatalf("body = %s, want %s", strings.TrimSpace(rawBody.String()), want)
+	}
+}
+
+// Preflight refusals happen before POST /consume and carry stable error codes so
+// clients can separate "no credit was touched" from an uncertain consume outcome.
+func TestRedeemQuotaCreditDistinguishesPreflightRefusalsFromUnknownConsumeOutcome(t *testing.T) {
+	const managementKey = "management-secret"
+	now := time.Now().UTC().Truncate(time.Second)
+	validExpiry := now.Add(24 * time.Hour).Unix()
+
+	for _, tc := range []struct {
+		name             string
+		bankStatus       int
+		bankBody         string
+		consumeBody      string
+		wantHTTPStatus   int
+		wantCode         string
+		wantConsumeCalls int
+	}{
+		{
+			name:             "unreadable credit bank refuses without consuming",
+			bankStatus:       http.StatusServiceUnavailable,
+			bankBody:         `{}`,
+			wantHTTPStatus:   http.StatusBadGateway,
+			wantCode:         quotaResetCreditBankUnreadableCode,
+			wantConsumeCalls: 0,
+		},
+		{
+			name:             "no eligible credit refuses without consuming",
+			bankStatus:       http.StatusOK,
+			bankBody:         `{"available_count":0,"credits":[]}`,
+			wantHTTPStatus:   http.StatusConflict,
+			wantCode:         quotaResetCreditUnavailableCode,
+			wantConsumeCalls: 0,
+		},
+		{
+			name:             "unconfirmed consume response remains an unknown outcome without preflight code",
+			bankStatus:       http.StatusOK,
+			bankBody:         fmt.Sprintf(`{"available_count":1,"credits":[{"id":"credit-1","status":"available","reset_type":"codex_rate_limits","expires_at":"%d"}]}`, validExpiry),
+			consumeBody:      `{}`,
+			wantHTTPStatus:   http.StatusBadGateway,
+			wantCode:         "",
+			wantConsumeCalls: 1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			consumeCalls := 0
+			cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				if request.Header.Get("Authorization") != "Bearer "+managementKey {
+					writer.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				writer.Header().Set("Content-Type", "application/json")
+				switch request.URL.Path {
+				case "/v8/management/credentials":
+					_, _ = writer.Write([]byte(`{"files":[{"id":"file-1","name":"codex-main.json","auth_index":"codex-idx-1","type":"codex","provider":"codex","disabled":false}]}`))
+				case "/v8/management/requests/api-call":
+					var payload struct {
+						URL string `json:"url"`
+					}
+					_ = json.NewDecoder(request.Body).Decode(&payload)
+					if strings.HasSuffix(payload.URL, "/rate-limit-reset-credits/consume") {
+						consumeCalls++
+						_, _ = fmt.Fprintf(writer, `{"status_code":200,"body":%s}`, tc.consumeBody)
+						return
+					}
+					if strings.Contains(payload.URL, "rate-limit-reset-credits") {
+						_, _ = fmt.Fprintf(writer, `{"status_code":%d,"body":%s}`, tc.bankStatus, tc.bankBody)
+						return
+					}
+					_, _ = writer.Write([]byte(`{"status_code":200,"body":{}}`))
+				default:
+					writer.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer cpaServer.Close()
+
+			handler := testHandler(t, "")
+			appServer := httptest.NewServer(handler.Router())
+			defer appServer.Close()
+
+			cipher, err := crypto.New("01234567890123456789012345678901")
+			if err != nil {
+				t.Fatal(err)
+			}
+			ciphertext, nonce, err := cipher.Encrypt([]byte(managementKey))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := handler.repo.UpsertInstance(context.Background(), domain.CPAInstance{
+				ID:                      "default",
+				Name:                    "Default",
+				BaseURL:                 cpaServer.URL,
+				UsageAddr:               strings.TrimPrefix(cpaServer.URL, "http://"),
+				ManagementKeyCiphertext: ciphertext,
+				ManagementKeyNonce:      nonce,
+				CreatedAt:               now,
+				UpdatedAt:               now,
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			client := signedInClient(t, appServer.URL+"/api/auth/login", managementKey)
+			resp, err := client.Post(appServer.URL+"/api/v1/management/quota/redeem-credit", "application/json", bytes.NewBufferString(`{"auth_index":"codex-idx-1"}`))
+			if err != nil {
+				t.Fatalf("POST /redeem-credit failed: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != tc.wantHTTPStatus {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.wantHTTPStatus)
+			}
+			var payload ErrorResponseDTO
+			if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode error payload: %v", err)
+			}
+			if payload.Code != tc.wantCode {
+				t.Errorf("code = %q, want %q (error=%q)", payload.Code, tc.wantCode, payload.Error)
+			}
+			if payload.Error == "" {
+				t.Errorf("error message is empty, want human-readable diagnostic")
+			}
+			if consumeCalls != tc.wantConsumeCalls {
+				t.Errorf("consume calls = %d, want %d", consumeCalls, tc.wantConsumeCalls)
+			}
+		})
 	}
 }
