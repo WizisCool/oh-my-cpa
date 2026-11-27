@@ -2,16 +2,23 @@ package management
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
 // ErrCredentialOutcomeUnknown marks a verify request CPA may have run although its answer never
 // arrived, so a caller cannot read it as a refusal it may safely repeat.
 var ErrCredentialOutcomeUnknown = errors.New("CPA credential request outcome is unknown")
+
+// ErrVerificationNotApplied marks a 409 verification_not_applied response from CPA:
+// upstream completed the verification inference request, but CPA kept an active
+// cooldown or disabled state and did not mark the credential verified.
+var ErrVerificationNotApplied = errors.New("CPA completed verification inference without applying it")
 
 // CredentialRecoverySummary keeps absent evidence distinct from a confirmed false.
 // It deliberately has no upstream free-form messages, account metadata or events.
@@ -91,6 +98,13 @@ func (c *Client) VerifyAuthFile(ctx context.Context, name, authIndex, model stri
 		Model     string `json:"model,omitempty"`
 	}{name, authIndex, model}
 	if err := c.doJSONBody(ctx, http.MethodPost, "/credentials/verify", payload, &outcome); err != nil {
+		// CPA v8.1.8+ answers 409 verification_not_applied when upstream completed the
+		// inference request but a racing cooldown or disable prevented applying it.
+		// Match only the closed code before discarding the upstream body.
+		var upstream *HTTPError
+		if errors.As(err, &upstream) && isVerificationNotAppliedHTTPError(upstream) {
+			return false, ErrVerificationNotApplied
+		}
 		safe := safeCredentialError(err)
 		// Verify runs an inference, so one CPA may have run without its answer arriving is not a
 		// refusal a caller may repeat. A cancellation keeps its own identity.
@@ -100,6 +114,28 @@ func (c *Client) VerifyAuthFile(ctx context.Context, name, authIndex, model stri
 		return false, safe
 	}
 	return outcome.Verified, nil
+}
+
+func isVerificationNotAppliedHTTPError(upstream *HTTPError) bool {
+	if upstream == nil || upstream.StatusCode != http.StatusConflict {
+		return false
+	}
+	var payload struct {
+		Code  string `json:"code"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(upstream.Body), &payload); err != nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(payload.Code), "verification_not_applied") {
+		return true
+	}
+	errText := strings.TrimSpace(payload.Error)
+	if strings.EqualFold(errText, "verification_not_applied") {
+		return true
+	}
+	prefix := "verification_not_applied:"
+	return len(errText) >= len(prefix) && strings.EqualFold(errText[:len(prefix)], prefix)
 }
 
 // Credential and OAuth failures may quote tokens, callback codes or profiles.

@@ -172,8 +172,17 @@ Inference verification is a separate, explicitly confirmed token-consuming actio
 post-login verification defaults to false. Both paths require audit admission before
 execution. A completed sign-in is not proof of inference or automatic renewal, and a
 failed summary read after completion is reported as a read failure, not a rolled-back
-login. Recovery and verification remain operator-driven browser actions; Agent reads
-receive the same safe evidence without OAuth interaction material.
+login. When verification confirms `verified=true` and post-verify readback affirmatively shows
+no credential-level cooldown remains for the same unique credential, OMC releases its
+locally observed credential-scoped cooldown evidence captured before verification began
+while preserving independent per-model and force cooldowns, and attempts a best-effort
+bounded refresh of the credential's quota reading; a failed, deferred, or skipped refresh
+keeps the prior reading and does not fail the verification. CPA's live auth-file projection
+stays authoritative when it shows a credential cooldown has already been lifted. When CPA
+answers `409 verification_not_applied`, OMC preserves that outcome distinctly without
+clearing local cooldown evidence or exposing upstream bodies. Recovery and verification
+remain operator-driven browser actions; Agent reads receive the same safe evidence
+without OAuth interaction material.
 
 ## Where the live contract is defined
 

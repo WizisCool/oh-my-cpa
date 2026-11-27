@@ -7,7 +7,7 @@
  * browser probe shows the page drawing a replay; this suite proves what it is drawing.
  */
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { afterEach, describe, test } from 'vitest';
 import { applyAgentEvent, EMPTY_FRAME } from '../../src/agent/runReducer.ts';
 import type { AgentRunRequest } from '../../src/agent/protocol.ts';
 import { DEMO_REPLAY_ONLY, replayAgentRun } from '../../src/demo/agentReplay.ts';
@@ -609,4 +609,311 @@ test('sandbox archive marks conflicting deleted baseline providers ambiguous wit
   assert.equal(singleArchive.archivedProviders.length, 1);
   assert.equal(singleArchive.archivedProviders[0].name, 'Relay Custom');
   assert.ok(!singleArchive.archivedProviders[0].is_ambiguous);
+});
+
+describe('sandbox verify cooldown behavior', () => {
+  afterEach(() => {
+    resetDemoSandbox();
+  });
+
+  test('sandbox verify releases credential cooldown, recomputes quota summary, and preserves force cooldowns', async () => {
+  resetDemoSandbox();
+  const nowMS = Date.now();
+  const modelRecoverMS = nowMS + 10_000;
+  const modelRetryMS = nowMS + 30_000;
+  const futureMS = nowMS + 60_000;
+  const windowResetMS = nowMS + 120_000;
+  let rebaseDeltaMS = 0;
+  let activeQuotaDeadlineMS = futureMS;
+  let activeQuotaReason = 'credential_quota';
+  let quotaErrText = '401 unauthorized';
+  let failAuthBaseline = false;
+
+  const baselineAuthFiles = {
+    total: 3,
+    files: [
+      {
+        name: 'codex-quota.json',
+        auth_index: 'idx-quota',
+        type: 'codex',
+        provider: 'codex',
+        status: 'error',
+        disabled: false,
+        unavailable: true,
+      },
+      {
+        name: 'codex-force.json',
+        auth_index: 'idx-force',
+        type: 'codex',
+        provider: 'codex',
+        status: 'error',
+        disabled: false,
+        unavailable: true,
+      },
+      {
+        name: 'codex-err.json',
+        auth_index: 'idx-err',
+        type: 'codex',
+        provider: 'codex',
+        status: 'error',
+        disabled: false,
+        unavailable: true,
+      },
+    ],
+  };
+  const buildBaselineQuota = () => ({
+    summary: {
+      total_credentials: 3,
+      healthy_count: 0,
+      warning_count: 0,
+      exhausted_count: 0,
+      cooldown_count: 3,
+      attention_count: 3,
+      soonest_recovery_ms: futureMS,
+    },
+    total: 3,
+    quotas: [
+      {
+        auth_index: 'idx-quota',
+        name: 'codex-quota.json',
+        type: 'codex',
+        provider: 'codex',
+        disabled: false,
+        status: 'cooldown',
+        observed_at_ms: nowMS - 10_000 + rebaseDeltaMS,
+        windows: [{ key: '5h', label: '5h', used_percent: 10, remaining_percent: 90, reset_at_ms: windowResetMS + rebaseDeltaMS }],
+        active_cooldown: {
+          is_active: true,
+          reason: activeQuotaReason,
+          recover_at_ms: activeQuotaDeadlineMS + rebaseDeltaMS,
+          correlated_at_ms: nowMS - 5_000 + rebaseDeltaMS,
+        },
+        model_cooldowns: [
+          { is_active: true, reason: 'quota', model: 'gpt-5-pro', recover_at_ms: modelRecoverMS + rebaseDeltaMS, retry_at_ms: modelRetryMS + rebaseDeltaMS },
+        ],
+        recommendation: { status: 'cooldown', priority: 'high', action: 'clear_cooldown', reason: activeQuotaReason },
+        capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: false },
+        quota_exceeded: true,
+        quota_reason: activeQuotaReason,
+        next_recover_at_ms: activeQuotaDeadlineMS + rebaseDeltaMS,
+      },
+      {
+        auth_index: 'idx-force',
+        name: 'codex-force.json',
+        type: 'codex',
+        provider: 'codex',
+        disabled: false,
+        status: 'cooldown',
+        observed_at_ms: nowMS - 10_000 + rebaseDeltaMS,
+        windows: [{ key: '5h', label: '5h', used_percent: 10, remaining_percent: 90, reset_at_ms: windowResetMS + rebaseDeltaMS }],
+        active_cooldown: { is_active: true, reason: 'force_cooldown', recover_at_ms: futureMS + rebaseDeltaMS },
+        recommendation: { status: 'cooldown', priority: 'high', action: 'clear_cooldown', reason: 'force_cooldown' },
+        capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: false },
+        quota_exceeded: true,
+        quota_reason: 'force_cooldown',
+        next_recover_at_ms: futureMS + rebaseDeltaMS,
+      },
+      {
+        auth_index: 'idx-err',
+        name: 'codex-err.json',
+        type: 'codex',
+        provider: 'codex',
+        disabled: false,
+        status: 'cooldown',
+        observed_at_ms: nowMS - 10_000 + rebaseDeltaMS,
+        windows: [{ key: '5h', label: '5h', used_percent: 10, remaining_percent: 90, reset_at_ms: windowResetMS + rebaseDeltaMS }],
+        error: quotaErrText,
+        active_cooldown: { is_active: true, reason: 'credential_quota', recover_at_ms: futureMS + rebaseDeltaMS },
+        recommendation: { status: 'cooldown', priority: 'high', action: 'clear_cooldown', reason: 'credential_quota' },
+        capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: false },
+        quota_exceeded: true,
+        quota_reason: 'credential_quota',
+        next_recover_at_ms: futureMS,
+      },
+    ],
+  });
+  const buildBaselineRouting = () => ({
+    as_of_ms: Date.now(),
+    window_ms: 60_000,
+    records: [],
+    has_more: false,
+    cooldowns: [
+      { auth_index: 'idx-quota', provider: 'codex', quota_exceeded: true, until_at_ms: activeQuotaDeadlineMS },
+      // Force cooldowns also carry quota_exceeded: true on the wire from SQLite.
+      { auth_index: 'idx-force', provider: 'codex', quota_exceeded: true, until_at_ms: futureMS },
+    ],
+  });
+
+  const fetchBaseline = async (urlPath: string): Promise<Response> => {
+    if (urlPath.startsWith('/management/auth-files')) {
+      if (failAuthBaseline) return new Response('{}', { status: 503 });
+      return new Response(JSON.stringify(baselineAuthFiles), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (urlPath.startsWith('/management/quota')) {
+      return new Response(JSON.stringify(buildBaselineQuota()), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (urlPath.startsWith('/usage/routing')) {
+      return new Response(JSON.stringify(buildBaselineRouting()), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  // Mismatched name/auth_index must fail with 404.
+  const mismatch = await interceptDemoRequest(
+    '/management/auth-files/verify',
+    { method: 'POST', body: JSON.stringify({ name: 'codex-quota.json', auth_index: 'idx-force' }) },
+    fetchBaseline,
+  );
+  assert.equal(mismatch?.status, 404);
+
+  // Verify all three credentials: quota cooldowns clear, force_cooldown stays intact, read error stays visible.
+  for (const body of [
+    { auth_index: 'idx-quota' },
+    { name: 'codex-force.json' },
+    { name: 'codex-err.json' },
+  ]) {
+    const res = await interceptDemoRequest(
+      '/management/auth-files/verify',
+      { method: 'POST', body: JSON.stringify(body) },
+      fetchBaseline,
+    );
+    assert.equal(res?.status, 200);
+  }
+
+  const quotaRes = await interceptDemoRequest('/management/quota', { method: 'GET' }, fetchBaseline);
+  assert.equal(quotaRes?.status, 200);
+  const quotaPayload = (await quotaRes!.json()) as {
+    summary: {
+      healthy_count: number;
+      warning_count: number;
+      cooldown_count: number;
+      attention_count: number;
+      soonest_recovery_ms?: number;
+    };
+    quotas: Array<{
+      auth_index: string;
+      status: string;
+      active_cooldown?: { is_active: boolean };
+      recommendation: { status: string; action: string; reason: string };
+      quota_exceeded: boolean;
+      next_recover_at_ms?: number;
+    }>;
+  };
+  const verifiedItem = quotaPayload.quotas.find((q) => q.auth_index === 'idx-quota');
+  const forceItem = quotaPayload.quotas.find((q) => q.auth_index === 'idx-force');
+  const errItem = quotaPayload.quotas.find((q) => q.auth_index === 'idx-err');
+  assert.equal(verifiedItem?.status, 'healthy');
+  assert.equal(verifiedItem?.active_cooldown, undefined);
+  assert.equal(verifiedItem?.quota_exceeded, false);
+  assert.equal(verifiedItem?.next_recover_at_ms, undefined);
+  assert.equal(verifiedItem?.recommendation.reason, 'Quota healthy');
+  assert.equal(forceItem?.status, 'cooldown');
+  assert.equal(forceItem?.active_cooldown?.is_active, true);
+  // Quota read error outranks healthy windows after cooldown release.
+  assert.equal(errItem?.status, 'error');
+  assert.equal(errItem?.active_cooldown, undefined);
+  assert.equal(errItem?.recommendation.status, 'needs_reauth');
+  assert.equal(errItem?.recommendation.action, 'reauth');
+  // Model cooldown uses the later of recover_at_ms (10s) and retry_at_ms (30s) for soonest_recovery_ms.
+  assert.equal(quotaPayload.summary.soonest_recovery_ms, modelRetryMS);
+  assert.equal(quotaPayload.summary.cooldown_count, 1);
+  assert.equal(quotaPayload.summary.warning_count, 1);
+  assert.equal(quotaPayload.summary.attention_count, 3);
+
+  // Simulated live routing rests have no shared event identity with the captured quota
+  // baseline, so verification keeps them visible; explicit clear-cooldown still suppresses them.
+  const routingRes = await interceptDemoRequest('/usage/routing', { method: 'GET' }, fetchBaseline);
+  assert.equal(routingRes?.status, 200);
+  const routingPayload = (await routingRes!.json()) as { cooldowns: Array<{ auth_index: string }> };
+  assert.deepEqual(routingPayload.cooldowns.map((c) => c.auth_index), ['idx-quota', 'idx-force']);
+
+  // Cloudflare Worker timestamp rebasing shifts every *_at_ms uniformly: verified cooldown stays cleared.
+  rebaseDeltaMS = 5_000;
+  const rebasedQuotaRes = await interceptDemoRequest('/management/quota', { method: 'GET' }, fetchBaseline);
+  const rebasedQuota = (await rebasedQuotaRes!.json()) as {
+    quotas: Array<{ auth_index: string; status: string; active_cooldown?: { is_active: boolean } }>;
+  };
+  assert.equal(rebasedQuota.quotas.find((q) => q.auth_index === 'idx-quota')?.status, 'healthy');
+  assert.equal(rebasedQuota.quotas.find((q) => q.auth_index === 'idx-quota')?.active_cooldown, undefined);
+  rebaseDeltaMS = 0;
+
+  // Substring inside another token must not be misclassified as an authentication failure.
+  quotaErrText = 'proxy_unauthorized_banner timeout';
+  const nonAuthErrRes = await interceptDemoRequest('/management/quota', { method: 'GET' }, fetchBaseline);
+  const nonAuthErrPayload = (await nonAuthErrRes!.json()) as {
+    quotas: Array<{ auth_index: string; recommendation: { status: string; action: string } }>;
+  };
+  assert.equal(nonAuthErrPayload.quotas.find((q) => q.auth_index === 'idx-err')?.recommendation.status, 'warning');
+  assert.equal(nonAuthErrPayload.quotas.find((q) => q.auth_index === 'idx-err')?.recommendation.action, 'refresh');
+  quotaErrText = '401 unauthorized';
+
+  // Even with the exact same deadline, a later force_cooldown stays visible in quota.
+  activeQuotaReason = 'force_cooldown';
+  const sameDeadlineForceQuotaRes = await interceptDemoRequest('/management/quota', { method: 'GET' }, fetchBaseline);
+  const sameDeadlineForceQuota = (await sameDeadlineForceQuotaRes!.json()) as {
+    quotas: Array<{ auth_index: string; status: string; active_cooldown?: { is_active: boolean } }>;
+  };
+  assert.equal(sameDeadlineForceQuota.quotas.find((q) => q.auth_index === 'idx-quota')?.status, 'cooldown');
+  activeQuotaReason = 'credential_quota';
+
+  // A newer baseline cooldown with a different deadline offset surfaces again in quota.
+  activeQuotaDeadlineMS = futureMS + 30_000;
+  const newerQuotaRes = await interceptDemoRequest('/management/quota', { method: 'GET' }, fetchBaseline);
+  const newerQuotaPayload = (await newerQuotaRes!.json()) as {
+    quotas: Array<{ auth_index: string; status: string; active_cooldown?: { is_active: boolean } }>;
+  };
+  const relapsedItem = newerQuotaPayload.quotas.find((q) => q.auth_index === 'idx-quota');
+  assert.equal(relapsedItem?.status, 'cooldown');
+  assert.equal(relapsedItem?.active_cooldown?.is_active, true);
+  activeQuotaDeadlineMS = futureMS;
+
+  // Unavailable auth-files baseline returns temporary 503 instead of misleading 404.
+  resetDemoSandbox();
+  failAuthBaseline = true;
+  const unavailableRes = await interceptDemoRequest(
+    '/management/auth-files/verify',
+    { method: 'POST', body: JSON.stringify({ auth_index: 'idx-quota' }) },
+    fetchBaseline,
+  );
+  assert.equal(unavailableRes?.status, 503);
+  failAuthBaseline = false;
+
+  // Resetting the sandbox while verify awaits cold baseline discards the stale completion with 409
+  // and does not repopulate baselineCache with the pre-reset response for the next verification.
+  resetDemoSandbox();
+  let releaseAuthBaseline!: () => void;
+  let authFetchCalls = 0;
+  const coldFetch = async (urlPath: string): Promise<Response> => {
+    if (urlPath.startsWith('/management/auth-files')) {
+      authFetchCalls += 1;
+      if (authFetchCalls === 1) {
+        await new Promise<void>((resolve) => {
+          releaseAuthBaseline = resolve;
+        });
+        return new Response(JSON.stringify({ total: 0, files: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+    }
+    return fetchBaseline(urlPath);
+  };
+  const pendingVerify = interceptDemoRequest(
+    '/management/auth-files/verify',
+    { method: 'POST', body: JSON.stringify({ auth_index: 'idx-quota' }) },
+    coldFetch,
+  );
+  // Seed an unrelated sandbox edit before reset, then reset while verify is in flight.
+  await interceptDemoRequest('/preferences/theme', { method: 'PUT', body: JSON.stringify({ value: 'paper' }) }, fetchBaseline);
+  resetDemoSandbox();
+  releaseAuthBaseline();
+  const staleRes = await pendingVerify;
+  assert.equal(staleRes?.status, 409);
+  assert.equal(countDemoSandboxChanges(), 0);
+  // Next verify must re-fetch fresh baseline (200) rather than reading the stale empty pre-reset response (404).
+  const retryRes = await interceptDemoRequest(
+    '/management/auth-files/verify',
+    { method: 'POST', body: JSON.stringify({ auth_index: 'idx-quota' }) },
+    coldFetch,
+  );
+  assert.equal(retryRes?.status, 200);
+  assert.equal(authFetchCalls, 2);
+  });
 });

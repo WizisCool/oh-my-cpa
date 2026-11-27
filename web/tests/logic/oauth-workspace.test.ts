@@ -1,4 +1,16 @@
-import { renewalDetail, renewalKind, renewalLabel, renewalTone } from '../../src/components/authFiles/credentialRecovery.ts';
+import { ApiError } from '../../src/api/client.ts';
+import {
+  isVerificationNotApplied,
+  renewalDetail,
+  renewalKind,
+  renewalLabel,
+  renewalTone,
+  VERIFICATION_OUTCOME_MESSAGES,
+  VERIFICATION_OUTCOME_TONES,
+  VERIFICATION_OUTCOMES,
+  verificationOutcomeFromError,
+  verificationOutcomeFromResult,
+} from '../../src/components/authFiles/credentialRecovery.ts';
 import { buildCredentialQuotaBoard, resolveCredentialQuotaStatusDetail } from '../../src/components/dashboard/credentialQuotaLogic.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -891,6 +903,28 @@ test('an unresolved refresh has specific guidance without changing independent e
   for (const code of ['refresh_failed', 'invalid_grant', 'new_provider_error']) {
     assert.equal(renewalDetail(file({ requires_sign_in: true, refresh_error: { code } })), 'recovery.sign_in_hint');
   }
+});
+
+test('verification outcomes classify 409 verification_not_applied separately from plain failure', () => {
+  assert.deepEqual(VERIFICATION_OUTCOMES, ['verified', 'unconfirmed', 'verification_not_applied', 'failed']);
+  assert.equal(verificationOutcomeFromResult({ verified: true }), 'verified');
+  assert.equal(verificationOutcomeFromResult({ verified: false }), 'unconfirmed');
+
+  const notApplied = new ApiError('not applied', 409, { code: 'verification_not_applied' });
+  const genericConflict = new ApiError('conflict', 409, { code: 'cpa_unavailable' });
+  const transportError = new Error('network down');
+
+  assert.equal(verificationOutcomeFromError(notApplied), 'verification_not_applied');
+  assert.equal(verificationOutcomeFromError(genericConflict), 'failed');
+  assert.equal(verificationOutcomeFromError(transportError), 'failed');
+
+  assert.equal(isVerificationNotApplied('verification_not_applied'), true);
+  assert.equal(isVerificationNotApplied('failed'), false);
+  assert.equal(isVerificationNotApplied(null), false);
+
+  assert.equal(VERIFICATION_OUTCOME_MESSAGES.verification_not_applied, 'recovery.verify_not_applied');
+  assert.equal(VERIFICATION_OUTCOME_TONES.verification_not_applied, 'warning');
+  assert.equal(VERIFICATION_OUTCOME_TONES.failed, 'error');
 });
 
 test('a section keeps one plan shape together, richest first, unread last', () => {

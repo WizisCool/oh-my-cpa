@@ -16,7 +16,10 @@ CPA cools a credential or one of its models. The Quota page lists a
 model-scoped cooldown with its own recovery and retry instant and the gateway's backoff
 level, and reports it as partial: the credential keeps serving its other models. Spellings
 that resolve to one upstream model - a mixed-case id, or an OAuth alias recorded before CPA
-resolved it - are listed once, keeping the later recovery time.
+resolved it - are listed once, keeping the later recovery time. When CPA's live credential
+projection affirmatively reports a credential available, quota reads reconcile stale local
+credential-scoped cooldown evidence up to the pre-read watermark without issuing a
+credential-wide CPA reset, leaving independent model cooldowns intact.
 
 ## Window warmup
 

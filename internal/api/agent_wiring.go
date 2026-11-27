@@ -118,7 +118,7 @@ func (h *Handler) inferenceClient(ctx context.Context, fingerprint string) (*gat
 	return gateway.NewClient(client.BaseURL(), key, h.cfg.TLSSkipVerify)
 }
 func (h *Handler) operationsService() *operations.Service {
-	service := &operations.Service{TLSSkipVerify: h.cfg.TLSSkipVerify, Pricing: h.pricing, Repo: h.repo, Cipher: h.cipher, Client: h.capabilityClient, Acquire: func(ctx context.Context) error {
+	service := &operations.Service{TLSSkipVerify: h.cfg.TLSSkipVerify, Pricing: h.pricing, Repo: h.repo, Cipher: h.cipher, Client: h.capabilityClient, Now: h.now, Acquire: func(ctx context.Context) error {
 		if err := h.providerWrites.acquire(ctx); err != nil {
 			return errors.New("write_busy")
 		}

@@ -25,6 +25,7 @@ type Service struct {
 	Repo             *repository.Repository
 	Cipher           *appcrypto.Cipher
 	Client           func(context.Context) (*management.Client, error)
+	Now              func() time.Time
 	Acquire          func(context.Context) error
 	Release          func()
 	Notify           func()
@@ -78,6 +79,13 @@ func (s *Service) checkRevision(value any, expected string) error {
 	}
 	return nil
 }
+func (s *Service) now() time.Time {
+	if s != nil && s.Now != nil {
+		return s.Now()
+	}
+	return time.Now()
+}
+
 func (s *Service) lock(ctx context.Context) (func(), error) {
 	if s.Acquire == nil {
 		return func() {}, nil

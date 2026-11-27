@@ -92,6 +92,124 @@ func TestModelCooldownCaptureAndCorrelation(t *testing.T) {
 	}
 }
 
+func TestClearCredentialCooldownEvidencePreservesModelAndForceCooldowns(t *testing.T) {
+	ctx := context.Background()
+	repo, _ := testRepository(t)
+	if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO cpa_instances (id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at) VALUES ('default', 'Default', 'http://127.0.0.1:8317', '127.0.0.1:8317', x'00', x'00', 'unknown', 0, 0)`); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 27, 15, 0, 0, 0, time.UTC)
+	recoverAt := now.Add(time.Hour)
+	modelRecoverAt := now.Add(2 * time.Hour)
+
+	// 1. Credential quota with inherited model mirror + independent per-model cooldown on separate row.
+	inherited := fmt.Sprintf(`{"timestamp":%q,"auth_index":"auth-verify","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":4},"model":{"name":"claude-sonnet-4-6","next_retry_after":%q,"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":4}}}}`,
+		now.Format(time.RFC3339), recoverAt.Format(time.RFC3339), recoverAt.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
+	independentModel := fmt.Sprintf(`{"timestamp":%q,"auth_index":"auth-verify","model":"claude-opus-4-6","status_code":429,"auth_status":{"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":3},"model":{"name":"claude-opus-4-6","next_retry_after":%q,"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":3}}}}`,
+		now.Add(time.Second).Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339))
+	// 2. Combined row carrying both credential quota and an independent (non-inherited) model cooldown.
+	combined := fmt.Sprintf(`{"timestamp":%q,"auth_index":"auth-combined","model":"claude-haiku-4-5","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":2},"model":{"name":"claude-haiku-4-5","quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":5}}}}`,
+		now.Format(time.RFC3339), recoverAt.Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339))
+	// 3. Force cooldown row that verify must leave untouched.
+	forced := fmt.Sprintf(`{"timestamp":%q,"auth_index":"auth-force","code":"force_cooldown","status_code":502,"auth_status":{"quota":{"exceeded":true,"reason":"force_cooldown","next_recover_at":%q,"backoff_level":1}}}`,
+		now.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
+
+	for _, raw := range []string{inherited, independentModel, combined, forced} {
+		if err := repo.CaptureErrorEvent(ctx, "default", raw, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, authIndex := range []string{"auth-verify", "auth-combined", "auth-force"} {
+		if err := repo.ClearCredentialCooldownEvidence(ctx, authIndex); err != nil {
+			t.Fatalf("ClearCredentialCooldownEvidence(%s): %v", authIndex, err)
+		}
+	}
+
+	cooldowns, err := repo.BatchCorrelatedCooldowns(ctx, []string{"auth-verify", "auth-combined", "auth-force"}, now.UnixMilli())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cooldowns["auth-verify"].IsActive {
+		t.Fatalf("auth-verify credential cooldown survived: %+v", cooldowns["auth-verify"])
+	}
+	if cooldowns["auth-combined"].IsActive {
+		t.Fatalf("auth-combined credential cooldown survived: %+v", cooldowns["auth-combined"])
+	}
+	if !cooldowns["auth-force"].IsActive {
+		t.Fatalf("auth-force force_cooldown was cleared by verify: %+v", cooldowns["auth-force"])
+	}
+
+	// Inherited model mirror on auth-verify was cleared, while independent per-model cooldowns survive.
+	models, err := repo.BatchModelCooldowns(ctx, []string{"auth-verify", "auth-combined"}, now.UnixMilli(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models["auth-verify"]) != 1 || models["auth-verify"][0].Model != "claude-opus-4-6" {
+		t.Fatalf("auth-verify independent model cooldowns = %+v, want only claude-opus-4-6", models["auth-verify"])
+	}
+	if len(models["auth-combined"]) != 1 || models["auth-combined"][0].Model != "claude-haiku-4-5" {
+		t.Fatalf("auth-combined independent model cooldowns = %+v, want claude-haiku-4-5", models["auth-combined"])
+	}
+
+	// Confirm the inherited mirror row itself no longer counts as active model evidence.
+	var inheritedRemaining int
+	if err := repo.SQL().QueryRowContext(ctx, `SELECT COUNT(*) FROM error_events WHERE auth_index = 'auth-verify' AND model_quota_inherited = 1 AND model_quota_exceeded = 1`).Scan(&inheritedRemaining); err != nil {
+		t.Fatal(err)
+	}
+	if inheritedRemaining != 0 {
+		t.Fatalf("inherited model mirror rows remaining = %d, want 0", inheritedRemaining)
+	}
+
+	// Routing cooldowns also drop cleared credential_quota rows while keeping force_cooldown.
+	routingCooldowns, err := repo.activeRoutingCooldowns(ctx, "default", now.UnixMilli())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(routingCooldowns) != 1 || routingCooldowns[0].AuthIndex != "auth-force" {
+		t.Fatalf("routingCooldowns = %+v, want only auth-force", routingCooldowns)
+	}
+
+	// HasActiveForceCooldownEvidence reports true for active force_cooldown (even when mixed with quota rows).
+	if activeForce, err := repo.HasActiveForceCooldownEvidence(ctx, "auth-force", now.UnixMilli()); err != nil || !activeForce {
+		t.Fatalf("HasActiveForceCooldownEvidence(active) = %v, %v, want true", activeForce, err)
+	}
+	if activeForce, err := repo.HasActiveForceCooldownEvidence(ctx, "auth-force", recoverAt.Add(time.Second).UnixMilli()); err != nil || activeForce {
+		t.Fatalf("HasActiveForceCooldownEvidence(expired) = %v, %v, want false", activeForce, err)
+	}
+
+	// Expired credential cooldown + still-active model cooldown: BatchExpiredCooldowns vetoes
+	// it (protecting credential-wide CPA reset), while BatchExpiredCredentialCooldowns still
+	// surfaces it for local CPA reconciliation.
+	pastRecover := now.Add(-time.Minute)
+	expiredCred := fmt.Sprintf(`{"timestamp":%q,"auth_index":"auth-exp-model","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":2}}}`,
+		now.Add(-2*time.Minute).Format(time.RFC3339), pastRecover.Format(time.RFC3339))
+	activeModel := fmt.Sprintf(`{"timestamp":%q,"auth_index":"auth-exp-model","model":"gpt-5-pro","status_code":429,"auth_status":{"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":2},"model":{"name":"gpt-5-pro","next_retry_after":%q,"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":2}}}}`,
+		now.Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339))
+	for _, raw := range []string{expiredCred, activeModel} {
+		if err := repo.CaptureErrorEvent(ctx, "default", raw, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resetCands, err := repo.BatchExpiredCooldowns(ctx, []string{"auth-exp-model"}, now.UnixMilli())
+	if err != nil || len(resetCands) != 0 {
+		t.Fatalf("BatchExpiredCooldowns must veto active model cooldown: %+v, %v", resetCands, err)
+	}
+	reconcileCands, err := repo.BatchExpiredCredentialCooldowns(ctx, []string{"auth-exp-model"}, now.UnixMilli())
+	if err != nil || len(reconcileCands) != 1 {
+		t.Fatalf("BatchExpiredCredentialCooldowns must include expired credential despite active model: %+v, %v", reconcileCands, err)
+	}
+
+	// Authoritative CPA reconciliation clears force_cooldown too once CPA reports no credential cooldown.
+	if err := repo.ClearAuthoritativeCredentialCooldownEvidence(ctx, "auth-force"); err != nil {
+		t.Fatal(err)
+	}
+	cooldownsAfter, err := repo.BatchCorrelatedCooldowns(ctx, []string{"auth-force"}, now.UnixMilli())
+	if err != nil || cooldownsAfter["auth-force"].IsActive {
+		t.Fatalf("auth-force after authoritative clear = %+v, %v", cooldownsAfter, err)
+	}
+}
+
 // One upstream model can be stored under several spellings: CPA compared model cooldown keys
 // case-insensitively only after the events were written, and an alias recorded before the
 // mapping existed kept the name the operator typed. Each one must read as one resting model.

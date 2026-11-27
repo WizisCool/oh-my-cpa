@@ -105,6 +105,7 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 	if err != nil {
 		return quotaAutoRefreshRound{}, err
 	}
+	snapshotMaxEventID, hasSnapshotWatermark := h.latestErrorEventID(ctx)
 	filesResp, err := client.AuthFiles(ctx)
 	if err != nil {
 		return quotaAutoRefreshRound{}, err
@@ -141,12 +142,24 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 	// drops evidence that expired earlier, which is exactly the evidence nobody cleared.
 	nowMS := h.now().UnixMilli()
 	var expiredCooldowns map[string]int64
+	var reconciledCleared, reconciledFailed int
 	if h.repo != nil {
 		expired, err := h.repo.BatchExpiredCooldowns(ctx, authIndexes, nowMS)
 		if err != nil && h.logger != nil {
 			h.logger.Warn("expired cooldown lookup failed", "error", err.Error())
 		}
 		expiredCooldowns = expired
+		if hasSnapshotWatermark && snapshotMaxEventID > 0 {
+			reconcileCandidates, credErr := h.repo.BatchExpiredCredentialCooldowns(ctx, authIndexes, nowMS)
+			if credErr != nil && h.logger != nil {
+				h.logger.Warn("expired credential cooldown lookup failed", "error", credErr.Error())
+			}
+			var clearErr error
+			reconciledCleared, reconciledFailed, clearErr = h.operationsService().ReconcileExpiredCPACredentialCooldowns(ctx, filesResp.Files, reconcileCandidates, expiredCooldowns, time.UnixMilli(nowMS), snapshotMaxEventID)
+			if clearErr != nil && h.logger != nil {
+				h.logger.Warn("failed to clear expired cooldown evidence already lifted by CPA", "error", clearErr.Error())
+			}
+		}
 	}
 
 	type dueCredential struct {
@@ -193,7 +206,11 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 		}
 		return cmp.Or(cmp.Compare(a.observedMS, b.observedMS), strings.Compare(a.file.AuthIndex, b.file.AuthIndex))
 	})
-	round := quotaAutoRefreshRound{Due: len(due)}
+	round := quotaAutoRefreshRound{
+		Due:              len(due),
+		CooldownsCleared: reconciledCleared,
+		Failed:           reconciledFailed,
+	}
 	if len(due) > QUOTA_AUTO_REFRESH_ROUND_LIMIT {
 		due = due[:QUOTA_AUTO_REFRESH_ROUND_LIMIT]
 	}

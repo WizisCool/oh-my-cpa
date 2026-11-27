@@ -279,6 +279,7 @@ export function isRetryableWriteFailure(err: unknown): boolean {
     case 'capability_missing':
     case 'cpa_v8_required':
     case 'cpa_management_disabled':
+    case 'verification_not_applied':
       return false;
     default:
       break;

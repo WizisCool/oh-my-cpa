@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -116,6 +117,202 @@ func TestVerifyAuthFileSeparatesUnansweredRequestsFromRefusals(t *testing.T) {
 			_, err = client.VerifyAuthFile(context.Background(), "claude.json", "exact-claude", "claude-haiku-4-5")
 			if err == nil || errors.Is(err, ErrCredentialOutcomeUnknown) != test.isUncertain || strings.Contains(err.Error(), "127.0.0.1") {
 				t.Fatalf("verify error = %v, want uncertain %t", err, test.isUncertain)
+			}
+		})
+	}
+}
+
+func TestVerifyAuthFileDistinguishesVerificationNotApplied409(t *testing.T) {
+	for _, test := range []struct {
+		name               string
+		status             int
+		body               string
+		wantNotApplied     bool
+		wantHTTPStatusCode int
+	}{
+		{
+			name:           "cpa_error_prefix",
+			status:         http.StatusConflict,
+			body:           `{"status":"error","verified":false,"error":"verification_not_applied: upstream completed the verification request, but the credential is still cooling down or disabled; OPAQUE-SECRET","credential":{"access_token":"OPAQUE-SECRET"}}`,
+			wantNotApplied: true,
+		},
+		{
+			name:           "explicit_code_field",
+			status:         http.StatusConflict,
+			body:           `{"status":"error","verified":false,"code":"verification_not_applied","error":"OPAQUE-SECRET"}`,
+			wantNotApplied: true,
+		},
+		{
+			name:               "other_409_superseded",
+			status:             http.StatusConflict,
+			body:               `{"status":"error","verified":false,"error":"credential_superseded: credential was replaced OPAQUE-SECRET"}`,
+			wantNotApplied:     false,
+			wantHTTPStatusCode: http.StatusConflict,
+		},
+		{
+			name:               "non_409_with_matching_code",
+			status:             http.StatusBadGateway,
+			body:               `{"code":"verification_not_applied","error":"verification_not_applied: OPAQUE-SECRET"}`,
+			wantNotApplied:     false,
+			wantHTTPStatusCode: http.StatusBadGateway,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				if request.URL.Path == "/v8/management"+MANAGEMENT_V8_PROBE_ENDPOINT {
+					_, _ = writer.Write([]byte("8"))
+					return
+				}
+				writer.Header().Set("Content-Type", "application/json")
+				writer.WriteHeader(test.status)
+				_, _ = writer.Write([]byte(test.body))
+			}))
+			t.Cleanup(server.Close)
+
+			client, err := NewClient(server.URL, "management-key", 5*time.Second, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			verified, err := client.VerifyAuthFile(context.Background(), "claude.json", "exact-claude", "claude-haiku-4-5")
+			if verified || err == nil {
+				t.Fatalf("VerifyAuthFile = (%v, %v), want false and error", verified, err)
+			}
+			if strings.Contains(err.Error(), "OPAQUE-SECRET") {
+				t.Fatalf("verify error leaked upstream detail: %v", err)
+			}
+			if errors.Is(err, ErrVerificationNotApplied) != test.wantNotApplied {
+				t.Fatalf("errors.Is(err, ErrVerificationNotApplied) = %v, want %v (err=%v)", errors.Is(err, ErrVerificationNotApplied), test.wantNotApplied, err)
+			}
+			if !test.wantNotApplied {
+				var httpErr *HTTPError
+				if !errors.As(err, &httpErr) || httpErr.StatusCode != test.wantHTTPStatusCode || httpErr.Body != "" {
+					t.Fatalf("sanitized HTTP error = %#v, want status %d with empty body", httpErr, test.wantHTTPStatusCode)
+				}
+			}
+		})
+	}
+}
+
+func TestAuthFileHasClearedCredentialCooldown(t *testing.T) {
+	now := time.Date(2026, 11, 27, 15, 0, 0, 0, time.UTC)
+	boolPtr := func(value bool) *bool { return &value }
+
+	for _, test := range []struct {
+		name string
+		file AuthFile
+		want bool
+	}{
+		{
+			name: "active_available_no_retry",
+			file: AuthFile{Status: "active", Disabled: false, Unavailable: false},
+			want: true,
+		},
+		{
+			name: "active_with_expired_retry",
+			file: AuthFile{Status: "active", NextRetryAfter: now.Add(-time.Second).Format(time.RFC3339)},
+			want: true,
+		},
+		{
+			name: "active_with_model_only_quota_blocked",
+			file: AuthFile{Status: "active", CredentialRecoverySummary: CredentialRecoverySummary{RecoveryStage: "quota_blocked"}},
+			want: true,
+		},
+		{
+			name: "active_with_future_retry",
+			file: AuthFile{Status: "active", NextRetryAfter: now.Add(time.Minute).Format(time.RFC3339)},
+			want: false,
+		},
+		{
+			name: "active_with_malformed_retry",
+			file: AuthFile{Status: "active", NextRetryAfter: "not-a-timestamp"},
+			want: false,
+		},
+		{
+			name: "error_unavailable_cooling",
+			file: AuthFile{Status: "error", Unavailable: true, NextRetryAfter: now.Add(time.Hour).Format(time.RFC3339)},
+			want: false,
+		},
+		{
+			name: "disabled",
+			file: AuthFile{Status: "active", Disabled: true},
+			want: false,
+		},
+		{
+			name: "requires_sign_in",
+			file: AuthFile{Status: "active", CredentialRecoverySummary: CredentialRecoverySummary{RequiresSignIn: boolPtr(true)}},
+			want: false,
+		},
+		{
+			name: "sparse_missing_status",
+			file: AuthFile{Name: "codex.json", AuthIndex: "idx-1"},
+			want: false,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.file.HasClearedCredentialCooldown(now); got != test.want {
+				t.Fatalf("HasClearedCredentialCooldown = %v, want %v", got, test.want)
+			}
+		})
+	}
+
+	for _, test := range []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{
+			name: "json_explicit_unavailable_false",
+			raw:  `{"status":"active","disabled":false,"unavailable":false}`,
+			want: true,
+		},
+		{
+			name: "json_omitted_unavailable",
+			raw:  `{"status":"active","disabled":false}`,
+			want: false,
+		},
+		{
+			name: "json_null_unavailable",
+			raw:  `{"status":"active","disabled":false,"unavailable":null}`,
+			want: false,
+		},
+		{
+			name: "json_explicit_unavailable_true",
+			raw:  `{"status":"active","disabled":false,"unavailable":true}`,
+			want: false,
+		},
+		{
+			name: "json_disabled_vetoes_active",
+			raw:  `{"status":"active","disabled":true,"unavailable":false}`,
+			want: false,
+		},
+		{
+			name: "json_future_retry_vetoes_active",
+			raw:  `{"status":"active","disabled":false,"unavailable":false,"next_retry_after":"2026-11-27T15:05:00Z"}`,
+			want: false,
+		},
+		{
+			name: "json_numeric_past_retry_tolerant",
+			raw:  fmt.Sprintf(`{"status":"active","disabled":false,"unavailable":false,"next_retry_after":%d,"quota_blocked":"unknown"}`, now.Add(-time.Minute).Unix()),
+			want: true,
+		},
+		{
+			name: "json_numeric_future_retry_vetoes_active",
+			raw:  fmt.Sprintf(`{"status":"active","disabled":false,"unavailable":false,"next_retry_after":%d}`, now.Add(time.Minute).Unix()),
+			want: false,
+		},
+		{
+			name: "json_object_retry_tolerant_and_conservative",
+			raw:  `{"status":"active","disabled":false,"unavailable":false,"next_retry_after":{"seconds":60}}`,
+			want: false,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var decoded AuthFile
+			if err := json.Unmarshal([]byte(test.raw), &decoded); err != nil {
+				t.Fatalf("Unmarshal(%s): %v", test.raw, err)
+			}
+			if got := decoded.HasClearedCredentialCooldown(now); got != test.want {
+				t.Fatalf("decoded HasClearedCredentialCooldown = %v, want %v (file=%+v)", got, test.want, decoded)
 			}
 		})
 	}
