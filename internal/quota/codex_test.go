@@ -185,3 +185,94 @@ func TestParseCodexUsagePreservesExactCustomDurationAndCycleRange(t *testing.T) 
 		t.Fatalf("WindowCycleRange(28800s) = %d reason=%q, want %d", from8h, reason8h, want8h)
 	}
 }
+
+func TestParseCodexResetCreditsHandlesNumericTimestampsAndCountFallback(t *testing.T) {
+	raw := []byte(`{
+		"credits": [
+			{
+				"id": "cr-sec",
+				"status": "available",
+				"reset_type": "codex_rate_limits",
+				"granted_at": 1775000000,
+				"expires_at": 1776000000
+			},
+			{
+				"id": "cr-ms-camel",
+				"status": "available",
+				"grantedAt": 1775000000123,
+				"expiresAt": "1776500000"
+			},
+			{
+				"id": "cr-precedence",
+				"status": "available",
+				"granted_at": 1775100000,
+				"grantedAt": 1700000000,
+				"expires_at": "2026-12-01T00:00:00Z",
+				"expiresAt": "2020-01-01T00:00:00Z"
+			},
+			{
+				"id": "cr-used",
+				"status": "used",
+				"expires_at": 1776000000
+			}
+		]
+	}`)
+	parsed, err := ParseCodexResetCreditsPayload(raw)
+	if err != nil {
+		t.Fatalf("ParseCodexResetCreditsPayload failed: %v", err)
+	}
+	if parsed.AvailableCount != 3 || len(parsed.Credits) != 3 {
+		t.Fatalf("parsed = %+v, want available_count=3 derived from 3 redeemable credits", parsed)
+	}
+	if parsed.Credits[0].GrantedAtMS == nil || *parsed.Credits[0].GrantedAtMS != 1775000000000 {
+		t.Fatalf("cr-sec granted_at_ms = %v, want 1775000000000", parsed.Credits[0].GrantedAtMS)
+	}
+	if parsed.Credits[0].ExpiresAtMS == nil || *parsed.Credits[0].ExpiresAtMS != 1776000000000 {
+		t.Fatalf("cr-sec expires_at_ms = %v, want 1776000000000", parsed.Credits[0].ExpiresAtMS)
+	}
+	if parsed.Credits[1].GrantedAtMS == nil || *parsed.Credits[1].GrantedAtMS != 1775000000123 {
+		t.Fatalf("cr-ms-camel granted_at_ms = %v, want 1775000000123", parsed.Credits[1].GrantedAtMS)
+	}
+	if parsed.Credits[1].ExpiresAtMS == nil || *parsed.Credits[1].ExpiresAtMS != 1776500000000 {
+		t.Fatalf("cr-ms-camel expires_at_ms = %v, want 1776500000000", parsed.Credits[1].ExpiresAtMS)
+	}
+	wantDec := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC).UnixMilli()
+	if parsed.Credits[2].GrantedAtMS == nil || *parsed.Credits[2].GrantedAtMS != 1775100000000 {
+		t.Fatalf("cr-precedence granted_at_ms = %v, want snake_case 1775100000000", parsed.Credits[2].GrantedAtMS)
+	}
+	if parsed.Credits[2].ExpiresAtMS == nil || *parsed.Credits[2].ExpiresAtMS != wantDec {
+		t.Fatalf("cr-precedence expires_at_ms = %v, want snake_case %d", parsed.Credits[2].ExpiresAtMS, wantDec)
+	}
+
+	explicitZero, err := ParseCodexResetCreditsPayload([]byte(`{"available_count":0,"availableCount":4,"credits":[]}`))
+	if err != nil {
+		t.Fatalf("explicit zero failed: %v", err)
+	}
+	if explicitZero.AvailableCount != 0 || !explicitZero.hasAvailableCount {
+		t.Fatalf("explicitZero = %+v, want available_count=0 with hasAvailableCount=true", explicitZero)
+	}
+
+	// Supplied but unreadable expiries are excluded so redemption never treats them as undated,
+	// while omitted, null, or blank expiries remain accepted as undated credits.
+	unreadableExpiry, err := ParseCodexResetCreditsPayload([]byte(`{
+		"credits": [
+			{"id": "cr-bool-exp", "status": "available", "expires_at": false},
+			{"id": "cr-bad-str-exp", "status": "available", "expires_at": "not-a-date"},
+			{"id": "cr-neg-exp", "status": "available", "expires_at": -1},
+			{"id": "cr-null-exp", "status": "available", "expires_at": null},
+			{"id": "cr-blank-exp", "status": "available", "expires_at": "   "},
+			{"id": "cr-omitted-exp", "status": "available"}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("unreadableExpiry failed: %v", err)
+	}
+	if unreadableExpiry.AvailableCount != 3 || len(unreadableExpiry.Credits) != 3 {
+		t.Fatalf("unreadableExpiry = %+v, want only the 3 undated credits retained", unreadableExpiry)
+	}
+	for i, wantID := range []string{"cr-null-exp", "cr-blank-exp", "cr-omitted-exp"} {
+		if unreadableExpiry.Credits[i].ID != wantID || unreadableExpiry.Credits[i].ExpiresAtMS != nil {
+			t.Fatalf("credit[%d] = %+v, want id=%q with nil ExpiresAtMS", i, unreadableExpiry.Credits[i], wantID)
+		}
+	}
+}

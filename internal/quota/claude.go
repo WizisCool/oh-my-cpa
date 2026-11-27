@@ -90,6 +90,15 @@ type RawClaudeProfileResponse struct {
 	Organization *RawClaudeProfileOrg     `json:"organization"`
 }
 
+// Sanitized status codes for supplementary Claude reset-grants read failures.
+// They distinguish a refusal or upstream failure from an account with zero grants.
+const (
+	ClaudeResetGrantsErrorRateLimited    = "rate_limited"
+	ClaudeResetGrantsErrorAuth           = "auth_error"
+	ClaudeResetGrantsErrorUpstream       = "upstream_error"
+	ClaudeResetGrantsErrorInvalidPayload = "invalid_payload"
+)
+
 // ClaudeResetGrant is one Anthropic rate-limit reset grant, display-only. OMC
 // lists grants beside the Claude quota; claiming one spends an entitlement
 // and is deliberately not implemented.
@@ -160,11 +169,13 @@ func ParseClaudeResetGrants(raw []byte) []ClaudeResetGrant {
 		}
 		var endsAtMS *int64
 		if rawGrant.EndsAt != nil {
-			parsed, ok := parseGrantInstant(*rawGrant.EndsAt)
-			if !ok {
-				return nil
+			if trimmed := strings.TrimSpace(*rawGrant.EndsAt); trimmed != "" {
+				parsed, ok := parseGrantInstant(trimmed)
+				if !ok {
+					return nil
+				}
+				endsAtMS = &parsed
 			}
-			endsAtMS = &parsed
 		}
 		// A grant that names a window this parser does not know is not partly
 		// described by the windows it does know: a launch grant for one model's

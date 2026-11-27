@@ -4,10 +4,13 @@ import { Button } from '@/components/ui/button';
 import { useT } from '../../i18n';
 import { ThunderboltOutlined } from '../../components/icons';
 import { MetaLine } from '../../components/common/MetaLine';
+import { Notice } from '../../components/feedback';
 import type { ClaudeResetGrant, CodexResetCreditsInfo } from '../../types/quota';
 import {
   formatCodexResetCreditExpiry,
+  formatResetReadError,
   formatTimeWithCountdown,
+  orderClaudeResetGrants,
   orderCodexResetCredits,
   resolveSelectedCodexResetCredit,
 } from './quotaFormat';
@@ -17,6 +20,7 @@ import styles from './QuotaWindowCards.module.css';
 export interface QuotaResetCardsProps {
   credits?: CodexResetCreditsInfo;
   grants?: ClaudeResetGrant[];
+  grantsError?: string;
   /** The credential the credits belong to, as the redemption dialog names it. */
   credentialLabel: string;
   nowMS: number;
@@ -32,18 +36,22 @@ export interface QuotaResetCardsProps {
  * which one to spend waits for Reset quota, which opens the shared redemption dialog. Claude
  * grants remain read-only cards in the same grid rhythm.
  */
-export function QuotaResetCards({ credits, grants = [], credentialLabel, nowMS, isDemo, isRedeeming = false, onRedeem }: QuotaResetCardsProps) {
+export function QuotaResetCards({ credits, grants = [], grantsError, credentialLabel, nowMS, isDemo, isRedeeming = false, onRedeem }: QuotaResetCardsProps) {
   const t = useT();
   const creditsHeadingId = React.useId();
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
-  const liveGrants = grants.filter((grant) => grant.resets_left > 0);
+  const liveGrants = orderClaudeResetGrants(grants);
   const hasCredits = (credits?.available_count ?? 0) > 0;
-  if (!hasCredits && liveGrants.length === 0) return null;
+  const creditsErrorText = formatResetReadError(credits?.error, t);
+  const grantsErrorText = formatResetReadError(grantsError, t);
+  const showCodexSection = hasCredits || Boolean(creditsErrorText);
+  const showClaudeSection = liveGrants.length > 0 || Boolean(grantsErrorText);
+  if (!showCodexSection && !showClaudeSection) return null;
 
   const creditRows = hasCredits && credits ? orderCodexResetCredits(credits.credits) : [];
   const { eligibleCount } = resolveSelectedCodexResetCredit(creditRows, null, nowMS);
   const hasApplicableNote = Boolean(
-    credits && credits.applicable_available_count > 0 && credits.applicable_available_count !== credits.available_count,
+    hasCredits && credits && credits.applicable_available_count > 0 && credits.applicable_available_count !== credits.available_count,
   );
   const hasListedButNoneEligible = creditRows.length > 0 && eligibleCount === 0;
   const isRedeemDisabled = isDemo || isRedeeming || hasListedButNoneEligible;
@@ -56,21 +64,23 @@ export function QuotaResetCards({ credits, grants = [], credentialLabel, nowMS, 
   const until = (atMS: number) => formatTimeWithCountdown(atMS, nowMS, t);
   return (
     <>
-      {hasCredits && credits && (
+      {showCodexSection && (
         <section className={styles.group} data-quota-reset="credits" aria-labelledby={creditsHeadingId}>
           <div className={styles['reset-bar']}>
             <div className={styles['reset-bar-info']}>
               <span id={creditsHeadingId} className={styles['group-name']}>{t('quota.reset_credits_title')}</span>
-              <MetaLine className={styles['reset-bar-meta']}>
-                <span>
-                  {t('quota.reset_available')} <b>{credits.available_count}</b>
-                </span>
-                {hasApplicableNote && (
-                  <span>{t('omc.quota_credit_applicable', { n: credits.applicable_available_count })}</span>
-                )}
-              </MetaLine>
+              {hasCredits && credits && (
+                <MetaLine className={styles['reset-bar-meta']}>
+                  <span>
+                    {t('quota.reset_available')} <b>{credits.available_count}</b>
+                  </span>
+                  {hasApplicableNote && (
+                    <span>{t('omc.quota_credit_applicable', { n: credits.applicable_available_count })}</span>
+                  )}
+                </MetaLine>
+              )}
             </div>
-            {onRedeem && (
+            {hasCredits && onRedeem && (
               <Button
                 size="sm"
                 icon={<ThunderboltOutlined />}
@@ -83,6 +93,9 @@ export function QuotaResetCards({ credits, grants = [], credentialLabel, nowMS, 
               </Button>
             )}
           </div>
+          {creditsErrorText && (
+            <Notice tone="warning" description={creditsErrorText} data-testid="quota-reset-error-credits" />
+          )}
           {creditRows.length > 0 && (
             <div className={styles.grid} data-quota-reset-list="credits">
               {creditRows.map((credit, index) => {
@@ -105,7 +118,7 @@ export function QuotaResetCards({ credits, grants = [], credentialLabel, nowMS, 
               })}
             </div>
           )}
-          {onRedeem && (
+          {hasCredits && credits && onRedeem && (
             <RedeemResetCreditDialog
               open={isDialogOpen}
               credits={credits}
@@ -117,26 +130,31 @@ export function QuotaResetCards({ credits, grants = [], credentialLabel, nowMS, 
           )}
         </section>
       )}
-      {liveGrants.length > 0 && (
-        <section className={styles.group} aria-label={t('quota.resets_title')}>
+      {showClaudeSection && (
+        <section className={styles.group} data-quota-reset="grants" aria-label={t('quota.resets_title')}>
           <div className={styles['group-name']}>{t('quota.resets_title')}</div>
-          <div className={styles.grid}>
-            {/* A grant is named by the provider's own label and nothing else: what it restores is the
-                provider's entitlement to state, and a guess could promise a reset it does not give. */}
-            {liveGrants.map((grant) => (
-              <div className={styles.card} key={grant.id} data-quota-reset="grant">
-                <span className={styles.head}>
-                  <span className={styles['grant-name']} data-tip={grant.label} data-tip-overflow="">{grant.label || t('quota.reset_grant_untitled')}</span>
-                  <span className={styles.value}>
-                    <span className={styles['value-prefix']}>{t('quota.reset_available')}</span>
-                    <b>{grant.resets_left}</b>
-                    <span className={styles['value-prefix']}>/ {grant.resets_total}</span>
+          {grantsErrorText && (
+            <Notice tone="warning" description={grantsErrorText} data-testid="quota-reset-error-grants" />
+          )}
+          {liveGrants.length > 0 && (
+            <div className={styles.grid}>
+              {/* A grant is named by the provider's own label and nothing else: what it restores is the
+                  provider's entitlement to state, and a guess could promise a reset it does not give. */}
+              {liveGrants.map((grant) => (
+                <div className={styles.card} key={grant.id} data-quota-reset="grant" data-quota-reset-grant={grant.id}>
+                  <span className={styles.head}>
+                    <span className={styles['grant-name']} data-tip={grant.label} data-tip-overflow="">{grant.label || t('quota.reset_grant_untitled')}</span>
+                    <span className={styles.value}>
+                      <span className={styles['value-prefix']}>{t('quota.reset_available')}</span>
+                      <b>{grant.resets_left}</b>
+                      <span className={styles['value-prefix']}>/ {grant.resets_total}</span>
+                    </span>
                   </span>
-                </span>
-                {grant.ends_at_ms && <span className={styles.detail}>{t('quota.reset_grant_until', { when: until(grant.ends_at_ms) })}</span>}
-              </div>
-            ))}
-          </div>
+                  {grant.ends_at_ms && <span className={styles.detail}>{t('quota.reset_grant_until', { when: until(grant.ends_at_ms) })}</span>}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
     </>

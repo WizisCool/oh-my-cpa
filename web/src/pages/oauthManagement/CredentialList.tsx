@@ -250,11 +250,11 @@ function CredentialRow({ record, isSelected, isSelecting, hasHandle, nowMS, acti
         </div>
         <div className={styles.who}>
           <CredentialName record={record} facts={facts} isRenaming={isRenaming} onRename={() => setIsRenaming(true)} onRenamed={() => setIsRenaming(false)} actions={actions} />
-          {!isPhone && <CredentialTraits record={record} facts={facts} actions={actions} />}
+          {!isPhone && <CredentialTraits record={record} facts={facts} actions={actions} nowMS={nowMS} />}
         </div>
         {/* A phone says what the credential is and how it is doing on one line under its name. */}
         <div className={styles.state}>
-          {isPhone && <CredentialTraits record={record} facts={facts} actions={actions} />}
+          {isPhone && <CredentialTraits record={record} facts={facts} actions={actions} nowMS={nowMS} />}
           <CredentialState record={record} facts={facts} actions={actions} nowMS={nowMS} isQuiet={isPhone} />
         </div>
         <div className={styles.quota} data-quota-missing={!hasLines && metrics.length === 0 ? 'true' : undefined}>

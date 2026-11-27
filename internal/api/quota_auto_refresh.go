@@ -198,7 +198,7 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 		due = due[:QUOTA_AUTO_REFRESH_ROUND_LIMIT]
 	}
 
-	svc := quota.NewService(client)
+	svc := h.newQuotaService(client)
 	var wg sync.WaitGroup
 	var countMu sync.Mutex
 	sem := make(chan struct{}, QUOTA_AUTO_REFRESH_CONCURRENCY)

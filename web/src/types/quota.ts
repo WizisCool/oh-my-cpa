@@ -251,6 +251,7 @@ export interface QuotaItem {
   windows: QuotaWindow[];
   reset_credits?: CodexResetCreditsInfo;
   reset_grants?: ClaudeResetGrant[];
+  reset_grants_error?: string;
   active_cooldown?: ActiveCooldown;
   model_cooldowns?: ActiveCooldown[];
   recommendation: QuotaRecommendation;

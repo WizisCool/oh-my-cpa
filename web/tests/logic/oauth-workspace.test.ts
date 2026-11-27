@@ -27,7 +27,17 @@ import { orderQuotaWindows, quotaWindowFullName, quotaWindowGroupKey, quotaWindo
 import { applyKeyOrder, moveKey, parseGroupedOrder, parseRankOrder, rankedKeys, ranksOf } from '../../src/types/displayOrder.ts';
 import { credentialStatusOf, compareSections, quotaCellsOf, quotaDetailWindowFullName, quotaDetailWindowName, quotaLinesOf, quotaReadingLabels, quotaReadingName, packQuotaLines, sortByQuotaColumn, isListQuotaFamilyExcluded, buildCredentialSections, orderBySection, providersInSectionOrder } from '../../src/pages/oauthManagement/credentialSections.ts';
 import type { QuotaWindow } from '../../src/types/quota.ts';
-import { formatShortDateTime, isUnusedFullCodexFiveHourWindow, quotaPlanLabel, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../../src/pages/quota/quotaFormat.ts';
+import {
+  claudeResetGrantTotalLeft,
+  formatResetReadError,
+  formatShortDateTime,
+  isUnusedFullCodexFiveHourWindow,
+  orderClaudeResetGrants,
+  quotaPlanLabel,
+  quotaResetCountdown,
+  quotaResetText,
+  resetAccuracyMarker,
+} from '../../src/pages/quota/quotaFormat.ts';
 import { matchesStatusFilter } from '../../src/components/authFiles/authFileLogic.ts';
 import { healthBucketOf, healthCounts, matchesHealthLens, parseHealthLens, providerSummaries } from '../../src/pages/oauthManagement/fleetPresentation.ts';
 import { siwcBadgeState } from '../../src/components/authFiles/siwcBadge.ts';
@@ -1160,4 +1170,61 @@ test('workspaceProviderOptions uses PRIMARY_CREDENTIAL_PROVIDERS including copil
   assert.equal(projection.records[0].displayProvider, 'copilot');
   assert.equal(providerDisplayName(projection.records[0].displayProvider), 'GitHub Copilot');
   assert.equal(projection.records[0].authorizationProviderId, 'copilot');
+});
+
+test('Claude reset grants ordering, totals, error formatting, and workspace observation detection', () => {
+  const ordered = orderClaudeResetGrants([
+    { id: 'grant-undated-b', label: 'Bonus B', resets_total: 1, resets_left: 1 },
+    { id: 'grant-later', label: 'Monthly', resets_total: 3, resets_left: 2, ends_at_ms: 2_000_000_000_000 },
+    { id: 'grant-spent', label: 'Spent', resets_total: 2, resets_left: 0, ends_at_ms: 1_500_000_000_000 },
+    { id: 'grant-soonest', label: 'Weekly', resets_total: 2, resets_left: 1, ends_at_ms: 1_800_000_000_000 },
+    { id: 'grant-undated-a', label: 'Bonus A', resets_total: 1, resets_left: 1 },
+  ]);
+  assert.deepEqual(ordered.map((grant) => grant.id), ['grant-soonest', 'grant-later', 'grant-undated-a', 'grant-undated-b']);
+  assert.equal(claudeResetGrantTotalLeft(ordered), 5);
+  assert.equal(claudeResetGrantTotalLeft([{ id: 'spent', resets_total: 1, resets_left: 0 }]), 0);
+
+  const en = makeT('en');
+  assert.equal(formatResetReadError('rate_limited', en), 'Upstream rate limited; reset info will retry shortly');
+  assert.equal(formatResetReadError('auth_error', en), 'Authorization failed while reading reset info');
+  assert.equal(formatResetReadError('upstream_error', en), 'Could not load reset info from upstream');
+  assert.equal(formatResetReadError('invalid_payload', en), 'Upstream returned an unexpected reset info payload');
+  assert.equal(formatResetReadError('HTTP 403', en), 'Could not load reset info (HTTP 403)');
+  assert.equal(formatResetReadError('   ', en), null);
+
+  // Claude credentials carrying reset grants or a reset-grants error count as observed without enabling Codex redemption.
+  const claudeFile = file({ name: 'claude-pro.json', auth_index: 'idx-claude', type: 'claude', provider: 'claude' });
+  const withoutGrants = buildOAuthWorkspaceProjection(
+    [claudeFile],
+    [quota({ auth_index: 'idx-claude', provider: 'claude', status: 'unpublished', windows: [] })],
+    choices,
+  );
+  assert.equal(withoutGrants.records[0].isQuotaObserved, false);
+
+  const withGrants = buildOAuthWorkspaceProjection(
+    [claudeFile],
+    [quota({
+      auth_index: 'idx-claude',
+      provider: 'claude',
+      status: 'unpublished',
+      windows: [],
+      reset_grants: [{ id: 'g-1', label: 'Weekly', resets_total: 2, resets_left: 2 }],
+    })],
+    choices,
+  );
+  assert.equal(withGrants.records[0].isQuotaObserved, true);
+  assert.equal(withGrants.records[0].canRedeemCredit, false);
+
+  const withError = buildOAuthWorkspaceProjection(
+    [claudeFile],
+    [quota({
+      auth_index: 'idx-claude',
+      provider: 'claude',
+      status: 'unpublished',
+      windows: [],
+      reset_grants_error: 'rate_limited',
+    })],
+    choices,
+  );
+  assert.equal(withError.records[0].isQuotaObserved, true);
 });

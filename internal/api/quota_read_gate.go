@@ -27,9 +27,12 @@ const (
 	QUOTA_RATE_LIMIT_BACKOFF_MAX  = 30 * time.Minute
 	// A Claude read is three requests - profile, usage and reset grants - and all three count
 	// against the same limit. Only usage changes between reads, so the plan is re-read every
-	// six hours and the grants every hour, and a steady refresh costs one request.
-	QUOTA_CLAUDE_PROFILE_MAX_AGE      = 6 * time.Hour
-	QUOTA_CLAUDE_RESET_GRANTS_MAX_AGE = time.Hour
+	// six hours and the grants every hour, and a steady refresh costs one request. A failed
+	// grants read uses a short cooldown rather than the full hour so a transient 429 recovers
+	// promptly without hammering Anthropic on immediate retries.
+	QUOTA_CLAUDE_PROFILE_MAX_AGE               = 6 * time.Hour
+	QUOTA_CLAUDE_RESET_GRANTS_MAX_AGE          = time.Hour
+	QUOTA_CLAUDE_RESET_GRANTS_FAILURE_COOLDOWN = 2 * time.Minute
 )
 
 // quotaReadGates holds the pacing of every provider that needs one. The zero value is ready.
@@ -57,6 +60,10 @@ func (g *quotaReadGates) forgetExcept(current map[string]management.AuthFile) {
 	g.claudeGate().forgetExcept(current)
 }
 
+func (g *quotaReadGates) claudeResetGrantsError(authIndex string) string {
+	return g.claudeGate().resetGrantsError(authIndex)
+}
+
 // quotaProviderGate bounds one provider's reads and remembers its rate limits. It lives in
 // memory: a restart forgets a pause, and the first read after it learns the limit again.
 type quotaProviderGate struct {
@@ -70,8 +77,10 @@ type quotaProviderGate struct {
 }
 
 type quotaSupplementaryReads struct {
-	profileAtMS     int64
-	resetGrantsAtMS int64
+	profileAtMS           int64
+	resetGrantsAtMS       int64
+	resetGrantsFailedAtMS int64
+	resetGrantsError      string
 }
 
 type quotaCredentialBackoff struct {
@@ -124,15 +133,17 @@ func (g *quotaProviderGate) readOptions(authIndex string, prior *quota.Normalize
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	reads := g.supplementary[authIndex]
+	isResetGrantsFresh := (reads.resetGrantsAtMS > 0 && nowMS-reads.resetGrantsAtMS < QUOTA_CLAUDE_RESET_GRANTS_MAX_AGE.Milliseconds()) ||
+		(reads.resetGrantsFailedAtMS > 0 && nowMS-reads.resetGrantsFailedAtMS < QUOTA_CLAUDE_RESET_GRANTS_FAILURE_COOLDOWN.Milliseconds())
 	return quota.ReadOptions{
 		IsClaudeProfileFresh:     prior.Plan != nil && prior.Plan.PlanType != "" && reads.profileAtMS > 0 && nowMS-reads.profileAtMS < QUOTA_CLAUDE_PROFILE_MAX_AGE.Milliseconds(),
-		IsClaudeResetGrantsFresh: reads.resetGrantsAtMS > 0 && nowMS-reads.resetGrantsAtMS < QUOTA_CLAUDE_RESET_GRANTS_MAX_AGE.Milliseconds(),
+		IsClaudeResetGrantsFresh: isResetGrantsFresh,
 	}
 }
 
 // recordSupplementary stamps the supplementary reads a usable reading just made. A grants listing
-// that failed is stamped too: the grants are display-only, and the grants endpoint refuses more
-// readily than usage, so retrying it on every read would spend requests the usage reads need.
+// that failed enters a short failure cooldown and keeps its error code rather than locking out
+// retries for the full hour-long success TTL.
 func (g *quotaProviderGate) recordSupplementary(authIndex string, options quota.ReadOptions, reading *quota.NormalizedQuota, nowMS int64) {
 	if isUsable, _ := quota.ReadOutcome(reading, nil); !isUsable {
 		return
@@ -144,9 +155,22 @@ func (g *quotaProviderGate) recordSupplementary(authIndex string, options quota.
 		reads.profileAtMS = nowMS
 	}
 	if !options.IsClaudeResetGrantsFresh {
-		reads.resetGrantsAtMS = nowMS
+		if reading.ResetGrantsError != "" {
+			reads.resetGrantsFailedAtMS = nowMS
+			reads.resetGrantsError = reading.ResetGrantsError
+		} else {
+			reads.resetGrantsAtMS = nowMS
+			reads.resetGrantsFailedAtMS = 0
+			reads.resetGrantsError = ""
+		}
 	}
 	g.supplementary[authIndex] = reads
+}
+
+func (g *quotaProviderGate) resetGrantsError(authIndex string) string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.supplementary[authIndex].resetGrantsError
 }
 
 // observe updates the pacing from one read's outcome. A refused read pauses the provider and

@@ -43,7 +43,10 @@ func testHandler(t *testing.T, basePath string) *Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewHandler(config.Config{BasePath: basePath, Version: "test"}, repository.New(db), cipher, nil, authManager)
+	handler := NewHandler(config.Config{BasePath: basePath, Version: "test"}, repository.New(db), cipher, nil, authManager)
+	zeroDelay := time.Duration(0)
+	handler.claudeResetGrantsDelay = &zeroDelay
+	return handler
 }
 
 func TestRouterSeparatesSPAFromAPIAndRedirectsBasePath(t *testing.T) {

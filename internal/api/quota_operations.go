@@ -84,7 +84,7 @@ func (h *Handler) redeemQuotaCredit(ctx context.Context, client *management.Clie
 		return nil, newProviderWriteError(http.StatusInternalServerError, "audit failure; redeem credit aborted")
 	}
 
-	svc := quota.NewServiceWithClock(client, h.now)
+	svc := h.newQuotaService(client)
 	redeemedCreditID, err := svc.RedeemCodexCredit(ctx, *foundFile, requestedCreditID)
 	if err != nil {
 		failureDetails := map[string]any{"error": err.Error()}

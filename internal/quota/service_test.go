@@ -85,7 +85,7 @@ func TestServiceRefreshPreservesPreviousStateOnTransientError(t *testing.T) {
 			return management.ApiCallResponse{}, errors.New("upstream gateway timeout 504")
 		},
 	}
-	svc := NewService(client)
+	svc := NewService(client).WithClaudeResetGrantsDelay(0)
 
 	used := 20.0
 	rem := 80.0
@@ -233,7 +233,7 @@ func TestRedeemCodexCreditCallsConsumeEndpoint(t *testing.T) {
 		},
 	}
 
-	svc := NewService(client)
+	svc := NewService(client).WithClaudeResetGrantsDelay(0)
 	redeemedID, err := svc.RedeemCodexCredit(context.Background(), management.AuthFile{
 		AuthIndex: "auth-codex",
 		Name:      "codex.json",
@@ -503,7 +503,7 @@ func TestRefreshCredentialQuotaAttachesClaudeResetGrants(t *testing.T) {
 			return management.ApiCallResponse{}, errors.New("unimplemented")
 		},
 	}
-	result, err := NewService(client).RefreshCredentialQuota(context.Background(), management.AuthFile{
+	result, err := NewService(client).WithClaudeResetGrantsDelay(0).RefreshCredentialQuota(context.Background(), management.AuthFile{
 		AuthIndex: "auth-claude",
 		Name:      "claude.json",
 		Type:      "claude",
@@ -574,7 +574,7 @@ func TestServiceAllProvidersContract(t *testing.T) {
 		},
 	}
 
-	svc := NewService(client)
+	svc := NewService(client).WithClaudeResetGrantsDelay(0)
 
 	// 1. Antigravity
 	agFile := management.AuthFile{
@@ -1044,11 +1044,114 @@ func TestRefreshClaudeKeepsBalancesWithoutAProfile(t *testing.T) {
 		}
 		return management.ApiCallResponse{StatusCode: 500}, nil
 	}}
-	result, err := NewService(client).RefreshCredentialQuota(context.Background(), management.AuthFile{AuthIndex: "cl-2", Name: "claude.json", Type: "claude", Provider: "claude"}, nil)
+	result, err := NewService(client).WithClaudeResetGrantsDelay(0).RefreshCredentialQuota(context.Background(), management.AuthFile{AuthIndex: "cl-2", Name: "claude.json", Type: "claude", Provider: "claude"}, nil)
 	if err != nil {
 		t.Fatalf("RefreshCredentialQuota error: %v", err)
 	}
 	if result.Plan == nil || result.Plan.PlanLabel != "" || len(result.Plan.Balances) != 1 || result.Plan.ExtraUsage == nil {
 		t.Fatalf("plan = %+v, want an unlabelled plan carrying the balance and extra usage", result.Plan)
+	}
+}
+
+func TestCodexResetCreditsErrorSurfacingAndAccountIDGuards(t *testing.T) {
+	if got := resolveCodexAccountID(management.AuthFile{Account: "owner@example.com"}); got != "" {
+		t.Fatalf("resolveCodexAccountID(email) = %q, want empty", got)
+	}
+	if got := resolveCodexAccountID(management.AuthFile{
+		Account: "owner@example.com",
+		Quota:   map[string]any{"account_id": "acct-from-quota"},
+	}); got != "acct-from-quota" {
+		t.Fatalf("resolveCodexAccountID(email+quota) = %q, want acct-from-quota", got)
+	}
+
+	// Dedicated endpoint error with no usage credits still surfaces an error struct.
+	errClient := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+		return management.ApiCallResponse{StatusCode: http.StatusForbidden, Body: json.RawMessage(`{"message":"forbidden"}`)}, nil
+	}}
+	gotErr := NewService(errClient).fetchCodexResetCredits(context.Background(), management.AuthFile{AuthIndex: "cx-err"}, nil, nil)
+	if gotErr == nil || !strings.Contains(gotErr.Error, "HTTP 403") {
+		t.Fatalf("dedicated 403 with nil usageCredits = %+v, want Error containing HTTP 403", gotErr)
+	}
+
+	// Dedicated endpoint error preserves usageCredits count while surfacing the error.
+	gotFallback := NewService(errClient).fetchCodexResetCredits(context.Background(), management.AuthFile{AuthIndex: "cx-err"}, nil, &CodexResetCreditsInfo{AvailableCount: 2})
+	if gotFallback == nil || gotFallback.AvailableCount != 2 || !strings.Contains(gotFallback.Error, "HTTP 403") {
+		t.Fatalf("dedicated 403 with usageCredits = %+v, want count=2 and HTTP 403 error", gotFallback)
+	}
+
+	// Dedicated endpoint omitting available_count with numeric timestamps derives count from credits.
+	numericClient := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+		return management.ApiCallResponse{
+			StatusCode: http.StatusOK,
+			Body:       json.RawMessage(`{"credits":[{"id":"c1","status":"available","expires_at":1776000000},{"id":"c2","status":"available","expires_at":1777000000}]}`),
+		}, nil
+	}}
+	gotNumeric := NewService(numericClient).fetchCodexResetCredits(context.Background(), management.AuthFile{AuthIndex: "cx-num"}, nil, nil)
+	if gotNumeric == nil || gotNumeric.AvailableCount != 2 || len(gotNumeric.Credits) != 2 || gotNumeric.Error != "" {
+		t.Fatalf("numeric credits without available_count = %+v, want count=2 and 2 credits", gotNumeric)
+	}
+}
+
+func TestRefreshClaudeResetGrantsPreservesPriorOnFailureAndSpacesRequest(t *testing.T) {
+	priorGrants := []ClaudeResetGrant{{ID: "grant-keep", Label: "Weekly", ResetsTotal: 2, ResetsLeft: 1}}
+	rem := 70.0
+	prior := &NormalizedQuota{
+		AuthIndex:   "cl-keep",
+		Provider:    "claude",
+		Windows:     []QuotaWindow{{ID: "five_hour", RemainingPercent: &rem}},
+		ResetGrants: priorGrants,
+	}
+
+	var usageAt, grantsAt time.Time
+	client := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+		switch {
+		case strings.Contains(req.URL, "cedar_ember"):
+			grantsAt = time.Now()
+			return management.ApiCallResponse{StatusCode: http.StatusTooManyRequests, Body: json.RawMessage(`{"error":"rate_limited"}`)}, nil
+		case strings.Contains(req.URL, "oauth/usage"):
+			usageAt = time.Now()
+			return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(`{"five_hour":{"utilization":20}}`)}, nil
+		case strings.Contains(req.URL, "oauth/profile"):
+			return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(`{"account":{"has_claude_pro":true}}`)}, nil
+		}
+		return management.ApiCallResponse{StatusCode: http.StatusNotFound}, nil
+	}}
+
+	svc := NewService(client)
+	if svc.claudeGrantsDelay != DefaultClaudeResetGrantsDelay {
+		t.Fatalf("default claudeGrantsDelay = %v, want %v", svc.claudeGrantsDelay, DefaultClaudeResetGrantsDelay)
+	}
+	const shortDelay = 25 * time.Millisecond
+	file := management.AuthFile{AuthIndex: "cl-keep", Name: "claude.json", Type: "claude", Provider: "claude"}
+	res, err := svc.WithClaudeResetGrantsDelay(shortDelay).RefreshCredentialQuota(context.Background(), file, prior)
+	if err != nil {
+		t.Fatalf("RefreshCredentialQuota error: %v", err)
+	}
+	if len(res.ResetGrants) != 1 || res.ResetGrants[0].ID != "grant-keep" {
+		t.Fatalf("ResetGrants = %+v, want prior grant preserved on 429", res.ResetGrants)
+	}
+	if res.ResetGrantsError != ClaudeResetGrantsErrorRateLimited {
+		t.Fatalf("ResetGrantsError = %q, want %q", res.ResetGrantsError, ClaudeResetGrantsErrorRateLimited)
+	}
+	if gap := grantsAt.Sub(usageAt); gap < shortDelay-5*time.Millisecond {
+		t.Fatalf("gap between usage and grants = %v, want at least ~%v", gap, shortDelay)
+	}
+
+	// Deferred and stale readings also preserve prior ResetGrants and ResetGrantsError.
+	deferred := svc.DeferredReading(file, res, time.Now().Add(time.Minute))
+	if len(deferred.ResetGrants) != 1 || deferred.ResetGrants[0].ID != "grant-keep" || deferred.ResetGrantsError != ClaudeResetGrantsErrorRateLimited {
+		t.Fatalf("DeferredReading lost reset grants: %+v", deferred)
+	}
+
+	// Context cancellation aborts the grants delay immediately.
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(15 * time.Millisecond)
+		cancel()
+	}()
+	start := time.Now()
+	_, errCode := NewService(client).WithClaudeResetGrantsDelay(5*time.Second).fetchClaudeResetGrants(cancelCtx, file)
+	if errCode != ClaudeResetGrantsErrorUpstream || time.Since(start) > time.Second {
+		t.Fatalf("canceled grants delay returned (%q, %v), want immediate upstream_error", errCode, time.Since(start))
 	}
 }
