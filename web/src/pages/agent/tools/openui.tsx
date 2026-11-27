@@ -1,4 +1,4 @@
-import React from 'react';
+import type { ReactNode } from 'react';
 import { formatErrorCode } from '../../../utils/format';
 import { Button } from '@/components/ui/button';
 import { useAui, useAuiState } from '@assistant-ui/react';
@@ -10,7 +10,6 @@ import { Notice } from '../../../components/feedback';
 import { useI18n } from '../../../i18n';
 import styles from '../AgentPage.module.css';
 import { OPENUI_TOOL_PROVIDER } from '../../../agent/openui/toolProvider';
-import { fenceRemoteAssets } from '../../../agent/openui/noRemoteAssets';
 
 /**
  * The official OpenUI tool renderers, configured for OMC.
@@ -61,17 +60,16 @@ function isWebURL(value: unknown): value is string {
 }
 
 /**
- * Where a drawn interface stands in an answer.
+ * Where a drawn OpenUI interface stands in an answer.
  *
- * The program is model output, so the assets it names are fenced here rather than trusted: a remote
- * image would let a steered answer report what its reader looked at. The fence follows
- * mutations because a program streams its statements into this box.
+ * Interfaces render inside the console document where external HTTP(S) images (such as library
+ * source favicons or model-referenced images) may load directly under `Referrer-Policy: no-referrer`.
+ * Exported standalone HTML snapshots strip non-inline assets in `exportMarkup.ts` to match their
+ * enforced `img-src data:` policy.
  */
-export function OpenUISurface({ tool, children }: { tool: string; children: React.ReactNode }) {
-  const ref = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => (ref.current ? fenceRemoteAssets(ref.current) : undefined), []);
+export function OpenUISurface({ tool, children }: { tool: string; children: ReactNode }) {
   return (
-    <div ref={ref} className={styles['openui']} data-testid="agent-openui" data-tool={tool} data-aui-quote-selectable="false">
+    <div className={styles['openui']} data-testid="agent-openui" data-tool={tool} data-aui-quote-selectable="false">
       {children}
     </div>
   );

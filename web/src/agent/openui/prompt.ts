@@ -52,7 +52,7 @@ const DATA_ROWS_SPEC: ToolSpec = {
 const OFFICIAL_RULES = (openuiChatPromptOptions.additionalRules ?? []).filter(rule => !/generate realistic\/plausible data/i.test(rule));
 
 const OMC_RULES = [
-  'Every asset in a program comes from OMC: never point an Image, a source or a background at an external address, because the console blocks it and the answer would show an empty box.',
+  'Do not invent external image or background URLs: prefer icons, charts, tables and OMC data; exported HTML snapshots strip non-inline assets to stay self-contained.',
   'Every response is OpenUI: a short answer is a Card holding the one thing asked for. Choose the composition the question needs rather than a fixed dashboard: a trend gets a time series and the window it covers, a comparison gets the entities side by side with their exact figures, a lookup gets the records and nothing else, a decision gets a form or a prepared change. Do not stack metrics, a chart, a table and tabs unless the answer genuinely needs each one.',
   'Never state the same number twice: a total in a metric tile is not repeated as a one-row chart, and a table that already lists the figures does not need a card above it repeating them. A supporting detail belongs in the table, a secondary section or an accordion, not beside the primary view.',
   'Figures come only from OMC capability results in this conversation. Never invent, estimate or pad a number, a model name, a key alias or a provider; if something was not returned, say it was not recorded.',

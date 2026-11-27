@@ -1304,8 +1304,13 @@ func securityHeaders(next http.Handler) http.Handler {
 		writer.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		writer.Header().Set("X-Robots-Tag", robotsTagValue)
 		writer.Header().Set("Permissions-Policy", "geolocation=(), camera=(), microphone=(), payment=()")
-		// The console reads Google Fonts' stylesheet for its CJK faces (web/src/theme/cjkFont.ts)
-		// and loads the faces, and a conversation export fetches them, from gstatic.
+		// Console responses send Content-Security-Policy-Report-Only strictly for browser
+		// diagnostics, not as an enforced security boundary. External HTTP(S) images (such as
+		// published plugin logos and OpenUI source/brand marks) load directly from the browser
+		// under Referrer-Policy: no-referrer without an OMC outbound image proxy; Google Fonts
+		// hosts cover the optional CJK stylesheet (web/src/theme/cjkFont.ts) and faces from
+		// gstatic. Enforced CSP is set on isolated/portable surfaces instead: frame-src on the
+		// console/plugin shells, sandbox on uploaded assets, present_html frames, and exported HTML.
 		writer.Header().Set("Content-Security-Policy-Report-Only", "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: http: https:; connect-src 'self' blob: https://fonts.googleapis.com https://fonts.gstatic.com; worker-src 'self' blob:; frame-ancestors 'self';")
 		if request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https") {
 			writer.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")

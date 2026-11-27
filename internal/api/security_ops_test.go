@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -51,8 +52,15 @@ func TestSecurityHeadersApplied(t *testing.T) {
 	if resp.Header.Get("Permissions-Policy") == "" {
 		t.Errorf("expected Permissions-Policy header")
 	}
-	if resp.Header.Get("Content-Security-Policy-Report-Only") == "" {
+	cspReportOnly := resp.Header.Get("Content-Security-Policy-Report-Only")
+	if cspReportOnly == "" {
 		t.Errorf("expected Content-Security-Policy-Report-Only header")
+	}
+	if !strings.Contains(cspReportOnly, "img-src 'self' data: blob: http: https:") {
+		t.Errorf("expected report-only CSP to permit external HTTP(S) images, got %q", cspReportOnly)
+	}
+	if enforced := resp.Header.Get("Content-Security-Policy"); enforced != "" {
+		t.Errorf("ordinary console/API responses use report-only CSP, got enforced %q", enforced)
 	}
 	if resp.Header.Get("X-Robots-Tag") != robotsTagValue {
 		t.Errorf("expected X-Robots-Tag %q, got %q", robotsTagValue, resp.Header.Get("X-Robots-Tag"))

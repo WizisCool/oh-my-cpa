@@ -551,4 +551,12 @@ test('agent workspace', async () => {
     assert.match(agentCss, /\.shell\[data-hero\]\s+\.shell-main\s*>\s*\.shell-notices\s*\+\s*\*\s*\{[^}]*\bmargin-top:\s*auto\s*;/);
     assert.match(agentCss, /\.shell\[data-hero\]\s+\.shell-main\s*>\s*:last-child\s*\{[^}]*\bmargin-bottom:\s*auto\s*;/);
   });
+
+  check('live OpenUI surface does not maintain a MutationObserver asset fence and keeps open_url web-only', () => {
+    const openuiTsx = readFileSync(new URL('../../src/pages/agent/tools/openui.tsx', import.meta.url), 'utf8');
+    const staticRenderTsx = readFileSync(new URL('../../src/agent/openui/staticRender.tsx', import.meta.url), 'utf8');
+    assert.doesNotMatch(openuiTsx, /noRemoteAssets|fenceRemoteAssets|MutationObserver/);
+    assert.doesNotMatch(staticRenderTsx, /noRemoteAssets|fenceRemoteAssets/);
+    assert.match(openuiTsx, /isWebURL\(event\.params\?\.url\)/);
+  });
 });

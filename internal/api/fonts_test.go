@@ -69,6 +69,9 @@ func TestFontUploadServesTheStoredFileFromThisOrigin(t *testing.T) {
 	if faceResponse.StatusCode != http.StatusOK || !bytes.Equal(content, goregular.TTF) || faceResponse.Header.Get("Content-Type") != "font/ttf" || !strings.Contains(faceResponse.Header.Get("Cache-Control"), "immutable") {
 		t.Fatalf("face: %d %v", faceResponse.StatusCode, faceResponse.Header)
 	}
+	if got := faceResponse.Header.Get("Content-Security-Policy"); got != "default-src 'none'; style-src 'none'; sandbox" {
+		t.Fatalf("uploaded font face CSP = %q, want enforced sandbox policy", got)
+	}
 
 	response, payload = uploadFontFiles(t, client, base+"/upload", "", map[string][]byte{"page.ttf": []byte("<html><script>alert(1)</script></html>")})
 	if response.StatusCode != http.StatusBadRequest || !strings.Contains(string(payload), "font_invalid_file") {
