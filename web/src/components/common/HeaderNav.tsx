@@ -16,15 +16,11 @@ import { isDemoMode } from '../../types/demoMode';
 import { formatStarCount } from '../../utils/format';
 import { Tooltip } from './Tooltip';
 import { useConfirmModal, useToast } from '../feedback';
-import {
-  getDemoSandboxSnapshot,
-  resetDemoSandbox,
-  subscribeDemoSandbox,
-} from '../../demo/sandbox';
 
 const REPOSITORY_URL = 'https://github.com/WizisCool/oh-my-cpa';
 /** The server reads the count at most hourly, so asking more often learns nothing. */
 const STAR_COUNT_STALE_MS = 60 * 60 * 1000;
+const loadDemoSandbox = () => import('../../demo/sandbox');
 
 interface HeaderNavProps {
   isDiscovering?: boolean;
@@ -82,16 +78,34 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   const isPhone = useIsPhoneViewport();
   const { lang, setLang } = useI18n();
   const { modePreference, setModePreference } = useTheme();
-  const demoChangeCount = React.useSyncExternalStore(
-    (listener) => (isDemo ? subscribeDemoSandbox(listener) : () => {}),
-    () => (isDemo ? getDemoSandboxSnapshot().changeCount : 0),
-    () => 0,
-  );
+  const [demoSandboxChangeCount, setDemoSandboxChangeCount] = React.useState(0);
+  React.useEffect(() => {
+    if (!isDemo) return undefined;
+    let isDisposed = false;
+    let unsubscribe: (() => void) | undefined;
+    void loadDemoSandbox()
+      .then(({ getDemoSandboxSnapshot, subscribeDemoSandbox }) => {
+        if (isDisposed) return;
+        const sync = () => setDemoSandboxChangeCount(getDemoSandboxSnapshot().changeCount);
+        unsubscribe = subscribeDemoSandbox(sync);
+        sync();
+      })
+      .catch(() => {
+        // Keep the default zero count if the deferred sandbox chunk fails to load.
+      });
+    return () => {
+      isDisposed = true;
+      unsubscribe?.();
+    };
+  }, [isDemo]);
+  const demoChangeCount = isDemo ? demoSandboxChangeCount : 0;
   const handleResetDemoSandbox = React.useCallback(async () => {
+    if (!isDemo) return;
+    const { resetDemoSandbox } = await loadDemoSandbox();
     resetDemoSandbox();
     await queryClient.resetQueries();
     toast.success(t('demo.reset_sandbox_done'));
-  }, [queryClient, t, toast]);
+  }, [isDemo, queryClient, t, toast]);
   const handlePhoneResetDemoSandbox = React.useCallback(() => {
     confirm({
       title: t('demo.reset_sandbox'),
