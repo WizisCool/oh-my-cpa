@@ -456,7 +456,7 @@ export const api = {
     const response = await request<{ fonts: InstalledFont[] }>('/fonts');
     return response.fonts;
   },
-  /** The server downloads the family and stores it; the browser never contacts Google. */
+  /** The server downloads and stores the family locally so installed library fonts load from this origin. */
   async installGoogleFont(family: string, signal?: AbortSignal): Promise<InstalledFont> {
     return request('/fonts/google', { method: 'POST', body: JSON.stringify({ family }), signal });
   },

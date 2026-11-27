@@ -16,13 +16,13 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-// Installing from Google Fonts is a download made by this process, never by the
-// browser: the console's contract is that a page it serves loads nothing from another
-// origin, and that a deployment keeps working with no network once it is installed.
-// The server fetches the family's stylesheet once, downloads every file the stylesheet
-// names - for a CJK family that is about a hundred `unicode-range` slices per weight,
-// the same cut the built-in typeface uses - and the console serves them from its own
-// origin from then on. The operator's browser never contacts Google.
+// Installing a library family from Google Fonts is a download made by this process
+// rather than by the browser: installed families are served from the console's own
+// origin so a deployment keeps rendering them offline once installed. The server
+// fetches the family's stylesheet once, downloads every file the stylesheet names -
+// for a CJK family that is about a hundred `unicode-range` slices per weight, the
+// same cut the built-in typeface uses - and serves them locally from then on. (The
+// default typeface's separate optional browser CJK path is in `web/src/theme/cjkFont.ts`.)
 
 // DefaultGoogleFontsURL is the stylesheet API the installer reads. A deployment that
 // cannot reach it can name a compatible mirror with OMCPA_GOOGLE_FONTS_URL.

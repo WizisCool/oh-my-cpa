@@ -6,8 +6,8 @@
  * get the same treatment: links open outside the page, and an image is rendered as a link
  * rather than fetched. Without the second part a reply - or a reasoning block - could make the
  * operator's browser issue a request to any host the model chose, which is a tracking pixel
- * with extra steps and a reason the acceptance probe asserts that no external origin is
- * contacted at all.
+ * with extra steps and a reason the acceptance probe asserts that no undeclared external
+ * origin is contacted.
  *
  * The label comes from the caller because it is user-visible copy, and copy belongs in the
  * dictionary rather than in a component.

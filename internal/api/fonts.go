@@ -15,10 +15,10 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
-// The console's font library. Every face it stores is served from this origin, which
-// is what lets an operator choose any typeface while the console keeps loading
-// nothing from another host: an uploaded file is validated and stored, and a Google
-// Fonts family is downloaded by the server once and stored the same way.
+// The console's font library. Every face it stores is served from this origin, so
+// operator-installed typefaces render locally without runtime requests to another
+// host: an uploaded file is validated and stored, and a Google Fonts family is
+// downloaded by the server once and stored the same way.
 
 const (
 	// maxFontUploadFiles bounds one upload: the four styles of a family, plus room

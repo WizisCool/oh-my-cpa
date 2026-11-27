@@ -22,7 +22,7 @@ import { contrastRatio, oklchLightness, relativeLuminance, withLightness } from 
 import { CodeLinesPlaceholder } from '../common/ContentPlaceholder';
 import './config.css';
 
-// ── Configure Local Monaco Environment (Strict Offline / Zero CDN) ───────────
+// ── Configure Local Monaco Environment (Bundled Workers) ─────────────────────
 if (typeof window !== 'undefined') {
   window.MonacoEnvironment = {
     getWorker(_moduleId: unknown, label: string) {
@@ -72,7 +72,7 @@ function ensureMonacoConfigured() {
         },
       },
     }, {
-      enableSchemaRequest: false, // Strict offline: no external network schema fetching
+      enableSchemaRequest: false, // Keep schema resolution local; do not fetch remote schemas
       validate: false,
       format: { enable: true },
       hover: true,

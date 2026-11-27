@@ -141,10 +141,10 @@ const GOOGLE_FONTS_SITE = 'https://fonts.google.com/';
  * installed families.
  *
  * The Google install is a field inside the dialog rather than a dialog of its own, so the
- * library never stacks a second modal over the first. The server does the download, so the
- * field cannot preview a family without breaking the rule that the browser loads nothing
- * from another host; Google's catalogue is linked for that, and an installed family
- * previews itself in the list the moment it lands.
+ * library never stacks a second modal over the first. The server does the download so
+ * installed library families are served from the console's own origin rather than fetched
+ * live by the browser while browsing; Google's catalogue is linked for previews, and an
+ * installed family previews itself in the list the moment it lands.
  */
 const FontLibraryDialog: React.FC<{ open: boolean; fonts: readonly InstalledFont[]; isLoading: boolean; onClose: () => void }> = ({ open, fonts, isLoading, onClose }) => {
   const t = useT();
