@@ -92,14 +92,16 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
   };
   const planLabel = quotaPlanLabel(item.plan, t);
   const availableCredits = item.reset_credits?.available_count ?? 0;
-  const availableClaudeResets = claudeResetGrantTotalLeft(item.reset_grants);
+  const availableClaudeResets = claudeResetGrantTotalLeft(item.reset_grants, nowMS);
   const normalizedProvider = item.provider?.trim().toLowerCase();
   const isObserved = !item.disabled
     && item.status !== 'idle'
     && item.status !== 'loading'
-    && (windows.length > 0 || Boolean(item.plan) || Boolean(item.reset_credits) || (item.reset_grants?.length ?? 0) > 0 || item.status === 'unpublished');
-  const showCodexZeroReset = isObserved && normalizedProvider === 'codex' && availableCredits === 0 && !item.reset_credits?.error;
-  const showClaudeZeroReset = isObserved && normalizedProvider === 'claude' && availableClaudeResets === 0 && !item.reset_grants_error;
+    && (windows.length > 0 || Boolean(item.plan) || Boolean(item.reset_credits) || item.reset_grants_observed === true || (item.reset_grants?.length ?? 0) > 0 || item.status === 'unpublished');
+  const hasCodexResetEvidence = item.reset_credits != null;
+  const hasClaudeResetEvidence = item.reset_grants_observed === true || Array.isArray(item.reset_grants);
+  const showCodexZeroReset = isObserved && normalizedProvider === 'codex' && hasCodexResetEvidence && availableCredits === 0 && !item.reset_credits?.error;
+  const showClaudeZeroReset = isObserved && normalizedProvider === 'claude' && hasClaudeResetEvidence && availableClaudeResets === 0 && !item.reset_grants_error;
   const creditBalanceText = item.plan?.credits?.unlimited
     ? t('quota.credits_unlimited')
     : item.plan?.credits?.balance;

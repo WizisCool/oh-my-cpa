@@ -1173,16 +1173,21 @@ test('workspaceProviderOptions uses PRIMARY_CREDENTIAL_PROVIDERS including copil
 });
 
 test('Claude reset grants ordering, totals, error formatting, and workspace observation detection', () => {
-  const ordered = orderClaudeResetGrants([
+  const nowMS = 1_750_000_000_000;
+  const grants = [
     { id: 'grant-undated-b', label: 'Bonus B', resets_total: 1, resets_left: 1 },
+    { id: 'grant-expired', label: 'Expired', resets_total: 2, resets_left: 1, ends_at_ms: nowMS - 1_000 },
+    { id: 'grant-at-now', label: 'Ended', resets_total: 2, resets_left: 1, ends_at_ms: nowMS },
     { id: 'grant-later', label: 'Monthly', resets_total: 3, resets_left: 2, ends_at_ms: 2_000_000_000_000 },
-    { id: 'grant-spent', label: 'Spent', resets_total: 2, resets_left: 0, ends_at_ms: 1_500_000_000_000 },
+    { id: 'grant-spent', label: 'Spent', resets_total: 2, resets_left: 0, ends_at_ms: 1_900_000_000_000 },
     { id: 'grant-soonest', label: 'Weekly', resets_total: 2, resets_left: 1, ends_at_ms: 1_800_000_000_000 },
     { id: 'grant-undated-a', label: 'Bonus A', resets_total: 1, resets_left: 1 },
-  ]);
+  ];
+  const ordered = orderClaudeResetGrants(grants, nowMS);
   assert.deepEqual(ordered.map((grant) => grant.id), ['grant-soonest', 'grant-later', 'grant-undated-a', 'grant-undated-b']);
-  assert.equal(claudeResetGrantTotalLeft(ordered), 5);
-  assert.equal(claudeResetGrantTotalLeft([{ id: 'spent', resets_total: 1, resets_left: 0 }]), 0);
+  assert.equal(claudeResetGrantTotalLeft(grants, nowMS), 5);
+  assert.equal(claudeResetGrantTotalLeft([{ id: 'expired', resets_total: 1, resets_left: 1, ends_at_ms: nowMS - 1 }], nowMS), 0);
+  assert.equal(claudeResetGrantTotalLeft([{ id: 'spent', resets_total: 1, resets_left: 0 }], nowMS), 0);
 
   const en = makeT('en');
   assert.equal(formatResetReadError('rate_limited', en), 'Upstream rate limited; reset info will retry shortly');

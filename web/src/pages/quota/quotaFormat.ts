@@ -363,13 +363,22 @@ export function formatCodexResetCreditExpiry(
   return { primary: t('quota.reset_credit_expires', { when: countdown }), dateText, isExpired: false, hasExpiry: true };
 }
 
+function isLiveClaudeResetGrant(grant: ClaudeResetGrant, nowMS?: number): boolean {
+  if (!Number.isFinite(grant.resets_left) || grant.resets_left <= 0) return false;
+  if (nowMS != null && grant.ends_at_ms != null && Number.isFinite(grant.ends_at_ms) && grant.ends_at_ms > 0 && grant.ends_at_ms <= nowMS) {
+    return false;
+  }
+  return true;
+}
+
 /**
  * Live Claude reset grants ordered soonest-expiring first, matching Codex credit ordering;
- * undated entries trail deterministically by grant ID.
+ * undated entries trail deterministically by grant ID. When `nowMS` is provided, cached grants
+ * whose `ends_at_ms` has passed are excluded.
  */
-export function orderClaudeResetGrants(grants: readonly ClaudeResetGrant[] | undefined): ClaudeResetGrant[] {
+export function orderClaudeResetGrants(grants: readonly ClaudeResetGrant[] | undefined, nowMS?: number): ClaudeResetGrant[] {
   return (grants ?? [])
-    .filter((grant) => grant.resets_left > 0)
+    .filter((grant) => isLiveClaudeResetGrant(grant, nowMS))
     .slice()
     .sort((left, right) => {
       const endDiff = creditSortTimestamp(left.ends_at_ms) - creditSortTimestamp(right.ends_at_ms);
@@ -378,11 +387,11 @@ export function orderClaudeResetGrants(grants: readonly ClaudeResetGrant[] | und
     });
 }
 
-/** Total remaining resets across all live Claude reset grants. */
-export function claudeResetGrantTotalLeft(grants: readonly ClaudeResetGrant[] | undefined): number {
+/** Total remaining resets across all live, unexpired Claude reset grants. */
+export function claudeResetGrantTotalLeft(grants: readonly ClaudeResetGrant[] | undefined, nowMS?: number): number {
   let total = 0;
   for (const grant of grants ?? []) {
-    if (Number.isFinite(grant.resets_left) && grant.resets_left > 0) {
+    if (isLiveClaudeResetGrant(grant, nowMS)) {
       total += grant.resets_left;
     }
   }

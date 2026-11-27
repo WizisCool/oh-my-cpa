@@ -145,7 +145,7 @@ function CredentialCard({ record, providerName, isSelected, isSelecting, nowMS, 
       <div className={styles.traits}>
         {/* Named as well as drawn: a mark that falls back to a neutral glyph says nothing of whose it is. */}
         <span className={styles.provider}>{providerName}</span>
-        <CredentialTraits record={record} facts={facts} actions={actions} nowMS={nowMS} />
+        <CredentialTraits record={record} facts={facts} actions={actions} nowMS={nowMS} showResetError={false} />
       </div>
 
       <div className={styles.readings} data-quota-missing={!hasLines && metrics.length === 0 ? 'true' : undefined}>
@@ -195,7 +195,7 @@ function CardResetSummary({ record, isMuted, isStandalone, nowMS }: {
   const orderedCredits = hasCodexCredits && codexCredits ? orderCodexResetCredits(codexCredits.credits) : [];
   const codexError = formatResetReadError(codexCredits?.error, t);
 
-  const liveGrants = orderClaudeResetGrants(record.quota?.reset_grants);
+  const liveGrants = orderClaudeResetGrants(record.quota?.reset_grants, nowMS);
   const grantsError = formatResetReadError(record.quota?.reset_grants_error, t);
 
   const showCodex = orderedCredits.length > 0 || Boolean(codexError);

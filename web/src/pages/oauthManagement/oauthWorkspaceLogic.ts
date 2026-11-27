@@ -200,6 +200,7 @@ function hasMeaningfulObservation(item: QuotaItem): boolean {
     (item.windows?.length ?? 0) > 0
       || item.plan
       || item.reset_credits
+      || item.reset_grants_observed === true
       || (item.reset_grants?.length ?? 0) > 0
       || item.reset_grants_error
       || item.active_cooldown?.is_active

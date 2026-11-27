@@ -158,7 +158,7 @@ export function credentialFacts(record: OAuthWorkspaceRecord, actions: Credentia
     siwc: actions.siwcBadge(record),
     credits: (quota?.reset_credits?.available_count ?? 0) > 0
       ? (quota?.reset_credits?.available_count ?? 0)
-      : claudeResetGrantTotalLeft(quota?.reset_grants),
+      : claudeResetGrantTotalLeft(quota?.reset_grants, nowMS),
     resetReadError: quota?.reset_credits?.error?.trim() || quota?.reset_grants_error?.trim() || null,
     canRename: !file.runtime_only && record.hasUniqueFileName,
     isBusy: actions.isBusy(record),
@@ -281,7 +281,7 @@ function buildResetBadgeTipCard(record: OAuthWorkspaceRecord, nowMS: number, t: 
     return { heading: t('quota.reset_credits_title'), rows, notes: notes.length > 0 ? notes : undefined };
   }
 
-  const liveGrants = orderClaudeResetGrants(quota.reset_grants);
+  const liveGrants = orderClaudeResetGrants(quota.reset_grants, nowMS);
   if (liveGrants.length > 0) {
     const rows: TipRow[] = liveGrants.map((grant) => ({
       label: grant.label || t('quota.reset_grant_untitled'),
@@ -300,16 +300,18 @@ function buildResetBadgeTipCard(record: OAuthWorkspaceRecord, nowMS: number, t: 
 }
 
 /** The plan, routing priority and banked resets: the facts that sit beside a name. */
-export function CredentialTraits({ record, facts, actions, nowMS }: {
+export function CredentialTraits({ record, facts, actions, nowMS, showResetError = true }: {
   record: OAuthWorkspaceRecord;
   facts: CredentialFacts;
   actions: CredentialActions;
   nowMS: number;
+  /** Card view renders reset-read failures inline below the quota tracks instead of repeating them here. */
+  showResetError?: boolean;
 }) {
   const t = useT();
   const plan = record.quota?.plan;
   const planLabel = quotaPlanLabel(plan, t);
-  const resetErrorText = formatResetReadError(facts.resetReadError ?? undefined, t);
+  const resetErrorText = showResetError ? formatResetReadError(facts.resetReadError ?? undefined, t) : null;
   const hasTraits = Boolean(planLabel) || record.file.priority !== undefined || (record.file.weight ?? 1) !== 1
     || plan?.subscription_active === false || facts.credits > 0 || Boolean(resetErrorText);
   if (!hasTraits) return null;

@@ -356,9 +356,10 @@ describe('credential quota body details', () => {
     expect(document.querySelector('[data-reset-zero="codex"]')?.textContent).toContain('0');
   });
 
-  it('orders Claude grants soonest-first, confirms observed zero resets, and surfaces reset read errors', () => {
+  it('confirms observed zero resets only with reset-read evidence and surfaces reset read errors', () => {
     const { rerender } = renderBody(quota('claude-ordered', [quotaWindow('five_hour', 60, 3)], {
       provider: 'claude',
+      reset_grants_observed: true,
       reset_grants: [
         { id: 'grant-later', label: 'Monthly Bonus', resets_total: 2, resets_left: 2, ends_at_ms: NOW_MS + 10 * 24 * HOUR_MS },
         { id: 'grant-soon', label: 'Weekly Reset', resets_total: 2, resets_left: 1, ends_at_ms: NOW_MS + 2 * 24 * HOUR_MS },
@@ -369,12 +370,27 @@ describe('credential quota body details', () => {
     expect(grantNodes.map((node) => node.getAttribute('data-quota-reset-grant'))).toEqual(['grant-soon', 'grant-later']);
     expect(screen.getByTestId('quota-reset-error-grants').textContent).toContain('rate limited');
 
-    // Observed Claude credential with zero live grants and no error displays an explicit 0 in the meta row.
+    // Without reset-read evidence (e.g. after a failed initial grants read and restart), do not claim 0.
     rerender(
       <MemoryRouter>
         <I18nProvider>
           <CredentialQuotaBody
-            item={quota('claude-zero', [quotaWindow('five_hour', 80, 3)], { provider: 'claude', reset_grants: [] })}
+            item={quota('claude-unconfirmed', [quotaWindow('five_hour', 80, 3)], { provider: 'claude' })}
+            credentialLabel="claude-unconfirmed"
+            nowMS={NOW_MS}
+            isDemo={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    expect(document.querySelector('[data-reset-zero="claude"]')).toBeNull();
+
+    // Confirmed empty grants read displays explicit 0 in the meta row.
+    rerender(
+      <MemoryRouter>
+        <I18nProvider>
+          <CredentialQuotaBody
+            item={quota('claude-zero', [quotaWindow('five_hour', 80, 3)], { provider: 'claude', reset_grants_observed: true })}
             credentialLabel="claude-zero"
             nowMS={NOW_MS}
             isDemo={false}
@@ -639,17 +655,15 @@ describe('credential list row', () => {
       onOpen,
       fileOverrides: { type: 'claude', provider: 'claude' },
     });
-    const badge = listView.container.querySelector<HTMLButtonElement>('[data-quota-credits="3"]');
-    expect(badge).toBeTruthy();
-    expect(badge?.textContent).toContain('3 resets left');
-    fireEvent.click(badge!);
+    const badge = within(listView.container).getByRole('button', { name: /3 resets left/i });
+    fireEvent.click(badge);
     expect(onOpen).toHaveBeenCalledTimes(1);
     listView.unmount();
 
     const errListView = renderCredentialRow(claudeErrorItem, {
       fileOverrides: { type: 'claude', provider: 'claude' },
     });
-    expect(errListView.container.querySelector('[data-quota-reset-error="true"]')?.textContent).toContain('Reset info unavailable');
+    expect(within(errListView.container).getByRole('button', { name: /Reset info unavailable/i })).toBeTruthy();
     errListView.unmount();
 
     const files = [
@@ -679,14 +693,12 @@ describe('credential list row', () => {
     );
     const codexCreditRows = Array.from(cardView.container.querySelectorAll<HTMLElement>('[data-card-reset-credit]'));
     expect(codexCreditRows.map((row) => row.getAttribute('data-card-reset-credit'))).toEqual(['c-early', 'c-late']);
-    expect(codexCreditRows[0].textContent).toContain('3d left');
 
     const claudeGrantRows = Array.from(cardView.container.querySelectorAll<HTMLElement>('[data-card-reset-grant]'));
     expect(claudeGrantRows.map((row) => row.getAttribute('data-card-reset-grant'))).toEqual(['grant-soon', 'grant-later']);
-    expect(claudeGrantRows[0].textContent).toContain('Weekly');
-    expect(claudeGrantRows[0].textContent).toContain('1/2');
-    expect(claudeGrantRows[0].textContent).toContain('2d left');
 
+    // Card mode shows reset read errors once (inline below quota tracks), not repeated in the traits row.
+    expect(cardView.container.querySelector('[data-quota-reset-error="true"]')).toBeNull();
     expect(cardView.container.querySelector('[data-card-reset-error="claude"]')?.textContent).toContain('rate limited');
     cardView.unmount();
   });

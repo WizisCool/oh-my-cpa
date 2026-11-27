@@ -345,6 +345,7 @@ func newReading(file management.AuthFile, prior *NormalizedQuota, nowMS int64) *
 		result.Windows = prior.Windows
 		result.ResetCredits = prior.ResetCredits
 		result.ResetGrants = prior.ResetGrants
+		result.ResetGrantsObserved = prior.ResetGrantsObserved
 		result.ResetGrantsError = prior.ResetGrantsError
 	}
 	return result
@@ -365,6 +366,7 @@ func applyReadFailure(result, prior *NormalizedQuota, readErr error) {
 		result.Plan = prior.Plan
 		result.ResetCredits = prior.ResetCredits
 		result.ResetGrants = prior.ResetGrants
+		result.ResetGrantsObserved = prior.ResetGrantsObserved
 		result.ResetGrantsError = prior.ResetGrantsError
 	} else {
 		result.Status = "error"
@@ -444,16 +446,19 @@ func (s *Service) RefreshCredentialQuotaWith(ctx context.Context, file managemen
 				// code without failing the quota reading itself.
 				if options.IsClaudeResetGrantsFresh && prior != nil {
 					result.ResetGrants = prior.ResetGrants
+					result.ResetGrantsObserved = prior.ResetGrantsObserved
 					result.ResetGrantsError = prior.ResetGrantsError
 				} else {
 					grants, grantsErr := s.fetchClaudeResetGrants(ctx, file)
 					if grantsErr != "" {
 						if prior != nil {
 							result.ResetGrants = prior.ResetGrants
+							result.ResetGrantsObserved = prior.ResetGrantsObserved
 						}
 						result.ResetGrantsError = grantsErr
 					} else {
 						result.ResetGrants = grants
+						result.ResetGrantsObserved = true
 						result.ResetGrantsError = ""
 					}
 				}

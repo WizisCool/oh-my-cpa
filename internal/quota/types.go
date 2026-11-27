@@ -213,6 +213,9 @@ type NormalizedQuota struct {
 	// ResetGrants lists Anthropic rate-limit reset grants beside the Claude
 	// quota, display-only: claiming one spends an entitlement and is out of scope.
 	ResetGrants []ClaudeResetGrant `json:"reset_grants,omitempty"`
+	// ResetGrantsObserved reports that a supplementary Claude reset-grants read
+	// succeeded, so an empty grant list is distinguishable from an unavailable read.
+	ResetGrantsObserved bool `json:"reset_grants_observed,omitempty"`
 	// ResetGrantsError carries a short sanitized status code when the supplementary
 	// Claude reset-grants read failed, so a refusal or outage is not mistaken for zero.
 	ResetGrantsError string              `json:"reset_grants_error,omitempty"`
