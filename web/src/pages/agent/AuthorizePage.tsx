@@ -142,12 +142,16 @@ function Outcome({ operation }: { operation: Operation }) {
   const tone = statusTone(result.status, result.code);
   // A denial and an expiry are the operator's own outcome, not a failure to explain.
   const hasReason = !!result.code && tone !== 'success' && result.status !== 'rejected';
+  // "May have been applied" leads an uncertain outcome even when it carries its own detail, so
+  // the operator checks the target before asking for the change again.
+  const isUncertain = result.status === 'uncertain';
   return (
     <footer className={styles['outcome']} data-testid="agent-authorize-outcome" data-status={result.status}>
       <StatusLabel tone={workspaceStatusTone(tone)}>{t(callStatusKey({ name: operation.capability, result }))}</StatusLabel>
       {hasReason && (
         <div className={agentStyles['failure']} data-tone={tone === 'warning' ? 'warning' : undefined}>
-          <span>{result.detail || t(operationFailureKey(result.status, result.code ?? ''))}</span>
+          <span>{isUncertain || !result.detail ? t(operationFailureKey(result.status, result.code ?? '')) : result.detail}</span>
+          {isUncertain && result.detail && <span>{result.detail}</span>}
           <code>{formatErrorCode({ code: result.code })}</code>
         </div>
       )}

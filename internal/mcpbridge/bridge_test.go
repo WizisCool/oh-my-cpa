@@ -177,6 +177,17 @@ func TestOperationStatusWaitsForTheDecision(t *testing.T) {
 	statusPollInterval = time.Millisecond
 	defer func() { statusPollInterval = previousInterval }()
 	session := connectFixture(t, backend)
+	for tool, err := range session.Tools(context.Background(), nil) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tool.Name != OPERATION_STATUS_TOOL {
+			continue
+		}
+		if schema, _ := json.Marshal(tool.OutputSchema); !strings.Contains(string(schema), `"approval_url"`) || strings.Contains(string(schema), `"required":["id","status","approval_url"]`) {
+			t.Fatalf("status tool output schema: %s", schema)
+		}
+	}
 	status := func(arguments map[string]any) *mcp.CallToolResult {
 		t.Helper()
 		result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: OPERATION_STATUS_TOOL, Arguments: arguments})

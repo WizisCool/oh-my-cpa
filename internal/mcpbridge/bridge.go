@@ -76,6 +76,17 @@ type pendingOperation struct {
 	ApprovalURL string `json:"approval_url,omitempty"`
 }
 
+// operationStatusSchema declares what omc_operation_status answers with. The handler builds its
+// structured content itself, so without a declared schema the catalog would advertise none.
+var operationStatusSchema = map[string]any{"type": "object", "required": []string{"id", "status"}, "properties": map[string]any{
+	"id":            map[string]any{"type": "string"},
+	"capability":    map[string]any{"type": "string"},
+	"status":        map[string]any{"type": "string", "description": "pending, or the outcome once the operator has decided"},
+	"expires_at_ms": map[string]any{"type": "integer"},
+	"result":        map[string]any{"type": "object", "description": "the capability result envelope once the operation has run"},
+	"approval_url":  map[string]any{"type": "string", "format": "uri", "description": "while pending: the console page where the operator decides"},
+}}
+
 type operationStatusInput struct {
 	OperationID string `json:"operation_id" jsonschema:"the operation_id of a pending result"`
 	WaitSeconds int    `json:"wait_seconds,omitempty" jsonschema:"seconds to wait for the operator's decision before answering, 0 to 30; 0 answers immediately"`
@@ -121,7 +132,7 @@ func NewServer(ctx context.Context, backend Backend, options Options) (*mcp.Serv
 			return receipt(result, approvalLink(request, result.OperationID)), nil
 		})
 	}
-	mcp.AddTool(server, &mcp.Tool{Name: OPERATION_STATUS_TOOL, Description: "Read the state of an operation that returned status \"pending\": still pending, or its outcome once the operator has decided. Approval itself happens only in the OMC console.", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: &isOpenWorld}}, func(ctx context.Context, request *mcp.CallToolRequest, input operationStatusInput) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: OPERATION_STATUS_TOOL, Description: "Read the state of an operation that returned status \"pending\": still pending, or its outcome once the operator has decided. Approval itself happens only in the OMC console.", OutputSchema: operationStatusSchema, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: &isOpenWorld}}, func(ctx context.Context, request *mcp.CallToolRequest, input operationStatusInput) (*mcp.CallToolResult, any, error) {
 		if !operationIDPattern.MatchString(input.OperationID) {
 			return failure(errors.New("invalid_operation_id")), nil, nil
 		}
