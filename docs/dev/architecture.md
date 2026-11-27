@@ -63,6 +63,42 @@ execute the sensitive action. If recording a credential-read outcome fails, with
 the body. An upstream write already completed cannot be rolled back by pretending
 it failed; preserve that outcome while reporting audit trouble appropriately.
 
+### Content Security Policy and external images
+
+Ordinary console and API HTTP responses send `Content-Security-Policy-Report-Only` (with no
+report endpoint configured) strictly as a browser diagnostic header, not as an enforced
+security boundary or collected telemetry. External HTTP(S) images — published plugin logos,
+OpenUI library source/brand favicons, and any image URL an OpenUI answer renders — may load
+directly from the operator's browser under `Referrer-Policy: no-referrer`, without an OMC
+server-side image proxy (`no-referrer` suppresses the `Referer` header, not the operator's IP
+address, request timing, or destination URL contents). Live OpenUI answers render directly in
+the console document without a client-side DOM mutation fence; off-screen rendering for HTML
+and PNG conversation exports (`web/src/agent/openui/staticRender.tsx`,
+`web/src/agent/conversationDownload.ts`) likewise mounts OpenUI interfaces in the live console
+document before stripping non-inline URLs from the saved markup, so export creation can also
+initiate direct browser requests for any external image URLs in those interfaces (including
+interfaces not currently visible) before the saved HTML's enforced CSP applies. Avoiding an
+arbitrary outbound image proxy keeps OMC free of SSRF exposure and server-egress
+dependencies, and keeps same-origin CPAMC plugin pages working without breaking on a global
+enforced console CSP.
+
+Enforced CSP and rendering isolation apply to the specific surfaces OMC controls:
+
+- **Console and plugin frame shells**: `web/index.html` and
+  `web/src/components/plugins/pluginFrameShell.html` declare enforced
+  `frame-src 'self' blob:` so frames stay on the console's own origin or blobs.
+- **Uploaded user assets**: custom icons, uploaded fonts, and Agent conversation images
+  are served with enforced `Content-Security-Policy: default-src 'none'; style-src 'none'; sandbox`.
+- **Sandboxed model HTML (`present_html`)**: renders inside an opaque-origin
+  `<iframe sandbox="allow-scripts" referrerpolicy="no-referrer">` prefixed with an
+  enforced `default-src 'none'` policy (`web/src/agent/htmlDocument.ts`) that allows only
+  inline styles/scripts and `data:`/`blob:` media, blocking remote subresources, fetches, and
+  form submissions (a script inside the frame can still navigate its own frame, as noted in
+  `htmlDocument.ts`).
+- **Exported standalone conversation HTML**: once written, enforces `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'` (`web/src/agent/conversationHtml.ts`), and `inertMarkup` (`web/src/agent/openui/exportMarkup.ts`) strips non-inline asset URLs from exported OpenUI markup so saved files remain self-contained offline.
+- **Model Markdown**: `ModelMarkdown` (via `safeMarkdownComponents`) renders Markdown image
+  syntax as explicit external links rather than `<img>` elements.
+
 ### Trusted plugin pages
 
 Installing a CPA plugin is a trust decision: its same-origin page is not an untrusted

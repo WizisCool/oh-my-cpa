@@ -41,6 +41,9 @@ func TestCustomIconHTTPCRUDAndCaching(t *testing.T) {
 	if contentResponse.StatusCode != 200 || !strings.Contains(string(content), "circle") || tag == "" || contentResponse.Header.Get("Content-Type") != "image/svg+xml" || contentResponse.Header.Get("Cache-Control") != "private, no-cache" {
 		t.Fatalf("content: %d %s", contentResponse.StatusCode, content)
 	}
+	if got := contentResponse.Header.Get("Content-Security-Policy"); got != "default-src 'none'; style-src 'none'; sandbox" {
+		t.Fatalf("uploaded custom icon CSP = %q, want enforced sandbox policy", got)
+	}
 	request, _ := http.NewRequest(http.MethodGet, base+"/"+icon.ID+"/content", nil)
 	request.Header.Set("If-None-Match", tag)
 	contentResponse, err = client.Do(request)

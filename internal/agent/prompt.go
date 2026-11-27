@@ -9,7 +9,7 @@ import (
 // PROMPT_VERSION names the system prompt a turn ran with. It is recorded on the turn, so an
 // operator asking "why did it answer like that" can tell which instructions were in force; change
 // it whenever a section's wording changes.
-const PROMPT_VERSION = "2026-10-25.3"
+const PROMPT_VERSION = "2026-11-27.1"
 
 // MAX_PROMPT_BYTES bounds OMC's own sections of the system prompt. They are resent on every model
 // round of every turn, so they are a per-round cost like the tool catalogue, and a section that

@@ -102,7 +102,7 @@ test('HTML renders Markdown and GFM but cannot activate hostile transcript marku
   assert.equal(html.match(/<script>/g)?.length, 1, 'only the static control script executes');
   assert.equal(html.includes('<img src="https://tracking.invalid'), false);
   assert.equal(html.includes('href="javascript:'), false);
-  assert.ok(html.includes('&lt;script&gt;') && html.includes('connect-src \'none\''));
+  assert.ok(html.includes('&lt;script&gt;') && html.includes("img-src data:") && html.includes("connect-src 'none'"));
   assert.ok(html.includes('rel="noopener noreferrer"'));
   assert.ok(html.includes('data-search') && html.includes('data-toggle-panel') && html.includes('data-copy'));
 });

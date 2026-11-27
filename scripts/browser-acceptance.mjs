@@ -283,6 +283,14 @@ try {
   const health = await Promise.race([waitFor(`${appURL}/api/healthz`), appExited]);
   const identity = await health.json();
   if (identity.version !== fixtureVersion) throw new Error('Acceptance port is served by an unrelated process');
+  check('console API sends report-only CSP permitting external HTTP(S) images and no enforced global CSP',
+    health.headers.get('content-security-policy-report-only')?.includes("img-src 'self' data: blob: http: https:")
+    && !health.headers.get('content-security-policy')
+    && health.headers.get('referrer-policy') === 'no-referrer');
+  const faviconResponse = await fetch(`${appURL}/favicon.svg`, { signal: cancellation.signal });
+  check('console serves same-origin /favicon.svg',
+    faviconResponse.status === 200 && (faviconResponse.headers.get('content-type') ?? '').includes('image/svg+xml'),
+    `status=${faviconResponse.status}`);
   cancellation.signal.throwIfAborted();
   const redirect = await fetch(appURL, { redirect: 'manual', signal: cancellation.signal });
   check('startup prints build info banner on stderr', appStderr.join('').includes(`Oh My CPA Version: ${fixtureVersion}, Commit: `));
@@ -293,12 +301,16 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
   network = await guardBrowserContext(context, [appURL, FAKE_INSTALLED_PLUGIN_LOGO_URL, FAKE_UNINSTALLED_PLUGIN_LOGO_URL]);
   page = await context.newPage();
+  const externalImageReferers = new Map();
   // These two declared images are synthetic; no publisher is contacted by acceptance.
   for (const logoURL of [FAKE_INSTALLED_PLUGIN_LOGO_URL, FAKE_UNINSTALLED_PLUGIN_LOGO_URL]) {
-    await page.route(logoURL, (route) => route.fulfill({
-      contentType: 'image/svg+xml',
-      body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="#2a78d6"/></svg>',
-    }));
+    await page.route(logoURL, (route) => {
+      externalImageReferers.set(logoURL, route.request().headers().referer ?? '');
+      return route.fulfill({
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="#2a78d6"/></svg>',
+      });
+    });
   }
   const responseBodies = [];
   const auditedAssetURLs = new Set();
@@ -333,7 +345,13 @@ try {
     } catch { /* navigation may dispose a response */ }
   });
 
-  await page.goto(`${appURL}/dashboard`, { waitUntil: 'domcontentloaded' });
+  const initialDocument = await page.goto(`${appURL}/dashboard`, { waitUntil: 'domcontentloaded' });
+  const initialHeaders = initialDocument?.headers() ?? {};
+  check('console document sends report-only CSP allowing external HTTP(S) images',
+    (initialHeaders['content-security-policy-report-only'] ?? '').includes("img-src 'self' data: blob: http: https:")
+    && !initialHeaders['content-security-policy']
+    && initialHeaders['referrer-policy'] === 'no-referrer',
+    `report-only=${initialHeaders['content-security-policy-report-only'] ?? ''} enforced=${initialHeaders['content-security-policy'] ?? ''} referrer=${initialHeaders['referrer-policy'] ?? ''}`);
   await page.locator('input[type="password"]').waitFor({ state: 'visible' });
   check('unauthenticated route shows sign-in', await page.locator('input[type="password"]').isVisible());
   await page.locator('input[type="password"]').fill('wrong-fixture-key');
@@ -382,7 +400,12 @@ try {
     await cardArtwork.evaluate((image) => image.decode());
     check(`the ${storeID} store card loads the artwork its registry publishes`,
       await cardArtwork.getAttribute('src') === logoURL);
+    check(`external plugin artwork ${storeID} loads without a Referer header`,
+      externalImageReferers.has(logoURL) && externalImageReferers.get(logoURL) === '',
+      `referer=${externalImageReferers.get(logoURL)}`);
   }
+  const frameCsp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
+  check('console document retains enforced frame-src CSP meta policy', frameCsp === "frame-src 'self' blob:", frameCsp ?? '');
 
   await runRequestListAcceptance({ appURL, page, check });
   await runMcpAcceptance({ appURL, page, check });

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { inertMarkup, isInlineImageURL, sanitizeExportStyle } from '../src/agent/openui/exportMarkup';
 import { CodeBody, languageOf } from '../src/components/common/CodeBody';
 import { ModelMarkdown } from '../src/components/workspace/ModelMarkdown';
 import { renderWithOmc } from './support/render';
@@ -85,5 +86,66 @@ describe('ModelMarkdown', () => {
     await waitFor(() => expect(container.querySelector('.hljs-tag')).not.toBeNull());
     fireEvent.click(previewToggle);
     expect(container.querySelector('iframe')).not.toBeNull();
+  });
+});
+
+describe('OpenUI standalone HTML export sanitization', () => {
+  it('strips non-inline assets, scripts, and hooks in inertMarkup while preserving data:image/ payloads, SVG fragments, and web links', () => {
+    const inlinePNG = 'data:image/png;base64,AAAA';
+    expect(isInlineImageURL(inlinePNG)).toBe(true);
+    expect(isInlineImageURL('https://www.google.com/s2/favicons?sz=128&domain=example.test')).toBe(false);
+    expect(isInlineImageURL('/api/v1/custom-icons/1/content')).toBe(false);
+    expect(isInlineImageURL('blob:http://localhost/abc')).toBe(false);
+
+    const host = document.createElement('div');
+    host.innerHTML = [
+      '<script>window.injected=1</script>',
+      '<iframe src="https://evil.test"></iframe>',
+      `<img id="inline" src="${inlinePNG}" srcset="${inlinePNG} 1x" alt="inline">`,
+      `<img id="remote" src="https://www.google.com/s2/favicons?sz=128&domain=example.test" srcset="${inlinePNG} 1x, https://evil.test/2x.png 2x" onclick="evil()">`,
+      '<img id="origin" src="/api/v1/custom-icons/1/content">',
+      '<img id="blob" src="blob:http://localhost/abc">',
+      '<video id="vid" poster="https://evil.test/poster.png"></video>',
+      `<div id="styled" data-copy="1" style="background-image: url('https://evil.test/bg.png'), url('/api/x'), url(&quot;${inlinePNG}&quot;); clip-path: url(#chart-clip)"></div>`,
+      '<svg><image id="svg-remote" href="https://evil.test/icon.svg" xlink:href="https://evil.test/icon.svg"></image><image id="svg-inline" href="data:image/png;base64,BBBB"></image><use id="svg-local-use" href="#icon-1" xlink:href="#icon-1"></use><use id="svg-remote-use" href="https://evil.test/sprite.svg#icon-1"></use></svg>',
+      '<a id="web-link" href="https://example.test/docs">Docs</a>',
+      '<a id="bad-link" href="javascript:alert(1)">Bad</a>',
+      '<form id="frm" action="https://evil.test/submit"><button formaction="https://evil.test/btn">Go</button></form>',
+    ].join('');
+
+    const out = document.createElement('div');
+    out.innerHTML = inertMarkup(host);
+
+    expect(out.querySelector('script')).toBeNull();
+    expect(out.querySelector('iframe')).toBeNull();
+    expect(out.querySelector('#inline')?.getAttribute('src')).toBe(inlinePNG);
+    expect(out.querySelector('#inline')?.getAttribute('srcset')).toBe(`${inlinePNG} 1x`);
+    expect(out.querySelector('#remote')?.hasAttribute('src')).toBe(false);
+    expect(out.querySelector('#remote')?.hasAttribute('srcset')).toBe(false);
+    expect(out.querySelector('#remote')?.hasAttribute('onclick')).toBe(false);
+    expect(out.querySelector('#origin')?.hasAttribute('src')).toBe(false);
+    expect(out.querySelector('#blob')?.hasAttribute('src')).toBe(false);
+    expect(out.querySelector('#vid')?.hasAttribute('poster')).toBe(false);
+
+    const styled = out.querySelector('#styled');
+    expect(styled?.hasAttribute('data-copy')).toBe(false);
+    const styleText = styled?.getAttribute('style') ?? '';
+    expect(styleText).not.toContain('evil.test');
+    expect(styleText).not.toContain('/api/x');
+    expect(styleText).toContain(inlinePNG);
+    expect(styleText).toContain('url(#chart-clip)');
+    expect(sanitizeExportStyle('background: url("https://evil.test/a\'b")')).toBe('background: none');
+
+    expect(out.querySelector('#svg-remote')?.hasAttribute('href')).toBe(false);
+    expect(out.querySelector('#svg-remote')?.hasAttribute('xlink:href')).toBe(false);
+    expect(out.querySelector('#svg-inline')?.getAttribute('href')).toBe('data:image/png;base64,BBBB');
+    expect(out.querySelector('#svg-local-use')?.getAttribute('href')).toBe('#icon-1');
+    expect(out.querySelector('#svg-local-use')?.getAttribute('xlink:href')).toBe('#icon-1');
+    expect(out.querySelector('#svg-remote-use')?.hasAttribute('href')).toBe(false);
+
+    expect(out.querySelector('#web-link')?.getAttribute('href')).toBe('https://example.test/docs');
+    expect(out.querySelector('#bad-link')?.hasAttribute('href')).toBe(false);
+    expect(out.querySelector('#frm')?.hasAttribute('action')).toBe(false);
+    expect(out.querySelector('#frm button')?.hasAttribute('formaction')).toBe(false);
   });
 });

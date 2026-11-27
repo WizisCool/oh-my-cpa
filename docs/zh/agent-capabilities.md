@@ -21,7 +21,7 @@ OMC 内置的 `/agent` 对话工作区与外部 MCP 客户端共用同一套声�
 
 控制台、内置 Agent 与 MCP 共用同一套订阅配额与窗口容量投影（如 `quota_list`、`quota_refresh`、`quota_get_capacity`）。当窗口已有足够计价请求样本时，按已记录流量与上游已用比例线性推算 100% 满窗容量（`basis: "current_window"`）；若新窗口刚重置尚未产生流量，则沿用同一方案上一完整周期的容量基准（`basis: "previous_window"`）。
 
-内置 Agent 还支持通过 `present_openui` 渲染结构化交互界面，或通过 `present_html` 在隔离的沙盒 iframe 中按需绘制图表与单页文档（沙盒采用不透明源且禁止外联加载资源）。
+内置 Agent 还支持通过 `present_openui` 在控制台文档内渲染结构化交互界面（实时浏览以及导出 HTML/PNG 对话时的离屏渲染均在控制台文档内挂载，外部 HTTP(S) 图片与来源图标可能在 `Referrer-Policy: no-referrer` 下由浏览器直接加载；离线导出的独立 HTML 文件随后会剥离非内联资源并匹配强制 `img-src data:` 策略），或通过 `present_html` 在隔离的沙盒 iframe 中按需绘制图表与单页文档（沙盒采用不透明源并强制 CSP，阻止远程子资源、fetch 请求与表单提交，但沙盒内脚本仍可导航该框架自身）。
 
 ## 接入外部 MCP 客户端
 

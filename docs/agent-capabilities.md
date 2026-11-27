@@ -107,12 +107,18 @@ avoid copying large tables into every model round. Keep the full approved result
 the server and pass bounded projections where needed.
 
 `present_openui` draws an interface; `present_html` draws a page the operator asked for
-as a document - a drawing, a diagram, a small interactive page. A page is rendered in a
-frame with an opaque origin that loads no remote assets and cannot read the console, so
-its styles, scripts and images must be inline. Both calls change nothing, and both are
-kept with the turn so a follow-up can refine what was drawn. A whole HTML or SVG document
-that arrives as answer text is offered as a page too, but stays code until the reader
-asks for it.
+as a document - a drawing, a diagram, a small interactive page. A `present_html` page is
+rendered in a frame with an opaque origin and an enforced CSP that blocks remote
+subresources, fetches, and form submissions and cannot read the console (a script inside
+the frame can still navigate its own frame), so its styles, scripts and images must be
+inline. By contrast, `present_openui` interfaces — both during live viewing and during
+off-screen rendering for HTML/PNG conversation export — mount inside the console document
+where external HTTP(S) images (including library source favicons) may load directly under
+`Referrer-Policy: no-referrer`, while the finished standalone HTML export strips non-inline
+asset URLs afterward to match its enforced `img-src data:` policy. Both calls change
+nothing, and both are kept with the turn so a follow-up can refine what was drawn. A whole
+HTML or SVG document that arrives as answer text is offered as a page too, but stays code
+until the reader asks for it.
 
 ## Connecting external clients
 
