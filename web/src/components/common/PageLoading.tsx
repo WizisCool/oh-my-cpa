@@ -897,19 +897,14 @@ export function AuthorizeCardSkeleton({
     <LoadingRegion isImmediate={isImmediate} className={clsx(isFullCard && 'auth-card shell-loading-auth-card placeholder-auth-card')}>
       {isFullCard && (
         <>
-          <div className="placeholder-auth-parties" aria-hidden="true">
-            <Placeholder width={52} height={52} row={0} className="placeholder-auth-party" />
-            <Placeholder width={18} height={12} row={0} className="is-meta" />
-            <Placeholder width={52} height={52} row={0} className="placeholder-auth-party" />
-          </div>
-          <Placeholder width="64%" height={24} row={0} className="placeholder-title placeholder-auth-centered" />
-          <Placeholder width="86%" row={1} className="placeholder-line placeholder-auth-centered" />
+          <Placeholder width="56%" height={26} row={0} className="placeholder-title" />
+          <Placeholder width="92%" row={1} className="placeholder-line" />
         </>
       )}
       <div className="placeholder-auth-request" aria-hidden="true">
         <div className="placeholder-auth-request-head">
           <Placeholder width="52%" row={2} className="placeholder-line" />
-          <Placeholder width={56} height={20} row={2} className="is-pill" />
+          <Placeholder width={40} height={22} row={2} className="is-pill" />
         </div>
         <Placeholder width="38%" row={2} className="placeholder-line is-meta" />
         <Placeholder width="100%" height={72} row={3} className="is-surface" />
@@ -919,7 +914,7 @@ export function AuthorizeCardSkeleton({
         </div>
       </div>
       {isFullCard && (
-        <Placeholder width={116} row={4} className="placeholder-line is-meta placeholder-auth-link" />
+        <Placeholder width={96} row={4} className="placeholder-line is-meta" />
       )}
     </LoadingRegion>
   );

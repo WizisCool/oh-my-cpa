@@ -52,7 +52,10 @@ loopback addresses, refuses redirects, opens no data directory, and prints its u
 There is no separate external credential: holding the management key is
 administrator-equivalent, so an external agent can prepare an operation and read its
 status but cannot approve it, submit secrets, or complete OAuth. A prepared change
-returns `status: "pending"` with a link to `<console URL>/authorize/<id>`, a
+returns `status: "pending"` with `approval_url`, a link to `<console URL>/authorize/<id>`
+that the agent shows the operator. Over Streamable HTTP the link uses `OMCPA_PUBLIC_URL` when one
+is set; the stdio bridge builds it from `OMCPA_SERVER_URL`, so that address must open in the
+operator's browser. It opens a
 standalone authorization screen where the signed-in operator (signing in first if
 needed) allows or denies that one operation; `omc_operation_status` reads the
 outcome and can wait up to 30 seconds for the decision (`wait_seconds`). The read-only database queries and `ask_question` are offered to the built-in

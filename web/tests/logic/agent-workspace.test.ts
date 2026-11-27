@@ -17,7 +17,7 @@ import {
   groupCapabilities,
   parseAgentTarget,
   turnParts,
-  previewEntries,
+  previewParts,
   statusTone,
   turnDuration,
   turnLabelKey,
@@ -137,15 +137,21 @@ test('agent workspace', async () => {
     assert.equal(trace.name, 'providers_list');
   });
 
-  check('a prepared change is laid out as fields only when it is shaped like a form', () => {
-    assert.deepEqual(previewEntries({ provider: 'p1', enabled: false, removes: ['credentials', 'mappings'] }), [
-      ['provider', 'p1'], ['enabled', 'false'], ['removes', 'credentials, mappings'],
-    ]);
-    assert.equal(previewEntries({ nested: { a: 1 } }), undefined);
-    assert.equal(previewEntries({ list: [{ a: 1 }] }), undefined);
-    assert.equal(previewEntries([1, 2]), undefined);
-    assert.equal(previewEntries({}), undefined);
-    assert.equal(previewEntries(undefined), undefined);
+  check('a prepared change reads its scalars as fields and keeps only the nested rest as a document', () => {
+    assert.deepEqual(previewParts({ provider: 'p1', enabled: false, removes: ['credentials', 'mappings'] }), {
+      rows: [['provider', 'p1'], ['enabled', 'false'], ['removes', 'credentials, mappings']],
+      details: undefined,
+    });
+    // The shape providers_set_status prepares: the decision is a field, the current record is the
+    // document, and the revision fingerprints that bind it are in neither.
+    assert.deepEqual(previewParts({ is_disabled: true, provider: { id: 'openai-compat-0', name: 'Groq', revision: 'hmac:ee99' }, revision: 'hmac:ee99' }), {
+      rows: [['is_disabled', 'true']],
+      details: { provider: { id: 'openai-compat-0', name: 'Groq' } },
+    });
+    assert.deepEqual(previewParts({ list: [{ a: 1 }] }), { rows: [], details: { list: [{ a: 1 }] } });
+    assert.deepEqual(previewParts([1, 2]), { rows: [], details: [1, 2] });
+    assert.deepEqual(previewParts({}), { rows: [], details: undefined });
+    assert.deepEqual(previewParts(undefined), { rows: [], details: undefined });
   });
 
   check('the remembered selector keeps only its three fields, trimmed', () => {

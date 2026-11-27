@@ -38,7 +38,7 @@ const SERVER_INSTRUCTIONS = `Oh My CPA (OMC) is the control plane of a CLIProxyA
 Results are JSON envelopes with a "status":
 - "success": "data" holds the result.
 - "error": "code" names the refusal and "detail", when present, says what to change. Correct the arguments and call again.
-- "pending": the change is prepared but not applied. Only the operator can approve it, on the OMC console page the result links to. Give the operator that link, then call omc_operation_status with the operation_id (wait_seconds lets one call wait for the decision). Never report a pending change as done.
+- "pending": the change is prepared but not applied. Only the operator can approve it, on the OMC console page at "approval_url". Show the operator that URL as a clickable link, then call omc_operation_status with the operation_id (wait_seconds lets one call wait for the decision). Never report a pending change as done.
 - "rejected": the operator denied it. Do not prepare it again unless asked.
 - "uncertain": the change may or may not have been applied. Read the current state before deciding anything; never retry blindly.
 
@@ -59,6 +59,21 @@ type Options struct {
 	// ConsoleURL returns the console address, base path included, that the operator opens to
 	// decide an operation. An empty value leaves the link out of a pending result.
 	ConsoleURL func(*mcp.CallToolRequest) string
+}
+
+// pendingReceipt is a tool result with the address the operator opens to decide it.
+//
+// The address is a field of the structured result rather than only a text block of its own:
+// clients that receive structured content (Claude Code, Codex) hand the model that object
+// alone, so a link outside it never reaches the agent that has to show it.
+type pendingReceipt struct {
+	capability.Result
+	ApprovalURL string `json:"approval_url,omitempty"`
+}
+
+type pendingOperation struct {
+	capability.Operation
+	ApprovalURL string `json:"approval_url,omitempty"`
 }
 
 type operationStatusInput struct {
@@ -117,14 +132,11 @@ func NewServer(ctx context.Context, backend Backend, options Options) (*mcp.Serv
 		if err != nil {
 			return failure(err), nil, nil
 		}
-		raw, _ := json.Marshal(operation)
-		result := &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(raw)}}, StructuredContent: operation}
+		value := pendingOperation{Operation: operation}
 		if operation.Status == "pending" {
-			if link := approvalLink(request, operation.ID); link != "" {
-				result.Content = append(result.Content, &mcp.TextContent{Text: "Operator approval: " + link})
-			}
+			value.ApprovalURL = approvalLink(request, operation.ID)
 		}
-		return result, nil, nil
+		return withApprovalText(value, value.ApprovalURL), nil, nil
 	})
 	return server, nil
 }
@@ -150,10 +162,21 @@ func failure(err error) *mcp.CallToolResult {
 }
 
 func receipt(value capability.Result, approvalLink string) *mcp.CallToolResult {
+	structured := pendingReceipt{Result: value}
+	if value.Status == "pending" {
+		structured.ApprovalURL = approvalLink
+	}
+	result := withApprovalText(structured, structured.ApprovalURL)
+	result.IsError = value.Status == "error" || value.Status == "uncertain"
+	return result
+}
+
+// withApprovalText answers with the value as structured content and as its JSON text, plus the
+// approval link as a line of its own for clients that show the text blocks instead.
+func withApprovalText(value any, approvalLink string) *mcp.CallToolResult {
 	raw, _ := json.Marshal(value)
 	result := &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(raw)}}, StructuredContent: value}
-	result.IsError = value.Status == "error" || value.Status == "uncertain"
-	if value.Status == "pending" && approvalLink != "" {
+	if approvalLink != "" {
 		result.Content = append(result.Content, &mcp.TextContent{Text: "Operator approval: " + approvalLink})
 	}
 	return result

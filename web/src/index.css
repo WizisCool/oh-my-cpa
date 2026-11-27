@@ -2004,14 +2004,16 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 /* The session check and the sign-in request draw along the page's top edge. Compounded with
    `.progress-bar` because that rule comes later and would otherwise put the bar back in the flow. */
 .progress-bar.auth-progress { position: fixed; inset-inline: 0; top: 0; z-index: 10; }
+/* The wordmark on the leading side and the preference menus on the trailing one, as on sign-in. */
 .auth-header {
   height: 56px;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 6px;
-  padding: 0 max(24px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+  padding: 0 max(20px, env(safe-area-inset-right)) 0 max(28px, env(safe-area-inset-left));
 }
+.auth-header-menus { display: flex; align-items: center; gap: 6px; }
 .auth-main {
   min-height: 0;
   overflow-y: auto;
@@ -2047,7 +2049,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 @media (max-width: 640px) {
   .auth-header {
-    padding: 0 16px 0 12px;
+    padding: 0 16px 0 20px;
   }
   .auth-main {
     padding: 8px 20px 56px;
@@ -2651,22 +2653,18 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   box-shadow: var(--shadow-edge);
 }
 .placeholder-plugin-stage-inner { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
-.placeholder-auth-card { max-width: 440px; }
-.placeholder-auth-parties { display: flex; align-items: center; justify-content: center; gap: 14px; padding-bottom: 6px; }
-.placeholder-auth-party { border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-edge); }
-.placeholder-auth-centered { align-self: center; }
+.placeholder-auth-card { max-width: 480px; }
 .placeholder-auth-request {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px;
-  border-radius: var(--radius-lg);
+  padding: 16px;
+  border-radius: var(--radius-xl);
   background: var(--surface);
   box-shadow: var(--shadow-edge);
 }
 .placeholder-auth-request-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .placeholder-auth-request-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 4px; }
-.placeholder-auth-link { align-self: center; }
 .placeholder-auth-check { display: flex; align-items: center; gap: 8px; }
 @media (max-width: 900px) {
   .placeholder-routing-workspace,

@@ -169,29 +169,41 @@ export function isAwaitingAnswer(turn: Pick<Turn, 'status' | 'traces'>): boolean
 
 const PREVIEW_FIELDS_MAX = 8;
 
+export interface PreviewParts {
+  /** The change's top-level scalars and short scalar lists, as label/value rows. */
+  rows: [string, string][];
+  /** Whatever is nested, as a document; `undefined` when the rows say everything. */
+  details: unknown;
+}
+
 /**
- * A prepared change as label/value rows, when it is shaped like a form: a flat object whose values
- * are scalars or short lists of scalars.
+ * A prepared change split into what reads as a form and what does not: top-level scalars and
+ * lists of scalars become label/value rows, and nested parts stay one JSON document, because
+ * flattening them into rows would invent a reading of them.
  *
- * Anything deeper stays JSON, because flattening a nested document into rows would invent a
- * reading of it. `undefined` means "show the document".
+ * Revision fingerprints are left out of both. They bind the decision on the server and tell the
+ * operator nothing, and a line of `hmac:` hex is the longest thing in most previews.
  */
-export function previewEntries(changes: unknown): [string, string][] | undefined {
-  if (typeof changes !== 'object' || changes === null || Array.isArray(changes)) return undefined;
-  const entries = Object.entries(changes);
-  if (entries.length === 0 || entries.length > PREVIEW_FIELDS_MAX) return undefined;
-  const rows: [string, string][] = [];
-  for (const [key, value] of entries) {
-    if (Array.isArray(value)) {
-      if (!value.every(item => item === null || typeof item !== 'object')) return undefined;
-      rows.push([key, value.map(String).join(', ')]);
-    } else if (value !== null && typeof value === 'object') {
-      return undefined;
-    } else {
-      rows.push([key, String(value)]);
-    }
+export function previewParts(changes: unknown): PreviewParts {
+  const shown = withoutRevisions(changes);
+  if (typeof shown !== 'object' || shown === null || Array.isArray(shown)) {
+    return { rows: [], details: shown };
   }
-  return rows;
+  const rows: [string, string][] = [];
+  const nested: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(shown)) {
+    const isScalarList = Array.isArray(value) && value.every(item => item === null || typeof item !== 'object');
+    if (rows.length < PREVIEW_FIELDS_MAX && isScalarList) rows.push([key, value.map(String).join(', ')]);
+    else if (rows.length < PREVIEW_FIELDS_MAX && (value === null || typeof value !== 'object')) rows.push([key, String(value)]);
+    else nested[key] = value;
+  }
+  return { rows, details: Object.keys(nested).length > 0 ? nested : undefined };
+}
+
+function withoutRevisions(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutRevisions);
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'revision').map(([key, item]) => [key, withoutRevisions(item)]));
 }
 
 /**

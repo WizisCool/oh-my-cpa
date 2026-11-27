@@ -21,4 +21,4 @@
 
 MCP 的人工审批门槛仅约束通过 MCP 发起的状态变更操作；由于 CPA 管理密钥同时也是控制台管理员登录凭据，持有该密钥的 Agent 等同具备管理员权限（可直接用于登录控制台，绕过 MCP 审批流），请仅向受信任的 Agent 提供管理密钥。
 
-在 MCP 流程内，外部 Agent 提交涉及状态变更的高风险操作时不会直接执行，而是生成 `pending` 审批单与 `<控制台 URL>/authorize/<id>` 链接，由已登录管理员在浏览器完成确认、密码/密钥录入或 OAuth 登录授权后才执行。只读 SQL 查询工具仅对内置 Agent 开放。
+在 MCP 流程内，外部 Agent 提交涉及状态变更的高风险操作时不会直接执行，而是生成 `pending` 审批单，结果中的 `approval_url` 即 `<控制台 URL>/authorize/<id>` 链接（Streamable HTTP 下设置了 `OMCPA_PUBLIC_URL` 时使用该地址；stdio 桥接使用 `OMCPA_SERVER_URL`，该地址需能在操作员浏览器中打开），Agent 会把它交给操作员点击，由已登录管理员在浏览器完成确认、密码/密钥录入或 OAuth 登录授权后才执行。只读 SQL 查询工具仅对内置 Agent 开放。
