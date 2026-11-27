@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/mcpbridge"
 )
 
@@ -92,6 +94,9 @@ func TestRemoteMCPServesTheRegistryToAManagementKeyHolder(t *testing.T) {
 	if !strings.HasPrefix(link, "Operator approval: "+fixture.baseURL+"/omc/authorize/") {
 		t.Fatalf("approval link: %s", link)
 	}
+	if structured, _ := json.Marshal(prepared.StructuredContent); !strings.Contains(string(structured), `"approval_url":"`+strings.TrimPrefix(link, "Operator approval: ")+`"`) {
+		t.Fatalf("structured result lacks the approval link: %s", structured)
+	}
 	operationID := link[strings.LastIndex(link, "/")+1:]
 	status, err := session.CallTool(ctx, &mcp.CallToolParams{Name: mcpbridge.OPERATION_STATUS_TOOL, Arguments: map[string]any{"operation_id": operationID}})
 	if err != nil || status.IsError || !strings.Contains(status.Content[0].(*mcp.TextContent).Text, `"status":"pending"`) {
@@ -100,5 +105,23 @@ func TestRemoteMCPServesTheRegistryToAManagementKeyHolder(t *testing.T) {
 	refused, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "requests_get", Arguments: map[string]any{"unknown": true}})
 	if err != nil || !refused.IsError || refused.Content[0].(*mcp.TextContent).Text != "invalid_tool_arguments" {
 		t.Fatalf("refusal: %+v %v", refused, err)
+	}
+}
+
+// An agent on the server often reaches OMC by an address the operator's browser cannot open
+// (loopback, a container name), so a configured public address is the one the link names.
+func TestApprovalLinkPrefersThePublicAddress(t *testing.T) {
+	request, _ := http.NewRequest("POST", "http://127.0.0.1:8080/omc/api/mcp", nil)
+	h := &Handler{cfg: config.Config{BasePath: "/omc/"}}
+	if got := h.consoleURL(request); got != "http://127.0.0.1:8080/omc" {
+		t.Fatalf("request address: %s", got)
+	}
+	h.cfg.PublicURL = "https://omc.example.com/ignored"
+	if got := h.consoleURL(request); got != "https://omc.example.com/omc" {
+		t.Fatalf("public address: %s", got)
+	}
+	h.cfg.PublicURL = "omc.example.com"
+	if got := h.consoleURL(request); got != "http://127.0.0.1:8080/omc" {
+		t.Fatalf("an address without a scheme was used: %s", got)
 	}
 }

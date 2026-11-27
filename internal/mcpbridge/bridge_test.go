@@ -151,8 +151,13 @@ func TestPendingResultCarriesTheApprovalLinkAndRefusalsKeepTheirCode(t *testing.
 	if err != nil || result.IsError {
 		t.Fatalf("prepare: %+v %v", result, err)
 	}
-	if got := texts(result); len(got) != 2 || got[1] != "Operator approval: https://omc.example/omc/authorize/"+operationID {
+	link := "https://omc.example/omc/authorize/" + operationID
+	if got := texts(result); len(got) != 2 || got[1] != "Operator approval: "+link || !strings.Contains(got[0], `"approval_url":"`+link+`"`) {
 		t.Fatalf("approval link: %v", got)
+	}
+	// Claude Code and Codex give the model the structured content alone, so the link must be in it.
+	if structured, _ := json.Marshal(result.StructuredContent); !strings.Contains(string(structured), `"approval_url":"`+link+`"`) {
+		t.Fatalf("structured content lacks the approval link: %s", structured)
 	}
 	backend.result, backend.err = capability.Result{}, errors.New("capability_forbidden")
 	result, err = session.CallTool(context.Background(), &mcp.CallToolParams{Name: "fixture_write"})
@@ -172,6 +177,17 @@ func TestOperationStatusWaitsForTheDecision(t *testing.T) {
 	statusPollInterval = time.Millisecond
 	defer func() { statusPollInterval = previousInterval }()
 	session := connectFixture(t, backend)
+	for tool, err := range session.Tools(context.Background(), nil) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tool.Name != OPERATION_STATUS_TOOL {
+			continue
+		}
+		if schema, _ := json.Marshal(tool.OutputSchema); !strings.Contains(string(schema), `"approval_url"`) || strings.Contains(string(schema), `"required":["id","status","approval_url"]`) {
+			t.Fatalf("status tool output schema: %s", schema)
+		}
+	}
 	status := func(arguments map[string]any) *mcp.CallToolResult {
 		t.Helper()
 		result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: OPERATION_STATUS_TOOL, Arguments: arguments})
@@ -181,12 +197,12 @@ func TestOperationStatusWaitsForTheDecision(t *testing.T) {
 		return result
 	}
 	immediate := status(map[string]any{"operation_id": operationID})
-	if got := texts(immediate); immediate.IsError || backend.reads != 1 || len(got) != 2 || !strings.Contains(got[0], `"status":"pending"`) {
+	if got := texts(immediate); immediate.IsError || backend.reads != 1 || len(got) != 2 || !strings.Contains(got[0], `"status":"pending"`) || !strings.Contains(got[0], `"approval_url":"https://omc.example/omc/authorize/`+operationID+`"`) {
 		t.Fatalf("immediate read: %v after %d reads", got, backend.reads)
 	}
 	backend.reads = 0
 	waited := status(map[string]any{"operation_id": operationID, "wait_seconds": 5})
-	if got := texts(waited); waited.IsError || backend.reads != 2 || len(got) != 1 || !strings.Contains(got[0], `"status":"success"`) {
+	if got := texts(waited); waited.IsError || backend.reads != 2 || len(got) != 1 || !strings.Contains(got[0], `"status":"success"`) || strings.Contains(got[0], "approval_url") {
 		t.Fatalf("waited read: %v after %d reads", got, backend.reads)
 	}
 	for _, arguments := range []map[string]any{{"operation_id": "../capabilities"}, {"operation_id": operationID, "wait_seconds": MAX_STATUS_WAIT_SECONDS + 1}} {

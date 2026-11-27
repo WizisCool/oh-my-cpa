@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -42,16 +43,22 @@ func (backend executorBackend) Operation(ctx context.Context, id string) (capabi
 	return operation, nil
 }
 
-// consoleURL is the address the caller reached this console at, base path included. It is
-// only ever returned to that same authenticated caller, as the approval link.
+// consoleURL is the console address the approval link opens, base path included: the configured
+// public address when there is one, since an agent often reaches OMC by an address (loopback, a
+// container name) the operator's browser cannot open, and otherwise the address the caller
+// reached. It is only ever returned to that same authenticated caller.
 func (h *Handler) consoleURL(request *http.Request) string {
+	basePath := strings.TrimRight(h.cfg.BasePath, "/")
+	if public, err := url.Parse(h.cfg.PublicURL); err == nil && (public.Scheme == "https" || public.Scheme == "http") && public.Host != "" {
+		return public.Scheme + "://" + public.Host + basePath
+	}
 	scheme := "http"
 	if request.TLS != nil {
 		scheme = "https"
 	} else if forwarded := strings.TrimSpace(strings.Split(request.Header.Get("X-Forwarded-Proto"), ",")[0]); forwarded == "https" {
 		scheme = forwarded
 	}
-	return scheme + "://" + request.Host + strings.TrimRight(h.cfg.BasePath, "/")
+	return scheme + "://" + request.Host + basePath
 }
 
 func (h *Handler) mcpHandler() (http.Handler, error) {

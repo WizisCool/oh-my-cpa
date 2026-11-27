@@ -83,12 +83,15 @@ export const ShellLoading: React.FC = () => {
       <div className="auth-shell">
         <ProgressBar source={progressTasks} label={t('common.loading')} className="auth-progress" />
         <header className="auth-header">
-          <span className="shell-loading-icon-slot" aria-hidden="true">
-            <Placeholder width={16} height={16} />
-          </span>
-          <span className="shell-loading-lang-slot" aria-hidden="true">
-            <Placeholder width={16} height={16} className="is-circle" />
-            <Placeholder width={20} height={10} />
+          <BrandArtwork shape="wordmark" height={22} className="app-brand-logo" />
+          <span className="auth-header-menus" aria-hidden="true">
+            <span className="shell-loading-icon-slot">
+              <Placeholder width={16} height={16} />
+            </span>
+            <span className="shell-loading-lang-slot">
+              <Placeholder width={16} height={16} className="is-circle" />
+              <Placeholder width={20} height={10} />
+            </span>
           </span>
         </header>
         <main className="auth-main">

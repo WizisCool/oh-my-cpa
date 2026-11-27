@@ -193,8 +193,10 @@ func (d *Definition) ValidateOutput(value any) (json.RawMessage, error) {
 }
 
 // ResultSchema describes the executor envelope while retaining the definition's typed data contract.
+// `approval_url` is added by the MCP adapter to a pending result: the console page that decides it.
 func (d *Definition) ResultSchema() map[string]any {
 	return map[string]any{"type": "object", "required": []string{"status"}, "additionalProperties": false, "properties": map[string]any{
 		"status": map[string]any{"type": "string"}, "data": d.OutputSchema, "code": map[string]any{"type": "string"}, "detail": map[string]any{"type": "string"}, "operation_id": map[string]any{"type": "string"}, "invalidates": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		"approval_url": map[string]any{"type": "string", "format": "uri"},
 	}}
 }

@@ -10,7 +10,7 @@ import workspace from '../../../components/workspace/Workspace.module.css';
 import { useI18n } from '../../../i18n';
 import { capabilityDescription } from '../../../i18n/capabilities';
 import { failureCode, startOperationOAuth } from '../api';
-import { failureKey, previewEntries } from '../state';
+import { failureKey, previewParts } from '../state';
 import type { Capability, Operation } from '../state';
 import styles from '../AgentPage.module.css';
 import { Tag } from '../../../components/common/Tag';
@@ -55,8 +55,6 @@ export function ApprovalCard({ operation, capability, variant = 'inline', respon
   const permission = operation.permission ?? capability?.permission ?? 'write';
   const isDestructive = permission === 'destructive';
   const isConsent = variant === 'consent';
-  const entries = previewEntries(operation.preview.changes);
-  const description = capabilityDescription(operation.capability, capability?.description ?? '', t);
   const canApprove = !pendingAction
     && (operation.human_input !== 'secret' || !!secret)
     && (operation.human_input !== 'oauth' || !!oauth);
@@ -107,22 +105,7 @@ export function ApprovalCard({ operation, capability, variant = 'inline', respon
           <p className={styles['approval-lead']}>{t('agent.operation.lead')}</p>
         </>
       )}
-      {description && <p className={styles['approval-description']}>{description}</p>}
-      <dl className={styles['operation-fields']}>
-        <div className={styles['operation-field-row']}>
-          <dt>{t('agent.operation.target')}</dt>
-          <dd><code>{operation.preview.target}</code></dd>
-        </div>
-        {entries?.map(([label, text]) => (
-          <div key={label} className={styles['operation-field-row']}>
-            <dt>{label}</dt>
-            <dd>{text}</dd>
-          </div>
-        ))}
-      </dl>
-      {operation.preview.changes !== undefined && !entries && (
-        <CodeBlock lang="json" block>{JSON.stringify(operation.preview.changes, null, 2)}</CodeBlock>
-      )}
+      <OperationPreview operation={operation} capability={capability} />
       {isDestructive && <Notice tone="error" title={t('agent.operation.irreversible')} />}
       {operation.human_input === 'secret' && (
         <div className={workspace['field']}>
@@ -154,7 +137,7 @@ export function ApprovalCard({ operation, capability, variant = 'inline', respon
           <code>{error}</code>
         </div>
       )}
-      <footer className={styles['operation-actions']}>
+      <footer className={styles['operation-actions']} data-testid="agent-authorization-actions">
         <Button disabled={!!pendingAction} loading={pendingAction === 'reject'} onClick={() => void decide(false)}>{t('agent.reject')}</Button>
         <Button
           variant="primary"
@@ -167,5 +150,38 @@ export function ApprovalCard({ operation, capability, variant = 'inline', respon
         </Button>
       </footer>
     </section>
+  );
+}
+
+/**
+ * What a prepared operation will change: the capability's sentence, its target, and the change as
+ * label/value rows when it is shaped like a form, or as the JSON document when it is not.
+ *
+ * The authorization screen keeps drawing it after the decision, so an outcome is always read
+ * beside the change it is the outcome of.
+ */
+export function OperationPreview({ operation, capability }: { operation: Operation; capability?: Capability }) {
+  const { t } = useI18n();
+  const { rows, details } = previewParts(operation.preview.changes);
+  const description = capabilityDescription(operation.capability, capability?.description ?? '', t);
+  return (
+    <>
+      {description && <p className={styles['approval-description']}>{description}</p>}
+      <dl className={styles['operation-fields']}>
+        <div className={styles['operation-field-row']}>
+          <dt>{t('agent.operation.target')}</dt>
+          <dd><code>{operation.preview.target}</code></dd>
+        </div>
+        {rows.map(([label, text]) => (
+          <div key={label} className={styles['operation-field-row']}>
+            <dt>{label}</dt>
+            <dd>{text}</dd>
+          </div>
+        ))}
+      </dl>
+      {details !== undefined && (
+        <CodeBlock lang="json" block>{JSON.stringify(details, null, 2)}</CodeBlock>
+      )}
+    </>
   );
 }

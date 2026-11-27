@@ -1,110 +1,105 @@
-/* The consent screen an external agent's approval link opens. The shell, column and title are the
+/* The consent screen an external agent's approval link opens. The shell, header and column are the
    sign-in page's (`auth-*` in index.css); these are the parts only this screen has. */
 
 .card {
-  max-width: 440px;
+  max-width: 480px;
 }
 
-.parties {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  margin-bottom: 24px;
-}
-
-.party {
-  border: 0;
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  box-shadow: var(--shadow-edge);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  color: var(--fg);
-}
-
-.link {
-  color: var(--muted);
-  font-size: var(--text-lg);
-}
-
-/* The shared title leaves room for a form under it; here one sentence follows directly. */
+/* The page's one title, left-aligned with the request under it, as on the sign-in page. */
 .card :global(.auth-title) {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
+  text-align: start;
+  font-size: 26px;
+  letter-spacing: -0.015em;
 }
 
 .intro {
-  margin: 0 0 20px;
-  color: var(--muted);
+  margin: 0 0 24px;
+  color: var(--fg-2);
   font-size: var(--text-md);
-  line-height: 1.6;
-  text-align: center;
+  line-height: 1.55;
   overflow-wrap: anywhere;
 }
 
+/* One raised surface holds the request: head, the change, then the decision or its outcome. */
 .request {
-  border: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
   padding: 16px;
-  box-shadow: var(--shadow-edge);
-  border-top: 2px solid var(--warn);
   border-radius: var(--radius-xl);
   background: var(--surface);
-}
-
-.request[data-destructive] {
-  border-top-color: var(--danger);
+  box-shadow: var(--shadow-edge);
 }
 
 .request-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.request-title {
+.request-name {
+  display: flex;
   min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.request-title {
   color: var(--fg);
-  font-size: 15px;
+  font-size: var(--text-base);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-.request-name {
-  align-self: flex-start;
+.request-id {
   color: var(--muted);
   font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.request-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: var(--text-md);
+}
+
+/* The change keeps the approval card's field block, so a decided request reads as it was asked. */
+.request-body :global(dl) {
+  padding: 10px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--thread-field);
 }
 
 .outcome {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
-  margin: 4px 0 0;
-  font-size: var(--text-base);
-  font-weight: 600;
 }
 
-.outcome[data-tone='success'] { color: var(--success); }
-.outcome[data-tone='error'] { color: var(--danger); }
-.outcome[data-tone='warning'] { color: var(--warn); }
+.outcome > div {
+  align-self: stretch;
+}
 
+/* One sentence a line: what allowing does, then how long the request waits. */
 .fine {
+  display: flex;
+  flex-direction: column;
   margin: 14px 0 0;
   color: var(--muted);
   font-size: var(--text-sm);
   line-height: 1.6;
-  text-align: center;
 }
 
 .console {
-  display: block;
-  margin-top: 20px;
-  font-size: var(--text-sm);
-  text-align: center;
+  margin-top: 16px;
+  padding-inline: 0;
+}
+
+@media (max-width: 640px) {
+  .card :global(.auth-title) { font-size: 22px; }
+  .request { padding: 14px; }
 }
