@@ -106,28 +106,57 @@ func (s *Service) VerifyCredential(ctx context.Context, target CredentialTarget,
 		// Re-read CPA's live auth-file projection instead of inferring cooldown
 		// release from verified=true alone: older pre-v8.1.8 gateways can return
 		// verified=true while leaving a credential_quota block active, and a
-		// force_cooldown stays active across verify. Any read or local storage
-		// failure here is non-fatal because upstream verify already completed.
-		postFile, postErr := s.recoveryAuthFile(ctx, CredentialTarget{Name: file.Name, AuthIndex: file.AuthIndex})
-		if postErr == nil {
-			// Guard against credential replacement reusing the same name/auth_index
-			// with a different CPA runtime ID between verify and readback.
-			if file.ID != "" && postFile.ID != "" && file.ID != postFile.ID {
-				if s.Notify != nil {
-					s.Notify()
-				}
-				return CredentialVerifyResult{Verified: verified}, nil
+		// force_cooldown stays active across verify. Require unique auth_index
+		// ownership and matching identity before clearing local evidence or
+		// passing AuthFile to post-verify quota refresh. Any read or local
+		// storage failure here is non-fatal because upstream verify completed.
+		postFile, confirmed, postErr := s.verifyReadbackAuthFile(ctx, client, file)
+		if postErr != nil || !confirmed {
+			if s.Notify != nil {
+				s.Notify()
 			}
-			file = postFile
-			if s.Repo != nil && hasWatermark && preVerifyMaxEventID > 0 && postFile.HasClearedCredentialCooldown(s.now()) {
-				_ = s.Repo.ClearCredentialCooldownEvidenceUpTo(ctx, file.AuthIndex, preVerifyMaxEventID)
-			}
+			return CredentialVerifyResult{Verified: verified}, nil
+		}
+		file = postFile
+		if s.Repo != nil && hasWatermark && preVerifyMaxEventID > 0 && postFile.HasClearedCredentialCooldown(s.now()) {
+			_ = s.Repo.ClearCredentialCooldownEvidenceUpTo(ctx, file.AuthIndex, preVerifyMaxEventID)
 		}
 	}
 	if s.Notify != nil {
 		s.Notify()
 	}
 	return CredentialVerifyResult{Verified: verified, AuthFile: file}, nil
+}
+
+// verifyReadbackAuthFile re-reads CPA's live credential list and confirms that
+// target.AuthIndex is uniquely owned by the same credential that was verified.
+// When another credential shares the same auth_index or CPA swapped runtime IDs,
+// returning confirmed=false prevents clearing sibling evidence or refreshing a
+// replacement credential's quota under the old index.
+func (s *Service) verifyReadbackAuthFile(ctx context.Context, client *management.Client, target management.AuthFile) (management.AuthFile, bool, error) {
+	files, err := client.AuthFiles(ctx)
+	if err != nil {
+		return management.AuthFile{}, false, err
+	}
+	targetIndex := strings.TrimSpace(target.AuthIndex)
+	var matched management.AuthFile
+	indexMatches := 0
+	for _, file := range files.Files {
+		if strings.TrimSpace(file.AuthIndex) != targetIndex {
+			continue
+		}
+		matched, indexMatches = file, indexMatches+1
+	}
+	if indexMatches != 1 {
+		return management.AuthFile{}, false, nil
+	}
+	if matched.RuntimeOnly || matched.Name != target.Name {
+		return management.AuthFile{}, false, nil
+	}
+	if target.ID != "" && matched.ID != "" && target.ID != matched.ID {
+		return management.AuthFile{}, false, nil
+	}
+	return matched, true, nil
 }
 
 func clearedCooldownAuthIndexes(files []management.AuthFile, now time.Time) map[string]bool {
@@ -204,32 +233,36 @@ func (s *Service) ReconcileCPACredentialCooldowns(
 
 // ReconcileExpiredCPACredentialCooldowns releases expired local credential cooldown
 // evidence up to snapshotMaxEventID when CPA's live auth-file projection affirmatively
-// shows no credential-level cooldown remains. It returns the counts of confirmed local
-// clears and failed clears:
-//   - On repository error, the credential is removed from expiredCooldowns for this tick
-//     so the round does not fall through to a credential-wide CPA reset (wiping model
-//     cooldowns) while CPA already reports the credential active; storage keeps the row
-//     for retry next tick.
-//   - On a zero-row no-op (e.g., a newer expired event arrived beyond snapshotMaxEventID),
-//     the credential remains in expiredCooldowns for a fresh decision without incrementing
-//     clearedCount.
-//   - When rows were cleared, the credential is removed from expiredCooldowns only if no
-//     newer expired row remains in storage.
+// shows no credential-level cooldown remains.
+//
+// reconcileCandidates covers all expired credential-scoped rows (including credentials
+// that still have an independent model cooldown, because local reconciliation preserves
+// independent model cooldowns). resetCandidates is the narrower map used to dispatch
+// credential-wide CPA resets; whenever CPA already reports an auth_index clear, that
+// index is removed from resetCandidates regardless of rows cleared or errors so this
+// round never falls through to an unbounded credential-wide CPA reset (leaving any
+// post-watermark or failed rows in storage for the next round's fresh watermark).
 func (s *Service) ReconcileExpiredCPACredentialCooldowns(
 	ctx context.Context,
 	files []management.AuthFile,
-	expiredCooldowns map[string]int64,
+	reconcileCandidates map[string]int64,
+	resetCandidates map[string]int64,
 	now time.Time,
 	snapshotMaxEventID int64,
 ) (int, int, error) {
-	if s == nil || s.Repo == nil || len(expiredCooldowns) == 0 || len(files) == 0 || snapshotMaxEventID <= 0 {
+	if s == nil || s.Repo == nil || len(files) == 0 || snapshotMaxEventID <= 0 {
 		return 0, 0, nil
 	}
 	cleared := clearedCooldownAuthIndexes(files, now)
 	var errs []error
 	clearedCount := 0
 	failedCount := 0
-	for authIndex := range expiredCooldowns {
+	for authIndex := range resetCandidates {
+		if cleared[authIndex] {
+			delete(resetCandidates, authIndex)
+		}
+	}
+	for authIndex := range reconcileCandidates {
 		if !cleared[authIndex] {
 			continue
 		}
@@ -237,22 +270,10 @@ func (s *Service) ReconcileExpiredCPACredentialCooldowns(
 		if err != nil {
 			errs = append(errs, err)
 			failedCount++
-			delete(expiredCooldowns, authIndex)
 			continue
 		}
-		if rows == 0 {
-			continue
-		}
-		clearedCount++
-		remaining, checkErr := s.Repo.BatchExpiredCooldowns(ctx, []string{authIndex}, now.UnixMilli())
-		if checkErr != nil {
-			errs = append(errs, checkErr)
-			failedCount++
-			delete(expiredCooldowns, authIndex)
-			continue
-		}
-		if _, stillExpired := remaining[authIndex]; !stillExpired {
-			delete(expiredCooldowns, authIndex)
+		if rows > 0 {
+			clearedCount++
 		}
 	}
 	return clearedCount, failedCount, errors.Join(errs...)

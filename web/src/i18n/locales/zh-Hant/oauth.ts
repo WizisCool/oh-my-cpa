@@ -40,6 +40,7 @@ export default {
   "recovery.verify_unconfirmed": "請求已完成，但推理尚未確認。請重新整理憑證查看復原階段。",
   "recovery.verify_not_applied": "推理驗證已完成，但未生效",
   "recovery.verify_not_applied_hint": "上游已完成此次驗證請求，但 CPA 保留了該憑證的冷卻或停用狀態，未解除冷卻。",
+  "recovery.verify_sandbox_reset": "示範沙盒已在驗證期間重設",
   "recovery.verify_failed": "推理驗證失敗：{msg}",
   "recovery.complete": "登入流程已完成。請查看憑證的復原階段；推理驗證和自動續期驗證分別記錄。",
   "recovery.read_failed": "登入已完成，但無法讀取憑證摘要。請重新整理查看復原階段。",

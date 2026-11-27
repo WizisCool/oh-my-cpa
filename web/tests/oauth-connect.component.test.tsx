@@ -161,18 +161,35 @@ it('keeps targeted recovery pinned across failure/minimizing and verifies creden
 it('surfaces 409 verification_not_applied as its own warning state on the recovery panel', async () => {
   const t = makeT('en');
   const server = installOmcApi();
-  let mode: 'not_applied' | 'verified' = 'not_applied';
-  server.on('POST', '/management/auth-files/verify', () => mode === 'not_applied'
-    ? json({ code: 'verification_not_applied', error: 'verification inference completed, but CPA did not apply it' }, 409)
-    : { status: 'ok', verified: true });
+  let mode: 'not_applied' | 'verified' | 'deferred_not_applied' | 'sandbox_reset' = 'not_applied';
+  let releaseDeferred!: () => void;
+  server.on('POST', '/management/auth-files/verify', async () => {
+    if (mode === 'deferred_not_applied') {
+      await new Promise<void>((resolve) => { releaseDeferred = resolve; });
+      return json({ code: 'verification_not_applied', error: 'still cooling' }, 409);
+    }
+    if (mode === 'sandbox_reset') {
+      return json({ code: 'sandbox_reset', error: 'Sandbox was reset during verification' }, 409);
+    }
+    return mode === 'not_applied'
+      ? json({ code: 'verification_not_applied', error: 'verification inference completed, but CPA did not apply it' }, 409)
+      : { status: 'ok', verified: true };
+  });
   const changed = vi.fn();
   const file: ManagementAuthFile = {
     name: 'cooling.json', auth_index: 'cooling-idx', provider: 'claude', disabled: false, unavailable: true, runtime_only: false,
     success: 0, failed: 1, recovery_supported: true, requires_sign_in: false, renewal_state: 'awaiting_first_renewal',
     recovery_stage: 'quota_blocked', adopted: true, inference_verified: false, renewal_verified: false,
   };
+  const siblingFile: ManagementAuthFile = { ...file, name: 'sibling.json', auth_index: 'sibling-idx' };
+  let setActiveFile!: (next: ManagementAuthFile) => void;
+  function RecoveryHarness() {
+    const [activeFile, setFile] = React.useState<ManagementAuthFile>(file);
+    setActiveFile = setFile;
+    return <CredentialRecoveryPanel file={activeFile} canEdit onChanged={changed} />;
+  }
   const surface = renderWithOmc(
-    <CredentialRecoveryPanel file={file} canEdit onChanged={changed} />,
+    <RecoveryHarness />,
     { route: '/omc/oauth-management', isStrict: true },
   );
   try {
@@ -196,6 +213,27 @@ it('surfaces 409 verification_not_applied as its own warning state on the recove
     });
     await waitFor(() => expect(screen.queryByTestId('credential-verify-not-applied')).toBeNull());
     await waitFor(() => expect(changed).toHaveBeenCalledTimes(2));
+
+    // Switching to another credential while verify is in flight must bind the outcome to
+    // the verified credential's mutation target rather than showing it on the new credential.
+    mode = 'deferred_not_applied';
+    fireEvent.click(surface.baseElement.querySelector('[data-credential-verify]')!);
+    const thirdConfirmation = await screen.findByRole('dialog');
+    fireEvent.click(within(thirdConfirmation).getByRole('button', { name: t('recovery.verify') }));
+    await waitFor(() => expect(releaseDeferred).toBeTypeOf('function'));
+    await act(async () => { setActiveFile(siblingFile); });
+    await act(async () => { releaseDeferred(); });
+    await waitFor(() => expect(changed).toHaveBeenCalledTimes(3));
+    expect(screen.queryByTestId('credential-verify-not-applied')).toBeNull();
+
+    // sandbox_reset renders localized copy rather than raw English error text.
+    mode = 'sandbox_reset';
+    fireEvent.click(surface.baseElement.querySelector('[data-credential-verify]')!);
+    const fourthConfirmation = await screen.findByRole('dialog');
+    await act(async () => {
+      fireEvent.click(within(fourthConfirmation).getByRole('button', { name: t('recovery.verify') }));
+    });
+    await waitFor(() => expect(surface.baseElement.textContent).toContain(t('recovery.verify_sandbox_reset')));
   } finally {
     surface.unmount();
   }

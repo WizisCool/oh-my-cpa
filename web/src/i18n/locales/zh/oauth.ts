@@ -37,6 +37,7 @@ export default {
   "recovery.verify_unconfirmed": "请求已完成，但推理尚未确认。请刷新凭证查看恢复阶段。",
   "recovery.verify_not_applied": "推理验证已完成，但未生效",
   "recovery.verify_not_applied_hint": "上游已完成此次验证请求，但 CPA 保留了该凭证的冷却或禁用状态，未解除冷却。",
+  "recovery.verify_sandbox_reset": "演示沙盒已在验证期间重置",
   "recovery.verify_failed": "推理验证失败：{msg}",
   "recovery.complete": "登录流程已完成。请查看凭证的恢复阶段；推理验证和自动续期验证分别记录。",
   "recovery.read_failed": "登录已完成，但无法读取凭证摘要。请刷新查看恢复阶段。",

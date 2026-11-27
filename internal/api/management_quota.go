@@ -284,9 +284,14 @@ func (h *Handler) releaseRestoredCooldown(ctx context.Context, svc *quota.Servic
 		return
 	}
 	// The CPA reset is credential-wide; a restored global reading cannot justify
-	// clearing another model's still-active cooldown.
-	hasModelEvidence, err := h.repo.HasActiveModelCooldownEvidence(ctx, authIndex, svc.Now().UnixMilli())
+	// clearing another model's still-active cooldown or an active force cooldown.
+	nowMS := svc.Now().UnixMilli()
+	hasModelEvidence, err := h.repo.HasActiveModelCooldownEvidence(ctx, authIndex, nowMS)
 	if err != nil || hasModelEvidence {
+		return
+	}
+	hasForceEvidence, err := h.repo.HasActiveForceCooldownEvidence(ctx, authIndex, nowMS)
+	if err != nil || hasForceEvidence {
 		return
 	}
 	clearErr := svc.ClearCPACooldown(ctx, authIndex)

@@ -40,6 +40,7 @@ export default {
   "recovery.verify_unconfirmed": "The request completed without confirmed inference. Refresh the credential to inspect its recovery stage.",
   "recovery.verify_not_applied": "Verification completed without applying",
   "recovery.verify_not_applied_hint": "Upstream answered the verification request, but CPA kept the credential’s cooldown or disabled state and did not release it.",
+  "recovery.verify_sandbox_reset": "The demo sandbox was reset during verification",
   "recovery.verify_failed": "Inference verification failed: {msg}",
   "recovery.complete": "Sign-in completed. Inspect the credential’s recovery stage; inference and automatic renewal are verified separately.",
   "recovery.read_failed": "Sign-in completed, but the credential summary could not be read. Refresh to inspect the recovery stage.",

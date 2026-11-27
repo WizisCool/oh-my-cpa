@@ -170,6 +170,36 @@ func TestClearCredentialCooldownEvidencePreservesModelAndForceCooldowns(t *testi
 		t.Fatalf("routingCooldowns = %+v, want only auth-force", routingCooldowns)
 	}
 
+	// HasActiveForceCooldownEvidence reports true for active force_cooldown (even when mixed with quota rows).
+	if activeForce, err := repo.HasActiveForceCooldownEvidence(ctx, "auth-force", now.UnixMilli()); err != nil || !activeForce {
+		t.Fatalf("HasActiveForceCooldownEvidence(active) = %v, %v, want true", activeForce, err)
+	}
+	if activeForce, err := repo.HasActiveForceCooldownEvidence(ctx, "auth-force", recoverAt.Add(time.Second).UnixMilli()); err != nil || activeForce {
+		t.Fatalf("HasActiveForceCooldownEvidence(expired) = %v, %v, want false", activeForce, err)
+	}
+
+	// Expired credential cooldown + still-active model cooldown: BatchExpiredCooldowns vetoes
+	// it (protecting credential-wide CPA reset), while BatchExpiredCredentialCooldowns still
+	// surfaces it for local CPA reconciliation.
+	pastRecover := now.Add(-time.Minute)
+	expiredCred := fmt.Sprintf(`{"timestamp":%q,"auth_index":"auth-exp-model","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":2}}}`,
+		now.Add(-2*time.Minute).Format(time.RFC3339), pastRecover.Format(time.RFC3339))
+	activeModel := fmt.Sprintf(`{"timestamp":%q,"auth_index":"auth-exp-model","model":"gpt-5-pro","status_code":429,"auth_status":{"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":2},"model":{"name":"gpt-5-pro","next_retry_after":%q,"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":2}}}}`,
+		now.Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339))
+	for _, raw := range []string{expiredCred, activeModel} {
+		if err := repo.CaptureErrorEvent(ctx, "default", raw, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resetCands, err := repo.BatchExpiredCooldowns(ctx, []string{"auth-exp-model"}, now.UnixMilli())
+	if err != nil || len(resetCands) != 0 {
+		t.Fatalf("BatchExpiredCooldowns must veto active model cooldown: %+v, %v", resetCands, err)
+	}
+	reconcileCands, err := repo.BatchExpiredCredentialCooldowns(ctx, []string{"auth-exp-model"}, now.UnixMilli())
+	if err != nil || len(reconcileCands) != 1 {
+		t.Fatalf("BatchExpiredCredentialCooldowns must include expired credential despite active model: %+v, %v", reconcileCands, err)
+	}
+
 	// Authoritative CPA reconciliation clears force_cooldown too once CPA reports no credential cooldown.
 	if err := repo.ClearAuthoritativeCredentialCooldownEvidence(ctx, "auth-force"); err != nil {
 		t.Fatal(err)

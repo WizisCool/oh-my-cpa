@@ -1,13 +1,24 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
+)
+
+// verifyPostRefreshTimeout caps the best-effort quota refresh after a confirmed
+// verify so a slow upstream read or provider gate cannot stall the response,
+// while verifyPostRefreshBudget keeps a margin below http.Server.WriteTimeout (30s).
+const (
+	verifyPostRefreshTimeout      = 3 * time.Second
+	verifyPostRefreshAuditTimeout = time.Second
+	verifyPostRefreshBudget       = 23 * time.Second
 )
 
 // AuthFileVerifyRequestDTO selects a credential and optional model to verify via live inference.
@@ -41,6 +52,7 @@ type AuthFileVerifyResponseDTO struct {
 // @Failure 503 {object} ErrorResponseDTO
 // @Router /v1/management/auth-files/verify [post]
 func (h *Handler) verifyManagementAuthFile(writer http.ResponseWriter, request *http.Request) {
+	startedAt := time.Now()
 	writer.Header().Set("Cache-Control", "no-store")
 	var input AuthFileVerifyRequestDTO
 	if err := decodeManagementJSON(writer, request, managementAuthFileRequestLimit, &input); err != nil {
@@ -98,7 +110,9 @@ func (h *Handler) verifyManagementAuthFile(writer http.ResponseWriter, request *
 	// a retry that consumes tokens again.
 	_ = h.recordAudit(request, "auth_file.verify", "auth_file", target, "success", map[string]any{"verified": result.Verified})
 	if result.Verified {
-		h.refreshQuotaAfterVerify(request, result.AuthFile)
+		if remaining := verifyPostRefreshBudget - time.Since(startedAt); remaining > 0 {
+			h.refreshQuotaAfterVerify(request, result.AuthFile, min(verifyPostRefreshTimeout, remaining))
+		}
 	}
 	h.invalidateCoordinator("management-auth-files", "management-quota")
 	writeJSON(writer, http.StatusOK, AuthFileVerifyResponseDTO{Status: "ok", Verified: result.Verified})
@@ -106,32 +120,35 @@ func (h *Handler) verifyManagementAuthFile(writer http.ResponseWriter, request *
 
 // refreshQuotaAfterVerify re-reads the credential's quota reading after a
 // confirmed operator verify so the stored snapshot and subsequent renders
-// reflect the post-verify state CPA now reports. Best effort: the verify
-// already succeeded upstream and must never be turned into a retryable failure.
-func (h *Handler) refreshQuotaAfterVerify(request *http.Request, file management.AuthFile) {
+// reflect the post-verify state CPA now reports. Bounded with its own deadline
+// derived from context.WithoutCancel so it neither inherits an early client
+// disconnect nor starves http.Server.WriteTimeout on the completed 200 response.
+func (h *Handler) refreshQuotaAfterVerify(request *http.Request, file management.AuthFile, timeout time.Duration) {
 	authIndex := strings.TrimSpace(file.AuthIndex)
-	if authIndex == "" || file.Disabled || !quota.CapabilitiesForFile(file).RefreshSupported {
+	if authIndex == "" || file.Disabled || timeout <= 0 || !quota.CapabilitiesForFile(file).RefreshSupported {
 		return
 	}
-	ctx := request.Context()
-	client, err := h.capabilityClient(ctx)
+	refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(request.Context()), timeout)
+	defer cancel()
+	auditReq := request.WithContext(refreshCtx)
+	client, err := h.capabilityClient(refreshCtx)
 	if err != nil || client == nil {
 		return
 	}
 	isMeta := quota.DetectProvider(file.Type, file.Provider) == "meta"
 	if isMeta {
 		// Meta's quota read can mint a key; keep its fail-closed audit gate.
-		if err := h.recordAudit(request, "quota.refresh", "quota", authIndex, "attempt", map[string]any{
+		if err := h.recordAudit(auditReq, "quota.refresh", "quota", authIndex, "attempt", map[string]any{
 			"provider":        "meta",
 			"upstream_action": "key_exchange",
 		}); err != nil {
 			return
 		}
 	}
-	prior := h.loadPriorNormalizedQuota(ctx, authIndex)
-	refreshed, err := h.refreshQuotaReadingWithoutCooldownRelease(ctx, h.newQuotaService(client), file, prior)
+	prior := h.loadPriorNormalizedQuota(refreshCtx, authIndex)
+	refreshed, err := h.refreshQuotaReadingWithoutCooldownRelease(refreshCtx, h.newQuotaService(client), file, prior)
 	if err == nil && refreshed != nil && !refreshed.IsDeferred {
-		_ = h.persistNormalizedQuotaSnapshot(ctx, refreshed)
+		_ = h.persistNormalizedQuotaSnapshot(refreshCtx, refreshed)
 	}
 	if isMeta {
 		outcome := "success"
@@ -142,6 +159,8 @@ func (h *Handler) refreshQuotaAfterVerify(request *http.Request, file management
 		if refreshed != nil {
 			details["status"] = refreshed.Status
 		}
-		_ = h.recordAudit(request, "quota.refresh", "quota", authIndex, outcome, details)
+		outcomeCtx, outcomeCancel := context.WithTimeout(context.WithoutCancel(request.Context()), verifyPostRefreshAuditTimeout)
+		defer outcomeCancel()
+		_ = h.recordAudit(request.WithContext(outcomeCtx), "quota.refresh", "quota", authIndex, outcome, details)
 	}
 }

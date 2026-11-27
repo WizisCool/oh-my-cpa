@@ -717,15 +717,23 @@ func TestVerifyCredentialPreservesCooldownOnLegacyCPAAndNewerIngest(t *testing.T
 	var repoRef *repository.Repository
 	var injectDuringVerify atomic.Bool
 	var replacedVerified atomic.Bool
-	var replacedQuotaReads atomic.Int32
+	var failNextCredentialsRead atomic.Bool
+	var guardedQuotaReads atomic.Int32
 
 	client, base, repo := startDashboardTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/v8/management/credentials":
+			if failNextCredentialsRead.CompareAndSwap(true, false) {
+				w.WriteHeader(http.StatusBadGateway)
+				fmt.Fprint(w, `{"error":"temporary readback failure"}`)
+				return
+			}
 			// idx-legacy models pre-v8.1.8 CPA: verify returns 200 verified=true but CPA keeps it cooling.
 			// idx-raced models CPA v8.1.8+ releasing the old cooldown, while a brand-new cooldown is ingested mid-verify.
 			// idx-replaced models CPA swapping a different runtime ID under the same name/auth_index during verify.
+			// idx-shared models two credentials sharing one auth_index (A active, B still cooling).
+			// idx-readback-fail models a transient error on the post-verify readback.
 			replacedID := "cred-replaced-old"
 			if replacedVerified.Load() {
 				replacedID = "cred-replaced-new"
@@ -733,8 +741,11 @@ func TestVerifyCredentialPreservesCooldownOnLegacyCPAAndNewerIngest(t *testing.T
 			fmt.Fprintf(w, `{"files":[
 				{"id":"cred-legacy","name":"codex-legacy.json","auth_index":"idx-legacy","type":"codex","provider":"codex","status":"error","unavailable":true,"next_retry_after":%q,"requires_sign_in":false,"renewal_state":"awaiting_first_renewal","recovery_stage":"quota_blocked","adopted":true,"inference_verified":true},
 				{"id":"cred-raced","name":"codex-raced.json","auth_index":"idx-raced","type":"codex","provider":"codex","status":"active","unavailable":false,"requires_sign_in":false,"renewal_state":"awaiting_first_renewal","recovery_stage":"loaded","adopted":true,"inference_verified":true},
-				{"id":%q,"name":"codex-replaced.json","auth_index":"idx-replaced","type":"codex","provider":"codex","status":"active","unavailable":false,"requires_sign_in":false,"renewal_state":"awaiting_first_renewal","recovery_stage":"loaded","adopted":true,"inference_verified":true}
-			]}`, recoverAt.Format(time.RFC3339), replacedID)
+				{"id":%q,"name":"codex-replaced.json","auth_index":"idx-replaced","type":"codex","provider":"codex","status":"active","unavailable":false,"requires_sign_in":false,"renewal_state":"awaiting_first_renewal","recovery_stage":"loaded","adopted":true,"inference_verified":true},
+				{"id":"cred-shared-a","name":"codex-shared-a.json","auth_index":"idx-shared","type":"codex","provider":"codex","status":"active","unavailable":false,"requires_sign_in":false,"renewal_state":"awaiting_first_renewal","recovery_stage":"loaded","adopted":true,"inference_verified":true},
+				{"id":"cred-shared-b","name":"codex-shared-b.json","auth_index":"idx-shared","type":"codex","provider":"codex","status":"error","unavailable":true,"next_retry_after":%q,"requires_sign_in":false,"renewal_state":"awaiting_first_renewal","recovery_stage":"quota_blocked","adopted":true,"inference_verified":false},
+				{"id":"cred-readback","name":"codex-readback.json","auth_index":"idx-readback-fail","type":"codex","provider":"codex","status":"active","unavailable":false,"requires_sign_in":false,"renewal_state":"awaiting_first_renewal","recovery_stage":"loaded","adopted":true,"inference_verified":true}
+			]}`, recoverAt.Format(time.RFC3339), replacedID, recoverAt.Format(time.RFC3339))
 		case "/v8/management/credentials/verify":
 			var body struct {
 				AuthIndex string `json:"auth_index"`
@@ -750,14 +761,18 @@ func TestVerifyCredentialPreservesCooldownOnLegacyCPAAndNewerIngest(t *testing.T
 			if body.AuthIndex == "idx-replaced" {
 				replacedVerified.Store(true)
 			}
+			if body.AuthIndex == "idx-readback-fail" {
+				failNextCredentialsRead.Store(true)
+			}
 			fmt.Fprint(w, `{"status":"ok","verified":true}`)
 		case "/v8/management/requests/api-call":
 			var payload struct {
 				AuthIndex string `json:"auth_index"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&payload)
-			if payload.AuthIndex == "idx-replaced" {
-				replacedQuotaReads.Add(1)
+			switch payload.AuthIndex {
+			case "idx-replaced", "idx-shared", "idx-readback-fail":
+				guardedQuotaReads.Add(1)
 			}
 			fmt.Fprint(w, `{"status_code":200,"body":{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":10,"limit_window_seconds":18000,"reset_after_seconds":14400}}}}`)
 		default:
@@ -768,35 +783,40 @@ func TestVerifyCredentialPreservesCooldownOnLegacyCPAAndNewerIngest(t *testing.T
 	injectDuringVerify.Store(true)
 
 	ctx := context.Background()
-	legacyEvent := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-legacy","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":2}}}`,
-		now.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
-	racedOldEvent := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-raced","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":1}}}`,
-		now.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
-	replacedEvent := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-replaced","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":3}}}`,
-		now.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
-	for _, rawEvent := range []string{legacyEvent, racedOldEvent, replacedEvent} {
+	for _, seed := range []struct {
+		authIndex string
+		backoff   int
+	}{
+		{"idx-legacy", 2},
+		{"idx-raced", 1},
+		{"idx-replaced", 3},
+		{"idx-shared", 4},
+		{"idx-readback-fail", 5},
+	} {
+		rawEvent := fmt.Sprintf(`{"timestamp":%q,"auth_index":%q,"auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":%d}}}`,
+			now.Format(time.RFC3339), seed.authIndex, recoverAt.Format(time.RFC3339), seed.backoff)
 		if err := repo.CaptureErrorEvent(ctx, "default", rawEvent, now); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	legacyResp, legacyRaw := doJSON(t, client, http.MethodPost, base+"/omc/api/v1/management/auth-files/verify", `{"name":"codex-legacy.json","auth_index":"idx-legacy"}`)
-	if legacyResp.StatusCode != http.StatusOK {
-		t.Fatalf("verify idx-legacy = %d %s", legacyResp.StatusCode, legacyRaw)
+	for _, body := range []string{
+		`{"name":"codex-legacy.json","auth_index":"idx-legacy"}`,
+		`{"name":"codex-raced.json","auth_index":"idx-raced"}`,
+		`{"name":"codex-replaced.json","auth_index":"idx-replaced"}`,
+		`{"name":"codex-shared-a.json","auth_index":"idx-shared"}`,
+		`{"name":"codex-readback.json","auth_index":"idx-readback-fail"}`,
+	} {
+		resp, raw := doJSON(t, client, http.MethodPost, base+"/omc/api/v1/management/auth-files/verify", body)
+		if resp.StatusCode != http.StatusOK || !strings.Contains(string(raw), `"verified":true`) {
+			t.Fatalf("verify %s = %d %s", body, resp.StatusCode, raw)
+		}
 	}
-	racedResp, racedRaw := doJSON(t, client, http.MethodPost, base+"/omc/api/v1/management/auth-files/verify", `{"name":"codex-raced.json","auth_index":"idx-raced"}`)
-	if racedResp.StatusCode != http.StatusOK {
-		t.Fatalf("verify idx-raced = %d %s", racedResp.StatusCode, racedRaw)
-	}
-	replacedResp, replacedRaw := doJSON(t, client, http.MethodPost, base+"/omc/api/v1/management/auth-files/verify", `{"name":"codex-replaced.json","auth_index":"idx-replaced"}`)
-	if replacedResp.StatusCode != http.StatusOK {
-		t.Fatalf("verify idx-replaced = %d %s", replacedResp.StatusCode, replacedRaw)
-	}
-	if replacedQuotaReads.Load() != 0 {
-		t.Fatalf("replacement runtime ID must not trigger post-verify quota refresh, got %d reads", replacedQuotaReads.Load())
+	if guardedQuotaReads.Load() != 0 {
+		t.Fatalf("unconfirmed, replaced, or ambiguous auth_index must not trigger post-verify quota refresh, got %d reads", guardedQuotaReads.Load())
 	}
 
-	cooldowns, err := repo.BatchCorrelatedCooldowns(ctx, []string{"idx-legacy", "idx-raced", "idx-replaced"}, now.UnixMilli())
+	cooldowns, err := repo.BatchCorrelatedCooldowns(ctx, []string{"idx-legacy", "idx-raced", "idx-replaced", "idx-shared", "idx-readback-fail"}, now.UnixMilli())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -808,6 +828,90 @@ func TestVerifyCredentialPreservesCooldownOnLegacyCPAAndNewerIngest(t *testing.T
 	}
 	if !cooldowns["idx-replaced"].IsActive {
 		t.Fatalf("replacement runtime ID must not clear prior credential cooldown evidence: %+v", cooldowns["idx-replaced"])
+	}
+	if !cooldowns["idx-shared"].IsActive {
+		t.Fatalf("shared auth_index must not clear sibling credential cooldown evidence: %+v", cooldowns["idx-shared"])
+	}
+	if !cooldowns["idx-readback-fail"].IsActive {
+		t.Fatalf("failed post-verify readback must retain local cooldown evidence: %+v", cooldowns["idx-readback-fail"])
+	}
+}
+
+func TestRestoredQuotaVetoedByMixedForceCooldownAndAutoRefreshReconcilesWithActiveModel(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	futureAt := now.Add(2 * time.Hour)
+	pastAt := now.Add(-10 * time.Minute)
+	var cooldownResets atomic.Int32
+	var handler *Handler
+
+	client, base, repo := startDashboardTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v8/management/credentials":
+			fmt.Fprint(w, `{"files":[
+				{"id":"cred-mixed","name":"codex-mixed.json","auth_index":"idx-mixed","type":"codex","provider":"codex","status":"error","unavailable":true,"disabled":false},
+				{"id":"cred-auto","name":"codex-auto.json","auth_index":"idx-auto","type":"codex","provider":"codex","status":"active","unavailable":false,"disabled":false}
+			]}`)
+		case "/v8/management/requests/api-call":
+			fmt.Fprint(w, `{"status_code":200,"body":{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":5,"limit_window_seconds":18000,"reset_after_seconds":14400}}}}`)
+		case "/v8/management/routing/cooldown/reset":
+			cooldownResets.Add(1)
+			fmt.Fprint(w, `{"status":"ok"}`)
+		case "/v8/management/config/oauth/model-alias":
+			fmt.Fprint(w, `{}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}, func(h *Handler) { handler = h })
+
+	ctx := context.Background()
+	// idx-mixed has both an ordinary quota row and an active force_cooldown row: manual
+	// quota refresh showing healthy capacity must NOT issue a credential-wide CPA reset.
+	ordinaryQuota := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-mixed","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":2}}}`,
+		now.Add(-time.Minute).Format(time.RFC3339), futureAt.Format(time.RFC3339))
+	activeForce := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-mixed","code":"force_cooldown","status_code":502,"auth_status":{"quota":{"exceeded":true,"reason":"force_cooldown","next_recover_at":%q,"backoff_level":1}}}`,
+		now.Format(time.RFC3339), futureAt.Format(time.RFC3339))
+	// idx-auto has an expired credential cooldown + still-active model cooldown while CPA reports active.
+	expiredCred := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-auto","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":2}}}`,
+		now.Add(-20*time.Minute).Format(time.RFC3339), pastAt.Format(time.RFC3339))
+	activeModel := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-auto","model":"gpt-5-pro","status_code":429,"auth_status":{"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":2},"model":{"name":"gpt-5-pro","next_retry_after":%q,"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":2}}}}`,
+		now.Format(time.RFC3339), futureAt.Format(time.RFC3339), futureAt.Format(time.RFC3339), futureAt.Format(time.RFC3339))
+	for _, rawEvent := range []string{ordinaryQuota, activeForce, expiredCred, activeModel} {
+		if err := repo.CaptureErrorEvent(ctx, "default", rawEvent, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	refreshResp, refreshRaw := doJSON(t, client, http.MethodPost, base+"/omc/api/v1/management/quota/refresh", `{"auth_index":"idx-mixed"}`)
+	if refreshResp.StatusCode != http.StatusOK {
+		t.Fatalf("quota refresh idx-mixed = %d %s", refreshResp.StatusCode, refreshRaw)
+	}
+	if cooldownResets.Load() != 0 {
+		t.Fatalf("active force_cooldown mixed with quota row must veto CPA cooldown reset, got %d resets", cooldownResets.Load())
+	}
+	if hasForce, err := repo.HasActiveForceCooldownEvidence(ctx, "idx-mixed", now.UnixMilli()); err != nil || !hasForce {
+		t.Fatalf("idx-mixed force_cooldown must survive healthy quota refresh: %v, %v", hasForce, err)
+	}
+
+	// Run one automatic refresh round: idx-auto's expired credential cooldown is reconciled
+	// locally despite its active model cooldown, with zero credential-wide CPA resets.
+	round, err := handler.runQuotaAutoRefreshRound(ctx)
+	if err != nil {
+		t.Fatalf("runQuotaAutoRefreshRound: %v", err)
+	}
+	if round.CooldownsCleared != 1 {
+		t.Fatalf("round.CooldownsCleared = %d, want 1 (local reconciliation for idx-auto)", round.CooldownsCleared)
+	}
+	if cooldownResets.Load() != 0 {
+		t.Fatalf("auto-refresh must not call CPA reset when CPA already reports idx-auto active, got %d", cooldownResets.Load())
+	}
+	remainingExpired, err := repo.BatchExpiredCredentialCooldowns(ctx, []string{"idx-auto"}, now.UnixMilli())
+	if err != nil || len(remainingExpired) != 0 {
+		t.Fatalf("idx-auto expired credential cooldown should be cleared: %+v, %v", remainingExpired, err)
+	}
+	models, err := repo.BatchModelCooldowns(ctx, []string{"idx-auto"}, now.UnixMilli(), nil)
+	if err != nil || len(models["idx-auto"]) != 1 || models["idx-auto"][0].Model != "gpt-5-pro" {
+		t.Fatalf("idx-auto independent model cooldown must survive auto-refresh reconciliation: %+v, %v", models, err)
 	}
 }
 

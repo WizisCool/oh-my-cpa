@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { formatErrorCode } from '../../utils/format';
 import { useMutation } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { api, describeError } from '../../api/client';
+import { api, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import { formatGatewayTimestamp } from '../../utils/time';
@@ -45,6 +45,10 @@ function EvidenceStep({ title, value, hint, action }: {
   </li>;
 }
 
+function verificationTargetKey(name: string, authIndex?: string): string {
+  return `${name}\0${authIndex ?? ''}`;
+}
+
 export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }: {
   file: ManagementAuthFile;
   canEdit: boolean;
@@ -54,25 +58,28 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
   const t = useT();
   const modal = useConfirmModal();
   const toast = useToast();
-  const targetKey = `${file.name}\0${file.auth_index ?? ''}`;
+  const targetKey = verificationTargetKey(file.name, file.auth_index);
   const [lastOutcome, setLastOutcome] = useState<{ target: string; outcome: VerificationOutcome } | null>(null);
   const activeOutcome = lastOutcome?.target === targetKey && !file.inference_verified ? lastOutcome.outcome : null;
   const verification = useMutation({
     mutationFn: (target: { name: string; authIndex?: string }) => api.verifyManagementAuthFile(target.name, target.authIndex),
     onMutate: () => setLastOutcome(null),
-    onSuccess: (result) => {
+    onSuccess: (result, target) => {
       const outcome = verificationOutcomeFromResult(result);
-      setLastOutcome({ target: targetKey, outcome });
+      setLastOutcome({ target: verificationTargetKey(target.name, target.authIndex), outcome });
       const message = t(VERIFICATION_OUTCOME_MESSAGES[outcome]);
       if (VERIFICATION_OUTCOME_TONES[outcome] === 'success') toast.success(message);
       else toast.warning(message);
     },
-    onError: (error) => {
+    onError: (error, target) => {
       const outcome = verificationOutcomeFromError(error);
-      setLastOutcome({ target: targetKey, outcome });
+      setLastOutcome({ target: verificationTargetKey(target.name, target.authIndex), outcome });
       const key = VERIFICATION_OUTCOME_MESSAGES[outcome];
       if (VERIFICATION_OUTCOME_TONES[outcome] === 'warning') toast.warning(t(key));
-      else toast.error(t(key, { msg: describeError(error) }));
+      else {
+        const msg = apiErrorCode(error) === 'sandbox_reset' ? t('recovery.verify_sandbox_reset') : describeError(error);
+        toast.error(t(key, { msg }));
+      }
     },
     onSettled: onChanged,
   });

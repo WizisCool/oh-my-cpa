@@ -128,6 +128,12 @@ interface DemoAuditEntry {
 
 interface SandboxVerifiedCooldown {
   verifiedAt: number;
+  reason?: string;
+  backoffLevel?: number;
+  // Offsets relative to baseline observed_at_ms stay invariant when the Cloudflare
+  // demo Worker rebases every *_at_ms timestamp forward by one delta per request.
+  deadlineOffsetMs?: number;
+  correlatedOffsetMs?: number;
   untilAtMs?: number;
   correlatedAtMs?: number;
 }
@@ -256,6 +262,7 @@ function emptySandboxState(): DemoSandboxState {
 
 let memoryState: DemoSandboxState | null = null;
 const baselineCache = new Map<string, unknown>();
+let baselineCacheGeneration = 0;
 const oauthSessions = new Map<string, DemoOAuthSessionState>();
 const siwcSessions = new Map<string, DemoSiwcSessionState>();
 const listeners = new Set<() => void>();
@@ -410,6 +417,7 @@ export function resetDemoSandbox(): void {
   oauthSessions.clear();
   siwcSessions.clear();
   baselineCache.clear();
+  baselineCacheGeneration += 1;
   clearDemoConversationStorage();
   if (hasLocalStorage()) {
     try {
@@ -517,12 +525,70 @@ function cooldownDeadlineMs(cooldown?: { recover_at_ms?: number; retry_at_ms?: n
   return deadline;
 }
 
+function sandboxQuotaAnchorMs(item: QuotaItem, quotas?: readonly QuotaItem[]): number | undefined {
+  if (typeof item.observed_at_ms === 'number' && Number.isFinite(item.observed_at_ms) && item.observed_at_ms > 0) {
+    return item.observed_at_ms;
+  }
+  const fallback = quotas?.find(
+    (entry) => typeof entry.observed_at_ms === 'number' && Number.isFinite(entry.observed_at_ms) && entry.observed_at_ms > 0,
+  );
+  return fallback?.observed_at_ms;
+}
+
+function captureSandboxVerifiedCooldown(item: QuotaItem | undefined, quotas?: readonly QuotaItem[]): SandboxVerifiedCooldown | null {
+  const active = item?.active_cooldown;
+  if (!item || !active?.is_active || isForceCooldownReason(active.reason)) return null;
+  const untilAtMs = cooldownDeadlineMs(active);
+  const correlatedAtMs =
+    typeof active.correlated_at_ms === 'number' && Number.isFinite(active.correlated_at_ms) && active.correlated_at_ms > 0
+      ? active.correlated_at_ms
+      : undefined;
+  if (untilAtMs === undefined && correlatedAtMs === undefined) return null;
+  const anchor = sandboxQuotaAnchorMs(item, quotas);
+  return {
+    verifiedAt: Date.now(),
+    ...(active.reason !== undefined ? { reason: active.reason } : {}),
+    ...(active.backoff_level !== undefined ? { backoffLevel: active.backoff_level } : {}),
+    ...(anchor !== undefined
+      ? {
+          ...(untilAtMs !== undefined ? { deadlineOffsetMs: untilAtMs - anchor } : {}),
+          ...(correlatedAtMs !== undefined ? { correlatedOffsetMs: correlatedAtMs - anchor } : {}),
+        }
+      : {
+          ...(untilAtMs !== undefined ? { untilAtMs } : {}),
+          ...(correlatedAtMs !== undefined ? { correlatedAtMs } : {}),
+        }),
+  };
+}
+
 function matchesVerifiedCooldown(
   record: SandboxVerifiedCooldown | undefined,
-  untilAtMs: number | undefined,
-  correlatedAtMs?: number,
+  item: QuotaItem,
+  quotas?: readonly QuotaItem[],
 ): boolean {
-  if (!record) return false;
+  const active = item.active_cooldown;
+  if (!record || !active?.is_active || isForceCooldownReason(active.reason)) return false;
+  if (record.reason !== undefined && active.reason !== record.reason) return false;
+  if (record.backoffLevel !== undefined && active.backoff_level !== record.backoffLevel) return false;
+  const untilAtMs = cooldownDeadlineMs(active);
+  const correlatedAtMs =
+    typeof active.correlated_at_ms === 'number' && Number.isFinite(active.correlated_at_ms) && active.correlated_at_ms > 0
+      ? active.correlated_at_ms
+      : undefined;
+  if (record.deadlineOffsetMs !== undefined || record.correlatedOffsetMs !== undefined) {
+    const anchor = sandboxQuotaAnchorMs(item, quotas);
+    if (anchor === undefined) return false;
+    if (record.deadlineOffsetMs !== undefined && (untilAtMs === undefined || untilAtMs - anchor !== record.deadlineOffsetMs)) {
+      return false;
+    }
+    if (
+      record.correlatedOffsetMs !== undefined &&
+      (correlatedAtMs === undefined || correlatedAtMs - anchor !== record.correlatedOffsetMs)
+    ) {
+      return false;
+    }
+    return true;
+  }
   if (record.untilAtMs !== undefined) {
     if (untilAtMs === undefined || untilAtMs !== record.untilAtMs) return false;
     if (record.correlatedAtMs !== undefined && correlatedAtMs !== record.correlatedAtMs) {
@@ -533,21 +599,11 @@ function matchesVerifiedCooldown(
   return record.correlatedAtMs !== undefined && correlatedAtMs !== undefined && correlatedAtMs === record.correlatedAtMs;
 }
 
+const SANDBOX_AUTH_FAILURE_PATTERN =
+  /(?:^|[^a-z0-9_])(unauthorized|forbidden|invalid_api_key|invalid api key|authentication failed|auth failed|token expired|credential expired|401|403)(?:$|[^a-z0-9_])/i;
+
 function looksLikeSandboxAuthFailure(text: string): boolean {
-  const lower = text.toLowerCase();
-  for (const marker of [
-    'unauthorized',
-    'forbidden',
-    'invalid_api_key',
-    'invalid api key',
-    'authentication failed',
-    'auth failed',
-    'token expired',
-    'credential expired',
-  ]) {
-    if (lower.includes(marker)) return true;
-  }
-  return lower.split(/[^a-z0-9]+/).some((token) => token === '401' || token === '403');
+  return SANDBOX_AUTH_FAILURE_PATTERN.test(text);
 }
 
 function recomputeSandboxQuotaItem(item: QuotaItem): QuotaItem {
@@ -735,11 +791,14 @@ async function ensureBaseline<T>(cacheKey: string, pathWithQuery: string, fetchB
   if (baselineCache.has(cacheKey)) {
     return structuredClone(baselineCache.get(cacheKey)) as T;
   }
+  const generation = baselineCacheGeneration;
   try {
     const res = await fetchBaseline(pathWithQuery, { method: 'GET' });
     if (!res.ok) return null;
     const data = (await res.json()) as T;
-    baselineCache.set(cacheKey, structuredClone(data));
+    if (generation === baselineCacheGeneration) {
+      baselineCache.set(cacheKey, structuredClone(data));
+    }
     return data;
   } catch {
     return null;
@@ -747,8 +806,11 @@ async function ensureBaseline<T>(cacheKey: string, pathWithQuery: string, fetchB
 }
 
 async function readBaselineJson<T>(cacheKey: string, res: Response): Promise<T> {
+  const generation = baselineCacheGeneration;
   const data = (await res.json()) as T;
-  baselineCache.set(cacheKey, structuredClone(data));
+  if (generation === baselineCacheGeneration) {
+    baselineCache.set(cacheKey, structuredClone(data));
+  }
   return data;
 }
 
@@ -2643,11 +2705,7 @@ export async function interceptDemoRequest(
             next.active_cooldown = undefined;
             next.quota_exceeded = false;
             mutatedCooldownOrQuota = true;
-          } else if (
-            next.active_cooldown &&
-            !isForceCooldownReason(next.active_cooldown.reason) &&
-            matchesVerifiedCooldown(verifiedCooldown, cooldownDeadlineMs(next.active_cooldown), next.active_cooldown.correlated_at_ms)
-          ) {
+          } else if (matchesVerifiedCooldown(verifiedCooldown, q, base.quotas)) {
             next.active_cooldown = undefined;
             next.quota_exceeded = false;
             mutatedCooldownOrQuota = true;
@@ -2694,31 +2752,17 @@ export async function interceptDemoRequest(
       return jsonResponse({ ...base, tasks, runs });
     }
 
-    // Usage routing (apply cleared cooldowns so clearing cooldown on Quota/OAuth reflects live!)
+    // Usage routing (apply explicit cleared cooldowns; simulated live routing rests
+    // have no shared event identity with the captured quota baseline, so verify does
+    // not suppress them by deadline).
     if (pathname === '/usage/routing') {
-      const [res, quotaBase] = await Promise.all([
-        fetchBaseline(pathWithQuery, options),
-        ensureBaseline<QuotaOverviewResponse>('quota', '/management/quota', fetchBaseline),
-      ]);
+      const res = await fetchBaseline(pathWithQuery, options);
       if (!res.ok) return res;
       const base = (await res.json()) as UsageRoutingResponse;
-      const quotaByIndex = new Map((quotaBase?.quotas ?? []).map((q) => [q.auth_index, q]));
       const now = Date.now();
       const cooldowns = base.cooldowns.filter((c) => {
         const clearedAt = state.quota.clearedCooldowns[c.auth_index];
-        if (clearedAt && now - clearedAt <= 120_000) return false;
-        const verifiedCooldown = state.quota.verifiedCooldowns?.[c.auth_index];
-        const quotaCooldown = quotaByIndex.get(c.auth_index)?.active_cooldown;
-        if (
-          verifiedCooldown &&
-          quotaCooldown?.is_active &&
-          !isForceCooldownReason(quotaCooldown.reason) &&
-          cooldownDeadlineMs(quotaCooldown) === c.until_at_ms &&
-          matchesVerifiedCooldown(verifiedCooldown, c.until_at_ms, quotaCooldown.correlated_at_ms)
-        ) {
-          return false;
-        }
-        return true;
+        return !clearedAt || now - clearedAt > 120_000;
       });
       return jsonResponse({ ...base, cooldowns });
     }
@@ -3470,30 +3514,33 @@ export async function interceptDemoRequest(
     ]);
     // Discard stale completion if the sandbox was reset while awaiting baseline data.
     if (loadState() !== state) return errorResponse('Sandbox was reset during verification', 'sandbox_reset', 409);
-    const matches = mergeAuthFiles(authBase ?? { files: [], total: 0 }, state).files.filter((file) => {
+    const matchTarget = (file: ManagementAuthFile) => {
       if (name && file.name !== name) return false;
       if (authIndex && file.auth_index !== authIndex) return false;
       return true;
-    });
-    if (matches.length !== 1) return errorResponse('auth file not found', 'not_found', 404);
+    };
+    let matches: ManagementAuthFile[];
+    if (authBase === null) {
+      // Baseline read failed: only resolve an unambiguous sandbox-created credential
+      // locally, and return a temporary read error instead of a misleading 404.
+      matches = mergeAuthFiles({ files: [], total: 0 }, state).files.filter(matchTarget);
+      if (matches.length !== 1) {
+        return errorResponse('Credential list is temporarily unavailable', 'cpa_unavailable', 503);
+      }
+    } else {
+      matches = mergeAuthFiles(authBase, state).files.filter(matchTarget);
+      if (matches.length !== 1) return errorResponse('auth file not found', 'not_found', 404);
+    }
     const resolved = matches[0];
     if (resolved.runtime_only) return errorResponse('OAuth recovery target or provider is invalid', 'invalid_oauth_target', 400);
     const prev = state.authFiles.recoveredNames[resolved.name];
     state.authFiles.recoveredNames[resolved.name] = { refreshedAt: prev?.refreshedAt ?? new Date().toISOString(), verified: true };
     if (resolved.auth_index) {
       const quotaItem = quotaBase?.quotas.find((q) => q.auth_index === resolved.auth_index);
-      const activeCooldown = quotaItem?.active_cooldown;
-      if (activeCooldown?.is_active && !isForceCooldownReason(activeCooldown.reason)) {
-        const untilAtMs = cooldownDeadlineMs(activeCooldown);
-        const correlatedAtMs = activeCooldown.correlated_at_ms;
-        if (untilAtMs !== undefined || correlatedAtMs !== undefined) {
-          state.quota.verifiedCooldowns = state.quota.verifiedCooldowns ?? {};
-          state.quota.verifiedCooldowns[resolved.auth_index] = {
-            verifiedAt: Date.now(),
-            ...(untilAtMs !== undefined ? { untilAtMs } : {}),
-            ...(correlatedAtMs !== undefined ? { correlatedAtMs } : {}),
-          };
-        }
+      const captured = captureSandboxVerifiedCooldown(quotaItem, quotaBase?.quotas);
+      if (captured) {
+        state.quota.verifiedCooldowns = state.quota.verifiedCooldowns ?? {};
+        state.quota.verifiedCooldowns[resolved.auth_index] = captured;
       }
     }
     recordSandboxAudit(state, 'auth_file.verify', 'auth_file', resolved.name);

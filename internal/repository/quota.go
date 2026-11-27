@@ -430,6 +430,34 @@ func (r *Repository) HasCooldownEvidence(ctx context.Context, authIndex string) 
 	return exists, err
 }
 
+// HasActiveForceCooldownEvidence reports whether an auth index currently has an
+// active credential-scoped force_cooldown row, so a credential-wide CPA reset
+// triggered by restored quota capacity does not lift an active force cooldown.
+func (r *Repository) HasActiveForceCooldownEvidence(ctx context.Context, authIndex string, nowMS int64) (bool, error) {
+	if r == nil || r.SQL() == nil {
+		return false, errors.New("repository is not initialized")
+	}
+	var exists bool
+	err := r.SQL().QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM error_events
+			WHERE auth_index = ?
+			  AND quota_exceeded = 1
+			  AND auth_quota_aggregate = 0
+			  AND (LOWER(COALESCE(code, '')) = 'force_cooldown' OR LOWER(COALESCE(quota_reason, '')) = 'force_cooldown')
+			  AND (
+				next_recover_at_ms > ?
+				OR next_retry_after_ms > ?
+				OR (COALESCE(next_recover_at_ms, 0) <= 0 AND COALESCE(next_retry_after_ms, 0) <= 0 AND timestamp_ms > ?)
+			  )
+		)
+	`, strings.TrimSpace(authIndex), nowMS, nowMS, nowMS-5*60*1000).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check active force cooldown evidence: %w", err)
+	}
+	return exists, nil
+}
+
 // ClearCooldownEvidence durably resets local quota_exceeded flags in error_events when cooldown is cleared.
 func (r *Repository) ClearCooldownEvidence(ctx context.Context, authIndex string) error {
 	if r == nil || r.SQL() == nil {
@@ -784,9 +812,22 @@ func laterInstantMS(left, right *int64) *int64 {
 
 // BatchExpiredCooldowns returns, per auth index, the latest recovery time of its stored
 // quota_exceeded evidence, but only when every such recovery time and retry time has already
-// passed. It has no lookback window, so a cooldown that expired days ago and was never cleared is
-// still reported. Rows already cleared (quota_exceeded = 0) are never returned.
+// passed and no independent model cooldown is still active. It has no lookback window, so a
+// cooldown that expired days ago and was never cleared is still reported. Rows already cleared
+// (quota_exceeded = 0) are never returned.
 func (r *Repository) BatchExpiredCooldowns(ctx context.Context, authIndexes []string, nowMS int64) (map[string]int64, error) {
+	return r.batchExpiredCooldowns(ctx, authIndexes, nowMS, true)
+}
+
+// BatchExpiredCredentialCooldowns returns auth indexes whose stored credential-scoped
+// cooldown evidence has expired, without vetoing credentials that still have an active
+// independent model cooldown. Used for local CPA reconciliation, which preserves
+// independent model cooldowns rather than issuing a credential-wide CPA reset.
+func (r *Repository) BatchExpiredCredentialCooldowns(ctx context.Context, authIndexes []string, nowMS int64) (map[string]int64, error) {
+	return r.batchExpiredCooldowns(ctx, authIndexes, nowMS, false)
+}
+
+func (r *Repository) batchExpiredCooldowns(ctx context.Context, authIndexes []string, nowMS int64, excludeActiveModels bool) (map[string]int64, error) {
 	result := make(map[string]int64)
 	if r == nil || r.SQL() == nil || len(authIndexes) == 0 {
 		return result, nil
@@ -801,11 +842,20 @@ func (r *Repository) BatchExpiredCooldowns(ctx context.Context, authIndexes []st
 		return result, nil
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(validIndexes)), ",")
-	args := make([]any, 0, len(validIndexes)+1)
+	args := make([]any, 0, len(validIndexes)+5)
 	for _, authIndex := range validIndexes {
 		args = append(args, authIndex)
 	}
-	args = append(args, nowMS, nowMS, nowMS, nowMS, nowMS-5*60*1000)
+	args = append(args, nowMS, nowMS)
+	modelVeto := ""
+	if excludeActiveModels {
+		args = append(args, nowMS, nowMS, nowMS-5*60*1000)
+		modelVeto = `
+		  AND NOT EXISTS (SELECT 1 FROM error_events model_event
+		    WHERE model_event.auth_index = error_events.auth_index AND model_event.model_quota_exceeded = 1
+		      AND (model_event.model_next_recover_at_ms > ? OR model_event.model_next_retry_after_ms > ?
+		        OR (COALESCE(model_event.model_next_recover_at_ms, 0) = 0 AND COALESCE(model_event.model_next_retry_after_ms, 0) = 0 AND model_event.timestamp_ms > ?)))`
+	}
 	// A newer cooldown that has not recovered yet keeps the credential blocked, even when an
 	// older one has already passed; so does a retry time still ahead.
 	query := fmt.Sprintf(`
@@ -816,12 +866,8 @@ func (r *Repository) BatchExpiredCooldowns(ctx context.Context, authIndexes []st
 		GROUP BY auth_index
 		HAVING MAX(COALESCE(next_recover_at_ms, 0)) > 0
 		  AND MAX(COALESCE(next_recover_at_ms, 0)) <= ?
-		  AND MAX(COALESCE(next_retry_after_ms, 0)) <= ?
-		  AND NOT EXISTS (SELECT 1 FROM error_events model_event
-		    WHERE model_event.auth_index = error_events.auth_index AND model_event.model_quota_exceeded = 1
-		      AND (model_event.model_next_recover_at_ms > ? OR model_event.model_next_retry_after_ms > ?
-		        OR (COALESCE(model_event.model_next_recover_at_ms, 0) = 0 AND COALESCE(model_event.model_next_retry_after_ms, 0) = 0 AND model_event.timestamp_ms > ?)))
-	`, placeholders)
+		  AND MAX(COALESCE(next_retry_after_ms, 0)) <= ?%s
+	`, placeholders, modelVeto)
 	rows, err := r.SQL().QueryContext(ctx, query, args...)
 	if err != nil {
 		return result, fmt.Errorf("query expired cooldowns: %w", err)

@@ -150,8 +150,12 @@ func (h *Handler) runQuotaAutoRefreshRound(ctx context.Context) (quotaAutoRefres
 		}
 		expiredCooldowns = expired
 		if hasSnapshotWatermark && snapshotMaxEventID > 0 {
+			reconcileCandidates, credErr := h.repo.BatchExpiredCredentialCooldowns(ctx, authIndexes, nowMS)
+			if credErr != nil && h.logger != nil {
+				h.logger.Warn("expired credential cooldown lookup failed", "error", credErr.Error())
+			}
 			var clearErr error
-			reconciledCleared, reconciledFailed, clearErr = h.operationsService().ReconcileExpiredCPACredentialCooldowns(ctx, filesResp.Files, expiredCooldowns, time.UnixMilli(nowMS), snapshotMaxEventID)
+			reconciledCleared, reconciledFailed, clearErr = h.operationsService().ReconcileExpiredCPACredentialCooldowns(ctx, filesResp.Files, reconcileCandidates, expiredCooldowns, time.UnixMilli(nowMS), snapshotMaxEventID)
 			if clearErr != nil && h.logger != nil {
 				h.logger.Warn("failed to clear expired cooldown evidence already lifted by CPA", "error", clearErr.Error())
 			}

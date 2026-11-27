@@ -623,8 +623,11 @@ describe('sandbox verify cooldown behavior', () => {
   const modelRetryMS = nowMS + 30_000;
   const futureMS = nowMS + 60_000;
   const windowResetMS = nowMS + 120_000;
+  let rebaseDeltaMS = 0;
   let activeQuotaDeadlineMS = futureMS;
   let activeQuotaReason = 'credential_quota';
+  let quotaErrText = '401 unauthorized';
+  let failAuthBaseline = false;
 
   const baselineAuthFiles = {
     total: 3,
@@ -677,17 +680,22 @@ describe('sandbox verify cooldown behavior', () => {
         provider: 'codex',
         disabled: false,
         status: 'cooldown',
-        observed_at_ms: nowMS - 10_000,
-        windows: [{ key: '5h', label: '5h', used_percent: 10, remaining_percent: 90, reset_at_ms: windowResetMS }],
-        active_cooldown: { is_active: true, reason: activeQuotaReason, recover_at_ms: activeQuotaDeadlineMS },
+        observed_at_ms: nowMS - 10_000 + rebaseDeltaMS,
+        windows: [{ key: '5h', label: '5h', used_percent: 10, remaining_percent: 90, reset_at_ms: windowResetMS + rebaseDeltaMS }],
+        active_cooldown: {
+          is_active: true,
+          reason: activeQuotaReason,
+          recover_at_ms: activeQuotaDeadlineMS + rebaseDeltaMS,
+          correlated_at_ms: nowMS - 5_000 + rebaseDeltaMS,
+        },
         model_cooldowns: [
-          { is_active: true, reason: 'quota', model: 'gpt-5-pro', recover_at_ms: modelRecoverMS, retry_at_ms: modelRetryMS },
+          { is_active: true, reason: 'quota', model: 'gpt-5-pro', recover_at_ms: modelRecoverMS + rebaseDeltaMS, retry_at_ms: modelRetryMS + rebaseDeltaMS },
         ],
         recommendation: { status: 'cooldown', priority: 'high', action: 'clear_cooldown', reason: activeQuotaReason },
         capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: false },
         quota_exceeded: true,
         quota_reason: activeQuotaReason,
-        next_recover_at_ms: activeQuotaDeadlineMS,
+        next_recover_at_ms: activeQuotaDeadlineMS + rebaseDeltaMS,
       },
       {
         auth_index: 'idx-force',
@@ -696,14 +704,14 @@ describe('sandbox verify cooldown behavior', () => {
         provider: 'codex',
         disabled: false,
         status: 'cooldown',
-        observed_at_ms: nowMS - 10_000,
-        windows: [{ key: '5h', label: '5h', used_percent: 10, remaining_percent: 90, reset_at_ms: windowResetMS }],
-        active_cooldown: { is_active: true, reason: 'force_cooldown', recover_at_ms: futureMS },
+        observed_at_ms: nowMS - 10_000 + rebaseDeltaMS,
+        windows: [{ key: '5h', label: '5h', used_percent: 10, remaining_percent: 90, reset_at_ms: windowResetMS + rebaseDeltaMS }],
+        active_cooldown: { is_active: true, reason: 'force_cooldown', recover_at_ms: futureMS + rebaseDeltaMS },
         recommendation: { status: 'cooldown', priority: 'high', action: 'clear_cooldown', reason: 'force_cooldown' },
         capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: false },
         quota_exceeded: true,
         quota_reason: 'force_cooldown',
-        next_recover_at_ms: futureMS,
+        next_recover_at_ms: futureMS + rebaseDeltaMS,
       },
       {
         auth_index: 'idx-err',
@@ -712,10 +720,10 @@ describe('sandbox verify cooldown behavior', () => {
         provider: 'codex',
         disabled: false,
         status: 'cooldown',
-        observed_at_ms: nowMS - 10_000,
-        windows: [{ key: '5h', label: '5h', used_percent: 10, remaining_percent: 90, reset_at_ms: windowResetMS }],
-        error: '401 unauthorized',
-        active_cooldown: { is_active: true, reason: 'credential_quota', recover_at_ms: futureMS },
+        observed_at_ms: nowMS - 10_000 + rebaseDeltaMS,
+        windows: [{ key: '5h', label: '5h', used_percent: 10, remaining_percent: 90, reset_at_ms: windowResetMS + rebaseDeltaMS }],
+        error: quotaErrText,
+        active_cooldown: { is_active: true, reason: 'credential_quota', recover_at_ms: futureMS + rebaseDeltaMS },
         recommendation: { status: 'cooldown', priority: 'high', action: 'clear_cooldown', reason: 'credential_quota' },
         capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: false },
         quota_exceeded: true,
@@ -738,6 +746,7 @@ describe('sandbox verify cooldown behavior', () => {
 
   const fetchBaseline = async (urlPath: string): Promise<Response> => {
     if (urlPath.startsWith('/management/auth-files')) {
+      if (failAuthBaseline) return new Response('{}', { status: 503 });
       return new Response(JSON.stringify(baselineAuthFiles), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     if (urlPath.startsWith('/management/quota')) {
@@ -811,24 +820,43 @@ describe('sandbox verify cooldown behavior', () => {
   assert.equal(quotaPayload.summary.warning_count, 1);
   assert.equal(quotaPayload.summary.attention_count, 3);
 
+  // Simulated live routing rests have no shared event identity with the captured quota
+  // baseline, so verification keeps them visible; explicit clear-cooldown still suppresses them.
   const routingRes = await interceptDemoRequest('/usage/routing', { method: 'GET' }, fetchBaseline);
   assert.equal(routingRes?.status, 200);
   const routingPayload = (await routingRes!.json()) as { cooldowns: Array<{ auth_index: string }> };
-  assert.deepEqual(routingPayload.cooldowns.map((c) => c.auth_index), ['idx-force']);
+  assert.deepEqual(routingPayload.cooldowns.map((c) => c.auth_index), ['idx-quota', 'idx-force']);
 
-  // Even with the exact same deadline, a later force_cooldown stays visible in both quota and routing.
+  // Cloudflare Worker timestamp rebasing shifts every *_at_ms uniformly: verified cooldown stays cleared.
+  rebaseDeltaMS = 5_000;
+  const rebasedQuotaRes = await interceptDemoRequest('/management/quota', { method: 'GET' }, fetchBaseline);
+  const rebasedQuota = (await rebasedQuotaRes!.json()) as {
+    quotas: Array<{ auth_index: string; status: string; active_cooldown?: { is_active: boolean } }>;
+  };
+  assert.equal(rebasedQuota.quotas.find((q) => q.auth_index === 'idx-quota')?.status, 'healthy');
+  assert.equal(rebasedQuota.quotas.find((q) => q.auth_index === 'idx-quota')?.active_cooldown, undefined);
+  rebaseDeltaMS = 0;
+
+  // Substring inside another token must not be misclassified as an authentication failure.
+  quotaErrText = 'proxy_unauthorized_banner timeout';
+  const nonAuthErrRes = await interceptDemoRequest('/management/quota', { method: 'GET' }, fetchBaseline);
+  const nonAuthErrPayload = (await nonAuthErrRes!.json()) as {
+    quotas: Array<{ auth_index: string; recommendation: { status: string; action: string } }>;
+  };
+  assert.equal(nonAuthErrPayload.quotas.find((q) => q.auth_index === 'idx-err')?.recommendation.status, 'warning');
+  assert.equal(nonAuthErrPayload.quotas.find((q) => q.auth_index === 'idx-err')?.recommendation.action, 'refresh');
+  quotaErrText = '401 unauthorized';
+
+  // Even with the exact same deadline, a later force_cooldown stays visible in quota.
   activeQuotaReason = 'force_cooldown';
   const sameDeadlineForceQuotaRes = await interceptDemoRequest('/management/quota', { method: 'GET' }, fetchBaseline);
   const sameDeadlineForceQuota = (await sameDeadlineForceQuotaRes!.json()) as {
     quotas: Array<{ auth_index: string; status: string; active_cooldown?: { is_active: boolean } }>;
   };
   assert.equal(sameDeadlineForceQuota.quotas.find((q) => q.auth_index === 'idx-quota')?.status, 'cooldown');
-  const sameDeadlineForceRoutingRes = await interceptDemoRequest('/usage/routing', { method: 'GET' }, fetchBaseline);
-  const sameDeadlineForceRouting = (await sameDeadlineForceRoutingRes!.json()) as { cooldowns: Array<{ auth_index: string }> };
-  assert.deepEqual(sameDeadlineForceRouting.cooldowns.map((c) => c.auth_index), ['idx-quota', 'idx-force']);
   activeQuotaReason = 'credential_quota';
 
-  // A newer baseline cooldown with a different deadline surfaces again in both quota and routing views.
+  // A newer baseline cooldown with a different deadline offset surfaces again in quota.
   activeQuotaDeadlineMS = futureMS + 30_000;
   const newerQuotaRes = await interceptDemoRequest('/management/quota', { method: 'GET' }, fetchBaseline);
   const newerQuotaPayload = (await newerQuotaRes!.json()) as {
@@ -837,19 +865,33 @@ describe('sandbox verify cooldown behavior', () => {
   const relapsedItem = newerQuotaPayload.quotas.find((q) => q.auth_index === 'idx-quota');
   assert.equal(relapsedItem?.status, 'cooldown');
   assert.equal(relapsedItem?.active_cooldown?.is_active, true);
+  activeQuotaDeadlineMS = futureMS;
 
-  const newerRoutingRes = await interceptDemoRequest('/usage/routing', { method: 'GET' }, fetchBaseline);
-  const newerRoutingPayload = (await newerRoutingRes!.json()) as { cooldowns: Array<{ auth_index: string }> };
-  assert.deepEqual(newerRoutingPayload.cooldowns.map((c) => c.auth_index), ['idx-quota', 'idx-force']);
+  // Unavailable auth-files baseline returns temporary 503 instead of misleading 404.
+  resetDemoSandbox();
+  failAuthBaseline = true;
+  const unavailableRes = await interceptDemoRequest(
+    '/management/auth-files/verify',
+    { method: 'POST', body: JSON.stringify({ auth_index: 'idx-quota' }) },
+    fetchBaseline,
+  );
+  assert.equal(unavailableRes?.status, 503);
+  failAuthBaseline = false;
 
-  // Resetting the sandbox while verify awaits cold baseline discards the stale completion with 409.
+  // Resetting the sandbox while verify awaits cold baseline discards the stale completion with 409
+  // and does not repopulate baselineCache with the pre-reset response for the next verification.
   resetDemoSandbox();
   let releaseAuthBaseline!: () => void;
+  let authFetchCalls = 0;
   const coldFetch = async (urlPath: string): Promise<Response> => {
     if (urlPath.startsWith('/management/auth-files')) {
-      await new Promise<void>((resolve) => {
-        releaseAuthBaseline = resolve;
-      });
+      authFetchCalls += 1;
+      if (authFetchCalls === 1) {
+        await new Promise<void>((resolve) => {
+          releaseAuthBaseline = resolve;
+        });
+        return new Response(JSON.stringify({ total: 0, files: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
     }
     return fetchBaseline(urlPath);
   };
@@ -865,5 +907,13 @@ describe('sandbox verify cooldown behavior', () => {
   const staleRes = await pendingVerify;
   assert.equal(staleRes?.status, 409);
   assert.equal(countDemoSandboxChanges(), 0);
+  // Next verify must re-fetch fresh baseline (200) rather than reading the stale empty pre-reset response (404).
+  const retryRes = await interceptDemoRequest(
+    '/management/auth-files/verify',
+    { method: 'POST', body: JSON.stringify({ auth_index: 'idx-quota' }) },
+    coldFetch,
+  );
+  assert.equal(retryRes?.status, 200);
+  assert.equal(authFetchCalls, 2);
   });
 });
