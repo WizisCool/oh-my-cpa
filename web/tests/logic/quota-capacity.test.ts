@@ -16,6 +16,7 @@ import {
 import {
   formatQuotaMetric,
   isCodexResetCreditEligible,
+  nextCodexResetCreditExpiryDelayMS,
   orderCodexResetCredits,
   quotaPayloadSummary,
   resolveSelectedCodexResetCredit,
@@ -177,6 +178,38 @@ test('resolveSelectedCodexResetCredit defaults to earliest eligible card, preser
   assert.equal(noneEligible.defaultCredit, null);
   assert.equal(noneEligible.selectedCredit, null);
   assert.equal(noneEligible.eligibleCount, 0);
+
+  // Computes the earliest upcoming eligible expiry delay, ignoring expired/invalid/undated entries and capping long waits.
+  assert.equal(nextCodexResetCreditExpiryDelayMS(undefined, nowMS), null);
+  assert.equal(
+    nextCodexResetCreditExpiryDelayMS(
+      [
+        { id: 'c-expired', status: 'available', expires_at_ms: nowMS },
+        { id: '  ', status: 'available', expires_at_ms: nowMS + 500 },
+        { id: 'c-used', status: 'used', expires_at_ms: nowMS + 500 },
+        { id: 'c-undated', status: 'available' },
+      ],
+      nowMS,
+    ),
+    null,
+  );
+  assert.equal(
+    nextCodexResetCreditExpiryDelayMS(
+      [
+        { id: 'c-later', status: 'available', expires_at_ms: nowMS + 3_600_000 },
+        { id: 'c-soon', status: 'available', expires_at_ms: nowMS + 5_000 },
+      ],
+      nowMS,
+    ),
+    5_000,
+  );
+  assert.equal(
+    nextCodexResetCreditExpiryDelayMS(
+      [{ id: 'c-month', status: 'available', expires_at_ms: nowMS + 30 * 24 * 3_600_000 }],
+      nowMS,
+    ),
+    60_000,
+  );
 });
 
 test('subscription cycle helpers require verified active start and expiry boundaries', () => {

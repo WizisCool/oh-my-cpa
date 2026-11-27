@@ -517,10 +517,8 @@ export function CredentialMenu({ record, facts, actions, onRename, hasRefresh = 
   hasRefresh?: boolean;
 }) {
   const t = useT();
-  // The redemption dialog reads the credits as they stood when it opened, so a background tick
-  // does not reshuffle the choice under the pointer.
-  const [redeemOpenedAtMS, setRedeemOpenedAtMS] = React.useState<number | null>(null);
-  const run = useRunAction(record, actions, onRename, () => setRedeemOpenedAtMS(Date.now()));
+  const [isRedeemOpen, setIsRedeemOpen] = React.useState(false);
+  const run = useRunAction(record, actions, onRename, () => setIsRedeemOpen(true));
   const list = actionList(record, facts, t, hasRefresh);
   const [isOpen, setIsOpen] = React.useState(false);
   return (
@@ -559,14 +557,13 @@ export function CredentialMenu({ record, facts, actions, onRename, hasRefresh = 
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-      {(record.canRedeemCredit || redeemOpenedAtMS !== null) && (
+      {(record.canRedeemCredit || isRedeemOpen) && (
         <RedeemResetCreditDialog
-          open={redeemOpenedAtMS !== null}
+          open={isRedeemOpen}
           credits={record.quota?.reset_credits}
           targetName={maskedCredentialLabel(record)}
-          nowMS={redeemOpenedAtMS ?? Date.now()}
           onConfirm={(creditId) => actions.onRedeemCredit(record, creditId)}
-          onClose={() => setRedeemOpenedAtMS(null)}
+          onClose={() => setIsRedeemOpen(false)}
         />
       )}
     </>

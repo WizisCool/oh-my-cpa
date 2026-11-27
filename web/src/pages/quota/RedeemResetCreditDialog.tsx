@@ -7,6 +7,7 @@ import type { CodexResetCredit, CodexResetCreditsInfo } from '../../types/quota'
 import {
   formatCodexResetCreditExpiry,
   isCodexResetCreditEligible,
+  nextCodexResetCreditExpiryDelayMS,
   orderCodexResetCredits,
 } from './quotaFormat';
 import styles from './RedeemResetCreditDialog.module.css';
@@ -16,7 +17,11 @@ export interface RedeemResetCreditDialogProps {
   credits?: CodexResetCreditsInfo;
   /** The credential the credit is spent for, named as the page names it (already masked). */
   targetName: string;
-  nowMS: number;
+  /**
+   * Optional caller-owned timestamp for synchronized or deterministic views. When omitted, the
+   * dialog runs a live eligibility clock while open and rechecks `Date.now()` at confirmation.
+   */
+  nowMS?: number;
   /** Receives the chosen credit ID, or `undefined` when upstream listed no credits to choose from. */
   onConfirm: (creditId?: string) => unknown | Promise<unknown>;
   onClose: () => void;
@@ -31,26 +36,34 @@ export interface RedeemResetCreditDialogProps {
 export function RedeemResetCreditDialog({ open, credits, targetName, nowMS, onConfirm, onClose }: RedeemResetCreditDialogProps) {
   const t = useT();
   const optionRefs = React.useRef(new Map<string, HTMLButtonElement>());
+  const isLiveClock = nowMS === undefined;
+
+  const [wasOpen, setWasOpen] = React.useState(open);
+  const [liveNowMS, setLiveNowMS] = React.useState(() => nowMS ?? Date.now());
+  const isOpening = open && !wasOpen;
+  // On open, sample the current clock synchronously so the opening selection and eligibility never
+  // latch against a stale timestamp left over from mount or an earlier open.
+  const effectiveNowMS = isLiveClock ? (isOpening ? Date.now() : liveNowMS) : nowMS;
 
   // Card numbers follow the drawer's list, expired entries included, so "Credit #3" names the
   // same card in both places.
-  const listed = orderCodexResetCredits(credits?.credits);
+  const listed = React.useMemo(() => orderCodexResetCredits(credits?.credits), [credits?.credits]);
   const numbered = listed.map((credit, index) => ({ credit, number: index + 1 }));
-  const eligible = numbered.filter(({ credit }) => isCodexResetCreditEligible(credit, nowMS));
+  const eligible = numbered.filter(({ credit }) => isCodexResetCreditEligible(credit, effectiveNowMS));
   const defaultId = eligible[0]?.credit.id.trim() ?? '';
   const isUnlisted = listed.length === 0;
 
   // Latch the opening default and unlisted mode on first open mount and every reopen so a
-  // background quota poll removing or expiring credits cannot silently switch the target credit
-  // or downgrade an explicit selection into automatic backend selection.
+  // background quota poll or clock advance removing/expiring credits cannot silently switch the
+  // target credit or downgrade an explicit selection into automatic backend selection.
   const [selectedId, setSelectedId] = React.useState<string | null>(() => (open ? (defaultId || null) : null));
   const [isOpenedSingle, setIsOpenedSingle] = React.useState(() => open && eligible.length === 1);
   const [isOpenedUnlisted, setIsOpenedUnlisted] = React.useState(() => open && isUnlisted);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [wasOpen, setWasOpen] = React.useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
+      if (isLiveClock) setLiveNowMS(effectiveNowMS);
       setSelectedId(defaultId || null);
       setIsOpenedSingle(eligible.length === 1);
       setIsOpenedUnlisted(isUnlisted);
@@ -65,10 +78,63 @@ export function RedeemResetCreditDialog({ open, credits, targetName, nowMS, onCo
   const isSelectionUnavailable = !isAutoMode && Boolean(activeId) && !selectedCredit && eligible.length > 0;
   const canConfirm = !isSubmitting && (isAutoMode ? (credits?.available_count ?? 0) > 0 : Boolean(selectedCredit));
 
-  const pick = (credit: CodexResetCredit) => {
-    if (isSubmitting) return;
+  React.useEffect(() => {
+    if (!open || !isLiveClock || isSubmitting) return undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const clearTimer = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+    };
+
+    const scheduleNext = (sampleNowMS: number) => {
+      clearTimer();
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const delayMS = nextCodexResetCreditExpiryDelayMS(listed, sampleNowMS);
+      if (delayMS === null) return;
+      timer = setTimeout(() => {
+        timer = undefined;
+        const next = Date.now();
+        if (next === effectiveNowMS) scheduleNext(next);
+        else setLiveNowMS(next);
+      }, delayMS);
+    };
+
+    const onVisibility = () => {
+      clearTimer();
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const next = Date.now();
+      if (next === effectiveNowMS) scheduleNext(next);
+      else setLiveNowMS(next);
+    };
+
+    const current = Date.now();
+    if (listed.some((credit) => isCodexResetCreditEligible(credit, effectiveNowMS) && !isCodexResetCreditEligible(credit, current))) {
+      setLiveNowMS(current);
+    } else {
+      scheduleNext(current);
+    }
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearTimer();
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [open, isLiveClock, isSubmitting, listed, effectiveNowMS]);
+
+  const pick = (credit: CodexResetCredit): boolean => {
+    if (isSubmitting) return false;
+    if (isLiveClock) {
+      const current = Date.now();
+      if (!isCodexResetCreditEligible(credit, current)) {
+        setLiveNowMS(current);
+        return false;
+      }
+    }
     setSelectedId(credit.id.trim());
     setIsOpenedSingle(false);
+    return true;
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, position: number) => {
@@ -94,15 +160,26 @@ export function RedeemResetCreditDialog({ open, credits, targetName, nowMS, onCo
     event.preventDefault();
     const target = eligible[next]?.credit;
     if (!target) return;
-    pick(target);
-    optionRefs.current.get(target.id.trim())?.focus();
+    if (pick(target)) optionRefs.current.get(target.id.trim())?.focus();
   };
 
   const confirm = async () => {
     if (!canConfirm) return;
+    let confirmedCreditId: string | undefined = isAutoMode ? undefined : selectedCredit?.id.trim();
+    if (isLiveClock && !isAutoMode) {
+      const confirmNowMS = Date.now();
+      const confirmedCredit = activeId
+        ? listed.find((credit) => credit.id.trim() === activeId && isCodexResetCreditEligible(credit, confirmNowMS)) ?? null
+        : null;
+      if (!confirmedCredit) {
+        setLiveNowMS(confirmNowMS);
+        return;
+      }
+      confirmedCreditId = confirmedCredit.id.trim();
+    }
     setIsSubmitting(true);
     try {
-      await onConfirm(isAutoMode ? undefined : selectedCredit?.id.trim());
+      await onConfirm(confirmedCreditId);
     } finally {
       setIsSubmitting(false);
       onClose();
@@ -110,7 +187,7 @@ export function RedeemResetCreditDialog({ open, credits, targetName, nowMS, onCo
   };
 
   const renderFacts = (credit: CodexResetCredit, number: number, isSoonest: boolean) => {
-    const expiry = formatCodexResetCreditExpiry(credit, nowMS, t);
+    const expiry = formatCodexResetCreditExpiry(credit, effectiveNowMS, t);
     return (
       <>
         <span className={styles['option-name']}>
