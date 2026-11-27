@@ -116,7 +116,9 @@ type Handler struct {
 	quotaAutoRefresh quotaAutoRefreshState
 	// quotaReadGates paces the providers that rate-limit quota reads; see quota_read_gate.go.
 	quotaReadGates quotaReadGates
-	warmupRuntime  warmupRuntime
+	// claudeResetGrantsDelay overrides quota.DefaultClaudeResetGrantsDelay; tests set it to 0.
+	claudeResetGrantsDelay *time.Duration
+	warmupRuntime          warmupRuntime
 	// providerWrites serialises whole-list provider configuration writes; see
 	// management_provider_writes.go for why one global permit is required.
 	providerWrites providerWriteGate

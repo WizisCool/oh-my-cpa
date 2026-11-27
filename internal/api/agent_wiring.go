@@ -15,7 +15,6 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/gateway"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
-	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
@@ -244,7 +243,7 @@ func (h *Handler) operationsService() *operations.Service {
 				h.agent.lastRefresh[authIndex] = time.Now()
 				h.agent.refreshMu.Unlock()
 
-				value, err := h.refreshQuotaReading(ctx, quota.NewService(client), file, h.loadPriorNormalizedQuota(ctx, authIndex))
+				value, err := h.refreshQuotaReading(ctx, h.newQuotaService(client), file, h.loadPriorNormalizedQuota(ctx, authIndex))
 				if err != nil {
 					return operations.Quota{}, err
 				}

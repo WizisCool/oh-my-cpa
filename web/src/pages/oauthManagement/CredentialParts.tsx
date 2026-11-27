@@ -49,7 +49,17 @@ import {
 import { useT, type TFunc } from '../../i18n';
 import { maskAccount } from '../../utils/maskAccount';
 import { formatGatewayTimestamp } from '../../utils/time';
-import { formatObservedAgo, quotaPlanLabel } from '../quota/quotaFormat';
+import {
+  claudeResetGrantTotalLeft,
+  formatCodexResetCreditExpiry,
+  formatObservedAgo,
+  formatResetReadError,
+  formatTimeWithCountdown,
+  orderClaudeResetGrants,
+  orderCodexResetCredits,
+  quotaPlanLabel,
+} from '../quota/quotaFormat';
+import type { TipCard, TipRow } from '../../components/common/tipCard';
 import { Switch } from '../../components/common/Switch';
 import { Tag } from '../../components/common/Tag';
 import { outlivedResetLine, refreshFailureLine } from '../quota/quotaAttempt';
@@ -110,6 +120,7 @@ export interface CredentialFacts {
   quotaLines: QuotaLine[];
   siwc?: SIWCBadgeState;
   credits: number;
+  resetReadError: string | null;
   canRename: boolean;
   isBusy: boolean;
   isFileBusy: boolean;
@@ -145,7 +156,10 @@ export function credentialFacts(record: OAuthWorkspaceRecord, actions: Credentia
     warning: hasAuthFileStatusWarning(file) && file.status_message ? file.status_message : undefined,
     quotaLines: quotaLinesOf(record),
     siwc: actions.siwcBadge(record),
-    credits: quota?.reset_credits?.available_count ?? 0,
+    credits: (quota?.reset_credits?.available_count ?? 0) > 0
+      ? (quota?.reset_credits?.available_count ?? 0)
+      : claudeResetGrantTotalLeft(quota?.reset_grants, nowMS),
+    resetReadError: quota?.reset_credits?.error?.trim() || quota?.reset_grants_error?.trim() || null,
     canRename: !file.runtime_only && record.hasUniqueFileName,
     isBusy: actions.isBusy(record),
     isFileBusy: actions.isFileBusy?.(record) ?? actions.isBusy(record),
@@ -237,14 +251,71 @@ export function CredentialName({ record, facts, isRenaming, onRename, onRenamed,
   );
 }
 
+function buildResetBadgeTipCard(record: OAuthWorkspaceRecord, nowMS: number, t: TFunc): TipCard | null {
+  const quota = record.quota;
+  if (!quota) return null;
+  const codexCredits = quota.reset_credits;
+  if ((codexCredits?.available_count ?? 0) > 0 && codexCredits) {
+    const ordered = orderCodexResetCredits(codexCredits.credits);
+    const rows: TipRow[] = ordered.length > 0
+      ? ordered.map((credit, index): TipRow => {
+        const expiry = formatCodexResetCreditExpiry(credit, nowMS, t);
+        const value = expiry.isExpired
+          ? expiry.primary
+          : credit.expires_at_ms
+            ? formatTimeWithCountdown(credit.expires_at_ms, nowMS, t)
+            : '—';
+        return {
+          label: t('quota.reset_credit_item', { n: index + 1 }),
+          value,
+          tone: expiry.isExpired ? 'danger' : undefined,
+        };
+      })
+      : [{ label: t('quota.reset_credits_title'), value: String(codexCredits.available_count) }];
+    const notes: string[] = [];
+    if (codexCredits.applicable_available_count > 0 && codexCredits.applicable_available_count !== codexCredits.available_count) {
+      notes.push(t('omc.quota_credit_applicable', { n: codexCredits.applicable_available_count }));
+    }
+    const errText = formatResetReadError(codexCredits.error, t);
+    if (errText) notes.push(errText);
+    return { heading: t('quota.reset_credits_title'), rows, notes: notes.length > 0 ? notes : undefined };
+  }
+
+  const liveGrants = orderClaudeResetGrants(quota.reset_grants, nowMS);
+  if (liveGrants.length > 0) {
+    const rows: TipRow[] = liveGrants.map((grant) => ({
+      label: grant.label || t('quota.reset_grant_untitled'),
+      value: grant.ends_at_ms
+        ? t('quota.reset_grant_summary_until', {
+          left: grant.resets_left,
+          total: grant.resets_total,
+          when: formatTimeWithCountdown(grant.ends_at_ms, nowMS, t),
+        })
+        : t('quota.reset_grant_summary', { left: grant.resets_left, total: grant.resets_total }),
+    }));
+    const errText = formatResetReadError(quota.reset_grants_error, t);
+    return { heading: t('quota.resets_title'), rows, notes: errText ? [errText] : undefined };
+  }
+  return null;
+}
+
 /** The plan, routing priority and banked resets: the facts that sit beside a name. */
-export function CredentialTraits({ record, facts, actions }: { record: OAuthWorkspaceRecord; facts: CredentialFacts; actions: CredentialActions }) {
+export function CredentialTraits({ record, facts, actions, nowMS, showResetError = true }: {
+  record: OAuthWorkspaceRecord;
+  facts: CredentialFacts;
+  actions: CredentialActions;
+  nowMS: number;
+  /** Card view renders reset-read failures inline below the quota tracks instead of repeating them here. */
+  showResetError?: boolean;
+}) {
   const t = useT();
   const plan = record.quota?.plan;
   const planLabel = quotaPlanLabel(plan, t);
+  const resetErrorText = showResetError ? formatResetReadError(facts.resetReadError ?? undefined, t) : null;
   const hasTraits = Boolean(planLabel) || record.file.priority !== undefined || (record.file.weight ?? 1) !== 1
-    || plan?.subscription_active === false || facts.credits > 0;
+    || plan?.subscription_active === false || facts.credits > 0 || Boolean(resetErrorText);
   if (!hasTraits) return null;
+  const resetCard = facts.credits > 0 ? buildResetBadgeTipCard(record, nowMS, t) : null;
   return (
     <div className={styles.traits}>
       {/* The plan says what the account can do, so it leads what is said about it. */}
@@ -254,7 +325,7 @@ export function CredentialTraits({ record, facts, actions }: { record: OAuthWork
       )}
       <PriorityBadge priority={record.file.priority} weight={record.file.weight} />
       {facts.credits > 0 && (
-        <Tooltip title={t('omc.quota_credit_available_hint')}>
+        <Tooltip card={resetCard ?? undefined} title={resetCard ? undefined : t('omc.quota_credit_available_hint')}>
           <button
             type="button"
             className={clsx('tag is-small is-accent', styles.credits)}
@@ -267,6 +338,23 @@ export function CredentialTraits({ record, facts, actions }: { record: OAuthWork
           >
             <RollbackOutlined aria-hidden="true" />
             {t('omc.reset_credits_count', { n: facts.credits })}
+          </button>
+        </Tooltip>
+      )}
+      {facts.credits === 0 && resetErrorText && (
+        <Tooltip title={resetErrorText}>
+          <button
+            type="button"
+            className={clsx('tag is-small is-warn', styles['credits-warn'])}
+            data-quota-reset-error="true"
+            onClick={(event) => {
+              event.stopPropagation();
+              actions.onOpen(record, 'overview');
+            }}
+            aria-label={`${t('quota.reset_read_failed_short')}: ${record.file.name}`}
+          >
+            <WarningOutlined aria-hidden="true" />
+            {t('quota.reset_read_failed_short')}
           </button>
         </Tooltip>
       )}

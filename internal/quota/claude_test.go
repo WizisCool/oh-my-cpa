@@ -27,6 +27,20 @@ func TestParseClaudeResetGrantsRejectsMalformedBlock(t *testing.T) {
 	}
 }
 
+func TestParseClaudeResetGrantsAcceptsEmptyEndsAtString(t *testing.T) {
+	raw := `{"cedar_ember":{"eligible":true,"grants":[
+		{"id":"grant-empty","label":"Launch","resets_total":2,"resets_left":1,"ends_at":""},
+		{"id":"grant-space","label":"Bonus","resets_total":1,"resets_left":1,"ends_at":"   "}
+	]}}`
+	grants := ParseClaudeResetGrants([]byte(raw))
+	if len(grants) != 2 {
+		t.Fatalf("ParseClaudeResetGrants = %+v, want 2 grants", grants)
+	}
+	if grants[0].EndsAtMS != nil || grants[1].EndsAtMS != nil {
+		t.Fatalf("empty ends_at should leave EndsAtMS nil: %+v", grants)
+	}
+}
+
 func TestParseClaudeProfilePlans(t *testing.T) {
 	for _, testCase := range []struct {
 		name      string

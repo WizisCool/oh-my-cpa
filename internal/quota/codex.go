@@ -57,10 +57,10 @@ type RawCodexResetCredit struct {
 	Status       string `json:"status"`
 	ResetType    string `json:"reset_type"`
 	ResetTypeAlt string `json:"resetType"`
-	GrantedAt    string `json:"grantedAt"`
-	GrantedAtAlt string `json:"granted_at"`
-	ExpiresAt    string `json:"expiresAt"`
-	ExpiresAtAlt string `json:"expires_at"`
+	GrantedAt    any    `json:"granted_at"`
+	GrantedAtAlt any    `json:"grantedAt"`
+	ExpiresAt    any    `json:"expires_at"`
+	ExpiresAtAlt any    `json:"expiresAt"`
 }
 
 type RawCodexResetCreditsSummary struct {
@@ -681,14 +681,12 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 // is "available", so consumed/expired credits never inflate the reset count.
 func parseCodexResetCreditsSummary(resetCreditsRaw *RawCodexResetCreditsSummary) *CodexResetCreditsInfo {
 	availVal, hasAvailableCount := toFloat(resetCreditsRaw.AvailableCount)
-	if availVal == 0 {
-		var hasAlternate bool
-		availVal, hasAlternate = toFloat(resetCreditsRaw.AvailableCountAlt)
-		hasAvailableCount = hasAvailableCount || hasAlternate
+	if !hasAvailableCount {
+		availVal, hasAvailableCount = toFloat(resetCreditsRaw.AvailableCountAlt)
 	}
 
-	appVal, _ := toFloat(resetCreditsRaw.ApplicableAvailableCount)
-	if appVal == 0 {
+	appVal, hasApplicableCount := toFloat(resetCreditsRaw.ApplicableAvailableCount)
+	if !hasApplicableCount {
 		appVal, _ = toFloat(resetCreditsRaw.ApplicableCountAlt)
 	}
 
@@ -702,7 +700,13 @@ func parseCodexResetCreditsSummary(resetCreditsRaw *RawCodexResetCreditsSummary)
 			grantedMS = &g
 		}
 		var expMS *int64
-		if e, ok := parseCreditInstantToMS(creditInstant(rc.ExpiresAt, rc.ExpiresAtAlt)); ok {
+		if rawExpires := creditInstant(rc.ExpiresAt, rc.ExpiresAtAlt); isPresentCreditInstant(rawExpires) {
+			e, ok := parseCreditInstantToMS(rawExpires)
+			if !ok {
+				// Exclude credits whose supplied expiry cannot be parsed so redemption
+				// cannot treat a malformed expiry as an undated, never-expiring credit.
+				continue
+			}
 			expMS = &e
 		}
 		credits = append(credits, CodexResetCredit{
@@ -713,8 +717,13 @@ func parseCodexResetCreditsSummary(resetCreditsRaw *RawCodexResetCreditsSummary)
 		})
 	}
 
+	availableCount := int(availVal)
+	if !hasAvailableCount && len(credits) > 0 {
+		availableCount = len(credits)
+	}
+
 	return &CodexResetCreditsInfo{
-		AvailableCount:           int(availVal),
+		AvailableCount:           availableCount,
 		ApplicableAvailableCount: int(appVal),
 		Credits:                  credits,
 		hasAvailableCount:        hasAvailableCount,
@@ -735,32 +744,92 @@ func isRedeemableCodexCredit(rc RawCodexResetCredit) bool {
 }
 
 // creditInstant prefers snake_case (current upstream) and falls back to the
-// legacy camelCase spelling; values are epoch seconds or milliseconds.
-func creditInstant(primary, alt string) string {
-	if strings.TrimSpace(primary) != "" {
+// legacy camelCase spelling; values are ISO-8601 strings or Unix epochs in
+// seconds or milliseconds.
+func creditInstant(primary, alt any) any {
+	if isPresentCreditInstant(primary) {
 		return primary
 	}
 	return alt
 }
 
+func isPresentCreditInstant(value any) bool {
+	if value == nil {
+		return false
+	}
+	if s, ok := value.(string); ok {
+		return strings.TrimSpace(s) != ""
+	}
+	return true
+}
+
 // parseCreditInstantToMS parses a credit timestamp the way CPAMC does: the
-// upstream field may be ISO-8601 or a Unix epoch in seconds or milliseconds,
-// disambiguated by magnitude.
-func parseCreditInstantToMS(value string) (int64, bool) {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
+// upstream field may be ISO-8601 or a Unix epoch (string or number) in seconds
+// or milliseconds, disambiguated by magnitude.
+func parseCreditInstantToMS(value any) (int64, bool) {
+	if value == nil {
 		return 0, false
 	}
-	if t, err := time.Parse(time.RFC3339, trimmed); err == nil {
-		return t.UnixMilli(), true
-	}
-	if ms, ok := toInt64(trimmed); ok && ms > 0 {
-		if ms < 100000000000 {
-			ms *= 1000
+	switch v := value.(type) {
+	case string:
+		trimmed := strings.TrimSpace(v)
+		if trimmed == "" {
+			return 0, false
 		}
-		return ms, true
+		for _, layout := range []string{time.RFC3339, time.RFC3339Nano} {
+			if t, err := time.Parse(layout, trimmed); err == nil {
+				return t.UnixMilli(), true
+			}
+		}
+		if ms, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
+			return normalizeEpochToMS(ms)
+		}
+		if f, err := strconv.ParseFloat(trimmed, 64); err == nil {
+			return normalizeFloatEpochToMS(f)
+		}
+		return 0, false
+	case int64:
+		return normalizeEpochToMS(v)
+	case int:
+		return normalizeEpochToMS(int64(v))
+	case float64:
+		return normalizeFloatEpochToMS(v)
+	case float32:
+		return normalizeFloatEpochToMS(float64(v))
+	case json.Number:
+		if ms, err := v.Int64(); err == nil {
+			return normalizeEpochToMS(ms)
+		}
+		if f, err := v.Float64(); err == nil {
+			return normalizeFloatEpochToMS(f)
+		}
+		return 0, false
+	default:
+		return 0, false
 	}
-	return 0, false
+}
+
+func normalizeEpochToMS(ms int64) (int64, bool) {
+	if ms <= 0 {
+		return 0, false
+	}
+	if ms < 100000000000 {
+		ms *= 1000
+	}
+	return ms, true
+}
+
+func normalizeFloatEpochToMS(value float64) (int64, bool) {
+	if math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 {
+		return 0, false
+	}
+	if value < 100000000000 {
+		value *= 1000
+	}
+	if value >= maxInt64Exclusive {
+		return 0, false
+	}
+	return int64(math.Round(value)), true
 }
 
 // ParseCodexResetCreditsPayload parses the dedicated rate-limit reset credits

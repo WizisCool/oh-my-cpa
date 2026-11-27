@@ -203,6 +203,16 @@ type QuotaRefreshAttemptDTO struct {
 	Error         string `json:"error,omitempty"`
 }
 
+// newQuotaService constructs a quota.Service bound to this handler's clock and
+// supplementary read pacing.
+func (h *Handler) newQuotaService(client quota.CPAClient) *quota.Service {
+	svc := quota.NewServiceWithClock(client, h.now)
+	if h.claudeResetGrantsDelay != nil {
+		svc.WithClaudeResetGrantsDelay(*h.claudeResetGrantsDelay)
+	}
+	return svc
+}
+
 // refreshQuotaReading runs one credential read and records the attempt before returning.
 //
 // It is the single door to quota.Service.RefreshCredentialQuota for every surface that can read
@@ -228,7 +238,13 @@ func (h *Handler) refreshQuotaReadingAs(ctx context.Context, svc *quota.Service,
 	// successful one, and completion order would let it report the credential as broken.
 	attemptedAtMS := svc.Now().UnixMilli()
 	refreshed, err := h.readThroughGate(ctx, svc, file, prior, isAutomatic, func(options quota.ReadOptions) (*quota.NormalizedQuota, error) {
-		return svc.RefreshCredentialQuotaWith(ctx, file, prior, options)
+		reading, err := svc.RefreshCredentialQuotaWith(ctx, file, prior, options)
+		if err == nil && reading != nil && options.IsClaudeResetGrantsFresh {
+			// Sync from the gate while the provider slot is held so a concurrent read that
+			// finished during the wait cannot leave a stale grants error on this response.
+			reading.ResetGrantsError = h.quotaReadGates.claudeResetGrantsError(strings.TrimSpace(file.AuthIndex))
+		}
+		return reading, err
 	})
 	if refreshed != nil && refreshed.IsDeferred {
 		return refreshed, err
@@ -410,7 +426,7 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 			return
 		}
 		prior := h.loadPriorNormalizedQuota(ctx, targetIndex)
-		svc := quota.NewService(client)
+		svc := h.newQuotaService(client)
 		refreshed, err := h.refreshQuotaReading(ctx, svc, file, prior)
 		if err != nil {
 			writeError(writer, http.StatusBadGateway, fmt.Sprintf("refresh quota failed: %v", err))
@@ -463,7 +479,7 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 			}
 		}
 	}
-	svc := quota.NewService(client)
+	svc := h.newQuotaService(client)
 	readings := make(chan *quota.NormalizedQuota)
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 4)
@@ -580,7 +596,11 @@ func (h *Handler) loadPriorNormalizedQuota(ctx context.Context, authIndex string
 	if !ok {
 		return nil
 	}
-	return normalizedQuotaFromSnapshot(authIndex, snapshot)
+	q := normalizedQuotaFromSnapshot(authIndex, snapshot)
+	if q != nil && q.Provider == "claude" {
+		q.ResetGrantsError = h.quotaReadGates.claudeResetGrantsError(authIndex)
+	}
+	return q
 }
 
 // normalizedQuotaFromSnapshot rebuilds the prior reading a refresh starts from.
@@ -610,6 +630,7 @@ func normalizedQuotaFromSnapshot(authIndex string, snapshot repository.QuotaSnap
 		var grants []quota.ClaudeResetGrant
 		if err := json.Unmarshal([]byte(snapshot.ResetGrantsJSON), &grants); err == nil {
 			q.ResetGrants = grants
+			q.ResetGrantsObserved = true
 		}
 	}
 	if snapshot.WarmupJSON != "" {
@@ -653,6 +674,10 @@ func (h *Handler) persistNormalizedQuotaSnapshot(ctx context.Context, q *quota.N
 		if b, err := json.Marshal(q.ResetGrants); err == nil {
 			grantsJSON = string(b)
 		}
+	} else if q.ResetGrantsObserved {
+		// Persist an explicit empty array so restarts keep distinguishing a confirmed
+		// zero-grants read ("[]") from an unobserved or failed initial grants read ("").
+		grantsJSON = "[]"
 	}
 	planType := ""
 	planTier := ""
@@ -954,12 +979,16 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 					var grants []quota.ClaudeResetGrant
 					if err := json.Unmarshal([]byte(snapshot.ResetGrantsJSON), &grants); err == nil {
 						normalized.ResetGrants = grants
+						normalized.ResetGrantsObserved = true
 					}
 				}
 			}
 		}
 	}
 
+	if !normalized.Disabled && normalized.Provider == "claude" {
+		normalized.ResetGrantsError = h.quotaReadGates.claudeResetGrantsError(authIndex)
+	}
 	quota.EvaluateStatusAndRecommendation(&normalized, nowMS)
 	lastAttempts := h.lastQuotaAttempts(ctx, []string{authIndex})
 	attempt := quotaAttemptOf(lastAttempts[authIndex])
@@ -1119,10 +1148,14 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 				var grants []quota.ClaudeResetGrant
 				if err := json.Unmarshal([]byte(snapshot.ResetGrantsJSON), &grants); err == nil {
 					normalized.ResetGrants = grants
+					normalized.ResetGrantsObserved = true
 				}
 			}
 		}
 
+		if !normalized.Disabled && normalized.Provider == "claude" {
+			normalized.ResetGrantsError = h.quotaReadGates.claudeResetGrantsError(authIndex)
+		}
 		quota.EvaluateStatusAndRecommendation(&normalized, nowMS)
 		attempt := quotaAttemptOf(lastAttempts[authIndex])
 		_, hasStoredReading := latestSnapshots[authIndex]

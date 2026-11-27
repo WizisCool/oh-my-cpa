@@ -131,16 +131,22 @@ type CPAClient interface {
 	FetchPluginQuota(ctx context.Context, pluginID, authIndex string) (json.RawMessage, error)
 }
 
+// DefaultClaudeResetGrantsDelay spaces the supplementary Claude reset-grants
+// listing after the primary usage read so Anthropic does not answer the pair as
+// a burst 429 (matching CPAMC's 2-second grant read delay).
+const DefaultClaudeResetGrantsDelay = 2 * time.Second
+
 // Service manages live upstream quota fetching, normalization, and actions.
 type Service struct {
-	client         CPAClient
-	now            func() time.Time
-	warmupEvidence *warmup.Observation
+	client            CPAClient
+	now               func() time.Time
+	warmupEvidence    *warmup.Observation
+	claudeGrantsDelay time.Duration
 }
 
 // NewService creates a quota service bound to a CPA management client.
 func NewService(client CPAClient) *Service {
-	return &Service{client: client, now: time.Now}
+	return &Service{client: client, now: time.Now, claudeGrantsDelay: DefaultClaudeResetGrantsDelay}
 }
 
 func NewServiceWithClock(client CPAClient, clock func() time.Time) *Service {
@@ -149,6 +155,19 @@ func NewServiceWithClock(client CPAClient, clock func() time.Time) *Service {
 		service.now = clock
 	}
 	return service
+}
+
+// WithClaudeResetGrantsDelay overrides the spacing before Claude's supplementary
+// reset-grants request. Negative values disable the wait.
+func (s *Service) WithClaudeResetGrantsDelay(delay time.Duration) *Service {
+	if s == nil {
+		return nil
+	}
+	if delay < 0 {
+		delay = 0
+	}
+	s.claudeGrantsDelay = delay
+	return s
 }
 
 // Now is the instant this service stamps a read with.
@@ -290,13 +309,13 @@ func resolveAntigravityProjectID(file management.AuthFile) string {
 
 func resolveCodexAccountID(file management.AuthFile) string {
 	// Prefer the ChatGPT account id from CPA-projected id_token claims. The
-	// auth-file Account column holds the login email, which the usage
-	// endpoint ignores (but does not reject), so a wrong-looking id must
-	// never shadow the real claim.
+	// auth-file Account column usually holds the login email, which must not be
+	// sent as Chatgpt-Account-Id; non-email account identifiers remain accepted
+	// as a fallback.
 	if accountID := file.CodexChatgptAccountID(); accountID != "" {
 		return accountID
 	}
-	if acc := strings.TrimSpace(file.Account); acc != "" {
+	if acc := strings.TrimSpace(file.Account); acc != "" && !strings.Contains(acc, "@") {
 		return acc
 	}
 	if file.Quota != nil {
@@ -325,6 +344,9 @@ func newReading(file management.AuthFile, prior *NormalizedQuota, nowMS int64) *
 		result.Plan = prior.Plan
 		result.Windows = prior.Windows
 		result.ResetCredits = prior.ResetCredits
+		result.ResetGrants = prior.ResetGrants
+		result.ResetGrantsObserved = prior.ResetGrantsObserved
+		result.ResetGrantsError = prior.ResetGrantsError
 	}
 	return result
 }
@@ -343,6 +365,9 @@ func applyReadFailure(result, prior *NormalizedQuota, readErr error) {
 		result.Windows = prior.Windows
 		result.Plan = prior.Plan
 		result.ResetCredits = prior.ResetCredits
+		result.ResetGrants = prior.ResetGrants
+		result.ResetGrantsObserved = prior.ResetGrantsObserved
+		result.ResetGrantsError = prior.ResetGrantsError
 	} else {
 		result.Status = "error"
 	}
@@ -356,7 +381,7 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 // already holds fresh answers for left out.
 func (s *Service) RefreshCredentialQuotaWith(ctx context.Context, file management.AuthFile, prior *NormalizedQuota, options ReadOptions) (*NormalizedQuota, error) {
 	// A service is shared by concurrent batch reads; evidence belongs to one reading.
-	s = &Service{client: s.client, now: s.now}
+	s = &Service{client: s.client, now: s.now, claudeGrantsDelay: s.claudeGrantsDelay}
 	if s.now == nil {
 		s.now = time.Now
 	}
@@ -417,11 +442,25 @@ func (s *Service) RefreshCredentialQuotaWith(ctx context.Context, file managemen
 				}
 				result.Windows = windows
 				// Grant listing is supplementary: a failed, refused or malformed
-				// grants read leaves the quota itself untouched.
+				// grants read preserves prior grants and records a short error
+				// code without failing the quota reading itself.
 				if options.IsClaudeResetGrantsFresh && prior != nil {
 					result.ResetGrants = prior.ResetGrants
+					result.ResetGrantsObserved = prior.ResetGrantsObserved
+					result.ResetGrantsError = prior.ResetGrantsError
 				} else {
-					result.ResetGrants = s.fetchClaudeResetGrants(ctx, file)
+					grants, grantsErr := s.fetchClaudeResetGrants(ctx, file)
+					if grantsErr != "" {
+						if prior != nil {
+							result.ResetGrants = prior.ResetGrants
+							result.ResetGrantsObserved = prior.ResetGrantsObserved
+						}
+						result.ResetGrantsError = grantsErr
+					} else {
+						result.ResetGrants = grants
+						result.ResetGrantsObserved = true
+						result.ResetGrantsError = ""
+					}
 				}
 			}
 
@@ -588,6 +627,19 @@ func (s *Service) applyCodexSubscription(ctx context.Context, file management.Au
 	}
 }
 
+func codexResetCreditsWithError(usageCredits *CodexResetCreditsInfo, errText string) *CodexResetCreditsInfo {
+	safeErr := security.RedactText(strings.TrimSpace(errText))
+	if safeErr == "" {
+		safeErr = "request failed"
+	}
+	if usageCredits != nil {
+		out := *usageCredits
+		out.Error = safeErr
+		return &out
+	}
+	return &CodexResetCreditsInfo{Error: safeErr}
+}
+
 // fetchCodexResetCredits queries the dedicated rate-limit-reset-credits
 // endpoint, which lists individual credit expiries that the usage payload
 // omits. CPAMC precedence: dedicated available_count first, usage payload as
@@ -608,15 +660,18 @@ func (s *Service) fetchCodexResetCredits(ctx context.Context, file management.Au
 
 	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", CodexResetCreditsURL, creditsHeaders, "")
 	if err != nil {
-		return usageCredits
+		return codexResetCreditsWithError(usageCredits, err.Error())
 	}
 	normBody, err := resp.NormalizedBody()
-	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return usageCredits
+	if err != nil {
+		return codexResetCreditsWithError(usageCredits, "invalid_payload")
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return codexResetCreditsWithError(usageCredits, sanitizeError(resp.StatusCode, normBody))
 	}
 	dedicated, err := ParseCodexResetCreditsPayload(normBody)
 	if err != nil || dedicated == nil {
-		return usageCredits
+		return codexResetCreditsWithError(usageCredits, "invalid_payload")
 	}
 
 	if usageCredits == nil {
@@ -627,7 +682,6 @@ func (s *Service) fetchCodexResetCredits(ctx context.Context, file management.Au
 		AvailableCount:           usageCredits.AvailableCount,
 		ApplicableAvailableCount: usageCredits.ApplicableAvailableCount,
 		Credits:                  usageCredits.Credits,
-		Error:                    usageCredits.Error,
 	}
 	// The dedicated endpoint is the authority on the count, so a zero it states
 	// replaces a positive figure left over in the usage payload.
@@ -711,9 +765,20 @@ func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile
 
 // fetchClaudeResetGrants lists Anthropic reset grants for display. It is a
 // read of the same usage endpoint with the grant program's query parameters,
-// and it never claims anything: spending an entitlement is out of scope.
-// Any failure yields no grants rather than failing the quota refresh.
-func (s *Service) fetchClaudeResetGrants(ctx context.Context, file management.AuthFile) []ClaudeResetGrant {
+// spaced after the primary usage read so Anthropic does not answer the pair as
+// a burst 429. It never claims anything: spending an entitlement is out of
+// scope. Failures return a short sanitized error code so callers can preserve
+// prior grants and distinguish an outage from zero grants.
+func (s *Service) fetchClaudeResetGrants(ctx context.Context, file management.AuthFile) ([]ClaudeResetGrant, string) {
+	if s.claudeGrantsDelay > 0 {
+		timer := time.NewTimer(s.claudeGrantsDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ClaudeResetGrantsErrorUpstream
+		case <-timer.C:
+		}
+	}
 	headers := management.WithQuotaCredential(map[string]string{
 		"Accept":         "application/json",
 		"Content-Type":   "application/json",
@@ -722,14 +787,34 @@ func (s *Service) fetchClaudeResetGrants(ctx context.Context, file management.Au
 		"User-Agent":     ClaudeCLIUserAgent,
 	})
 	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", ClaudeUsageURL+"?cedar_ember=1&skip_spend=1", headers, "")
-	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil
+	if err != nil {
+		return nil, ClaudeResetGrantsErrorUpstream
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, ClaudeResetGrantsErrorRateLimited
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, ClaudeResetGrantsErrorAuth
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, ClaudeResetGrantsErrorUpstream
 	}
 	normBody, err := resp.NormalizedBody()
 	if err != nil {
-		return nil
+		return nil, ClaudeResetGrantsErrorInvalidPayload
 	}
-	return ParseClaudeResetGrants(normBody)
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(normBody, &envelope); err != nil {
+		return nil, ClaudeResetGrantsErrorInvalidPayload
+	}
+	grants := ParseClaudeResetGrants(normBody)
+	if grants == nil {
+		if rawBlock, present := envelope["cedar_ember"]; present && strings.TrimSpace(string(rawBlock)) != "null" {
+			return nil, ClaudeResetGrantsErrorInvalidPayload
+		}
+		return nil, ""
+	}
+	return grants, ""
 }
 
 func (s *Service) fetchAntigravityQuota(ctx context.Context, file management.AuthFile, nowMS int64) ([]QuotaWindow, error) {
@@ -967,7 +1052,7 @@ func (s *Service) RedeemCodexCredit(ctx context.Context, file management.AuthFil
 	// Without credit_id, upstream may spend a later-expiring credit first.
 	// Read the current bank and verify the requested credit or select the soonest-expiring one.
 	credits := s.fetchCodexResetCredits(ctx, file, headers, nil)
-	if credits == nil {
+	if credits == nil || credits.Error != "" {
 		return "", ErrCodexResetCreditBankUnreadable
 	}
 	credit, err := selectCodexResetCredit(credits.Credits, s.Now().UnixMilli(), requestedCreditID)

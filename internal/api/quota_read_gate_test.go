@@ -352,7 +352,7 @@ func TestClaudeQuotaRereadSendsOnlyTheUsageRequest(t *testing.T) {
 	file := management.AuthFile{AuthIndex: "claude-1", Name: "claude-1.json", Type: "claude", Provider: "claude"}
 	read := func() *quota.NormalizedQuota {
 		t.Helper()
-		reading, err := handler.refreshQuotaReading(ctx, quota.NewService(client), file, handler.loadPriorNormalizedQuota(ctx, "claude-1"))
+		reading, err := handler.refreshQuotaReading(ctx, handler.newQuotaService(client), file, handler.loadPriorNormalizedQuota(ctx, "claude-1"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -402,7 +402,7 @@ func TestClaudeRefusedGrantsListingNeitherPausesNorRepeats(t *testing.T) {
 	read := func(authIndex string) *quota.NormalizedQuota {
 		t.Helper()
 		file := management.AuthFile{AuthIndex: authIndex, Name: authIndex + ".json", Type: "claude", Provider: "claude"}
-		reading, err := handler.refreshQuotaReading(ctx, quota.NewService(client), file, handler.loadPriorNormalizedQuota(ctx, authIndex))
+		reading, err := handler.refreshQuotaReading(ctx, handler.newQuotaService(client), file, handler.loadPriorNormalizedQuota(ctx, authIndex))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -418,8 +418,76 @@ func TestClaudeRefusedGrantsListingNeitherPausesNorRepeats(t *testing.T) {
 		}
 	}
 	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
-	if got := fixture.claudeURLs[quota.ClaudeUsageURL+"?cedar_ember=1&skip_spend=1"]; got != 2 {
-		t.Fatalf("grants listed %d times, want once per credential", got)
+	grantsCalls := fixture.claudeURLs[quota.ClaudeUsageURL+"?cedar_ember=1&skip_spend=1"]
+	fixture.mu.Unlock()
+	if grantsCalls != 2 {
+		t.Fatalf("grants listed %d times, want once per credential", grantsCalls)
+	}
+
+	// Overview projects the transient grants error while the failure cooldown holds.
+	overview, err := handler.buildQuotaOverview(ctx, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundError := false
+	for _, item := range overview.Quotas {
+		if item.AuthIndex == "claude-1" {
+			foundError = item.ResetGrantsError == quota.ClaudeResetGrantsErrorRateLimited
+			if item.ResetGrantsObserved {
+				t.Fatalf("claude-1 ResetGrantsObserved = true after failed initial grants read, want false")
+			}
+		}
+	}
+	if !foundError {
+		t.Fatalf("overview did not project reset_grants_error=%q for claude-1", quota.ClaudeResetGrantsErrorRateLimited)
+	}
+
+	// Past the short failure cooldown (well before the 1-hour success TTL), the next refresh
+	// retries grants, recovers them, and clears reset_grants_error.
+	fixture.mu.Lock()
+	fixture.isGrantsRefused = false
+	fixture.mu.Unlock()
+	handler.nowFn = func() time.Time { return time.Now().Add(QUOTA_CLAUDE_RESET_GRANTS_FAILURE_COOLDOWN + time.Second) }
+	recovered := read("claude-1")
+	if recovered.ResetGrantsError != "" || !recovered.ResetGrantsObserved || len(recovered.ResetGrants) != 1 {
+		t.Fatalf("recovered claude-1 = observed:%v grants:%+v err:%q, want observed 1 grant and empty error", recovered.ResetGrantsObserved, recovered.ResetGrants, recovered.ResetGrantsError)
+	}
+	// A refresh carrying a stale prior.ResetGrantsError inside the fresh window still reflects
+	// the gate's cleared error state once it enters the provider slot.
+	stalePrior := handler.loadPriorNormalizedQuota(ctx, "claude-1")
+	stalePrior.ResetGrantsError = quota.ClaudeResetGrantsErrorRateLimited
+	rechecked, err := handler.refreshQuotaReading(ctx, handler.newQuotaService(client), management.AuthFile{AuthIndex: "claude-1", Name: "claude-1.json", Type: "claude", Provider: "claude"}, stalePrior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rechecked.ResetGrantsError != "" {
+		t.Fatalf("fresh-window refresh carried stale ResetGrantsError=%q, want empty from gate", rechecked.ResetGrantsError)
+	}
+
+	// Persisting a confirmed empty grants read retains ResetGrantsObserved across snapshot restore.
+	if err := handler.persistNormalizedQuotaSnapshot(ctx, &quota.NormalizedQuota{
+		AuthIndex:           "claude-2",
+		Provider:            "claude",
+		Status:              "healthy",
+		ObservedAtMS:        handler.now().UnixMilli(),
+		Windows:             recovered.Windows,
+		ResetGrants:         []quota.ClaudeResetGrant{},
+		ResetGrantsObserved: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	restoredEmpty := handler.loadPriorNormalizedQuota(ctx, "claude-2")
+	if restoredEmpty == nil || !restoredEmpty.ResetGrantsObserved || len(restoredEmpty.ResetGrants) != 0 {
+		t.Fatalf("restored empty grants snapshot = %+v, want ResetGrantsObserved=true with 0 grants", restoredEmpty)
+	}
+
+	overviewAfter, err := handler.buildQuotaOverview(ctx, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range overviewAfter.Quotas {
+		if item.AuthIndex == "claude-1" && (item.ResetGrantsError != "" || !item.ResetGrantsObserved) {
+			t.Fatalf("overview after recovery = observed:%v err:%q, want observed=true and empty error", item.ResetGrantsObserved, item.ResetGrantsError)
+		}
 	}
 }

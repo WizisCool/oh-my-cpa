@@ -212,13 +212,19 @@ type NormalizedQuota struct {
 	ResetCredits   *CodexResetCreditsInfo `json:"reset_credits,omitempty"`
 	// ResetGrants lists Anthropic rate-limit reset grants beside the Claude
 	// quota, display-only: claiming one spends an entitlement and is out of scope.
-	ResetGrants    []ClaudeResetGrant  `json:"reset_grants,omitempty"`
-	ActiveCooldown *ActiveCooldown     `json:"active_cooldown,omitempty"`
-	ModelCooldowns []ActiveCooldown    `json:"model_cooldowns,omitempty"`
-	Recommendation QuotaRecommendation `json:"recommendation"`
-	Capabilities   QuotaCapabilities   `json:"capabilities"`
-	RawSignals     map[string]string   `json:"raw_signals,omitempty"`
-	Error          string              `json:"error,omitempty"`
+	ResetGrants []ClaudeResetGrant `json:"reset_grants,omitempty"`
+	// ResetGrantsObserved reports that a supplementary Claude reset-grants read
+	// succeeded, so an empty grant list is distinguishable from an unavailable read.
+	ResetGrantsObserved bool `json:"reset_grants_observed,omitempty"`
+	// ResetGrantsError carries a short sanitized status code when the supplementary
+	// Claude reset-grants read failed, so a refusal or outage is not mistaken for zero.
+	ResetGrantsError string              `json:"reset_grants_error,omitempty"`
+	ActiveCooldown   *ActiveCooldown     `json:"active_cooldown,omitempty"`
+	ModelCooldowns   []ActiveCooldown    `json:"model_cooldowns,omitempty"`
+	Recommendation   QuotaRecommendation `json:"recommendation"`
+	Capabilities     QuotaCapabilities   `json:"capabilities"`
+	RawSignals       map[string]string   `json:"raw_signals,omitempty"`
+	Error            string              `json:"error,omitempty"`
 	// RateLimit is set when the provider refused the read for asking too often. It schedules the
 	// next read and never leaves the process: the reading's Error already tells the operator.
 	RateLimit *RateLimitSignal `json:"-"`

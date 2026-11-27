@@ -17221,6 +17221,14 @@
             "$ref": "#/definitions/quota.ClaudeResetGrant"
           }
         },
+        "reset_grants_error": {
+          "description": "ResetGrantsError carries a short sanitized status code when the supplementary\nClaude reset-grants read failed, so a refusal or outage is not mistaken for zero.",
+          "type": "string"
+        },
+        "reset_grants_observed": {
+          "description": "ResetGrantsObserved reports that a supplementary Claude reset-grants read\nsucceeded, so an empty grant list is distinguishable from an unavailable read.",
+          "type": "boolean"
+        },
         "status": {
           "description": "\"idle\", \"loading\", \"healthy\", \"warning\", \"exhausted\", \"error\", \"stale\", \"unpublished\"",
           "type": "string"
@@ -24139,6 +24147,14 @@
           "items": {
             "$ref": "#/definitions/quota.ClaudeResetGrant"
           }
+        },
+        "reset_grants_error": {
+          "description": "ResetGrantsError carries a short sanitized status code when the supplementary\nClaude reset-grants read failed, so a refusal or outage is not mistaken for zero.",
+          "type": "string"
+        },
+        "reset_grants_observed": {
+          "description": "ResetGrantsObserved reports that a supplementary Claude reset-grants read\nsucceeded, so an empty grant list is distinguishable from an unavailable read.",
+          "type": "boolean"
         },
         "status": {
           "description": "\"idle\", \"loading\", \"healthy\", \"warning\", \"exhausted\", \"error\", \"stale\", \"unpublished\"",

@@ -929,7 +929,7 @@ const (
 )
 
 func (h *Handler) refreshWarmupQuota(ctx context.Context, client *management.Client, file management.AuthFile) warmupQuotaRefreshOutcome {
-	service := quota.NewServiceWithClock(client, h.now)
+	service := h.newQuotaService(client)
 	prior := h.loadPriorNormalizedQuota(ctx, file.AuthIndex)
 	reading, err := h.refreshQuotaReadingAs(ctx, service, file, prior, true)
 	if err != nil || reading == nil {

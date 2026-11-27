@@ -22,6 +22,7 @@ import { CredentialQuotaBody } from '../src/pages/quota/CredentialQuotaBody';
 import { QuotaCapacityButton, QuotaCapacityScope } from '../src/pages/quota/QuotaCapacityButton';
 import QuotaCapacityDialog from '../src/pages/quota/QuotaCapacityDialog';
 import { CredentialList } from '../src/pages/oauthManagement/CredentialList';
+import { CredentialCards } from '../src/pages/oauthManagement/CredentialCards';
 import { ProviderStrip } from '../src/pages/oauthManagement/ProviderStrip';
 import type { CredentialActions } from '../src/pages/oauthManagement/CredentialParts';
 import { OAuthManagementPage } from '../src/pages/oauthManagement/OAuthManagementPage';
@@ -352,6 +353,72 @@ describe('credential quota body details', () => {
       </MemoryRouter>,
     );
     expect(document.querySelector('[data-quota-reset="credits"]')).toBeNull();
+    expect(document.querySelector('[data-reset-zero="codex"]')?.textContent).toContain('0');
+  });
+
+  it('confirms observed zero resets only with reset-read evidence and surfaces reset read errors', () => {
+    const { rerender } = renderBody(quota('claude-ordered', [quotaWindow('five_hour', 60, 3)], {
+      provider: 'claude',
+      reset_grants_observed: true,
+      reset_grants: [
+        { id: 'grant-later', label: 'Monthly Bonus', resets_total: 2, resets_left: 2, ends_at_ms: NOW_MS + 10 * 24 * HOUR_MS },
+        { id: 'grant-soon', label: 'Weekly Reset', resets_total: 2, resets_left: 1, ends_at_ms: NOW_MS + 2 * 24 * HOUR_MS },
+      ],
+      reset_grants_error: 'rate_limited',
+    }));
+    const grantNodes = Array.from(document.querySelectorAll<HTMLElement>('[data-quota-reset-grant]'));
+    expect(grantNodes.map((node) => node.getAttribute('data-quota-reset-grant'))).toEqual(['grant-soon', 'grant-later']);
+    expect(screen.getByTestId('quota-reset-error-grants').textContent).toContain('rate limited');
+
+    // Without reset-read evidence (e.g. after a failed initial grants read and restart), do not claim 0.
+    rerender(
+      <MemoryRouter>
+        <I18nProvider>
+          <CredentialQuotaBody
+            item={quota('claude-unconfirmed', [quotaWindow('five_hour', 80, 3)], { provider: 'claude' })}
+            credentialLabel="claude-unconfirmed"
+            nowMS={NOW_MS}
+            isDemo={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    expect(document.querySelector('[data-reset-zero="claude"]')).toBeNull();
+
+    // Confirmed empty grants read displays explicit 0 in the meta row.
+    rerender(
+      <MemoryRouter>
+        <I18nProvider>
+          <CredentialQuotaBody
+            item={quota('claude-zero', [quotaWindow('five_hour', 80, 3)], { provider: 'claude', reset_grants_observed: true })}
+            credentialLabel="claude-zero"
+            nowMS={NOW_MS}
+            isDemo={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    expect(document.querySelector('[data-quota-reset="grants"]')).toBeNull();
+    expect(document.querySelector('[data-reset-zero="claude"]')?.textContent).toContain('0');
+
+    // Codex read failure with zero count surfaces a warning instead of silent 0.
+    rerender(
+      <MemoryRouter>
+        <I18nProvider>
+          <CredentialQuotaBody
+            item={quota('codex-err', [quotaWindow('five_hour', 80, 3)], {
+              provider: 'codex',
+              reset_credits: { available_count: 0, applicable_available_count: 0, error: 'HTTP 403' },
+            })}
+            credentialLabel="codex-err"
+            nowMS={NOW_MS}
+            isDemo={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    expect(document.querySelector('[data-reset-zero="codex"]')).toBeNull();
+    expect(screen.getByTestId('quota-reset-error-credits').textContent).toContain('HTTP 403');
   });
 
   it('keeps the drawer read-only and spends a credit only through the redemption dialog', async () => {
@@ -553,6 +620,87 @@ describe('credential list row', () => {
     expect(within(cells[0]).getByText('100%')).toBeTruthy();
     expect(within(cells[0]).getByText('5h', { exact: true })).toBeTruthy();
     expect(within(cells[1]).getByText('~2d left')).toBeTruthy();
+  });
+
+  it('shows Claude and Codex reset badges on List and inline expiry rows on Card view', () => {
+    const onOpen = vi.fn();
+    const claudeItem = quota('claude-grants-row', [quotaWindow('five_hour', 50, 2)], {
+      type: 'claude',
+      provider: 'claude',
+      reset_grants: [
+        { id: 'grant-later', label: 'Monthly', resets_total: 2, resets_left: 2, ends_at_ms: NOW_MS + 9 * 24 * HOUR_MS },
+        { id: 'grant-soon', label: 'Weekly', resets_total: 2, resets_left: 1, ends_at_ms: NOW_MS + 2 * 24 * HOUR_MS },
+      ],
+    });
+    const codexItem = quota('codex-credits-card', [quotaWindow('five_hour', 30, 2)], {
+      type: 'codex',
+      provider: 'codex',
+      capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: true },
+      reset_credits: {
+        available_count: 2,
+        applicable_available_count: 2,
+        credits: [
+          { id: 'c-late', status: 'available', expires_at_ms: NOW_MS + 14 * 24 * HOUR_MS },
+          { id: 'c-early', status: 'available', expires_at_ms: NOW_MS + 3 * 24 * HOUR_MS },
+        ],
+      },
+    });
+    const claudeErrorItem = quota('claude-error-row', [quotaWindow('five_hour', 70, 2)], {
+      type: 'claude',
+      provider: 'claude',
+      reset_grants_error: 'rate_limited',
+    });
+
+    const listView = renderCredentialRow(claudeItem, {
+      onOpen,
+      fileOverrides: { type: 'claude', provider: 'claude' },
+    });
+    const badge = within(listView.container).getByRole('button', { name: /3 resets left/i });
+    fireEvent.click(badge);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    listView.unmount();
+
+    const errListView = renderCredentialRow(claudeErrorItem, {
+      fileOverrides: { type: 'claude', provider: 'claude' },
+    });
+    expect(within(errListView.container).getByRole('button', { name: /Reset info unavailable/i })).toBeTruthy();
+    errListView.unmount();
+
+    const files = [
+      file('codex-credits-card', { type: 'codex', provider: 'codex' }),
+      file('claude-grants-row', { type: 'claude', provider: 'claude' }),
+      file('claude-error-row', { type: 'claude', provider: 'claude' }),
+    ];
+    const { records } = buildOAuthWorkspaceProjection(files, [codexItem, claudeItem, claudeErrorItem], []);
+    const sections = buildCredentialSections(records, records);
+    const actions: CredentialActions = {
+      isBusy: () => false, isRefreshingQuota: () => false, siwcBadge: () => undefined,
+      onSelect: vi.fn(), onPick: vi.fn(), onToggle: vi.fn(), onDownload: vi.fn(), onDelete: vi.fn(), onOpen, onRename: vi.fn(async () => true),
+      onRefreshQuota: vi.fn(), onClearCooldown: vi.fn(), onRedeemCredit: vi.fn(), onReauthenticate: vi.fn(), onOpenSIWC: vi.fn(), onOpenModelRules: vi.fn(),
+    };
+    const cardView = render(
+      <MemoryRouter>
+        <I18nProvider>
+          <CredentialCards
+            groups={sections.map((section) => ({ ...section, title: section.provider }))}
+            selectedKeys={new Set()}
+            isSelecting={false}
+            nowMS={NOW_MS}
+            actions={actions}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    const codexCreditRows = Array.from(cardView.container.querySelectorAll<HTMLElement>('[data-card-reset-credit]'));
+    expect(codexCreditRows.map((row) => row.getAttribute('data-card-reset-credit'))).toEqual(['c-early', 'c-late']);
+
+    const claudeGrantRows = Array.from(cardView.container.querySelectorAll<HTMLElement>('[data-card-reset-grant]'));
+    expect(claudeGrantRows.map((row) => row.getAttribute('data-card-reset-grant'))).toEqual(['grant-soon', 'grant-later']);
+
+    // Card mode shows reset read errors once (inline below quota tracks), not repeated in the traits row.
+    expect(cardView.container.querySelector('[data-quota-reset-error="true"]')).toBeNull();
+    expect(cardView.container.querySelector('[data-card-reset-error="claude"]')?.textContent).toContain('rate limited');
+    cardView.unmount();
   });
 
   it('hides capacity trigger when a window has no capacity estimate and shows estimated full total when available', () => {

@@ -6,7 +6,17 @@ import { Button } from '@/components/ui/button';
 import { CodeOutlined, InsightsOutlined, SyncOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
-import { formatObservedAgo, formatQuotaMetric, formatQuotaMoney, formatSnapshotRenewalBound, formatTimeWithCountdown, quotaEmptyStateKey, quotaPayloadSummary, quotaPlanLabel } from './quotaFormat';
+import {
+  claudeResetGrantTotalLeft,
+  formatObservedAgo,
+  formatQuotaMetric,
+  formatQuotaMoney,
+  formatSnapshotRenewalBound,
+  formatTimeWithCountdown,
+  quotaEmptyStateKey,
+  quotaPayloadSummary,
+  quotaPlanLabel,
+} from './quotaFormat';
 import { QuotaWindowCards } from './QuotaWindowCards';
 import { QuotaResetCards } from './QuotaResetCards';
 import QuotaCapacityDialog from './QuotaCapacityDialog';
@@ -82,6 +92,16 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
   };
   const planLabel = quotaPlanLabel(item.plan, t);
   const availableCredits = item.reset_credits?.available_count ?? 0;
+  const availableClaudeResets = claudeResetGrantTotalLeft(item.reset_grants, nowMS);
+  const normalizedProvider = item.provider?.trim().toLowerCase();
+  const isObserved = !item.disabled
+    && item.status !== 'idle'
+    && item.status !== 'loading'
+    && (windows.length > 0 || Boolean(item.plan) || Boolean(item.reset_credits) || item.reset_grants_observed === true || (item.reset_grants?.length ?? 0) > 0 || item.status === 'unpublished');
+  const hasCodexResetEvidence = item.reset_credits != null;
+  const hasClaudeResetEvidence = item.reset_grants_observed === true || Array.isArray(item.reset_grants);
+  const showCodexZeroReset = isObserved && normalizedProvider === 'codex' && hasCodexResetEvidence && availableCredits === 0 && !item.reset_credits?.error;
+  const showClaudeZeroReset = isObserved && normalizedProvider === 'claude' && hasClaudeResetEvidence && availableClaudeResets === 0 && !item.reset_grants_error;
   const creditBalanceText = item.plan?.credits?.unlimited
     ? t('quota.credits_unlimited')
     : item.plan?.credits?.balance;
@@ -242,7 +262,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
         </div>
       )}
 
-      {(planLabel || item.plan?.expires_at_ms || creditBalanceText || extraUsage || metrics.length > 0) && (
+      {(planLabel || item.plan?.expires_at_ms || creditBalanceText || extraUsage || metrics.length > 0 || showCodexZeroReset || showClaudeZeroReset) && (
         <div className={styles['meta-row']}>
           {planLabel && (
             <span className={styles['meta-item']}>
@@ -309,6 +329,18 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
               <span className={styles['meta-value']}>{formatQuotaMetric(metric)}</span>
             </span>
           ))}
+          {showCodexZeroReset && (
+            <span className={styles['meta-item']} data-reset-zero="codex">
+              <span className={styles['meta-label']}>{t('quota.reset_credits_title')}</span>
+              <span className={styles['meta-value']}>0</span>
+            </span>
+          )}
+          {showClaudeZeroReset && (
+            <span className={styles['meta-item']} data-reset-zero="claude">
+              <span className={styles['meta-label']}>{t('quota.resets_title')}</span>
+              <span className={styles['meta-value']}>0</span>
+            </span>
+          )}
         </div>
       )}
 
@@ -340,6 +372,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
         key={item.auth_index}
         credits={item.reset_credits}
         grants={item.reset_grants}
+        grantsError={item.reset_grants_error}
         credentialLabel={credentialLabel}
         nowMS={nowMS}
         isDemo={isDemo}

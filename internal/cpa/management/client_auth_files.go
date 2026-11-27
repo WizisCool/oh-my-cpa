@@ -3,6 +3,7 @@ package management
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"mime/multipart"
@@ -232,15 +233,55 @@ func (f AuthFile) idTokenClaims() map[string]any {
 	var claims map[string]any
 	decoder := json.NewDecoder(bytes.NewReader(f.IDToken))
 	decoder.UseNumber()
+	if err := decoder.Decode(&claims); err == nil && len(claims) > 0 {
+		return flattenIDTokenClaims(claims)
+	}
+	var rawJWT string
+	if err := json.Unmarshal(f.IDToken, &rawJWT); err != nil {
+		return nil
+	}
+	return decodeJWTClaims(rawJWT)
+}
+
+func decodeJWTClaims(rawJWT string) map[string]any {
+	parts := strings.Split(strings.TrimSpace(rawJWT), ".")
+	if len(parts) != 3 || parts[1] == "" {
+		return nil
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(parts[1], "="))
+	if err != nil || len(payload) == 0 {
+		return nil
+	}
+	var claims map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.UseNumber()
 	if err := decoder.Decode(&claims); err != nil || len(claims) == 0 {
 		return nil
 	}
-	return claims
+	return flattenIDTokenClaims(claims)
+}
+
+// flattenIDTokenClaims lifts OpenAI's nested auth claim object onto the top-level
+// map so callers read the same claim names whether CPA projected flat fields or
+// forwarded the raw JWT payload.
+func flattenIDTokenClaims(claims map[string]any) map[string]any {
+	nested, ok := claims["https://api.openai.com/auth"].(map[string]any)
+	if !ok || len(nested) == 0 {
+		return claims
+	}
+	merged := make(map[string]any, len(claims)+len(nested))
+	for k, v := range claims {
+		merged[k] = v
+	}
+	for k, v := range nested {
+		merged[k] = v
+	}
+	return merged
 }
 
 // CodexChatgptAccountID extracts the ChatGPT account id from CPA-projected
-// id_token claims. CPA returns decoded JSON claims (never the raw JWT), and
-// older builds omit the field entirely, so every shape degrades to "".
+// id_token claims or a raw JWT string. Older builds omit the field entirely, so
+// every unrecognized shape degrades to "".
 func (f AuthFile) CodexChatgptAccountID() string {
 	claims := f.idTokenClaims()
 	if claims == nil {
@@ -261,7 +302,7 @@ func (f AuthFile) CodexPlanType() string {
 	if claims == nil {
 		return ""
 	}
-	for _, key := range []string{"plan_type", "planType"} {
+	for _, key := range []string{"plan_type", "planType", "chatgpt_plan_type"} {
 		if value, ok := claims[key].(string); ok && strings.TrimSpace(value) != "" {
 			return strings.ToLower(strings.TrimSpace(value))
 		}

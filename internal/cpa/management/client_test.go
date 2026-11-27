@@ -2,6 +2,7 @@ package management
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -530,5 +531,36 @@ func TestServerIDReadsEndpointNormalizesAndFallsBackToHeader(t *testing.T) {
 				t.Fatalf("ServerID = %q, want %q", identity.ServerID, tc.wantID)
 			}
 		})
+	}
+}
+
+func TestAuthFileIDTokenDecodesRawJWTAndNestedOpenAIClaims(t *testing.T) {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{
+		"email":"owner@example.test",
+		"https://api.openai.com/auth":{
+			"chatgpt_account_id":"acct_jwt_123",
+			"chatgpt_plan_type":"ProMax",
+			"chatgpt_subscription_active_until":"2026-12-01T00:00:00Z"
+		}
+	}`))
+	rawJWT, err := json.Marshal(header + "." + payload + ".sig")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := AuthFile{IDToken: rawJWT}
+	if got := file.CodexChatgptAccountID(); got != "acct_jwt_123" {
+		t.Fatalf("CodexChatgptAccountID = %q, want acct_jwt_123", got)
+	}
+	if got := file.CodexPlanType(); got != "promax" {
+		t.Fatalf("CodexPlanType = %q, want promax", got)
+	}
+	if untilMS, ok := file.CodexSubscriptionActiveUntil(); !ok || untilMS != time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC).UnixMilli() {
+		t.Fatalf("CodexSubscriptionActiveUntil = (%d, %v), want 2026-12-01T00:00:00Z", untilMS, ok)
+	}
+
+	malformed := AuthFile{IDToken: json.RawMessage(`"not-a-jwt"`)}
+	if got := malformed.CodexChatgptAccountID(); got != "" {
+		t.Fatalf("malformed id_token account id = %q, want empty", got)
 	}
 }

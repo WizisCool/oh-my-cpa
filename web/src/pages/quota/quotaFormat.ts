@@ -1,6 +1,6 @@
 import dayjs from '../../utils/time';
 import type { TFunc } from '../../i18n';
-import type { CodexResetCredit, QuotaItem, QuotaMetric, QuotaPlan, QuotaWindow } from '../../types/quota';
+import type { ClaudeResetGrant, CodexResetCredit, QuotaItem, QuotaMetric, QuotaPlan, QuotaWindow } from '../../types/quota';
 import { formatUsd } from '../../types/pricingDisplay';
 import { quotaWindowFullName, quotaWindowKindOf } from './quotaWindowSelection';
 
@@ -361,4 +361,50 @@ export function formatCodexResetCreditExpiry(
     return { primary: t('quota.reset_credit_expired'), dateText, isExpired: true, hasExpiry: true };
   }
   return { primary: t('quota.reset_credit_expires', { when: countdown }), dateText, isExpired: false, hasExpiry: true };
+}
+
+function isLiveClaudeResetGrant(grant: ClaudeResetGrant, nowMS?: number): boolean {
+  if (!Number.isFinite(grant.resets_left) || grant.resets_left <= 0) return false;
+  if (nowMS != null && grant.ends_at_ms != null && Number.isFinite(grant.ends_at_ms) && grant.ends_at_ms > 0 && grant.ends_at_ms <= nowMS) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Live Claude reset grants ordered soonest-expiring first, matching Codex credit ordering;
+ * undated entries trail deterministically by grant ID. When `nowMS` is provided, cached grants
+ * whose `ends_at_ms` has passed are excluded.
+ */
+export function orderClaudeResetGrants(grants: readonly ClaudeResetGrant[] | undefined, nowMS?: number): ClaudeResetGrant[] {
+  return (grants ?? [])
+    .filter((grant) => isLiveClaudeResetGrant(grant, nowMS))
+    .slice()
+    .sort((left, right) => {
+      const endDiff = creditSortTimestamp(left.ends_at_ms) - creditSortTimestamp(right.ends_at_ms);
+      if (endDiff !== 0) return endDiff;
+      return compareCreditID(left.id.trim(), right.id.trim());
+    });
+}
+
+/** Total remaining resets across all live, unexpired Claude reset grants. */
+export function claudeResetGrantTotalLeft(grants: readonly ClaudeResetGrant[] | undefined, nowMS?: number): number {
+  let total = 0;
+  for (const grant of grants ?? []) {
+    if (isLiveClaudeResetGrant(grant, nowMS)) {
+      total += grant.resets_left;
+    }
+  }
+  return total;
+}
+
+/** Formats a supplementary reset-credits or reset-grants read failure for operator display. */
+export function formatResetReadError(rawError: string | undefined, t: TFunc): string | null {
+  const trimmed = rawError?.trim();
+  if (!trimmed) return null;
+  if (trimmed === 'rate_limited') return t('quota.reset_read_error_rate_limited');
+  if (trimmed === 'auth_error') return t('quota.reset_read_error_auth');
+  if (trimmed === 'upstream_error') return t('quota.reset_read_error_upstream');
+  if (trimmed === 'invalid_payload') return t('quota.reset_read_error_invalid');
+  return t('quota.reset_read_error_detail', { reason: trimmed });
 }

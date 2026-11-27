@@ -23,8 +23,17 @@ import { rowClickIntent } from '../../types/rowSelection';
 import { activityOf } from './fleetPresentation';
 import { maskedCredentialLabel, type OAuthWorkspaceRecord } from './oauthWorkspaceLogic';
 import { ActivitySpark, QuotaLines, QuotaMetrics } from './QuotaGauges';
+import { MetaLine } from '../../components/common/MetaLine';
 import type { QuotaCapacityOwner } from '../quota/QuotaCapacityButton';
 import { quotaSubscriptionPeriodKey } from '../quota/quotaCapacity';
+import {
+  formatCodexResetCreditExpiry,
+  formatCountdown,
+  formatResetReadError,
+  formatShortDateTime,
+  orderClaudeResetGrants,
+  orderCodexResetCredits,
+} from '../quota/quotaFormat';
 import styles from './CredentialCards.module.css';
 
 /**
@@ -136,13 +145,14 @@ function CredentialCard({ record, providerName, isSelected, isSelecting, nowMS, 
       <div className={styles.traits}>
         {/* Named as well as drawn: a mark that falls back to a neutral glyph says nothing of whose it is. */}
         <span className={styles.provider}>{providerName}</span>
-        <CredentialTraits record={record} facts={facts} actions={actions} />
+        <CredentialTraits record={record} facts={facts} actions={actions} nowMS={nowMS} showResetError={false} />
       </div>
 
       <div className={styles.readings} data-quota-missing={!hasLines && metrics.length === 0 ? 'true' : undefined}>
         {/* The list's two tracks: the five-hour and weekly limits side by side, further limits under them. */}
         {hasLines && <QuotaLines lines={facts.quotaLines} provider={record.displayProvider} observedAtMS={record.quota?.observed_at_ms} isMuted={facts.isQuotaMuted} isRefreshing={facts.isRefreshing} nowMS={nowMS} owner={owner} />}
         {metrics.length > 0 && <QuotaMetrics metrics={metrics} isMuted={facts.isQuotaMuted} isStandalone={!hasLines} />}
+        <CardResetSummary record={record} isMuted={facts.isQuotaMuted} isStandalone={!hasLines && metrics.length === 0} nowMS={nowMS} />
         {!hasLines && metrics.length === 0 && (
           <span className={styles.quiet}>{facts.explanation ?? t('omc.quota_unobserved')}</span>
         )}
@@ -164,5 +174,110 @@ function CredentialCard({ record, providerName, isSelected, isSelecting, nowMS, 
         </div>
       </footer>
     </m.article>
+  );
+}
+
+const CARD_RESET_MAX_ROWS = 3;
+
+/**
+ * Compact flat reset rows on the card's own ground, below the quota tracks.
+ * Shows individual credit/grant expiries soonest-first without nesting a panel inside the card.
+ */
+function CardResetSummary({ record, isMuted, isStandalone, nowMS }: {
+  record: OAuthWorkspaceRecord;
+  isMuted: boolean;
+  isStandalone: boolean;
+  nowMS: number;
+}) {
+  const t = useT();
+  const codexCredits = record.quota?.reset_credits;
+  const hasCodexCredits = (codexCredits?.available_count ?? 0) > 0;
+  const orderedCredits = hasCodexCredits && codexCredits ? orderCodexResetCredits(codexCredits.credits) : [];
+  const codexError = formatResetReadError(codexCredits?.error, t);
+
+  const liveGrants = orderClaudeResetGrants(record.quota?.reset_grants, nowMS);
+  const grantsError = formatResetReadError(record.quota?.reset_grants_error, t);
+
+  const showCodex = orderedCredits.length > 0 || Boolean(codexError);
+  const showClaude = liveGrants.length > 0 || Boolean(grantsError);
+  if (!showCodex && !showClaude) return null;
+
+  return (
+    <div
+      className={clsx(styles['reset-summary'], isMuted && styles['reset-summary-muted'], isStandalone && styles['reset-summary-standalone'])}
+      data-card-resets={showCodex ? 'codex' : 'claude'}
+    >
+      {showCodex && (
+        <div className={styles['reset-block']}>
+          {orderedCredits.length > 0 && (
+            <>
+              <div className={styles['reset-head']}>
+                <span>{t('quota.reset_credits_title')}</span>
+              </div>
+              <div className={styles['reset-rows']}>
+                {orderedCredits.slice(0, CARD_RESET_MAX_ROWS).map((credit, index) => {
+                  const expiry = formatCodexResetCreditExpiry(credit, nowMS, t);
+                  return (
+                    <div
+                      className={styles['reset-row']}
+                      key={`${credit.id || 'credit'}-${index}`}
+                      data-card-reset-credit={credit.id || String(index)}
+                    >
+                      <span className={styles['reset-label']}>{t('quota.reset_credit_item', { n: index + 1 })}</span>
+                      <MetaLine className={styles['reset-value']}>
+                        <span data-expired={expiry.isExpired ? 'true' : undefined}>{expiry.primary}</span>
+                        {expiry.dateText && <span className={styles['reset-date']}>{expiry.dateText}</span>}
+                      </MetaLine>
+                    </div>
+                  );
+                })}
+                {orderedCredits.length > CARD_RESET_MAX_ROWS && (
+                  <span className={styles['reset-more']}>{t('quota.reset_more_count', { n: orderedCredits.length - CARD_RESET_MAX_ROWS })}</span>
+                )}
+              </div>
+            </>
+          )}
+          {codexError && (
+            <span className={styles['reset-error']} data-card-reset-error="codex">{codexError}</span>
+          )}
+        </div>
+      )}
+
+      {showClaude && (
+        <div className={styles['reset-block']}>
+          {liveGrants.length > 0 && (
+            <>
+              <div className={styles['reset-head']}>
+                <span>{t('quota.resets_title')}</span>
+              </div>
+              <div className={styles['reset-rows']}>
+                {liveGrants.slice(0, CARD_RESET_MAX_ROWS).map((grant) => {
+                  const endText = grant.ends_at_ms
+                    ? formatCountdown(grant.ends_at_ms, nowMS, t) ?? formatShortDateTime(grant.ends_at_ms)
+                    : null;
+                  return (
+                    <div className={styles['reset-row']} key={grant.id} data-card-reset-grant={grant.id}>
+                      <span className={styles['reset-label']} data-tip={grant.label} data-tip-overflow="">
+                        {grant.label || t('quota.reset_grant_untitled')}
+                      </span>
+                      <MetaLine className={styles['reset-value']}>
+                        <span>{t('quota.reset_grant_summary', { left: grant.resets_left, total: grant.resets_total })}</span>
+                        {endText && <span className={styles['reset-date']}>{endText}</span>}
+                      </MetaLine>
+                    </div>
+                  );
+                })}
+                {liveGrants.length > CARD_RESET_MAX_ROWS && (
+                  <span className={styles['reset-more']}>{t('quota.reset_more_count', { n: liveGrants.length - CARD_RESET_MAX_ROWS })}</span>
+                )}
+              </div>
+            </>
+          )}
+          {grantsError && (
+            <span className={styles['reset-error']} data-card-reset-error="claude">{grantsError}</span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
