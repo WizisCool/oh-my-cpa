@@ -69,6 +69,7 @@ function isDeferredModule(moduleId) {
   return moduleId.startsWith('web/src/pages/')
     || moduleId === 'web/src/components/common/AppLayout.tsx'
     || moduleId === 'web/src/components/config/YamlSourceEditor.tsx'
+    || moduleId === 'web/src/demo/sandbox.ts'
     || /^node_modules\/(?:recharts\/|d3-[^/]+\/|monaco-editor\/|react-markdown\/|remark-gfm\/)/.test(moduleId);
 }
 
@@ -84,6 +85,14 @@ export function findLoadingViolations(chunks, initialFiles) {
       if (moduleId === 'web/src/components/config/YamlSourceEditor.tsx' || moduleId.startsWith('node_modules/monaco-editor/')) {
         violations.push(`${moduleId} loads with ConfigPage instead of the on-demand editor through ${chunk.file}`);
       }
+    }
+  }
+  const appLayoutRoots = chunks.filter((chunk) => chunk.modules.includes('web/src/components/common/AppLayout.tsx')).map((chunk) => chunk.file);
+  if (appLayoutRoots.length === 0) violations.push('Missing AppLayout module ownership; cannot verify the on-demand demo sandbox boundary');
+  const appLayoutFiles = new Set(walkStaticGraph(chunks, appLayoutRoots));
+  for (const chunk of chunks.filter((candidate) => appLayoutFiles.has(candidate.file))) {
+    if (chunk.modules.includes('web/src/demo/sandbox.ts')) {
+      violations.push(`web/src/demo/sandbox.ts loads with AppLayout instead of the on-demand demo sandbox through ${chunk.file}`);
     }
   }
   return violations;

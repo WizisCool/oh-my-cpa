@@ -1,10 +1,11 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { installOmcApi, type OmcApi } from './support/omcApi';
 import { renderWithOmc } from './support/render';
 import { AppLayout } from '../src/components/common/AppLayout';
+import { HeaderNav } from '../src/components/common/HeaderNav';
 import { NavSelectionHighlight } from '../src/components/common/NavSelectionHighlight';
 import { useIsRouteActive } from '../src/performance/routeContract';
 import { consoleRouteRegistry } from '../src/routePreload';
@@ -355,5 +356,97 @@ describe('hot route slot caching and security boundary', () => {
     // Verify frozen router context inside cached slot still navigates cleanly.
     fireEvent.click(screen.getByRole('button', { name: 'Drill down' }));
     await screen.findByTestId('fake-events');
+  });
+});
+
+describe('HeaderNav demo sandbox lazy loading', () => {
+  it('subscribes dynamically in demo mode, tracks dirty changes, and resets sandbox state cleanly', async () => {
+    window.__OMCPA_CONFIG__ = { demo: true };
+    api.on('GET', '/management/system/repository', () => ({ stargazers_count: 0 }));
+    const sandbox = await import('../src/demo/sandbox');
+    sandbox.resetDemoSandbox();
+    try {
+      const surface = renderWithOmc(
+        <ThemeProvider>
+          <HeaderNav />
+        </ThemeProvider>,
+        { isStrict: true },
+      );
+      const resetQueriesSpy = vi.spyOn(surface.client, 'resetQueries');
+
+      expect(screen.getByTestId('demo-sandbox-badge').textContent).toBe('SANDBOX');
+      expect(screen.queryByTestId('demo-sandbox-reset')).toBeNull();
+
+      await act(async () => {
+        await sandbox.interceptDemoRequest(
+          '/preferences/omc_theme',
+          { method: 'PUT', body: JSON.stringify('dark') },
+          async () => new Response('{}', { status: 200 }),
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('demo-sandbox-badge').textContent).toBe('SANDBOX (1)');
+      });
+      const resetButton = await screen.findByTestId('demo-sandbox-reset');
+      fireEvent.click(resetButton);
+      const confirmDialog = await screen.findByRole('dialog');
+      fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Reset sandbox' }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('demo-sandbox-badge').textContent).toBe('SANDBOX');
+      });
+      expect(screen.queryByTestId('demo-sandbox-reset')).toBeNull();
+      expect(resetQueriesSpy).toHaveBeenCalledTimes(1);
+      expect(sandbox.getDemoSandboxSnapshot().changeCount).toBe(0);
+      await screen.findByText('Demo sandbox restored to baseline');
+    } finally {
+      sandbox.resetDemoSandbox();
+    }
+  });
+
+  it('cleans up demo sandbox subscription without leaking when unmounted before resolution', async () => {
+    window.__OMCPA_CONFIG__ = { demo: true };
+    api.on('GET', '/management/system/repository', () => ({ stargazers_count: 0 }));
+    const sandbox = await import('../src/demo/sandbox');
+    sandbox.resetDemoSandbox();
+    const subscribeSpy = vi.spyOn(sandbox, 'subscribeDemoSandbox');
+    const errorSpy = vi.spyOn(console, 'error');
+    try {
+      const surface = renderWithOmc(
+        <ThemeProvider>
+          <HeaderNav />
+        </ThemeProvider>,
+      );
+      surface.unmount();
+      // Flush microtasks for the in-flight dynamic import to settle after unmount.
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(subscribeSpy).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      sandbox.resetDemoSandbox();
+    }
+  });
+
+  it('never subscribes to the demo sandbox in normal mode', async () => {
+    api.on('GET', '/management/system/repository', () => ({ stargazers_count: 0 }));
+    const sandbox = await import('../src/demo/sandbox');
+    const subscribeSpy = vi.spyOn(sandbox, 'subscribeDemoSandbox');
+    renderWithOmc(
+      <ThemeProvider>
+        <HeaderNav />
+      </ThemeProvider>,
+      { isStrict: true },
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('demo-sandbox-badge')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+    expect(subscribeSpy).not.toHaveBeenCalled();
   });
 });
