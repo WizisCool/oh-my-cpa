@@ -205,11 +205,16 @@ including development remounts. Use one dataset for desktop and phone presentati
 keep unsaved drafts separate from server refreshes. See [Design](design.md).
 
 The production SPA ships with the application. Preserve the configured base path
-through routing, assets, API calls and reverse proxies. An asset may come from a public
-CDN when that is chosen for it; a deployment that cannot reach the CDN must still render
-the console, with the asset's local fallback. Plugin publishers may declare
-optional HTTP(S) logos; the browser loads those directly, with bundled or neutral
-fallbacks when unavailable. The public demo withholds external plugin logos. A Go build
+through routing, assets, API calls and reverse proxies. Public CDNs are optional and
+require a local fallback so an offline deployment still renders the console: the
+browser CJK font path (`web/src/theme/cjkFont.ts`) loads Noto Sans SC slices from
+Google Fonts and falls back to platform CJK fonts when unreachable, separate from the
+optional server-side font installer (`OMCPA_GOOGLE_FONTS_URL`) that stores installed
+library families locally. Plugin publishers may declare optional HTTP(S) logos; the
+browser loads those directly, with bundled or neutral fallbacks when unavailable,
+while the public demo withholds external plugin logos. On the server side, the console
+already makes a defined set of external requests beyond CPA itself (such as release
+checks, pricing and exchange-rate refreshes, and optional font installs). A Go build
 without the frontend contains a placeholder, not a complete release; generated assets
 are not committed.
 
