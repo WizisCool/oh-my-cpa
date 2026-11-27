@@ -181,20 +181,23 @@ type AuthFile struct {
 	// OAuthProvider is the login entry that issued the credential, for a plugin
 	// that declares several (Harbor and Harbor CN share the type "harbor"). Gateways
 	// that do not report it leave it empty.
-	OAuthProvider    string `json:"oauth_provider,omitempty"`
-	Label            string `json:"label"`
-	Status           string `json:"status"`
-	StatusMessage    string `json:"status_message"`
-	TOSAppealURL     string `json:"tos_appeal_url,omitempty"`
-	TOSAppealURLText string `json:"tos_appeal_url_text,omitempty"`
-	Disabled         bool   `json:"disabled"`
-	Unavailable      bool   `json:"unavailable"`
-	RuntimeOnly      bool   `json:"runtime_only"`
-	Source           string `json:"source"`
-	Email            string `json:"email"`
-	ProjectID        string `json:"project_id"`
-	AccountType      string `json:"account_type"`
-	Account          string `json:"account"`
+	OAuthProvider            string `json:"oauth_provider,omitempty"`
+	Label                    string `json:"label"`
+	Status                   string `json:"status"`
+	StatusMessage            string `json:"status_message"`
+	TOSAppealURL             string `json:"tos_appeal_url,omitempty"`
+	TOSAppealURLText         string `json:"tos_appeal_url_text,omitempty"`
+	Disabled                 bool   `json:"disabled"`
+	Unavailable              bool   `json:"unavailable"`
+	unavailableOmitted       bool
+	NextRetryAfter           string `json:"next_retry_after,omitempty"`
+	hasInvalidNextRetryAfter bool
+	RuntimeOnly              bool   `json:"runtime_only"`
+	Source                   string `json:"source"`
+	Email                    string `json:"email"`
+	ProjectID                string `json:"project_id"`
+	AccountType              string `json:"account_type"`
+	Account                  string `json:"account"`
 	// IDToken carries CPA-projected identity claims (e.g. Codex
 	// chatgpt_account_id). It is non-secret metadata used to scope
 	// upstream quota queries, never a credential.
@@ -224,6 +227,84 @@ type AuthFile struct {
 	CreatedAt   json.RawMessage `json:"created_at"`
 	UpdatedAt   json.RawMessage `json:"updated_at"`
 	LastRefresh json.RawMessage `json:"last_refresh"`
+}
+
+// UnmarshalJSON distinguishes an explicit JSON `"unavailable": false` from an
+// omitted or null field so sparse payloads cannot falsely claim availability,
+// and decodes `next_retry_after` tolerantly so non-string representations never
+// fail the entire credential list.
+func (f *AuthFile) UnmarshalJSON(data []byte) error {
+	type authFileAlias AuthFile
+	var decoded struct {
+		authFileAlias
+		RawUnavailable    *bool           `json:"unavailable"`
+		RawNextRetryAfter json.RawMessage `json:"next_retry_after"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	result := AuthFile(decoded.authFileAlias)
+	if decoded.RawUnavailable != nil {
+		result.Unavailable = *decoded.RawUnavailable
+		result.unavailableOmitted = false
+	} else {
+		result.Unavailable = false
+		result.unavailableOmitted = true
+	}
+	if raw := bytes.TrimSpace(decoded.RawNextRetryAfter); len(raw) > 0 && !bytes.Equal(raw, []byte("null")) {
+		var text string
+		if err := json.Unmarshal(raw, &text); err == nil {
+			result.NextRetryAfter = strings.TrimSpace(text)
+		} else {
+			decoder := json.NewDecoder(bytes.NewReader(raw))
+			decoder.UseNumber()
+			var value any
+			if err := decoder.Decode(&value); err == nil {
+				if num, ok := value.(json.Number); ok {
+					if ms, ok := idTokenInstantToMS(num); ok {
+						result.NextRetryAfter = time.UnixMilli(ms).UTC().Format(time.RFC3339Nano)
+					} else {
+						result.hasInvalidNextRetryAfter = true
+					}
+				} else {
+					result.hasInvalidNextRetryAfter = true
+				}
+			} else {
+				result.hasInvalidNextRetryAfter = true
+			}
+		}
+	}
+	*f = result
+	return nil
+}
+
+// HasClearedCredentialCooldown reports whether CPA's live auth-file projection
+// affirmatively shows that this credential is not under an active
+// credential-level cooldown. CPA's reconcileAuthFileCooldownState always sets
+// status="error" and unavailable=true (with next_retry_after for timed blocks)
+// while any credential-level cooldown is active, and restores status="active"
+// with unavailable=false and no future next_retry_after once it is lifted
+// (even when an independent per-model cooldown still remains).
+//
+// Sparse payloads that omit status or unavailable, or credentials marked
+// disabled or requiring sign-in, do not make this claim and return false.
+func (f AuthFile) HasClearedCredentialCooldown(now time.Time) bool {
+	if f.Disabled || f.Unavailable || f.unavailableOmitted || f.hasInvalidNextRetryAfter {
+		return false
+	}
+	if f.RequiresSignIn != nil && *f.RequiresSignIn {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(f.Status), "active") {
+		return false
+	}
+	if raw := strings.TrimSpace(f.NextRetryAfter); raw != "" {
+		retryAt, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil || retryAt.After(now) {
+			return false
+		}
+	}
+	return true
 }
 
 func (f AuthFile) idTokenClaims() map[string]any {

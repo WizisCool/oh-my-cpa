@@ -56,7 +56,7 @@ import type {
   SaveProviderModelItem,
   SaveProviderPayload,
 } from '../types/providers';
-import type { CodexResetCredit, CodexResetCreditsInfo, QuotaOverviewResponse } from '../types/quota';
+import type { CodexResetCredit, CodexResetCreditsInfo, QuotaItem, QuotaOverviewResponse, QuotaOverviewSummary } from '../types/quota';
 import type {
   RoutingBoard,
   RoutingMember,
@@ -126,6 +126,12 @@ interface DemoAuditEntry {
   details?: Record<string, unknown>;
 }
 
+interface SandboxVerifiedCooldown {
+  verifiedAt: number;
+  untilAtMs?: number;
+  correlatedAtMs?: number;
+}
+
 export interface DemoSandboxState {
   version: number;
   revisionSeq: number;
@@ -186,6 +192,7 @@ export interface DemoSandboxState {
   };
   quota: {
     clearedCooldowns: Record<string, number>;
+    verifiedCooldowns?: Record<string, SandboxVerifiedCooldown>;
     refreshedAt: Record<string, number>;
     resetAt: Record<string, number>;
     redeemedCredits: Record<string, number>;
@@ -238,7 +245,7 @@ function emptySandboxState(): DemoSandboxState {
     routing: { settingsOverrides: {}, memberOverrides: {} },
     plugins: { enabledOverrides: {}, deletedIds: [], installed: [], configs: {} },
     pricing: { modelOverrides: {}, channelModelOverrides: {}, dismissedCandidates: {}, channelOverrides: {} },
-    quota: { clearedCooldowns: {}, refreshedAt: {}, resetAt: {}, redeemedCredits: {}, redeemedCreditIds: {}, warmupRunsAdded: [] },
+    quota: { clearedCooldowns: {}, verifiedCooldowns: {}, refreshedAt: {}, resetAt: {}, redeemedCredits: {}, redeemedCreditIds: {}, warmupRunsAdded: [] },
     customIcons: { created: [], updated: {}, deletedIds: [], dataUrls: {} },
     fonts: { deletedIds: [] },
     system: {},
@@ -369,6 +376,7 @@ export function countDemoSandboxChanges(state = loadState()): number {
   count += Object.keys(state.pricing.channelOverrides).length;
   if (state.pricing.syncIntervalHours !== undefined) count += 1;
   count += Object.keys(state.quota.clearedCooldowns).length;
+  count += Object.keys(state.quota.verifiedCooldowns ?? {}).length;
   count += Object.keys(state.quota.resetAt).length;
   count += Object.keys(state.quota.redeemedCredits).length;
   if (state.quota.warmupTasks) count += 1;
@@ -485,6 +493,235 @@ function projectSandboxCodexResetCredits(
     availableCount: nextCount,
     applicableCount,
     remainingCredits: withoutSpent.slice(extraUntargeted),
+  };
+}
+
+function isForceCooldownReason(reason?: string): boolean {
+  return (reason ?? '').trim().toLowerCase() === 'force_cooldown';
+}
+
+function cooldownDeadlineMs(cooldown?: { recover_at_ms?: number; retry_at_ms?: number }): number | undefined {
+  if (!cooldown) return undefined;
+  let deadline: number | undefined;
+  if (typeof cooldown.recover_at_ms === 'number' && Number.isFinite(cooldown.recover_at_ms) && cooldown.recover_at_ms > 0) {
+    deadline = cooldown.recover_at_ms;
+  }
+  if (
+    typeof cooldown.retry_at_ms === 'number' &&
+    Number.isFinite(cooldown.retry_at_ms) &&
+    cooldown.retry_at_ms > 0 &&
+    (deadline === undefined || cooldown.retry_at_ms > deadline)
+  ) {
+    deadline = cooldown.retry_at_ms;
+  }
+  return deadline;
+}
+
+function matchesVerifiedCooldown(
+  record: SandboxVerifiedCooldown | undefined,
+  untilAtMs: number | undefined,
+  correlatedAtMs?: number,
+): boolean {
+  if (!record) return false;
+  if (record.untilAtMs !== undefined) {
+    if (untilAtMs === undefined || untilAtMs !== record.untilAtMs) return false;
+    if (record.correlatedAtMs !== undefined && correlatedAtMs !== record.correlatedAtMs) {
+      return false;
+    }
+    return true;
+  }
+  return record.correlatedAtMs !== undefined && correlatedAtMs !== undefined && correlatedAtMs === record.correlatedAtMs;
+}
+
+function looksLikeSandboxAuthFailure(text: string): boolean {
+  const lower = text.toLowerCase();
+  for (const marker of [
+    'unauthorized',
+    'forbidden',
+    'invalid_api_key',
+    'invalid api key',
+    'authentication failed',
+    'auth failed',
+    'token expired',
+    'credential expired',
+  ]) {
+    if (lower.includes(marker)) return true;
+  }
+  return lower.split(/[^a-z0-9]+/).some((token) => token === '401' || token === '403');
+}
+
+function recomputeSandboxQuotaItem(item: QuotaItem): QuotaItem {
+  const next: QuotaItem = { ...item };
+  const hasActiveCooldown = Boolean(next.active_cooldown?.is_active);
+  if (hasActiveCooldown) {
+    next.status = 'cooldown';
+    next.quota_exceeded = true;
+    next.quota_reason = next.active_cooldown?.reason;
+    next.next_recover_at_ms = next.active_cooldown?.recover_at_ms;
+    next.next_retry_after_ms = next.active_cooldown?.retry_after_seconds != null
+      ? next.active_cooldown.retry_after_seconds * 1000
+      : undefined;
+    next.recommendation = {
+      status: 'cooldown',
+      priority: 'high',
+      action: 'clear_cooldown',
+      reason: next.active_cooldown?.reason || next.recommendation.reason,
+    };
+    return next;
+  }
+
+  next.quota_exceeded = false;
+  next.quota_reason = undefined;
+  next.next_recover_at_ms = undefined;
+  next.next_retry_after_ms = undefined;
+
+  if (next.disabled) {
+    next.status = 'idle';
+    next.recommendation = {
+      status: 'idle',
+      priority: 'none',
+      action: 'none',
+      reason: 'Credential is disabled',
+    };
+    return next;
+  }
+
+  if (next.error) {
+    if (looksLikeSandboxAuthFailure(next.error)) {
+      next.status = 'error';
+      next.recommendation = {
+        status: 'needs_reauth',
+        priority: 'critical',
+        action: 'reauth',
+        reason: 'Upstream authentication failed',
+      };
+      return next;
+    }
+    if (next.status !== 'stale') {
+      next.status = 'error';
+    }
+    next.recommendation = {
+      status: 'warning',
+      priority: 'medium',
+      action: 'refresh',
+      reason: 'Quota refresh failed; keeping last snapshot',
+    };
+    return next;
+  }
+
+  const remainingPercents = next.windows
+    .map((w) => w.remaining_percent)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+
+  if (remainingPercents.length > 0) {
+    const minRemaining = Math.min(...remainingPercents);
+    const hasCredits = (next.reset_credits?.available_count ?? 0) > 0;
+    if (minRemaining <= 0) {
+      next.status = 'exhausted';
+      next.quota_exceeded = true;
+      next.quota_reason = 'quota_exhausted';
+      next.recommendation = hasCredits
+        ? { status: 'credits_available', priority: 'high', action: 'redeem_credit', reason: 'Quota exhausted; Codex reset credits available' }
+        : { status: 'exhausted', priority: 'medium', action: 'none', reason: 'Quota exhausted' };
+      return next;
+    }
+    if (minRemaining < 20) {
+      next.status = 'warning';
+      next.recommendation = hasCredits
+        ? { status: 'credits_available', priority: 'medium', action: 'redeem_credit', reason: 'Quota below 20%; Codex reset credits available' }
+        : { status: 'warning', priority: 'low', action: 'none', reason: 'Quota below 20%' };
+      return next;
+    }
+    next.status = 'healthy';
+    next.recommendation = {
+      status: 'healthy',
+      priority: 'none',
+      action: 'none',
+      reason: 'Quota healthy',
+    };
+    return next;
+  }
+
+  if (next.status === 'cooldown') {
+    next.status = 'idle';
+    next.recommendation = {
+      status: 'idle',
+      priority: 'none',
+      action: 'refresh',
+      reason: 'No live quota data yet',
+    };
+  }
+  return next;
+}
+
+function summarizeSandboxQuotas(quotas: QuotaItem[], nowMS: number): QuotaOverviewSummary {
+  let healthyCount = 0;
+  let warningCount = 0;
+  let exhaustedCount = 0;
+  let cooldownCount = 0;
+  let attentionCount = 0;
+  let soonestRecoveryMS: number | undefined;
+
+  const trackRecovery = (ts?: number) => {
+    if (ts != null && ts > nowMS && (soonestRecoveryMS === undefined || ts < soonestRecoveryMS)) {
+      soonestRecoveryMS = ts;
+    }
+  };
+
+  for (const item of quotas) {
+    if (item.active_cooldown?.is_active) {
+      trackRecovery(cooldownDeadlineMs(item.active_cooldown));
+    }
+    for (const modelCooldown of item.model_cooldowns ?? []) {
+      trackRecovery(cooldownDeadlineMs(modelCooldown));
+    }
+    for (const window of item.windows) {
+      trackRecovery(window.reset_at_ms);
+    }
+
+    const hasPartialCooldown = !item.disabled && (item.model_cooldowns?.length ?? 0) > 0;
+    switch (item.status) {
+      case 'healthy':
+        if (hasPartialCooldown) {
+          warningCount += 1;
+          attentionCount += 1;
+        } else {
+          healthyCount += 1;
+        }
+        break;
+      case 'idle':
+      case 'unpublished':
+        if (hasPartialCooldown) {
+          warningCount += 1;
+          attentionCount += 1;
+        }
+        break;
+      case 'warning':
+        warningCount += 1;
+        attentionCount += 1;
+        break;
+      case 'exhausted':
+        exhaustedCount += 1;
+        attentionCount += 1;
+        break;
+      case 'cooldown':
+        cooldownCount += 1;
+        attentionCount += 1;
+        break;
+      case 'error':
+        attentionCount += 1;
+        break;
+    }
+  }
+
+  return {
+    total_credentials: quotas.length,
+    healthy_count: healthyCount,
+    warning_count: warningCount,
+    exhausted_count: exhaustedCount,
+    cooldown_count: cooldownCount,
+    attention_count: attentionCount,
+    ...(soonestRecoveryMS !== undefined ? { soonest_recovery_ms: soonestRecoveryMS } : {}),
   };
 }
 
@@ -2393,24 +2630,37 @@ export async function interceptDemoRequest(
           const auth = authByIndex.get(q.auth_index);
           const refreshedAt = state.quota.refreshedAt[q.auth_index];
           const clearedAt = state.quota.clearedCooldowns[q.auth_index];
+          const verifiedCooldown = state.quota.verifiedCooldowns?.[q.auth_index];
           const resetAt = state.quota.resetAt[q.auth_index];
           const redeemed = state.quota.redeemedCredits[q.auth_index] ?? 0;
-          let next = {
+          let next: QuotaItem = {
             ...q,
             disabled: auth ? auth.disabled : q.disabled,
             observed_at_ms: refreshedAt ? Math.max(q.observed_at_ms, refreshedAt) : q.observed_at_ms,
           };
+          let mutatedCooldownOrQuota = false;
           if (clearedAt) {
             next.active_cooldown = undefined;
             next.quota_exceeded = false;
+            mutatedCooldownOrQuota = true;
+          } else if (
+            next.active_cooldown &&
+            !isForceCooldownReason(next.active_cooldown.reason) &&
+            matchesVerifiedCooldown(verifiedCooldown, cooldownDeadlineMs(next.active_cooldown), next.active_cooldown.correlated_at_ms)
+          ) {
+            next.active_cooldown = undefined;
+            next.quota_exceeded = false;
+            mutatedCooldownOrQuota = true;
           }
           if (resetAt) {
             next.windows = next.windows.map((w) => ({ ...w, used_percent: 0, remaining_percent: 100 }));
+            mutatedCooldownOrQuota = true;
           }
           if (redeemed > 0 && next.reset_credits) {
             next.windows = next.windows.map((w) => ({ ...w, used_percent: 0, remaining_percent: 100 }));
             next.active_cooldown = undefined;
             next.quota_exceeded = false;
+            mutatedCooldownOrQuota = true;
             const projected = projectSandboxCodexResetCredits(
               next.reset_credits,
               redeemed,
@@ -2423,9 +2673,12 @@ export async function interceptDemoRequest(
               ...(projected.remainingCredits !== undefined ? { credits: projected.remainingCredits } : {}),
             };
           }
+          if (mutatedCooldownOrQuota || next.disabled !== q.disabled) {
+            next = recomputeSandboxQuotaItem(next);
+          }
           return next;
         });
-      return jsonResponse({ ...base, quotas });
+      return jsonResponse({ ...base, quotas, summary: summarizeSandboxQuotas(quotas, Date.now()), total: quotas.length });
     }
 
     if (pathname === '/management/quota/warmup/settings') {
@@ -2443,13 +2696,29 @@ export async function interceptDemoRequest(
 
     // Usage routing (apply cleared cooldowns so clearing cooldown on Quota/OAuth reflects live!)
     if (pathname === '/usage/routing') {
-      const res = await fetchBaseline(pathWithQuery, options);
+      const [res, quotaBase] = await Promise.all([
+        fetchBaseline(pathWithQuery, options),
+        ensureBaseline<QuotaOverviewResponse>('quota', '/management/quota', fetchBaseline),
+      ]);
       if (!res.ok) return res;
       const base = (await res.json()) as UsageRoutingResponse;
+      const quotaByIndex = new Map((quotaBase?.quotas ?? []).map((q) => [q.auth_index, q]));
       const now = Date.now();
       const cooldowns = base.cooldowns.filter((c) => {
         const clearedAt = state.quota.clearedCooldowns[c.auth_index];
-        return !clearedAt || now - clearedAt > 120_000;
+        if (clearedAt && now - clearedAt <= 120_000) return false;
+        const verifiedCooldown = state.quota.verifiedCooldowns?.[c.auth_index];
+        const quotaCooldown = quotaByIndex.get(c.auth_index)?.active_cooldown;
+        if (
+          verifiedCooldown &&
+          quotaCooldown?.is_active &&
+          !isForceCooldownReason(quotaCooldown.reason) &&
+          cooldownDeadlineMs(quotaCooldown) === c.until_at_ms &&
+          matchesVerifiedCooldown(verifiedCooldown, c.until_at_ms, quotaCooldown.correlated_at_ms)
+        ) {
+          return false;
+        }
+        return true;
       });
       return jsonResponse({ ...base, cooldowns });
     }
@@ -3191,12 +3460,43 @@ export async function interceptDemoRequest(
   }
 
   if (pathname === '/management/auth-files/verify' && method === 'POST') {
-    const body = parseJsonBody<{ name?: string }>(options);
+    const body = parseJsonBody<{ name?: string; auth_index?: string }>(options);
     const name = (body?.name ?? '').trim();
-    if (!name) return errorResponse('Missing credential name', 'invalid_request', 400);
-    const prev = state.authFiles.recoveredNames[name];
-    state.authFiles.recoveredNames[name] = { refreshedAt: prev?.refreshedAt ?? new Date().toISOString(), verified: true };
-    recordSandboxAudit(state, 'auth_file.verify', 'auth_file', name);
+    const authIndex = (body?.auth_index ?? '').trim();
+    if (!name && !authIndex) return errorResponse('Missing credential name', 'invalid_request', 400);
+    const [authBase, quotaBase] = await Promise.all([
+      ensureBaseline<ManagementAuthFilesResponse>('auth-files', '/management/auth-files', fetchBaseline),
+      ensureBaseline<QuotaOverviewResponse>('quota', '/management/quota', fetchBaseline),
+    ]);
+    // Discard stale completion if the sandbox was reset while awaiting baseline data.
+    if (loadState() !== state) return errorResponse('Sandbox was reset during verification', 'sandbox_reset', 409);
+    const matches = mergeAuthFiles(authBase ?? { files: [], total: 0 }, state).files.filter((file) => {
+      if (name && file.name !== name) return false;
+      if (authIndex && file.auth_index !== authIndex) return false;
+      return true;
+    });
+    if (matches.length !== 1) return errorResponse('auth file not found', 'not_found', 404);
+    const resolved = matches[0];
+    if (resolved.runtime_only) return errorResponse('OAuth recovery target or provider is invalid', 'invalid_oauth_target', 400);
+    const prev = state.authFiles.recoveredNames[resolved.name];
+    state.authFiles.recoveredNames[resolved.name] = { refreshedAt: prev?.refreshedAt ?? new Date().toISOString(), verified: true };
+    if (resolved.auth_index) {
+      const quotaItem = quotaBase?.quotas.find((q) => q.auth_index === resolved.auth_index);
+      const activeCooldown = quotaItem?.active_cooldown;
+      if (activeCooldown?.is_active && !isForceCooldownReason(activeCooldown.reason)) {
+        const untilAtMs = cooldownDeadlineMs(activeCooldown);
+        const correlatedAtMs = activeCooldown.correlated_at_ms;
+        if (untilAtMs !== undefined || correlatedAtMs !== undefined) {
+          state.quota.verifiedCooldowns = state.quota.verifiedCooldowns ?? {};
+          state.quota.verifiedCooldowns[resolved.auth_index] = {
+            verifiedAt: Date.now(),
+            ...(untilAtMs !== undefined ? { untilAtMs } : {}),
+            ...(correlatedAtMs !== undefined ? { correlatedAtMs } : {}),
+          };
+        }
+      }
+    }
+    recordSandboxAudit(state, 'auth_file.verify', 'auth_file', resolved.name);
     saveState(state);
     return jsonResponse({ status: 'ok', verified: true });
   }

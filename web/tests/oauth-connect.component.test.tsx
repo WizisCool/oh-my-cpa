@@ -158,6 +158,49 @@ it('keeps targeted recovery pinned across failure/minimizing and verifies creden
   } finally { surface.unmount(); }
 });
 
+it('surfaces 409 verification_not_applied as its own warning state on the recovery panel', async () => {
+  const t = makeT('en');
+  const server = installOmcApi();
+  let mode: 'not_applied' | 'verified' = 'not_applied';
+  server.on('POST', '/management/auth-files/verify', () => mode === 'not_applied'
+    ? json({ code: 'verification_not_applied', error: 'verification inference completed, but CPA did not apply it' }, 409)
+    : { status: 'ok', verified: true });
+  const changed = vi.fn();
+  const file: ManagementAuthFile = {
+    name: 'cooling.json', auth_index: 'cooling-idx', provider: 'claude', disabled: false, unavailable: true, runtime_only: false,
+    success: 0, failed: 1, recovery_supported: true, requires_sign_in: false, renewal_state: 'awaiting_first_renewal',
+    recovery_stage: 'quota_blocked', adopted: true, inference_verified: false, renewal_verified: false,
+  };
+  const surface = renderWithOmc(
+    <CredentialRecoveryPanel file={file} canEdit onChanged={changed} />,
+    { route: '/omc/oauth-management', isStrict: true },
+  );
+  try {
+    fireEvent.click(surface.baseElement.querySelector('[data-credential-verify]')!);
+    const confirmation = await screen.findByRole('dialog');
+    await act(async () => {
+      fireEvent.click(within(confirmation).getByRole('button', { name: t('recovery.verify') }));
+    });
+    const notice = await screen.findByTestId('credential-verify-not-applied');
+    expect(notice.textContent).toContain(t('recovery.verify_not_applied'));
+    expect(notice.textContent).toContain(t('recovery.verify_not_applied_hint'));
+    expect(surface.baseElement.textContent).not.toContain('Inference verification failed');
+    await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+
+    // A later successful verify clears the not-applied notice.
+    mode = 'verified';
+    fireEvent.click(surface.baseElement.querySelector('[data-credential-verify]')!);
+    const secondConfirmation = await screen.findByRole('dialog');
+    await act(async () => {
+      fireEvent.click(within(secondConfirmation).getByRole('button', { name: t('recovery.verify') }));
+    });
+    await waitFor(() => expect(screen.queryByTestId('credential-verify-not-applied')).toBeNull());
+    await waitFor(() => expect(changed).toHaveBeenCalledTimes(2));
+  } finally {
+    surface.unmount();
+  }
+});
+
 /**
  * The drawer is not the only place an attempt exists: a session outlives it, so the strip
  * beside the page is where a closed panel's sign-in is answered.

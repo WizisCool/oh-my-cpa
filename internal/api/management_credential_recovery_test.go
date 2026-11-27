@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
 const recoveryCredentialFixture = `{"id":"runtime-codex-id","name":"codex.json","auth_index":"idx-1","provider":"codex","requires_sign_in":true,"renewal_state":"sign_in_required","recovery_stage":"sign_in_required","access_token_expires_at":"2026-11-02T01:00:00+01:00","next_refresh_after":"2026-11-01T01:00:00Z","adopted":true,"inference_verified":false,"renewal_verified":false,"refresh_error":{"code":"invalid_grant","http_status":401,"message":"OPAQUE-SECRET https://provider.test/?code=PRIVATE-CODE","access_token":"OPAQUE-SECRET","failure_stage":"PRIVATE-STAGE","receipt":"PRIVATE-RECEIPT","journal":{"refresh_token":"OPAQUE-SECRET"}},"next_action":"sign_in","recovery_hint":"OPAQUE-SECRET","renewal_event":{"account":"OPAQUE-SECRET"},"refresh_token":"OPAQUE-SECRET"}`
@@ -326,5 +328,547 @@ func TestCredentialVerificationHonoursProviderWriteGate(t *testing.T) {
 	_ = json.Unmarshal(raw, &body)
 	if response.StatusCode != http.StatusServiceUnavailable || body.Code != providerWriteBusyCode || verifications.Load() != 0 {
 		t.Fatalf("busy verification must be refused as write_busy: %d %s verifications=%d", response.StatusCode, raw, verifications.Load())
+	}
+}
+
+func TestVerifyCredentialReleasesCredentialCooldownAndRefreshesQuota(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	recoverAt := now.Add(2 * time.Hour)
+	modelRecoverAt := now.Add(3 * time.Hour)
+	var apiCallReads atomic.Int32
+	var cooldownResets atomic.Int32
+	var verifiedAuth atomic.Bool
+
+	client, base, repo := startDashboardTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v8/management/credentials":
+			idx1Status, idx1Unavailable, idx1Retry := "error", true, fmt.Sprintf(`,"next_retry_after":%q`, recoverAt.Format(time.RFC3339))
+			if verifiedAuth.Load() {
+				idx1Status, idx1Unavailable, idx1Retry = "active", false, ""
+			}
+			fmt.Fprintf(w, `{"files":[
+				{"id":"cred-1","name":"codex.json","auth_index":"idx-1","type":"codex","provider":"codex","status":%q,"unavailable":%t%s,"requires_sign_in":false,"renewal_state":"awaiting_first_renewal","recovery_stage":"loaded","adopted":true,"inference_verified":%t},
+				{"id":"cred-force","name":"codex-force.json","auth_index":"idx-force","type":"codex","provider":"codex","status":"error","unavailable":true,"next_retry_after":%q,"requires_sign_in":false,"renewal_state":"awaiting_first_renewal","recovery_stage":"quota_blocked","adopted":true,"inference_verified":false}
+			]}`, idx1Status, idx1Unavailable, idx1Retry, verifiedAuth.Load(), recoverAt.Format(time.RFC3339))
+		case "/v8/management/credentials/verify":
+			var body struct {
+				AuthIndex string `json:"auth_index"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.AuthIndex == "idx-1" {
+				verifiedAuth.Store(true)
+			}
+			fmt.Fprint(w, `{"status":"ok","verified":true}`)
+		case "/v8/management/requests/api-call":
+			apiCallReads.Add(1)
+			fmt.Fprint(w, `{"status_code":200,"body":{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":10,"limit_window_seconds":18000,"reset_after_seconds":14400}}}}`)
+		case "/v8/management/routing/cooldown/reset":
+			cooldownResets.Add(1)
+			fmt.Fprint(w, `{"status":"ok"}`)
+		case "/v8/management/config/oauth/model-alias":
+			fmt.Fprint(w, `{}`)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	ctx := context.Background()
+	// Seed credential_quota (with inherited mirror) + independent model cooldown on idx-1, and force_cooldown on idx-force.
+	credQuota := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-1","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":4},"model":{"name":"gpt-5","next_retry_after":%q,"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":4}}}}`,
+		now.Format(time.RFC3339), recoverAt.Format(time.RFC3339), recoverAt.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
+	modelCooldown := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-1","model":"gpt-5-pro","status_code":429,"auth_status":{"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":2},"model":{"name":"gpt-5-pro","next_retry_after":%q,"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":2}}}}`,
+		now.Add(time.Second).Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339))
+	forceCooldown := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-force","code":"force_cooldown","status_code":502,"auth_status":{"quota":{"exceeded":true,"reason":"force_cooldown","next_recover_at":%q,"backoff_level":1}}}`,
+		now.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
+	for _, rawEvent := range []string{credQuota, modelCooldown, forceCooldown} {
+		if err := repo.CaptureErrorEvent(ctx, "default", rawEvent, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify idx-1 succeeds -> releases credential_quota evidence, preserves gpt-5-pro model cooldown, and refreshes quota reading.
+	response, raw := doJSON(t, client, http.MethodPost, base+"/omc/api/v1/management/auth-files/verify", `{"name":"codex.json","auth_index":"idx-1"}`)
+	if response.StatusCode != http.StatusOK || !strings.Contains(string(raw), `"verified":true`) {
+		t.Fatalf("verify idx-1 = %d %s", response.StatusCode, raw)
+	}
+	if apiCallReads.Load() == 0 {
+		t.Fatalf("expected post-verify quota refresh to query upstream usage")
+	}
+
+	// VerifyCredential itself must release stored credential cooldown evidence before any
+	// quota read reconciles it, while preserving the independent model cooldown.
+	postVerifyCooldowns, err := repo.BatchCorrelatedCooldowns(ctx, []string{"idx-1"}, now.UnixMilli())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if postVerifyCooldowns["idx-1"].IsActive {
+		t.Fatalf("idx-1 credential cooldown must be cleared immediately by verify before quota read: %+v", postVerifyCooldowns["idx-1"])
+	}
+	postVerifyModels, err := repo.BatchModelCooldowns(ctx, []string{"idx-1"}, now.UnixMilli(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(postVerifyModels["idx-1"]) != 1 || postVerifyModels["idx-1"][0].Model != "gpt-5-pro" {
+		t.Fatalf("idx-1 independent model cooldown must survive verify before quota read: %+v", postVerifyModels["idx-1"])
+	}
+
+	// Quota overview and detail immediately show the refreshed healthy state with no active credential cooldown,
+	// while preserving the independent per-model cooldown.
+	overviewResp, overviewRaw := doJSON(t, client, http.MethodGet, base+"/omc/api/v1/management/quota", "")
+	if overviewResp.StatusCode != http.StatusOK {
+		t.Fatalf("quota overview = %d %s", overviewResp.StatusCode, overviewRaw)
+	}
+	var overview struct {
+		Summary struct {
+			CooldownCount int `json:"cooldown_count"`
+		} `json:"summary"`
+		Quotas []struct {
+			AuthIndex      string `json:"auth_index"`
+			Status         string `json:"status"`
+			ActiveCooldown *struct {
+				IsActive bool `json:"is_active"`
+			} `json:"active_cooldown"`
+			ModelCooldowns []struct {
+				Model string `json:"model"`
+			} `json:"model_cooldowns"`
+			Windows []struct {
+				RemainingPercent *float64 `json:"remaining_percent"`
+			} `json:"windows"`
+		} `json:"quotas"`
+	}
+	if err := json.Unmarshal(overviewRaw, &overview); err != nil {
+		t.Fatal(err)
+	}
+	if overview.Summary.CooldownCount != 1 {
+		t.Fatalf("cooldown_count = %d, want 1 (only idx-force); body=%s", overview.Summary.CooldownCount, overviewRaw)
+	}
+	var sawIdx1 bool
+	for _, item := range overview.Quotas {
+		if item.AuthIndex != "idx-1" {
+			continue
+		}
+		sawIdx1 = true
+		if item.Status != "healthy" || item.ActiveCooldown != nil {
+			t.Fatalf("idx-1 after verify = %+v, want healthy with no active credential cooldown", item)
+		}
+		if len(item.Windows) == 0 || item.Windows[0].RemainingPercent == nil || *item.Windows[0].RemainingPercent != 90 {
+			t.Fatalf("idx-1 refreshed windows = %+v, want 90%% remaining", item.Windows)
+		}
+		if len(item.ModelCooldowns) != 1 || item.ModelCooldowns[0].Model != "gpt-5-pro" {
+			t.Fatalf("idx-1 model_cooldowns = %+v, want independent gpt-5-pro preserved", item.ModelCooldowns)
+		}
+	}
+	if !sawIdx1 {
+		t.Fatalf("missing idx-1 in quota overview: %s", overviewRaw)
+	}
+
+	// Verify idx-force keeps its force_cooldown local evidence intact when CPA still keeps the force cooldown,
+	// and post-verify quota refresh must not issue a redundant CPA cooldown reset for either credential.
+	forceResp, forceRaw := doJSON(t, client, http.MethodPost, base+"/omc/api/v1/management/auth-files/verify", `{"name":"codex-force.json","auth_index":"idx-force"}`)
+	if forceResp.StatusCode != http.StatusOK {
+		t.Fatalf("verify idx-force = %d %s", forceResp.StatusCode, forceRaw)
+	}
+	if cooldownResets.Load() != 0 {
+		t.Fatalf("post-verify refresh must not call CPA cooldown reset, got %d resets", cooldownResets.Load())
+	}
+	cooldowns, err := repo.BatchCorrelatedCooldowns(ctx, []string{"idx-force"}, now.UnixMilli())
+	if err != nil || !cooldowns["idx-force"].IsActive {
+		t.Fatalf("idx-force force_cooldown must survive verify: %+v, %v", cooldowns, err)
+	}
+}
+
+func TestVerifyCredentialDistinguishes409VerificationNotApplied(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	recoverAt := now.Add(2 * time.Hour)
+
+	for _, test := range []struct {
+		name           string
+		cpaBody        string
+		wantHTTPStatus int
+		wantCode       string
+	}{
+		{
+			name:           "verification_not_applied",
+			cpaBody:        `{"status":"error","verified":false,"error":"verification_not_applied: upstream completed the verification request, but the credential is still cooling down or disabled; OPAQUE-SECRET","credential":{"access_token":"OPAQUE-SECRET"}}`,
+			wantHTTPStatus: http.StatusConflict,
+			wantCode:       "verification_not_applied",
+		},
+		{
+			name:           "credential_superseded_stays_generic",
+			cpaBody:        `{"status":"error","verified":false,"error":"credential_superseded: credential was replaced OPAQUE-SECRET","credential":{"access_token":"OPAQUE-SECRET"}}`,
+			wantHTTPStatus: http.StatusBadGateway,
+			wantCode:       "cpa_unavailable",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client, base, repo := startDashboardTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/v8/management/credentials":
+					fmt.Fprintf(w, `{"files":[{"id":"cred-1","name":"codex.json","auth_index":"idx-1","type":"codex","provider":"codex","status":"error","unavailable":true,"next_retry_after":%q,"requires_sign_in":false,"renewal_state":"awaiting_first_renewal","recovery_stage":"quota_blocked","adopted":true,"inference_verified":false}]}`, recoverAt.Format(time.RFC3339))
+				case "/v8/management/credentials/verify":
+					w.WriteHeader(http.StatusConflict)
+					fmt.Fprint(w, test.cpaBody)
+				default:
+					http.NotFound(w, r)
+				}
+			})
+
+			ctx := context.Background()
+			rawEvent := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-1","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":3}}}`,
+				now.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
+			if err := repo.CaptureErrorEvent(ctx, "default", rawEvent, now); err != nil {
+				t.Fatal(err)
+			}
+
+			response, raw := doJSON(t, client, http.MethodPost, base+"/omc/api/v1/management/auth-files/verify", `{"name":"codex.json","auth_index":"idx-1"}`)
+			if response.StatusCode != test.wantHTTPStatus {
+				t.Fatalf("status = %d, want %d: %s", response.StatusCode, test.wantHTTPStatus, raw)
+			}
+			if strings.Contains(string(raw), "OPAQUE-SECRET") {
+				t.Fatalf("response leaked upstream secret: %s", raw)
+			}
+			var body struct {
+				Code string `json:"code"`
+			}
+			if err := json.Unmarshal(raw, &body); err != nil || body.Code != test.wantCode {
+				t.Fatalf("code = %q, want %q; body=%s", body.Code, test.wantCode, raw)
+			}
+
+			// Local cooldown evidence must NOT be cleared when CPA refused to apply verification.
+			cooldowns, err := repo.BatchCorrelatedCooldowns(ctx, []string{"idx-1"}, now.UnixMilli())
+			if err != nil || !cooldowns["idx-1"].IsActive {
+				t.Fatalf("cooldown must remain active after 409 %s: %+v, %v", test.name, cooldowns, err)
+			}
+
+			events, err := repo.ListAuditEvents(ctx, 10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rawAudit, _ := json.Marshal(events)
+			if strings.Contains(string(rawAudit), "OPAQUE-SECRET") {
+				t.Fatalf("audit leaked secret: %s", rawAudit)
+			}
+			if test.wantCode == "verification_not_applied" && !strings.Contains(string(rawAudit), `"verification_not_applied"`) {
+				t.Fatalf("audit missing verification_not_applied code: %s", rawAudit)
+			}
+		})
+	}
+}
+
+func TestCPAAuthoritativeProjectionReleasesStaleLocalCredentialCooldown(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	recoverAt := now.Add(2 * time.Hour)
+	modelRecoverAt := now.Add(3 * time.Hour)
+
+	client, base, repo := startDashboardTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v8/management/credentials":
+			fmt.Fprintf(w, `{"files":[
+				{"id":"cred-lifted","name":"codex-lifted.json","auth_index":"idx-lifted","type":"codex","provider":"codex","account_type":"oauth","status":"active","unavailable":false,"recovery_stage":"quota_blocked","quota_blocked":true},
+				{"id":"cred-cooling","name":"codex-cooling.json","auth_index":"idx-cooling","type":"codex","provider":"codex","account_type":"oauth","status":"error","unavailable":true,"next_retry_after":%q,"recovery_stage":"quota_blocked","quota_blocked":true}
+			]}`, recoverAt.Format(time.RFC3339))
+		case "/v8/management/config/oauth/model-alias":
+			fmt.Fprint(w, `{}`)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	ctx := context.Background()
+	liftedCred := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-lifted","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":4}}}`,
+		now.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
+	liftedModel := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-lifted","model":"gpt-5-pro","status_code":429,"auth_status":{"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":2},"model":{"name":"gpt-5-pro","next_retry_after":%q,"quota":{"exceeded":true,"reason":"quota","next_recover_at":%q,"backoff_level":2}}}}`,
+		now.Add(time.Second).Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339), modelRecoverAt.Format(time.RFC3339))
+	stillCooling := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-cooling","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":4}}}`,
+		now.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
+	for _, rawEvent := range []string{liftedCred, liftedModel, stillCooling} {
+		if err := repo.CaptureErrorEvent(ctx, "default", rawEvent, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Quota overview reconciles against CPA's live auth-file projection.
+	overviewResp, overviewRaw := doJSON(t, client, http.MethodGet, base+"/omc/api/v1/management/quota", "")
+	if overviewResp.StatusCode != http.StatusOK {
+		t.Fatalf("quota overview = %d %s", overviewResp.StatusCode, overviewRaw)
+	}
+	var overview struct {
+		Quotas []struct {
+			AuthIndex      string `json:"auth_index"`
+			Status         string `json:"status"`
+			ActiveCooldown *struct {
+				IsActive bool `json:"is_active"`
+			} `json:"active_cooldown"`
+			ModelCooldowns []struct {
+				Model string `json:"model"`
+			} `json:"model_cooldowns"`
+		} `json:"quotas"`
+	}
+	if err := json.Unmarshal(overviewRaw, &overview); err != nil {
+		t.Fatal(err)
+	}
+	var sawLifted, sawCooling bool
+	for _, item := range overview.Quotas {
+		switch item.AuthIndex {
+		case "idx-lifted":
+			sawLifted = true
+			if item.Status == "cooldown" || item.ActiveCooldown != nil {
+				t.Fatalf("idx-lifted must not render stale cooldown after CPA lifted it: %+v", item)
+			}
+			if len(item.ModelCooldowns) != 1 || item.ModelCooldowns[0].Model != "gpt-5-pro" {
+				t.Fatalf("idx-lifted independent model cooldown must survive reconciliation: %+v", item.ModelCooldowns)
+			}
+		case "idx-cooling":
+			sawCooling = true
+			if item.Status != "cooldown" || item.ActiveCooldown == nil || !item.ActiveCooldown.IsActive {
+				t.Fatalf("idx-cooling must keep active cooldown while CPA reports error/unavailable: %+v", item)
+			}
+		}
+	}
+	if !sawLifted || !sawCooling {
+		t.Fatalf("overview missing seeded credentials (sawLifted=%v, sawCooling=%v): %s", sawLifted, sawCooling, overviewRaw)
+	}
+
+	// Re-seed idx-lifted and verify single-credential detail and trends/quota reconcile too.
+	if err := repo.CaptureErrorEvent(ctx, "default", strings.Replace(liftedCred, `"backoff_level":4`, `"backoff_level":5`, 1), now.Add(2*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	detailResp, detailRaw := doJSON(t, client, http.MethodGet, base+"/omc/api/v1/management/quota/idx-lifted", "")
+	if detailResp.StatusCode != http.StatusOK || strings.Contains(string(detailRaw), `"active_cooldown"`) {
+		t.Fatalf("quota detail for idx-lifted = %d %s", detailResp.StatusCode, detailRaw)
+	}
+
+	if err := repo.CaptureErrorEvent(ctx, "default", strings.Replace(liftedCred, `"backoff_level":4`, `"backoff_level":6`, 1), now.Add(3*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	trendsResp, trendsRaw := doJSON(t, client, http.MethodGet, base+"/omc/api/v1/management/trends/quota", "")
+	if trendsResp.StatusCode != http.StatusOK {
+		t.Fatalf("trends quota = %d %s", trendsResp.StatusCode, trendsRaw)
+	}
+	var trends struct {
+		Items []struct {
+			AuthIndex string `json:"auth_index"`
+			Status    string `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(trendsRaw, &trends); err != nil {
+		t.Fatal(err)
+	}
+	var sawTrendsLifted bool
+	for _, item := range trends.Items {
+		if item.AuthIndex == "idx-lifted" {
+			sawTrendsLifted = true
+			if item.Status == "cooldown" {
+				t.Fatalf("trends/quota kept stale cooldown for idx-lifted: %+v", item)
+			}
+		}
+	}
+	if !sawTrendsLifted {
+		t.Fatalf("trends/quota missing idx-lifted: %s", trendsRaw)
+	}
+
+	// If the repository clear fails, the quota response must keep active_cooldown
+	// consistent with stored routing state so a later read can retry reconciliation.
+	if err := repo.CaptureErrorEvent(ctx, "default", strings.Replace(liftedCred, `"backoff_level":4`, `"backoff_level":7`, 1), now.Add(4*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.SQL().Exec(`CREATE TRIGGER reject_cooldown_clear BEFORE UPDATE ON error_events BEGIN SELECT RAISE(FAIL, 'db busy'); END`); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_, _ = repo.SQL().Exec(`DROP TRIGGER IF EXISTS reject_cooldown_clear`)
+	}()
+	failResp, failRaw := doJSON(t, client, http.MethodGet, base+"/omc/api/v1/management/quota", "")
+	if failResp.StatusCode != http.StatusOK {
+		t.Fatalf("quota overview during db error = %d %s", failResp.StatusCode, failRaw)
+	}
+	var failOverview struct {
+		Quotas []struct {
+			AuthIndex      string `json:"auth_index"`
+			Status         string `json:"status"`
+			ActiveCooldown *struct {
+				IsActive bool `json:"is_active"`
+			} `json:"active_cooldown"`
+		} `json:"quotas"`
+	}
+	if err := json.Unmarshal(failRaw, &failOverview); err != nil {
+		t.Fatal(err)
+	}
+	var sawRetained bool
+	for _, item := range failOverview.Quotas {
+		if item.AuthIndex == "idx-lifted" {
+			sawRetained = true
+			if item.Status != "cooldown" || item.ActiveCooldown == nil || !item.ActiveCooldown.IsActive {
+				t.Fatalf("idx-lifted must retain active_cooldown in response when repo clear fails: %+v", item)
+			}
+		}
+	}
+	if !sawRetained {
+		t.Fatalf("overview missing idx-lifted during clear failure: %s", failRaw)
+	}
+}
+
+func TestVerifyCredentialPreservesCooldownOnLegacyCPAAndNewerIngest(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	recoverAt := now.Add(2 * time.Hour)
+	var repoRef *repository.Repository
+	var injectDuringVerify atomic.Bool
+	var replacedVerified atomic.Bool
+	var replacedQuotaReads atomic.Int32
+
+	client, base, repo := startDashboardTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v8/management/credentials":
+			// idx-legacy models pre-v8.1.8 CPA: verify returns 200 verified=true but CPA keeps it cooling.
+			// idx-raced models CPA v8.1.8+ releasing the old cooldown, while a brand-new cooldown is ingested mid-verify.
+			// idx-replaced models CPA swapping a different runtime ID under the same name/auth_index during verify.
+			replacedID := "cred-replaced-old"
+			if replacedVerified.Load() {
+				replacedID = "cred-replaced-new"
+			}
+			fmt.Fprintf(w, `{"files":[
+				{"id":"cred-legacy","name":"codex-legacy.json","auth_index":"idx-legacy","type":"codex","provider":"codex","status":"error","unavailable":true,"next_retry_after":%q,"requires_sign_in":false,"renewal_state":"awaiting_first_renewal","recovery_stage":"quota_blocked","adopted":true,"inference_verified":true},
+				{"id":"cred-raced","name":"codex-raced.json","auth_index":"idx-raced","type":"codex","provider":"codex","status":"active","unavailable":false,"requires_sign_in":false,"renewal_state":"awaiting_first_renewal","recovery_stage":"loaded","adopted":true,"inference_verified":true},
+				{"id":%q,"name":"codex-replaced.json","auth_index":"idx-replaced","type":"codex","provider":"codex","status":"active","unavailable":false,"requires_sign_in":false,"renewal_state":"awaiting_first_renewal","recovery_stage":"loaded","adopted":true,"inference_verified":true}
+			]}`, recoverAt.Format(time.RFC3339), replacedID)
+		case "/v8/management/credentials/verify":
+			var body struct {
+				AuthIndex string `json:"auth_index"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.AuthIndex == "idx-raced" && injectDuringVerify.CompareAndSwap(true, false) && repoRef != nil {
+				newerEvent := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-raced","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":9}}}`,
+					now.Add(2*time.Second).Format(time.RFC3339), recoverAt.Add(time.Hour).Format(time.RFC3339))
+				if err := repoRef.CaptureErrorEvent(context.Background(), "default", newerEvent, now.Add(2*time.Second)); err != nil {
+					t.Errorf("CaptureErrorEvent during verify: %v", err)
+				}
+			}
+			if body.AuthIndex == "idx-replaced" {
+				replacedVerified.Store(true)
+			}
+			fmt.Fprint(w, `{"status":"ok","verified":true}`)
+		case "/v8/management/requests/api-call":
+			var payload struct {
+				AuthIndex string `json:"auth_index"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			if payload.AuthIndex == "idx-replaced" {
+				replacedQuotaReads.Add(1)
+			}
+			fmt.Fprint(w, `{"status_code":200,"body":{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":10,"limit_window_seconds":18000,"reset_after_seconds":14400}}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	repoRef = repo
+	injectDuringVerify.Store(true)
+
+	ctx := context.Background()
+	legacyEvent := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-legacy","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":2}}}`,
+		now.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
+	racedOldEvent := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-raced","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":1}}}`,
+		now.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
+	replacedEvent := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-replaced","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":3}}}`,
+		now.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
+	for _, rawEvent := range []string{legacyEvent, racedOldEvent, replacedEvent} {
+		if err := repo.CaptureErrorEvent(ctx, "default", rawEvent, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	legacyResp, legacyRaw := doJSON(t, client, http.MethodPost, base+"/omc/api/v1/management/auth-files/verify", `{"name":"codex-legacy.json","auth_index":"idx-legacy"}`)
+	if legacyResp.StatusCode != http.StatusOK {
+		t.Fatalf("verify idx-legacy = %d %s", legacyResp.StatusCode, legacyRaw)
+	}
+	racedResp, racedRaw := doJSON(t, client, http.MethodPost, base+"/omc/api/v1/management/auth-files/verify", `{"name":"codex-raced.json","auth_index":"idx-raced"}`)
+	if racedResp.StatusCode != http.StatusOK {
+		t.Fatalf("verify idx-raced = %d %s", racedResp.StatusCode, racedRaw)
+	}
+	replacedResp, replacedRaw := doJSON(t, client, http.MethodPost, base+"/omc/api/v1/management/auth-files/verify", `{"name":"codex-replaced.json","auth_index":"idx-replaced"}`)
+	if replacedResp.StatusCode != http.StatusOK {
+		t.Fatalf("verify idx-replaced = %d %s", replacedResp.StatusCode, replacedRaw)
+	}
+	if replacedQuotaReads.Load() != 0 {
+		t.Fatalf("replacement runtime ID must not trigger post-verify quota refresh, got %d reads", replacedQuotaReads.Load())
+	}
+
+	cooldowns, err := repo.BatchCorrelatedCooldowns(ctx, []string{"idx-legacy", "idx-raced", "idx-replaced"}, now.UnixMilli())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cooldowns["idx-legacy"].IsActive {
+		t.Fatalf("pre-v8.1.8 CPA keeping error/unavailable must retain local cooldown evidence: %+v", cooldowns["idx-legacy"])
+	}
+	if !cooldowns["idx-raced"].IsActive || cooldowns["idx-raced"].BackoffLevel != 9 {
+		t.Fatalf("cooldown ingested during verify must not be erased by pre-verify watermark: %+v", cooldowns["idx-raced"])
+	}
+	if !cooldowns["idx-replaced"].IsActive {
+		t.Fatalf("replacement runtime ID must not clear prior credential cooldown evidence: %+v", cooldowns["idx-replaced"])
+	}
+}
+
+func TestCPAAuthoritativeProjectionDoesNotClearCooldownIngestedAfterSnapshotStarted(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	recoverAt := now.Add(2 * time.Hour)
+	var repoRef *repository.Repository
+	var injectNewCooldown atomic.Bool
+
+	client, base, repo := startDashboardTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v8/management/credentials":
+			// Simulate CPA entering cooldown and OMC ingesting the error event after the
+			// snapshot request began, while the in-flight response still returns active.
+			if injectNewCooldown.CompareAndSwap(true, false) && repoRef != nil {
+				rawEvent := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-race","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":2}}}`,
+					now.Format(time.RFC3339), recoverAt.Format(time.RFC3339))
+				if err := repoRef.CaptureErrorEvent(context.Background(), "default", rawEvent, now); err != nil {
+					t.Errorf("CaptureErrorEvent during AuthFiles fetch: %v", err)
+				}
+			}
+			fmt.Fprint(w, `{"files":[{"id":"cred-race","name":"codex-race.json","auth_index":"idx-race","type":"codex","provider":"codex","account_type":"oauth","status":"active","unavailable":false}]}`)
+		case "/v8/management/config/oauth/model-alias":
+			fmt.Fprint(w, `{}`)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	// Seed an older event first so snapshotMaxEventID > 0 before the overview runs and
+	// the per-event EventID > snapshotMaxEventID guard is genuinely exercised.
+	seedEvent := fmt.Sprintf(`{"timestamp":%q,"auth_index":"idx-seed","auth_status":{"quota":{"exceeded":true,"reason":"credential_quota","next_recover_at":%q,"backoff_level":1}}}`,
+		now.Add(-time.Minute).Format(time.RFC3339), now.Add(-30*time.Second).Format(time.RFC3339))
+	if err := repo.CaptureErrorEvent(context.Background(), "default", seedEvent, now.Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	repoRef = repo
+	injectNewCooldown.Store(true)
+
+	overviewResp, overviewRaw := doJSON(t, client, http.MethodGet, base+"/omc/api/v1/management/quota", "")
+	if overviewResp.StatusCode != http.StatusOK {
+		t.Fatalf("quota overview = %d %s", overviewResp.StatusCode, overviewRaw)
+	}
+	var overview struct {
+		Quotas []struct {
+			AuthIndex      string `json:"auth_index"`
+			Status         string `json:"status"`
+			ActiveCooldown *struct {
+				IsActive bool `json:"is_active"`
+			} `json:"active_cooldown"`
+		} `json:"quotas"`
+	}
+	if err := json.Unmarshal(overviewRaw, &overview); err != nil {
+		t.Fatal(err)
+	}
+	if len(overview.Quotas) != 1 || overview.Quotas[0].Status != "cooldown" || overview.Quotas[0].ActiveCooldown == nil || !overview.Quotas[0].ActiveCooldown.IsActive {
+		t.Fatalf("stale CPA snapshot must not hide newer cooldown in response: %+v", overview.Quotas)
+	}
+
+	cooldowns, err := repo.BatchCorrelatedCooldowns(context.Background(), []string{"idx-race"}, now.UnixMilli())
+	if err != nil || !cooldowns["idx-race"].IsActive {
+		t.Fatalf("stale CPA snapshot must not clear newer cooldown in persistence: %+v, %v", cooldowns, err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
 )
 
 // AuthFileVerifyRequestDTO selects a credential and optional model to verify via live inference.
@@ -33,6 +34,7 @@ type AuthFileVerifyResponseDTO struct {
 // @Failure 400 {object} ErrorResponseDTO
 // @Failure 401 {object} ErrorResponseDTO
 // @Failure 404 {object} ErrorResponseDTO
+// @Failure 409 {object} ErrorResponseDTO
 // @Failure 413 {object} ErrorResponseDTO
 // @Failure 500 {object} ErrorResponseDTO
 // @Failure 502 {object} ErrorResponseDTO
@@ -61,15 +63,27 @@ func (h *Handler) verifyManagementAuthFile(writer http.ResponseWriter, request *
 		writeError(writer, http.StatusInternalServerError, "audit log failure; verification aborted")
 		return
 	}
-	verified, err := h.operationsService().VerifyCredential(request.Context(), operations.CredentialTarget{Name: input.Name, AuthIndex: input.AuthIndex}, input.Model, "")
+	result, err := h.operationsService().VerifyCredential(request.Context(), operations.CredentialTarget{Name: input.Name, AuthIndex: input.AuthIndex}, input.Model, "")
 	target := firstNonEmpty(input.Name, input.AuthIndex)
 	if err != nil {
 		detail := map[string]any{}
-		var upstream *management.HTTPError
-		if errors.As(err, &upstream) {
-			detail["cpa_status"] = upstream.StatusCode
+		if errors.Is(err, management.ErrVerificationNotApplied) {
+			detail["cpa_status"] = http.StatusConflict
+			detail["code"] = "verification_not_applied"
+		} else {
+			var upstream *management.HTTPError
+			if errors.As(err, &upstream) {
+				detail["cpa_status"] = upstream.StatusCode
+			}
 		}
 		_ = h.recordAudit(request, "auth_file.verify", "auth_file", target, "failure", detail)
+		if errors.Is(err, management.ErrVerificationNotApplied) {
+			// CPA may have observed a racing cooldown or disabled state during verify;
+			// invalidate cached views so the console reloads CPA's current state.
+			h.invalidateCoordinator("management-auth-files", "management-quota")
+			writeCPAFacadeError(writer, err)
+			return
+		}
 		switch err.Error() {
 		case "resource_conflict":
 			writeError(writer, http.StatusNotFound, "auth file not found")
@@ -82,7 +96,52 @@ func (h *Handler) verifyManagementAuthFile(writer http.ResponseWriter, request *
 	}
 	// The inference has already run; an outcome-audit failure must not invite
 	// a retry that consumes tokens again.
-	_ = h.recordAudit(request, "auth_file.verify", "auth_file", target, "success", map[string]any{"verified": verified})
-	h.invalidateCoordinator("management-auth-files")
-	writeJSON(writer, http.StatusOK, AuthFileVerifyResponseDTO{Status: "ok", Verified: verified})
+	_ = h.recordAudit(request, "auth_file.verify", "auth_file", target, "success", map[string]any{"verified": result.Verified})
+	if result.Verified {
+		h.refreshQuotaAfterVerify(request, result.AuthFile)
+	}
+	h.invalidateCoordinator("management-auth-files", "management-quota")
+	writeJSON(writer, http.StatusOK, AuthFileVerifyResponseDTO{Status: "ok", Verified: result.Verified})
+}
+
+// refreshQuotaAfterVerify re-reads the credential's quota reading after a
+// confirmed operator verify so the stored snapshot and subsequent renders
+// reflect the post-verify state CPA now reports. Best effort: the verify
+// already succeeded upstream and must never be turned into a retryable failure.
+func (h *Handler) refreshQuotaAfterVerify(request *http.Request, file management.AuthFile) {
+	authIndex := strings.TrimSpace(file.AuthIndex)
+	if authIndex == "" || file.Disabled || !quota.CapabilitiesForFile(file).RefreshSupported {
+		return
+	}
+	ctx := request.Context()
+	client, err := h.capabilityClient(ctx)
+	if err != nil || client == nil {
+		return
+	}
+	isMeta := quota.DetectProvider(file.Type, file.Provider) == "meta"
+	if isMeta {
+		// Meta's quota read can mint a key; keep its fail-closed audit gate.
+		if err := h.recordAudit(request, "quota.refresh", "quota", authIndex, "attempt", map[string]any{
+			"provider":        "meta",
+			"upstream_action": "key_exchange",
+		}); err != nil {
+			return
+		}
+	}
+	prior := h.loadPriorNormalizedQuota(ctx, authIndex)
+	refreshed, err := h.refreshQuotaReadingWithoutCooldownRelease(ctx, h.newQuotaService(client), file, prior)
+	if err == nil && refreshed != nil && !refreshed.IsDeferred {
+		_ = h.persistNormalizedQuotaSnapshot(ctx, refreshed)
+	}
+	if isMeta {
+		outcome := "success"
+		details := map[string]any{}
+		if err != nil || refreshed == nil || refreshed.Error != "" {
+			outcome = "failure"
+		}
+		if refreshed != nil {
+			details["status"] = refreshed.Status
+		}
+		_ = h.recordAudit(request, "quota.refresh", "quota", authIndex, outcome, details)
+	}
 }

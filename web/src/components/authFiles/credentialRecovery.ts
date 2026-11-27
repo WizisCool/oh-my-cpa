@@ -1,5 +1,43 @@
+import { apiErrorCode } from '../../api/client';
 import type { MessageKey } from '../../i18n/catalog';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
+
+export const VERIFICATION_OUTCOMES = [
+  'verified',
+  'unconfirmed',
+  'verification_not_applied',
+  'failed',
+] as const;
+
+export type VerificationOutcome = (typeof VERIFICATION_OUTCOMES)[number];
+
+export const VERIFICATION_OUTCOME_MESSAGES = {
+  verified: 'recovery.verify_success',
+  unconfirmed: 'recovery.verify_unconfirmed',
+  verification_not_applied: 'recovery.verify_not_applied',
+  failed: 'recovery.verify_failed',
+} as const satisfies Record<VerificationOutcome, MessageKey>;
+
+export const VERIFICATION_OUTCOME_TONES = {
+  verified: 'success',
+  unconfirmed: 'warning',
+  verification_not_applied: 'warning',
+  failed: 'error',
+} as const satisfies Record<VerificationOutcome, 'success' | 'warning' | 'error'>;
+
+const VERIFICATION_NOT_APPLIED_OUTCOME: VerificationOutcome = 'verification_not_applied';
+
+export function verificationOutcomeFromResult(result: { verified: boolean }): VerificationOutcome {
+  return result.verified ? 'verified' : 'unconfirmed';
+}
+
+export function verificationOutcomeFromError(error: unknown): VerificationOutcome {
+  return apiErrorCode(error) === VERIFICATION_NOT_APPLIED_OUTCOME ? VERIFICATION_NOT_APPLIED_OUTCOME : 'failed';
+}
+
+export function isVerificationNotApplied(outcome: VerificationOutcome | null): boolean {
+  return outcome === VERIFICATION_NOT_APPLIED_OUTCOME;
+}
 
 const RENEWAL_LABELS = {
   sign_in_required: 'recovery.sign_in_required',

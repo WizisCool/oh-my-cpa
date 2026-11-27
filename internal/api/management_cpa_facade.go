@@ -70,6 +70,10 @@ func classifyCPAFacadeError(err error) (status int, code string, message string,
 		status = http.StatusBadGateway
 		code = "config_partially_applied"
 		message = "CPA applied only part of the configuration change before a request failed; reload the configuration to see what was saved"
+	} else if errors.Is(err, management.ErrVerificationNotApplied) {
+		status = http.StatusConflict
+		code = "verification_not_applied"
+		message = "verification inference completed, but CPA did not apply it because the credential is still cooling down or disabled"
 	} else if errors.Is(err, management.ErrManagementSecretKeyChange) {
 		status = http.StatusConflict
 		code = "management_key_environment_owned"
@@ -165,6 +169,9 @@ func publicCPAErrorMessage(err error) string {
 	}
 	if errors.Is(err, management.ErrManagementDisabled) {
 		return "CPA does not serve its Management API"
+	}
+	if errors.Is(err, management.ErrVerificationNotApplied) {
+		return "CPA completed verification inference without applying it"
 	}
 	if errors.Is(err, management.ErrConfigBackupUnavailable) {
 		return "the CPA configuration file could not be backed up before writing it"

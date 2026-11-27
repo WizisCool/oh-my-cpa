@@ -161,7 +161,7 @@ type CredentialQuotaDetailResponseDTO struct {
 }
 
 // @Summary Get credential quota overview
-// @Description Return normalized quota windows, active cooldowns, capacity forecasts, and overview summary across credentials.
+// @Description Return normalized quota windows, active cooldowns, capacity forecasts, and overview summary across credentials. Reconciles stale local credential-scoped cooldown evidence up to the pre-read watermark when CPA affirmatively reports a credential available, without issuing a credential-wide CPA cooldown reset.
 // @Tags Quota
 // @Produce json
 // @Security CookieAuth
@@ -220,7 +220,15 @@ func (h *Handler) newQuotaService(client quota.CPAClient) *quota.Service {
 // capability - so a failure the operator is shown in a toast is also the failure the page can
 // still report after the toast is gone.
 func (h *Handler) refreshQuotaReading(ctx context.Context, svc *quota.Service, file management.AuthFile, prior *quota.NormalizedQuota) (*quota.NormalizedQuota, error) {
-	return h.refreshQuotaReadingAs(ctx, svc, file, prior, false)
+	return h.refreshQuotaReadingWithPolicy(ctx, svc, file, prior, false, true)
+}
+
+// refreshQuotaReadingWithoutCooldownRelease reads and records the credential's quota without
+// issuing a credential-wide CPA cooldown reset. Used after an operator verify, where CPA has
+// already applied its own scoped credential_quota release while preserving independent model
+// and force cooldowns.
+func (h *Handler) refreshQuotaReadingWithoutCooldownRelease(ctx context.Context, svc *quota.Service, file management.AuthFile, prior *quota.NormalizedQuota) (*quota.NormalizedQuota, error) {
+	return h.refreshQuotaReadingWithPolicy(ctx, svc, file, prior, false, false)
 }
 
 // refreshAutomaticQuotaReading is the same read for a caller no operator is waiting on. It also
@@ -228,10 +236,14 @@ func (h *Handler) refreshQuotaReading(ctx context.Context, svc *quota.Service, f
 // existing rule and waits only for the provider pause, because the operator is asking for the
 // answer now.
 func (h *Handler) refreshAutomaticQuotaReading(ctx context.Context, svc *quota.Service, file management.AuthFile, prior *quota.NormalizedQuota) (*quota.NormalizedQuota, error) {
-	return h.refreshQuotaReadingAs(ctx, svc, file, prior, true)
+	return h.refreshQuotaReadingWithPolicy(ctx, svc, file, prior, true, true)
 }
 
 func (h *Handler) refreshQuotaReadingAs(ctx context.Context, svc *quota.Service, file management.AuthFile, prior *quota.NormalizedQuota, isAutomatic bool) (*quota.NormalizedQuota, error) {
+	return h.refreshQuotaReadingWithPolicy(ctx, svc, file, prior, isAutomatic, true)
+}
+
+func (h *Handler) refreshQuotaReadingWithPolicy(ctx context.Context, svc *quota.Service, file management.AuthFile, prior *quota.NormalizedQuota, isAutomatic bool, shouldReleaseCooldown bool) (*quota.NormalizedQuota, error) {
 	// Stamped before the read, on the same clock the service stamps the reading with: two reads of
 	// one credential can overlap, and the stored attempt must answer "which read started last", not
 	// "which response landed last". A slow failing read that started first may finish after a newer
@@ -250,7 +262,7 @@ func (h *Handler) refreshQuotaReadingAs(ctx context.Context, svc *quota.Service,
 		return refreshed, err
 	}
 	h.recordQuotaReadAttempt(ctx, file, attemptedAtMS, refreshed, err)
-	if err == nil && quota.HasRestoredCapacity(refreshed, attemptedAtMS) {
+	if shouldReleaseCooldown && err == nil && quota.HasRestoredCapacity(refreshed, attemptedAtMS) {
 		h.releaseRestoredCooldown(ctx, svc, refreshed)
 	}
 	return refreshed, err
@@ -873,8 +885,40 @@ func (h *Handler) redeemCodexResetCredit(writer http.ResponseWriter, request *ht
 	writeJSON(writer, 200, result)
 }
 
+func (h *Handler) latestErrorEventID(ctx context.Context) (int64, bool) {
+	if h.repo == nil {
+		return 0, false
+	}
+	maxID, err := h.repo.LatestErrorEventID(ctx)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Warn("failed to read error_events watermark before CPA auth-files fetch", "error", err)
+		}
+		return 0, false
+	}
+	return maxID, true
+}
+
+// reconcileCPACredentialCooldowns delegates live CPA auth-file cooldown reconciliation
+// to internal/operations so HTTP projections never mutate repository evidence directly.
+func (h *Handler) reconcileCPACredentialCooldowns(
+	ctx context.Context,
+	files []management.AuthFile,
+	activeCooldowns map[string]repository.ActiveCooldownRecord,
+	now time.Time,
+	snapshotMaxEventID int64,
+	hasSnapshotWatermark bool,
+) {
+	if !hasSnapshotWatermark || snapshotMaxEventID <= 0 {
+		return
+	}
+	if err := h.operationsService().ReconcileCPACredentialCooldowns(ctx, files, activeCooldowns, now, snapshotMaxEventID); err != nil && h.logger != nil {
+		h.logger.Warn("failed to release local cooldown evidence superseded by CPA state", "error", err)
+	}
+}
+
 // @Summary Get credential quota detail
-// @Description Return normalized quota windows, snapshot history, model quotas, and last refresh attempt for one credential.
+// @Description Return normalized quota windows, snapshot history, model quotas, and last refresh attempt for one credential. Reconciles stale local credential-scoped cooldown evidence up to the pre-read watermark when CPA affirmatively reports the credential available, without issuing a credential-wide CPA cooldown reset.
 // @Tags Quota
 // @Produce json
 // @Security CookieAuth
@@ -899,6 +943,7 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 	}
 
 	ctx := request.Context()
+	snapshotMaxEventID, hasSnapshotWatermark := h.latestErrorEventID(ctx)
 	filesResp, err := client.AuthFiles(ctx)
 	if err != nil {
 		writeCPAFacadeError(writer, err)
@@ -939,6 +984,7 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 	if h.repo != nil {
 		cooldownKeys := h.modelCooldownKeyResolver(ctx, client, map[string]management.AuthFile{authIndex: *targetFile})
 		if cooldowns, err := h.repo.BatchCorrelatedCooldowns(ctx, []string{authIndex}, nowMS); err == nil {
+			h.reconcileCPACredentialCooldowns(ctx, filesResp.Files, cooldowns, time.UnixMilli(nowMS), snapshotMaxEventID, hasSnapshotWatermark)
 			if cooldown, ok := cooldowns[authIndex]; ok && cooldown.IsActive {
 				normalized.ActiveCooldown = &quota.ActiveCooldown{
 					IsActive:          true,
@@ -1018,6 +1064,7 @@ type quotaOverviewData struct {
 }
 
 func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Client) (quotaOverviewData, error) {
+	snapshotMaxEventID, hasSnapshotWatermark := h.latestErrorEventID(ctx)
 	filesResp, err := client.AuthFiles(ctx)
 	if err != nil {
 		return quotaOverviewData{}, err
@@ -1046,6 +1093,7 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 			latestSnapshots = snapshots
 		}
 		if cooldowns, err := h.repo.BatchCorrelatedCooldowns(ctx, authIndexes, nowMS); err == nil {
+			h.reconcileCPACredentialCooldowns(ctx, filesResp.Files, cooldowns, time.UnixMilli(nowMS), snapshotMaxEventID, hasSnapshotWatermark)
 			activeCooldowns = cooldowns
 		}
 		if cooldowns, err := h.repo.BatchModelCooldowns(ctx, authIndexes, nowMS, cooldownKeys); err == nil {

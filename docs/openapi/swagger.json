@@ -3727,6 +3727,12 @@
               "$ref": "#/definitions/api.ErrorResponseDTO"
             }
           },
+          "409": {
+            "description": "Conflict",
+            "schema": {
+              "$ref": "#/definitions/api.ErrorResponseDTO"
+            }
+          },
           "413": {
             "description": "Request Entity Too Large",
             "schema": {
@@ -7907,7 +7913,7 @@
             "CookieAuth": []
           }
         ],
-        "description": "Return normalized quota windows, active cooldowns, capacity forecasts, and overview summary across credentials.",
+        "description": "Return normalized quota windows, active cooldowns, capacity forecasts, and overview summary across credentials. Reconciles stale local credential-scoped cooldown evidence up to the pre-read watermark when CPA affirmatively reports a credential available, without issuing a credential-wide CPA cooldown reset.",
         "produces": [
           "application/json"
         ],
@@ -8620,7 +8626,7 @@
             "CookieAuth": []
           }
         ],
-        "description": "Return normalized quota windows, snapshot history, model quotas, and last refresh attempt for one credential.",
+        "description": "Return normalized quota windows, snapshot history, model quotas, and last refresh attempt for one credential. Reconciles stale local credential-scoped cooldown evidence up to the pre-read watermark when CPA affirmatively reports the credential available, without issuing a credential-wide CPA cooldown reset.",
         "produces": [
           "application/json"
         ],

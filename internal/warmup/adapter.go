@@ -29,6 +29,10 @@ func Send(ctx context.Context, verify VerifyFunc, file management.AuthFile, mode
 		if errors.Is(err, management.ErrCredentialOutcomeUnknown) {
 			return Outcome{Status: "unknown", Reason: "no_answer"}
 		}
+		// Upstream completed the inference request, but CPA did not apply verification.
+		if errors.Is(err, management.ErrVerificationNotApplied) {
+			return Outcome{Status: "unknown", Reason: "verification_not_applied"}
+		}
 		var httpErr *management.HTTPError
 		if errors.As(err, &httpErr) && httpErr.StatusCode > 0 {
 			if httpErr.StatusCode == 504 {

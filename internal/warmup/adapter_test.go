@@ -43,6 +43,12 @@ func TestSendDelegatesToCPAVerify(t *testing.T) {
 	if noAnswer.Status != "unknown" || noAnswer.Reason != "no_answer" {
 		t.Fatalf("noAnswer = %+v", noAnswer)
 	}
+	notApplied := Send(context.Background(), func(_ context.Context, _, _, _ string) (bool, error) {
+		return false, management.ErrVerificationNotApplied
+	}, file, "claude-haiku-4-5")
+	if notApplied.Status != "unknown" || notApplied.Reason != "verification_not_applied" {
+		t.Fatalf("notApplied = %+v", notApplied)
+	}
 	refused := Send(context.Background(), func(_ context.Context, _, _, _ string) (bool, error) {
 		return false, management.ErrManagementV8Required
 	}, file, "claude-haiku-4-5")

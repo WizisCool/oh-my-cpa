@@ -40,6 +40,9 @@ type ActiveCooldownRecord struct {
 	RetryAtMS         *int64 `json:"retry_at_ms,omitempty"`
 	BackoffLevel      int    `json:"backoff_level,omitempty"`
 	Model             string `json:"model,omitempty"`
+	// EventID records the highest error_events primary key contributing to this active
+	// cooldown so callers can reject stale CPA snapshots captured before it was stored.
+	EventID int64 `json:"-"`
 }
 
 // SaveQuotaSnapshot inserts a snapshot, trims the credential's history to the
@@ -406,14 +409,23 @@ func (r *Repository) GetQuotaRefreshAttempts(ctx context.Context, authIndexes []
 	return result, rows.Err()
 }
 
-// HasCooldownEvidence reports whether an auth index still has stored quota_exceeded evidence.
+// HasCooldownEvidence reports whether an auth index still has stored releasable
+// quota_exceeded evidence. Operator/rule force cooldowns are excluded because a
+// healthy quota reading must not lift a forced cooldown.
 func (r *Repository) HasCooldownEvidence(ctx context.Context, authIndex string) (bool, error) {
 	if r == nil || r.SQL() == nil {
 		return false, errors.New("repository is not initialized")
 	}
 	var exists bool
 	err := r.SQL().QueryRowContext(ctx, `
-		SELECT EXISTS (SELECT 1 FROM error_events WHERE auth_index = ? AND quota_exceeded = 1 AND auth_quota_aggregate = 0)
+		SELECT EXISTS (
+			SELECT 1 FROM error_events
+			WHERE auth_index = ?
+			  AND quota_exceeded = 1
+			  AND auth_quota_aggregate = 0
+			  AND LOWER(COALESCE(code, '')) <> 'force_cooldown'
+			  AND LOWER(COALESCE(quota_reason, '')) <> 'force_cooldown'
+		)
 	`, strings.TrimSpace(authIndex)).Scan(&exists)
 	return exists, err
 }
@@ -431,6 +443,103 @@ func (r *Repository) ClearCooldownEvidence(ctx context.Context, authIndex string
 	`
 	_, err := r.SQL().ExecContext(ctx, query, strings.TrimSpace(authIndex))
 	return err
+}
+
+// LatestErrorEventID returns the highest error_events primary key currently stored,
+// or 0 when the table is empty. Callers capture this watermark before fetching live
+// CPA state so reconciliation never clears cooldown evidence inserted afterward.
+func (r *Repository) LatestErrorEventID(ctx context.Context) (int64, error) {
+	if r == nil || r.SQL() == nil {
+		return 0, errors.New("repository is not initialized")
+	}
+	var maxID int64
+	if err := r.SQL().QueryRowContext(ctx, `SELECT COALESCE(MAX(id), 0) FROM error_events`).Scan(&maxID); err != nil {
+		return 0, fmt.Errorf("read latest error event id: %w", err)
+	}
+	return maxID, nil
+}
+
+// ClearCredentialCooldownEvidence clears credential-scoped quota cooldown evidence
+// (auth_quota_aggregate = 0) and any propagated model mirror columns
+// (model_quota_inherited = 1) when an operator verify succeeds, while preserving
+// independent per-model cooldowns and force cooldowns to match CPA's release semantics.
+func (r *Repository) ClearCredentialCooldownEvidence(ctx context.Context, authIndex string) error {
+	_, err := r.clearCredentialCooldownEvidence(ctx, authIndex, false, 0)
+	return err
+}
+
+// ClearCredentialCooldownEvidenceUpTo is ClearCredentialCooldownEvidence bounded to
+// rows at or before maxEventID so an operator verify cannot erase a newer cooldown
+// ingested after verification began.
+func (r *Repository) ClearCredentialCooldownEvidenceUpTo(ctx context.Context, authIndex string, maxEventID int64) error {
+	if maxEventID <= 0 {
+		return nil
+	}
+	_, err := r.clearCredentialCooldownEvidence(ctx, authIndex, false, maxEventID)
+	return err
+}
+
+// ClearAuthoritativeCredentialCooldownEvidence clears credential-scoped cooldown
+// evidence (auth_quota_aggregate = 0) and inherited model mirrors when CPA's live
+// auth-file projection reports that no credential-level cooldown is active, while
+// preserving independent per-model cooldowns.
+func (r *Repository) ClearAuthoritativeCredentialCooldownEvidence(ctx context.Context, authIndex string) error {
+	_, err := r.clearCredentialCooldownEvidence(ctx, authIndex, true, 0)
+	return err
+}
+
+// ClearAuthoritativeCredentialCooldownEvidenceUpTo is ClearAuthoritativeCredentialCooldownEvidence
+// bounded to rows at or before maxEventID so an in-flight CPA read cannot erase a newer
+// cooldown ingested after the snapshot started. It returns the number of cleared rows.
+func (r *Repository) ClearAuthoritativeCredentialCooldownEvidenceUpTo(ctx context.Context, authIndex string, maxEventID int64) (int64, error) {
+	if maxEventID <= 0 {
+		return 0, nil
+	}
+	return r.clearCredentialCooldownEvidence(ctx, authIndex, true, maxEventID)
+}
+
+func (r *Repository) clearCredentialCooldownEvidence(ctx context.Context, authIndex string, includeForce bool, maxEventID int64) (int64, error) {
+	if r == nil || r.SQL() == nil {
+		return 0, errors.New("repository is not initialized")
+	}
+	trimmed := strings.TrimSpace(authIndex)
+	if trimmed == "" {
+		return 0, nil
+	}
+	query := `
+		UPDATE error_events
+		SET quota_exceeded = 0,
+		    next_recover_at_ms = NULL,
+		    next_retry_after_ms = NULL,
+		    model_quota_exceeded = CASE WHEN model_quota_inherited = 1 THEN 0 ELSE model_quota_exceeded END,
+		    model_next_recover_at_ms = CASE WHEN model_quota_inherited = 1 THEN NULL ELSE model_next_recover_at_ms END,
+		    model_next_retry_after_ms = CASE WHEN model_quota_inherited = 1 THEN NULL ELSE model_next_retry_after_ms END
+		WHERE auth_index = ?
+		  AND quota_exceeded = 1
+		  AND auth_quota_aggregate = 0
+	`
+	args := []any{trimmed}
+	if !includeForce {
+		query += `
+		  AND LOWER(COALESCE(code, '')) <> 'force_cooldown'
+		  AND LOWER(COALESCE(quota_reason, '')) <> 'force_cooldown'
+		`
+	}
+	if maxEventID > 0 {
+		query += `
+		  AND id <= ?
+		`
+		args = append(args, maxEventID)
+	}
+	res, err := r.SQL().ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("clear credential cooldown evidence: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("count cleared credential cooldown rows: %w", err)
+	}
+	return rows, nil
 }
 
 // BatchCorrelatedCooldowns efficiently batches correlated error events for auth indexes and derives active cooldown status.
@@ -463,7 +572,7 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 	}
 
 	query := fmt.Sprintf(`
-		SELECT auth_index, quota_reason, next_retry_after_ms, next_recover_at_ms, timestamp_ms, backoff_level
+		SELECT id, auth_index, quota_reason, next_retry_after_ms, next_recover_at_ms, timestamp_ms, backoff_level
 		FROM error_events
 		WHERE quota_exceeded = 1 AND auth_quota_aggregate = 0 AND (next_recover_at_ms > ? OR next_retry_after_ms > ? OR timestamp_ms >= ?) AND auth_index IN (%s)
 		-- timestamp_ms is not unique, so tied rows would otherwise be returned in
@@ -479,6 +588,7 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 	defer rows.Close()
 
 	for rows.Next() {
+		var eventID int64
 		var authIndex string
 		var reason sql.NullString
 		var retryAfterMS sql.NullInt64
@@ -486,7 +596,7 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 		var timestampMS int64
 		var backoffLevel int
 
-		if err := rows.Scan(&authIndex, &reason, &retryAfterMS, &recoverAtMS, &timestampMS, &backoffLevel); err != nil {
+		if err := rows.Scan(&eventID, &authIndex, &reason, &retryAfterMS, &recoverAtMS, &timestampMS, &backoffLevel); err != nil {
 			return result, fmt.Errorf("scan batch cooldown: %w", err)
 		}
 
@@ -533,14 +643,20 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 			RetryAfterSeconds: retryAfterSeconds,
 			CorrelatedAtMS:    &timestampMS,
 			BackoffLevel:      backoffLevel,
+			EventID:           eventID,
 		}
 		if retryAfterMS.Valid && retryAfterMS.Int64 > 0 {
 			candidate.RetryAtMS = &retryAfterMS.Int64
 		}
 		// Prefer an active row over an inactive newer one. If two rows are both
-		// active, the query order already gives the newest timestamp priority.
+		// active, the query order already gives the newest timestamp priority,
+		// while EventID tracks the highest active row id so reconciliation never
+		// clears an active cooldown ingested after an auth-files snapshot started.
 		if existing, exists := result[authIndex]; !exists || (candidate.IsActive && !existing.IsActive) {
 			result[authIndex] = candidate
+		} else if candidate.IsActive && existing.IsActive && candidate.EventID > existing.EventID {
+			existing.EventID = candidate.EventID
+			result[authIndex] = existing
 		}
 	}
 

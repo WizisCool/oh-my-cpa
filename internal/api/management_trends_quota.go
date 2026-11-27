@@ -194,24 +194,24 @@ func (h *Handler) trendsQuota(writer http.ResponseWriter, request *http.Request)
 	writeJSON(writer, http.StatusOK, result)
 }
 
-func (h *Handler) trendsOAuthFiles(ctx context.Context) (map[string]management.AuthFile, bool) {
+func (h *Handler) trendsOAuthFiles(ctx context.Context) (map[string]management.AuthFile, []management.AuthFile, bool) {
 	if h.cipher == nil {
-		return nil, false
+		return nil, nil, false
 	}
 	// Leave enough of the handler's deadline to read snapshots if CPA is offline.
 	liveCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	instance, err := h.repo.GetInstance(liveCtx, defaultInstanceID())
 	if err != nil {
-		return nil, false
+		return nil, nil, false
 	}
 	client, err := h.clientForInstance(liveCtx, instance)
 	if err != nil {
-		return nil, false
+		return nil, nil, false
 	}
 	response, err := client.AuthFiles(liveCtx)
 	if err != nil {
-		return nil, false
+		return nil, nil, false
 	}
 	files := make(map[string]management.AuthFile, len(response.Files))
 	for _, file := range response.Files {
@@ -223,7 +223,7 @@ func (h *Handler) trendsOAuthFiles(ctx context.Context) (map[string]management.A
 			files[index] = file
 		}
 	}
-	return files, true
+	return files, response.Files, true
 }
 
 func trendsMatches(values []string, value string) bool {
@@ -293,7 +293,8 @@ func trendsQuotaAccount(file management.AuthFile, archived repository.ArchivedCr
 
 func (h *Handler) readTrendsQuota(ctx context.Context, providers, indexes []string, nowMS int64) (TrendsQuotaResponseDTO, error) {
 	result := TrendsQuotaResponseDTO{AsOfMS: nowMS, Items: []TrendsQuotaCredentialDTO{}}
-	files, isLive := h.trendsOAuthFiles(ctx)
+	snapshotMaxEventID, hasSnapshotWatermark := h.latestErrorEventID(ctx)
+	files, liveFiles, isLive := h.trendsOAuthFiles(ctx)
 	var authIndexes []string
 	if isLive {
 		for index := range files {
@@ -352,6 +353,9 @@ func (h *Handler) readTrendsQuota(ctx context.Context, providers, indexes []stri
 	lastAttempts := h.lastQuotaAttempts(ctx, authIndexes)
 	var activeCooldowns map[string]repository.ActiveCooldownRecord
 	if cooldowns, cdErr := h.repo.BatchCorrelatedCooldowns(ctx, authIndexes, nowMS); cdErr == nil {
+		if isLive {
+			h.reconcileCPACredentialCooldowns(ctx, liveFiles, cooldowns, time.UnixMilli(nowMS), snapshotMaxEventID, hasSnapshotWatermark)
+		}
 		activeCooldowns = cooldowns
 	}
 	names, err := h.repo.ListCredentialDisplayNames(ctx, defaultInstanceID())

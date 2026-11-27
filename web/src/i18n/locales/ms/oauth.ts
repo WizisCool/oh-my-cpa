@@ -38,6 +38,8 @@ export default {
   "recovery.verify_warning": "Hantar permintaan inferens minimum menggunakan “{name}”? Ini menggunakan token dan tidak mengesahkan pembaharuan automatik.",
   "recovery.verify_success": "Inferens kelayakan ini disahkan. Pembaharuan automatik direkodkan secara berasingan.",
   "recovery.verify_unconfirmed": "Permintaan selesai tanpa pengesahan inferens. Muat semula kelayakan untuk melihat peringkat pemulihan.",
+  "recovery.verify_not_applied": "Pengesahan selesai tetapi tidak diterapkan",
+  "recovery.verify_not_applied_hint": "Hulu telah menyelesaikan permintaan pengesahan ini, tetapi CPA mengekalkan keadaan rehat atau dinyahdayakan kelayakan dan tidak melepaskannya.",
   "recovery.verify_failed": "Pengesahan inferens gagal: {msg}",
   "recovery.complete": "Log masuk selesai. Lihat peringkat pemulihan kelayakan; inferens dan pembaharuan automatik disahkan secara berasingan.",
   "recovery.read_failed": "Log masuk selesai tetapi ringkasan kelayakan tidak dapat dibaca. Muat semula untuk melihat peringkat pemulihan.",

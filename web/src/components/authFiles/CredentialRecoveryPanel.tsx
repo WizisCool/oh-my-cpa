@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { formatErrorCode } from '../../utils/format';
 import { useMutation } from '@tanstack/react-query';
@@ -10,7 +11,17 @@ import { SectionHeading } from '../common/SectionHeading';
 import { StatusLabel } from '../common/StatusLabel';
 import { Notice, useConfirmModal, useToast } from '../feedback';
 import { CheckOutlined } from '../icons';
-import { renewalDetail, renewalLabel, renewalTone } from './credentialRecovery';
+import {
+  isVerificationNotApplied,
+  renewalDetail,
+  renewalLabel,
+  renewalTone,
+  VERIFICATION_OUTCOME_MESSAGES,
+  VERIFICATION_OUTCOME_TONES,
+  verificationOutcomeFromError,
+  verificationOutcomeFromResult,
+  type VerificationOutcome,
+} from './credentialRecovery';
 import styles from './CredentialRecoveryPanel.module.css';
 
 
@@ -43,10 +54,26 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
   const t = useT();
   const modal = useConfirmModal();
   const toast = useToast();
+  const targetKey = `${file.name}\0${file.auth_index ?? ''}`;
+  const [lastOutcome, setLastOutcome] = useState<{ target: string; outcome: VerificationOutcome } | null>(null);
+  const activeOutcome = lastOutcome?.target === targetKey && !file.inference_verified ? lastOutcome.outcome : null;
   const verification = useMutation({
     mutationFn: (target: { name: string; authIndex?: string }) => api.verifyManagementAuthFile(target.name, target.authIndex),
-    onSuccess: (result) => result.verified ? toast.success(t('recovery.verify_success')) : toast.warning(t('recovery.verify_unconfirmed')),
-    onError: (error) => toast.error(t('recovery.verify_failed', { msg: describeError(error) })),
+    onMutate: () => setLastOutcome(null),
+    onSuccess: (result) => {
+      const outcome = verificationOutcomeFromResult(result);
+      setLastOutcome({ target: targetKey, outcome });
+      const message = t(VERIFICATION_OUTCOME_MESSAGES[outcome]);
+      if (VERIFICATION_OUTCOME_TONES[outcome] === 'success') toast.success(message);
+      else toast.warning(message);
+    },
+    onError: (error) => {
+      const outcome = verificationOutcomeFromError(error);
+      setLastOutcome({ target: targetKey, outcome });
+      const key = VERIFICATION_OUTCOME_MESSAGES[outcome];
+      if (VERIFICATION_OUTCOME_TONES[outcome] === 'warning') toast.warning(t(key));
+      else toast.error(t(key, { msg: describeError(error) }));
+    },
     onSettled: onChanged,
   });
   const isBlocked = !canEdit || !file.recovery_supported;
@@ -84,6 +111,15 @@ export function CredentialRecoveryPanel({ file, canEdit, onRecover, onChanged }:
     {/* Quota blocking is CPA's current stage, not evidence: it outranks confirmed inference,
         so it is stated beside the status instead of overwriting a verified step. */}
     {file.recovery_stage === 'quota_blocked' && <Notice tone="warning" title={t('recovery.quota_blocked')} description={t('recovery.quota_blocked_hint')} />}
+    {isVerificationNotApplied(activeOutcome) && (
+      <Notice
+        tone="warning"
+        title={t('recovery.verify_not_applied')}
+        description={t('recovery.verify_not_applied_hint')}
+        onClose={() => setLastOutcome(null)}
+        data-testid="credential-verify-not-applied"
+      />
+    )}
 
     <div className={styles['block']}>
       <SectionHeading level="label" as="h4" title={t('recovery.progress')} />
