@@ -8,6 +8,7 @@ const FIVE_HOURS_MS = 5 * 3_600_000;
 // Absorbs integer-second reset truncation and minor clock skew at observation without masking
 // active cycles observed shortly after starting.
 const UNSTARTED_CODEX_WINDOW_TOLERANCE_MS = 5_000;
+const RESET_CREDIT_CLOCK_MAX_DELAY_MS = 60_000;
 
 const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
 
@@ -279,6 +280,28 @@ export function isCodexResetCreditEligible(credit: CodexResetCredit, nowMS: numb
     return false;
   }
   return true;
+}
+
+/**
+ * Delay in milliseconds until the earliest upcoming eligible Codex reset credit expires,
+ * capped so open dialogs keep long countdowns fresh without overflowing 32-bit timers.
+ * Returns `null` when no eligible credit has a future expiration.
+ */
+export function nextCodexResetCreditExpiryDelayMS(
+  credits: readonly CodexResetCredit[] | undefined,
+  nowMS: number,
+  maxDelayMS = RESET_CREDIT_CLOCK_MAX_DELAY_MS,
+): number | null {
+  let earliestExpiryMS = Number.POSITIVE_INFINITY;
+  for (const credit of credits ?? []) {
+    if (!isCodexResetCreditEligible(credit, nowMS)) continue;
+    const expiresAt = credit.expires_at_ms;
+    if (expiresAt != null && Number.isFinite(expiresAt) && expiresAt > nowMS && expiresAt < earliestExpiryMS) {
+      earliestExpiryMS = expiresAt;
+    }
+  }
+  if (!Number.isFinite(earliestExpiryMS)) return null;
+  return Math.max(1, Math.min(Math.ceil(earliestExpiryMS - nowMS), maxDelayMS));
 }
 
 export interface SelectedCodexResetCredit {

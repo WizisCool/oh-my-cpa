@@ -709,6 +709,132 @@ describe('credential list row', () => {
     await waitFor(() => expect(onRedeemCredit).toHaveBeenCalledWith(expect.objectContaining({ authIndex: 'codex-menu-redeem' }), 'c-early'));
     expect(onRedeemCredit).toHaveBeenCalledTimes(1);
   });
+
+  it('rechecks credit expiry while the row-menu redemption dialog stays open and at confirmation', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const baseNow = Date.parse('2026-10-10T08:00:00Z');
+    vi.setSystemTime(baseNow);
+    const onRedeemCredit = vi.fn(async () => undefined);
+    try {
+      const renderMenuRow = () => renderCredentialRow(
+        quota('codex-menu-expiry', [quotaWindow('five_hour', 20, 3)], {
+          capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: true },
+          reset_credits: {
+            available_count: 2,
+            applicable_available_count: 2,
+            credits: [
+              { id: 'c-later', status: 'available', expires_at_ms: baseNow + HOUR_MS },
+              { id: 'c-soon', status: 'available', expires_at_ms: baseNow + 5_000 },
+            ],
+          },
+        }),
+        { onRedeemCredit, fileOverrides: { display_name: 'Expiring Codex' } },
+      );
+
+      const firstView = renderMenuRow();
+      // Closed row menus must not attach per-row timers.
+      expect(vi.getTimerCount()).toBe(0);
+
+      const openFromMenu = () => {
+        fireEvent.click(screen.getByRole('button', { name: 'More actions: codex-menu-expiry' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Use a reset' }));
+        return screen.getByRole('dialog');
+      };
+
+      // 1. Opening preselects the soonest credit; advancing 30s expires it without substituting c-later.
+      let dialog = openFromMenu();
+      let radios = within(dialog).getAllByRole('radio');
+      expect(radios.map((radio) => radio.getAttribute('data-redeem-credit'))).toEqual(['c-soon', 'c-later']);
+      expect(radios[0].getAttribute('aria-checked')).toBe('true');
+
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+
+      const confirmBtn = within(dialog).getByRole('button', { name: 'Redeem credit' }) as HTMLButtonElement;
+      expect(confirmBtn.disabled).toBe(true);
+      expect(dialog.textContent).toContain(makeT('en')('quota.reset_credit_selection_changed'));
+      radios = within(dialog).getAllByRole('radio');
+      expect(radios.map((radio) => radio.getAttribute('data-redeem-credit'))).toEqual(['c-later']);
+      expect(radios[0].getAttribute('aria-checked')).toBe('false');
+      expect(onRedeemCredit).not.toHaveBeenCalled();
+
+      // Explicitly picking the remaining eligible credit enables confirmation and dispatches its ID.
+      fireEvent.click(radios[0]);
+      expect(radios[0].getAttribute('aria-checked')).toBe('true');
+      expect(confirmBtn.disabled).toBe(false);
+      await act(async () => {
+        fireEvent.click(confirmBtn);
+      });
+      expect(onRedeemCredit).toHaveBeenCalledTimes(1);
+      expect(onRedeemCredit).toHaveBeenLastCalledWith(expect.objectContaining({ authIndex: 'codex-menu-expiry' }), 'c-later');
+      firstView.unmount();
+
+      // 2. If wall time passes expiry before a timer fires, confirmation still blocks the expired ID.
+      vi.setSystemTime(baseNow);
+      const secondView = renderMenuRow();
+      dialog = openFromMenu();
+      const confirmBeforeTick = within(dialog).getByRole('button', { name: 'Redeem credit' }) as HTMLButtonElement;
+      expect(confirmBeforeTick.disabled).toBe(false);
+
+      vi.setSystemTime(baseNow + 30_000);
+      await act(async () => {
+        fireEvent.click(confirmBeforeTick);
+      });
+      expect(onRedeemCredit).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('dialog')).toBeTruthy();
+      expect(confirmBeforeTick.disabled).toBe(true);
+      expect(dialog.textContent).toContain(makeT('en')('quota.reset_credit_selection_changed'));
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
+      // After exit animations settle, no dialog expiry timer should remain pending.
+      expect(vi.getTimerCount()).toBe(0);
+
+      // Reopening after c-soon expired starts fresh on c-later without a stale unavailable notice.
+      dialog = openFromMenu();
+      expect(dialog.textContent).not.toContain(makeT('en')('quota.reset_credit_selection_changed'));
+      expect(dialog.querySelector('[data-redeem-credit="c-later"]')).toBeTruthy();
+      expect((within(dialog).getByRole('button', { name: 'Redeem credit' }) as HTMLButtonElement).disabled).toBe(false);
+
+      // Advancing past the last remaining credit's expiry blocks confirmation cleanly.
+      act(() => {
+        vi.advanceTimersByTime(HOUR_MS);
+      });
+      expect((within(dialog).getByRole('button', { name: 'Redeem credit' }) as HTMLButtonElement).disabled).toBe(true);
+      expect(dialog.textContent).toContain(makeT('en')('quota.reset_credit_none_eligible'));
+      secondView.unmount();
+
+      // 3. An explicit eligible selection is preserved when another credit expires while open.
+      vi.setSystemTime(baseNow);
+      const thirdView = renderMenuRow();
+      dialog = openFromMenu();
+      radios = within(dialog).getAllByRole('radio');
+      fireEvent.click(radios[1]);
+      expect(radios[1].getAttribute('aria-checked')).toBe('true');
+
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+
+      const confirmPreserved = within(dialog).getByRole('button', { name: 'Redeem credit' }) as HTMLButtonElement;
+      expect(confirmPreserved.disabled).toBe(false);
+      expect(dialog.textContent).not.toContain(makeT('en')('quota.reset_credit_selection_changed'));
+      radios = within(dialog).getAllByRole('radio');
+      expect(radios.map((radio) => radio.getAttribute('data-redeem-credit'))).toEqual(['c-later']);
+      expect(radios[0].getAttribute('aria-checked')).toBe('true');
+      await act(async () => {
+        fireEvent.click(confirmPreserved);
+      });
+      expect(onRedeemCredit).toHaveBeenCalledTimes(2);
+      expect(onRedeemCredit).toHaveBeenLastCalledWith(expect.objectContaining({ authIndex: 'codex-menu-expiry' }), 'c-later');
+      thirdView.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('OAuth selection bar', () => {
