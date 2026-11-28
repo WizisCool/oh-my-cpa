@@ -1032,7 +1032,7 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 	}
 
 	if !normalized.Disabled && normalized.Provider == "claude" {
-		normalized.ResetGrantsError = h.quotaReadGates.claudeResetGrantsError(authIndex)
+		normalized.ResetGrantsError = h.quotaReadGates.claudeResetGrantsErrorForFile(*targetFile)
 	}
 	quota.EvaluateStatusAndRecommendation(&normalized, nowMS)
 	lastAttempts := h.lastQuotaAttempts(ctx, []string{authIndex})
@@ -1201,7 +1201,7 @@ func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Cli
 		}
 
 		if !normalized.Disabled && normalized.Provider == "claude" {
-			normalized.ResetGrantsError = h.quotaReadGates.claudeResetGrantsError(authIndex)
+			normalized.ResetGrantsError = h.quotaReadGates.claudeResetGrantsErrorForFile(file)
 		}
 		quota.EvaluateStatusAndRecommendation(&normalized, nowMS)
 		attempt := quotaAttemptOf(lastAttempts[authIndex])

@@ -712,6 +712,22 @@ func TestClaudeQueuedRefreshPreservesNewestResetGrants(t *testing.T) {
 		if len(queuedFailed.ResetGrants) != 1 || queuedFailed.ResetGrants[0].ID != "old-grant" || !queuedFailed.ResetGrantsObserved || queuedFailed.ResetGrantsError != quota.ClaudeResetGrantsErrorRateLimited {
 			t.Fatalf("queued failed read = grants:%+v observed:%v err:%q, want old-grant with rate_limited", queuedFailed.ResetGrants, queuedFailed.ResetGrantsObserved, queuedFailed.ResetGrantsError)
 		}
+
+		// Even if a cooldown refresh cannot load its prior snapshot (prior == nil), the gate's
+		// preserved fallback keeps old-grant from being wiped out by a newer persisted snapshot.
+		clockMu.Lock()
+		*now = now.Add(time.Second)
+		clockMu.Unlock()
+		nilPriorFailed, err := handler.refreshQuotaReading(ctx, handler.newQuotaService(client), file, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := handler.persistNormalizedQuotaSnapshot(ctx, nilPriorFailed); err != nil {
+			t.Fatal(err)
+		}
+		if len(nilPriorFailed.ResetGrants) != 1 || nilPriorFailed.ResetGrants[0].ID != "old-grant" || !nilPriorFailed.ResetGrantsObserved || nilPriorFailed.ResetGrantsError != quota.ClaudeResetGrantsErrorRateLimited {
+			t.Fatalf("nil-prior cooldown read = grants:%+v observed:%v err:%q, want old-grant with rate_limited", nilPriorFailed.ResetGrants, nilPriorFailed.ResetGrantsObserved, nilPriorFailed.ResetGrantsError)
+		}
 		fixture.mu.Lock()
 		if got := fixture.claudeURLs[grantsURL]; got != 1 {
 			fixture.mu.Unlock()
@@ -774,8 +790,47 @@ func TestClaudeQueuedRefreshPreservesNewestResetGrants(t *testing.T) {
 		}
 	})
 
-	t.Run("concurrent queued refresh before first persistence preserves newest grants", func(t *testing.T) {
+	t.Run("replaces cached reset grants when credential identity changes at same auth_index", func(t *testing.T) {
 		ctx := context.Background()
+		fixture := &claudeRateLimitFixture{claudeRequests: map[string]int{}, claudeURLs: map[string]int{}, codexReads: map[string]int{}}
+		handler, client, now, clockMu := setup(t, fixture)
+
+		originalFile := management.AuthFile{ID: "c1", AuthIndex: authIndex, Name: "claude-1.json", Email: "first@example.com", Type: "claude", Provider: "claude"}
+		first, err := handler.refreshQuotaReading(ctx, handler.newQuotaService(client), originalFile, handler.loadPriorNormalizedQuota(ctx, authIndex))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(first.ResetGrants) != 1 || first.ResetGrants[0].ID != "grant-1" {
+			t.Fatalf("original credential grants = %+v, want grant-1", first.ResetGrants)
+		}
+
+		// CPA replaces the runtime credential at the same auth_index inside the 1-hour cache window.
+		fixture.mu.Lock()
+		fixture.grantsResponseBody = `{"status_code": 200, "body": {"cedar_ember": {"eligible": true, "grants": [{"id": "grant-replacement", "resets_total": 1, "resets_left": 1, "clears": ["five_hour"]}]}}}`
+		fixture.mu.Unlock()
+		clockMu.Lock()
+		*now = now.Add(time.Second)
+		clockMu.Unlock()
+
+		replacementFile := management.AuthFile{ID: "c2", AuthIndex: authIndex, Name: "claude-replacement.json", Email: "second@example.com", Type: "claude", Provider: "claude"}
+		replaced, err := handler.refreshQuotaReading(ctx, handler.newQuotaService(client), replacementFile, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(replaced.ResetGrants) != 1 || replaced.ResetGrants[0].ID != "grant-replacement" || !replaced.ResetGrantsObserved || replaced.ResetGrantsError != "" {
+			t.Fatalf("replacement credential grants = %+v observed=%v err=%q, want grant-replacement", replaced.ResetGrants, replaced.ResetGrantsObserved, replaced.ResetGrantsError)
+		}
+		fixture.mu.Lock()
+		grantsCalls := fixture.claudeURLs[grantsURL]
+		fixture.mu.Unlock()
+		if grantsCalls != 2 {
+			t.Fatalf("supplementary grant requests after credential swap = %d, want 2", grantsCalls)
+		}
+	})
+
+	t.Run("concurrent queued refresh before first persistence preserves newest grants", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		inFirstGrants := make(chan struct{})
 		releaseFirstGrants := make(chan struct{})
 		var once, releaseOnce sync.Once
@@ -798,12 +853,14 @@ func TestClaudeQueuedRefreshPreservesNewestResetGrants(t *testing.T) {
 		priorFirst := handler.loadPriorNormalizedQuota(ctx, authIndex)
 		priorQueued := handler.loadPriorNormalizedQuota(ctx, authIndex)
 
-		firstDone := make(chan *quota.NormalizedQuota, 1)
-		firstErr := make(chan error, 1)
+		type refreshResult struct {
+			reading *quota.NormalizedQuota
+			err     error
+		}
+		firstCh := make(chan refreshResult, 1)
 		go func() {
 			reading, err := handler.refreshQuotaReading(ctx, handler.newQuotaService(client), file, priorFirst)
-			firstErr <- err
-			firstDone <- reading
+			firstCh <- refreshResult{reading: reading, err: err}
 		}()
 
 		// Wait until the first refresh holds the Claude gate slot in its grants request.
@@ -811,18 +868,16 @@ func TestClaudeQueuedRefreshPreservesNewestResetGrants(t *testing.T) {
 		defer waitTimer.Stop()
 		select {
 		case <-inFirstGrants:
-		case err := <-firstErr:
-			t.Fatalf("first refresh finished before grants request: err=%v reading=%+v", err, <-firstDone)
+		case res := <-firstCh:
+			t.Fatalf("first refresh finished before grants request: err=%v reading=%+v", res.err, res.reading)
 		case <-waitTimer.C:
 			t.Fatal("timed out waiting for first refresh to reach grants request")
 		}
 
-		queuedDone := make(chan *quota.NormalizedQuota, 1)
-		queuedErr := make(chan error, 1)
+		queuedCh := make(chan refreshResult, 1)
 		go func() {
 			reading, err := handler.refreshQuotaReading(ctx, handler.newQuotaService(client), file, priorQueued)
-			queuedErr <- err
-			queuedDone <- reading
+			queuedCh <- refreshResult{reading: reading, err: err}
 		}()
 
 		// Advance clock and release the first refresh; the queued refresh enters the gate before
@@ -832,14 +887,24 @@ func TestClaudeQueuedRefreshPreservesNewestResetGrants(t *testing.T) {
 		clockMu.Unlock()
 		releaseFirst()
 
-		firstReading := <-firstDone
-		if err := <-firstErr; err != nil {
-			t.Fatal(err)
+		joinRefresh := func(label string, ch <-chan refreshResult) *quota.NormalizedQuota {
+			t.Helper()
+			joinTimer := time.NewTimer(5 * time.Second)
+			defer joinTimer.Stop()
+			select {
+			case res := <-ch:
+				if res.err != nil {
+					t.Fatalf("%s error: %v", label, res.err)
+				}
+				return res.reading
+			case <-joinTimer.C:
+				cancel()
+				t.Fatalf("timed out waiting for %s to finish", label)
+				return nil
+			}
 		}
-		queuedReading := <-queuedDone
-		if err := <-queuedErr; err != nil {
-			t.Fatal(err)
-		}
+		firstReading := joinRefresh("first refresh", firstCh)
+		queuedReading := joinRefresh("queued refresh", queuedCh)
 		// Persist in either order — even persisting queued before first keeps grant-1.
 		if err := handler.persistNormalizedQuotaSnapshot(ctx, queuedReading); err != nil {
 			t.Fatal(err)
@@ -891,6 +956,8 @@ func TestClaudeQueuedRefreshPreservesNewestResetGrants(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			reqCtx, cancelReqs := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancelReqs()
 			inFirstGrants := make(chan struct{})
 			releaseFirstGrants := make(chan struct{})
 			secondLoadedPrior := make(chan struct{})
@@ -925,7 +992,7 @@ func TestClaudeQueuedRefreshPreservesNewestResetGrants(t *testing.T) {
 
 			postRefresh := func() *httptest.ResponseRecorder {
 				rec := httptest.NewRecorder()
-				req := httptest.NewRequest(http.MethodPost, "/api/v1/management/quota/refresh", bytes.NewBufferString(`{"auth_index":"claude-1"}`))
+				req := httptest.NewRequest(http.MethodPost, "/api/v1/management/quota/refresh", bytes.NewBufferString(`{"auth_index":"claude-1"}`)).WithContext(reqCtx)
 				handler.refreshCredentialQuota(rec, req)
 				return rec
 			}
@@ -1002,8 +1069,21 @@ func TestClaudeQueuedRefreshPreservesNewestResetGrants(t *testing.T) {
 			clockMu.Unlock()
 			releaseFirst()
 
-			firstRec := <-firstRecCh
-			queuedRec := <-queuedRecCh
+			joinHTTP := func(label string, ch <-chan *httptest.ResponseRecorder) *httptest.ResponseRecorder {
+				t.Helper()
+				joinTimer := time.NewTimer(5 * time.Second)
+				defer joinTimer.Stop()
+				select {
+				case rec := <-ch:
+					return rec
+				case <-joinTimer.C:
+					cancelReqs()
+					t.Fatalf("timed out waiting for %s to finish", label)
+					return nil
+				}
+			}
+			firstRec := joinHTTP("first HTTP refresh", firstRecCh)
+			queuedRec := joinHTTP("queued HTTP refresh", queuedRecCh)
 
 			for label, rec := range map[string]*httptest.ResponseRecorder{"first HTTP refresh": firstRec, "queued HTTP refresh": queuedRec} {
 				if rec.Code != http.StatusOK {

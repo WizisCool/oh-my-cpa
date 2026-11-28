@@ -1305,4 +1305,21 @@ func TestRefreshClaudeResetGrantsWithGateState(t *testing.T) {
 		t.Fatalf("usage failure cooldown result = status:%q observed_at_ms:%d grants:%+v observed:%v err:%q, want stale at %d retaining old-grant with rate_limited",
 			usageFailedCooldownRes.Status, usageFailedCooldownRes.ObservedAtMS, usageFailedCooldownRes.ResetGrants, usageFailedCooldownRes.ResetGrantsObserved, usageFailedCooldownRes.ResetGrantsError, priorObservedAtMS)
 	}
+
+	// Even past the fetch TTL (IsClaudeResetGrantsFresh: false), an observed gate result supersedes
+	// an older prior snapshot when primary usage fails.
+	usageFailedPostTTLRes, err := usageFailSvc.RefreshCredentialQuotaWith(context.Background(), file, stalePrior, ReadOptions{
+		IsClaudeProfileFresh:     true,
+		IsClaudeResetGrantsFresh: false,
+		ClaudeResetGrants:        &ClaudeResetGrantsState{Grants: []ClaudeResetGrant{}, Observed: true, Error: ""},
+	})
+	if err != nil {
+		t.Fatalf("usage failure post-TTL error: %v", err)
+	}
+	if usageFailedPostTTLRes.Status != "stale" || usageFailedPostTTLRes.ObservedAtMS != priorObservedAtMS ||
+		!usageFailedPostTTLRes.ResetGrantsObserved || len(usageFailedPostTTLRes.ResetGrants) != 0 ||
+		usageFailedPostTTLRes.ResetGrantsError != "" {
+		t.Fatalf("usage failure post-TTL result = status:%q observed_at_ms:%d grants:%+v observed:%v err:%q, want stale at %d with observed empty grants",
+			usageFailedPostTTLRes.Status, usageFailedPostTTLRes.ObservedAtMS, usageFailedPostTTLRes.ResetGrants, usageFailedPostTTLRes.ResetGrantsObserved, usageFailedPostTTLRes.ResetGrantsError, priorObservedAtMS)
+	}
 }

@@ -523,15 +523,17 @@ func (s *Service) RefreshCredentialQuotaWith(ctx context.Context, file managemen
 
 	if fetchErr != nil {
 		applyReadFailure(result, prior, fetchErr)
-		if stdProvider == "claude" && options.IsClaudeResetGrantsFresh && options.ClaudeResetGrants != nil {
-			// Keep grants, observed status, and error paired from the same gate
-			// observation even when primary usage fails, while preserving stale
-			// status and the prior reading's observation time.
+		if stdProvider == "claude" && options.ClaudeResetGrants != nil {
+			// Keep grants, observed status, and error paired with the gate's last
+			// authoritative observation (even past its fetch TTL) or active failure
+			// cooldown, while preserving stale status and the prior reading's observation time.
 			if options.ClaudeResetGrants.Observed {
 				result.ResetGrants = CloneClaudeResetGrants(options.ClaudeResetGrants.Grants)
 				result.ResetGrantsObserved = true
+				result.ResetGrantsError = options.ClaudeResetGrants.Error
+			} else if options.IsClaudeResetGrantsFresh {
+				result.ResetGrantsError = options.ClaudeResetGrants.Error
 			}
-			result.ResetGrantsError = options.ClaudeResetGrants.Error
 		}
 	} else if len(result.Windows) == 0 {
 		// The read succeeded and the provider published no window. Recording that separately is
