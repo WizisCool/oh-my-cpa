@@ -79,6 +79,7 @@ type quotaProviderGate struct {
 type quotaSupplementaryReads struct {
 	profileAtMS           int64
 	resetGrantsAtMS       int64
+	resetGrants           []quota.ClaudeResetGrant
 	resetGrantsFailedAtMS int64
 	resetGrantsError      string
 }
@@ -124,26 +125,46 @@ func (g *quotaProviderGate) scheduledReadAt(authIndex string) int64 {
 	return max(g.pausedUntilMS, g.backoffs[authIndex].untilMS)
 }
 
-// readOptions leaves out the supplementary reads whose last answer is recent and still carried
-// by prior. A prior plan with no type came from a failed profile read and is read again.
+// readOptions leaves out the supplementary reads whose last answer is recent. Profile reuse
+// requires a typed plan on prior; reset-grants reuse pairs the gate's freshness window with the
+// gate's last successful grant observation (and any active failure code) so a queued refresh
+// carrying an older prior snapshot cannot regress reset grants.
 func (g *quotaProviderGate) readOptions(authIndex string, prior *quota.NormalizedQuota, nowMS int64) quota.ReadOptions {
-	if prior == nil {
-		return quota.ReadOptions{}
-	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	reads := g.supplementary[authIndex]
-	isResetGrantsFresh := (reads.resetGrantsAtMS > 0 && nowMS-reads.resetGrantsAtMS < QUOTA_CLAUDE_RESET_GRANTS_MAX_AGE.Milliseconds()) ||
-		(reads.resetGrantsFailedAtMS > 0 && nowMS-reads.resetGrantsFailedAtMS < QUOTA_CLAUDE_RESET_GRANTS_FAILURE_COOLDOWN.Milliseconds())
+	isProfileFresh := prior != nil && prior.Plan != nil && prior.Plan.PlanType != "" &&
+		reads.profileAtMS > 0 && nowMS-reads.profileAtMS < QUOTA_CLAUDE_PROFILE_MAX_AGE.Milliseconds()
+	isResetGrantsSuccessFresh := reads.resetGrantsAtMS > 0 && nowMS-reads.resetGrantsAtMS < QUOTA_CLAUDE_RESET_GRANTS_MAX_AGE.Milliseconds()
+	isResetGrantsFailureFresh := reads.resetGrantsFailedAtMS > 0 && nowMS-reads.resetGrantsFailedAtMS < QUOTA_CLAUDE_RESET_GRANTS_FAILURE_COOLDOWN.Milliseconds()
+	isResetGrantsFresh := isResetGrantsSuccessFresh || isResetGrantsFailureFresh
+
+	var resetGrants *quota.ClaudeResetGrantsState
+	switch {
+	case reads.resetGrantsAtMS > 0:
+		resetGrants = &quota.ClaudeResetGrantsState{
+			Grants:   quota.CloneClaudeResetGrants(reads.resetGrants),
+			Observed: true,
+			Error:    reads.resetGrantsError,
+		}
+	case isResetGrantsFailureFresh:
+		state := &quota.ClaudeResetGrantsState{Error: reads.resetGrantsError}
+		if prior != nil {
+			state.Grants = quota.CloneClaudeResetGrants(prior.ResetGrants)
+			state.Observed = prior.ResetGrantsObserved
+		}
+		resetGrants = state
+	}
 	return quota.ReadOptions{
-		IsClaudeProfileFresh:     prior.Plan != nil && prior.Plan.PlanType != "" && reads.profileAtMS > 0 && nowMS-reads.profileAtMS < QUOTA_CLAUDE_PROFILE_MAX_AGE.Milliseconds(),
+		IsClaudeProfileFresh:     isProfileFresh,
 		IsClaudeResetGrantsFresh: isResetGrantsFresh,
+		ClaudeResetGrants:        resetGrants,
 	}
 }
 
 // recordSupplementary stamps the supplementary reads a usable reading just made. A grants listing
-// that failed enters a short failure cooldown and keeps its error code rather than locking out
-// retries for the full hour-long success TTL.
+// that failed enters a short failure cooldown and keeps its error code without discarding the
+// last successful grant list, while a successful observation updates both timestamp and grants.
 func (g *quotaProviderGate) recordSupplementary(authIndex string, options quota.ReadOptions, reading *quota.NormalizedQuota, nowMS int64) {
 	if isUsable, _ := quota.ReadOutcome(reading, nil); !isUsable {
 		return
@@ -158,8 +179,9 @@ func (g *quotaProviderGate) recordSupplementary(authIndex string, options quota.
 		if reading.ResetGrantsError != "" {
 			reads.resetGrantsFailedAtMS = nowMS
 			reads.resetGrantsError = reading.ResetGrantsError
-		} else {
+		} else if reading.ResetGrantsObserved {
 			reads.resetGrantsAtMS = nowMS
+			reads.resetGrants = quota.CloneClaudeResetGrants(reading.ResetGrants)
 			reads.resetGrantsFailedAtMS = 0
 			reads.resetGrantsError = ""
 		}

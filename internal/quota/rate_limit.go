@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,13 +27,44 @@ type RateLimitSignal struct {
 	RetryAfter time.Duration
 }
 
+// ClaudeResetGrantsState pairs a provider gate's remembered reset-grants result
+// with its observed status and error code so queued or retrying reads carry the
+// newest grant observation rather than an older prior snapshot.
+type ClaudeResetGrantsState struct {
+	Grants   []ClaudeResetGrant
+	Observed bool
+	Error    string
+}
+
+// CloneClaudeResetGrants returns a deep copy of grants so cached gate state and
+// callers never share mutable slice or pointer fields.
+func CloneClaudeResetGrants(grants []ClaudeResetGrant) []ClaudeResetGrant {
+	if grants == nil {
+		return nil
+	}
+	cloned := make([]ClaudeResetGrant, len(grants))
+	for i, grant := range grants {
+		if grant.EndsAtMS != nil {
+			endsAtMS := *grant.EndsAtMS
+			grant.EndsAtMS = &endsAtMS
+		}
+		grant.Clears = slices.Clone(grant.Clears)
+		cloned[i] = grant
+	}
+	return cloned
+}
+
 // ReadOptions names the supplementary reads a refresh may leave out because the caller holds a
 // recent answer for them. The zero value reads everything.
 type ReadOptions struct {
 	// IsClaudeProfileFresh reuses the prior reading's plan instead of reading the profile.
 	IsClaudeProfileFresh bool
-	// IsClaudeResetGrantsFresh carries the prior reading's reset grants instead of listing them.
+	// IsClaudeResetGrantsFresh carries the cached reset grants instead of listing them.
 	IsClaudeResetGrantsFresh bool
+	// ClaudeResetGrants is the gate's last known grant state for this credential. When
+	// IsClaudeResetGrantsFresh is true it is reused directly; when false it serves as the
+	// fallback preserved on a failed grants read, superseding an older prior snapshot.
+	ClaudeResetGrants *ClaudeResetGrantsState
 }
 
 // RateLimitedError is a read the provider refused with a rate limit. Its text is the same

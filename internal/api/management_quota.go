@@ -250,13 +250,7 @@ func (h *Handler) refreshQuotaReadingWithPolicy(ctx context.Context, svc *quota.
 	// successful one, and completion order would let it report the credential as broken.
 	attemptedAtMS := svc.Now().UnixMilli()
 	refreshed, err := h.readThroughGate(ctx, svc, file, prior, isAutomatic, func(options quota.ReadOptions) (*quota.NormalizedQuota, error) {
-		reading, err := svc.RefreshCredentialQuotaWith(ctx, file, prior, options)
-		if err == nil && reading != nil && options.IsClaudeResetGrantsFresh {
-			// Sync from the gate while the provider slot is held so a concurrent read that
-			// finished during the wait cannot leave a stale grants error on this response.
-			reading.ResetGrantsError = h.quotaReadGates.claudeResetGrantsError(strings.TrimSpace(file.AuthIndex))
-		}
-		return reading, err
+		return svc.RefreshCredentialQuotaWith(ctx, file, prior, options)
 	})
 	if refreshed != nil && refreshed.IsDeferred {
 		return refreshed, err

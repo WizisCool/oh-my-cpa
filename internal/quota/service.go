@@ -444,15 +444,22 @@ func (s *Service) RefreshCredentialQuotaWith(ctx context.Context, file managemen
 				// Grant listing is supplementary: a failed, refused or malformed
 				// grants read preserves prior grants and records a short error
 				// code without failing the quota reading itself.
-				if options.IsClaudeResetGrantsFresh && prior != nil {
-					result.ResetGrants = prior.ResetGrants
+				if options.IsClaudeResetGrantsFresh && options.ClaudeResetGrants != nil {
+					result.ResetGrants = CloneClaudeResetGrants(options.ClaudeResetGrants.Grants)
+					result.ResetGrantsObserved = options.ClaudeResetGrants.Observed
+					result.ResetGrantsError = options.ClaudeResetGrants.Error
+				} else if options.IsClaudeResetGrantsFresh && prior != nil {
+					result.ResetGrants = CloneClaudeResetGrants(prior.ResetGrants)
 					result.ResetGrantsObserved = prior.ResetGrantsObserved
 					result.ResetGrantsError = prior.ResetGrantsError
 				} else {
 					grants, grantsErr := s.fetchClaudeResetGrants(ctx, file)
 					if grantsErr != "" {
-						if prior != nil {
-							result.ResetGrants = prior.ResetGrants
+						if options.ClaudeResetGrants != nil && options.ClaudeResetGrants.Observed {
+							result.ResetGrants = CloneClaudeResetGrants(options.ClaudeResetGrants.Grants)
+							result.ResetGrantsObserved = true
+						} else if prior != nil {
+							result.ResetGrants = CloneClaudeResetGrants(prior.ResetGrants)
 							result.ResetGrantsObserved = prior.ResetGrantsObserved
 						}
 						result.ResetGrantsError = grantsErr
@@ -516,6 +523,16 @@ func (s *Service) RefreshCredentialQuotaWith(ctx context.Context, file managemen
 
 	if fetchErr != nil {
 		applyReadFailure(result, prior, fetchErr)
+		if stdProvider == "claude" && options.IsClaudeResetGrantsFresh && options.ClaudeResetGrants != nil {
+			// Keep grants, observed status, and error paired from the same gate
+			// observation even when primary usage fails, while preserving stale
+			// status and the prior reading's observation time.
+			if options.ClaudeResetGrants.Observed {
+				result.ResetGrants = CloneClaudeResetGrants(options.ClaudeResetGrants.Grants)
+				result.ResetGrantsObserved = true
+			}
+			result.ResetGrantsError = options.ClaudeResetGrants.Error
+		}
 	} else if len(result.Windows) == 0 {
 		// The read succeeded and the provider published no window. Recording that separately is
 		// what keeps the console from reporting the credential as one nobody has read and asking

@@ -1155,3 +1155,154 @@ func TestRefreshClaudeResetGrantsPreservesPriorOnFailureAndSpacesRequest(t *test
 		t.Fatalf("canceled grants delay returned (%q, %v), want immediate upstream_error", errCode, time.Since(start))
 	}
 }
+
+func TestRefreshClaudeResetGrantsWithGateState(t *testing.T) {
+	file := management.AuthFile{AuthIndex: "cl-gate", Name: "claude.json", Type: "claude", Provider: "claude"}
+	rem := 70.0
+	stalePrior := &NormalizedQuota{
+		AuthIndex:           "cl-gate",
+		Provider:            "claude",
+		Windows:             []QuotaWindow{{ID: "five_hour", RemainingPercent: &rem}},
+		ResetGrants:         []ClaudeResetGrant{{ID: "old-grant", ResetsTotal: 2, ResetsLeft: 1, Clears: []string{"five_hour"}}},
+		ResetGrantsObserved: true,
+		ResetGrantsError:    ClaudeResetGrantsErrorRateLimited,
+	}
+
+	grantsCalls := 0
+	client := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+		switch {
+		case strings.Contains(req.URL, "cedar_ember"):
+			grantsCalls++
+			return management.ApiCallResponse{StatusCode: http.StatusTooManyRequests, Body: json.RawMessage(`{"error":"rate_limited"}`)}, nil
+		case strings.Contains(req.URL, "oauth/usage"):
+			return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(`{"five_hour":{"utilization":20}}`)}, nil
+		case strings.Contains(req.URL, "oauth/profile"):
+			return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(`{"account":{"has_claude_pro":true}}`)}, nil
+		}
+		return management.ApiCallResponse{StatusCode: http.StatusNotFound}, nil
+	}}
+	svc := NewService(client).WithClaudeResetGrantsDelay(0)
+
+	// Fresh gate state overrides stale prior grants/error and skips upstream grants.
+	endsAtMS := int64(1776000000000)
+	cached := &ClaudeResetGrantsState{
+		Grants:   []ClaudeResetGrant{{ID: "grant-1", ResetsTotal: 2, ResetsLeft: 1, EndsAtMS: &endsAtMS, Clears: []string{"five_hour"}}},
+		Observed: true,
+	}
+	res, err := svc.RefreshCredentialQuotaWith(context.Background(), file, stalePrior, ReadOptions{
+		IsClaudeProfileFresh:     true,
+		IsClaudeResetGrantsFresh: true,
+		ClaudeResetGrants:        cached,
+	})
+	if err != nil {
+		t.Fatalf("RefreshCredentialQuotaWith error: %v", err)
+	}
+	if grantsCalls != 0 {
+		t.Fatalf("grantsCalls = %d, want 0 when fresh", grantsCalls)
+	}
+	if len(res.ResetGrants) != 1 || res.ResetGrants[0].ID != "grant-1" || !res.ResetGrantsObserved || res.ResetGrantsError != "" {
+		t.Fatalf("fresh cached result = grants:%+v observed:%v err:%q, want grant-1", res.ResetGrants, res.ResetGrantsObserved, res.ResetGrantsError)
+	}
+	// Mutating the returned grant must not mutate the gate's cached copy.
+	*res.ResetGrants[0].EndsAtMS = 0
+	res.ResetGrants[0].Clears[0] = "mutated"
+	if *cached.Grants[0].EndsAtMS != 1776000000000 || cached.Grants[0].Clears[0] != "five_hour" {
+		t.Fatalf("cached grant mutated through returned reading: %+v", cached.Grants[0])
+	}
+
+	// Fresh confirmed empty gate state overrides stale nonempty prior and also works with nil prior.
+	for name, prior := range map[string]*NormalizedQuota{"stale prior": stalePrior, "nil prior": nil} {
+		emptyRes, err := svc.RefreshCredentialQuotaWith(context.Background(), file, prior, ReadOptions{
+			IsClaudeProfileFresh:     prior != nil,
+			IsClaudeResetGrantsFresh: true,
+			ClaudeResetGrants:        &ClaudeResetGrantsState{Grants: []ClaudeResetGrant{}, Observed: true},
+		})
+		if err != nil {
+			t.Fatalf("%s: RefreshCredentialQuotaWith error: %v", name, err)
+		}
+		if len(emptyRes.ResetGrants) != 0 || !emptyRes.ResetGrantsObserved || emptyRes.ResetGrantsError != "" {
+			t.Fatalf("%s: empty cached result = grants:%+v observed:%v err:%q, want observed empty list", name, emptyRes.ResetGrants, emptyRes.ResetGrantsObserved, emptyRes.ResetGrantsError)
+		}
+	}
+	if grantsCalls != 0 {
+		t.Fatalf("grantsCalls after fresh empty reads = %d, want 0", grantsCalls)
+	}
+
+	// On a failed re-fetch, an observed gate state (even empty) supersedes an older stale prior.
+	failedRes, err := svc.RefreshCredentialQuotaWith(context.Background(), file, stalePrior, ReadOptions{
+		IsClaudeProfileFresh:     true,
+		IsClaudeResetGrantsFresh: false,
+		ClaudeResetGrants:        &ClaudeResetGrantsState{Grants: []ClaudeResetGrant{}, Observed: true},
+	})
+	if err != nil {
+		t.Fatalf("failed re-fetch error: %v", err)
+	}
+	if grantsCalls != 1 {
+		t.Fatalf("grantsCalls = %d, want 1", grantsCalls)
+	}
+	if len(failedRes.ResetGrants) != 0 || !failedRes.ResetGrantsObserved || failedRes.ResetGrantsError != ClaudeResetGrantsErrorRateLimited {
+		t.Fatalf("failed re-fetch result = grants:%+v observed:%v err:%q, want observed empty list with rate_limited", failedRes.ResetGrants, failedRes.ResetGrantsObserved, failedRes.ResetGrantsError)
+	}
+
+	// When primary usage fails on a queued refresh whose prior carried an obsolete grants list/error,
+	// fresh gate state keeps grants, observed status, and error paired from the same observation
+	// while preserving stale status and ObservedAtMS.
+	priorObservedAtMS := int64(1775000000000)
+	stalePrior.ObservedAtMS = priorObservedAtMS
+	usageFailClient := &mockCPAClient{apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+		if strings.Contains(req.URL, "oauth/usage") {
+			return management.ApiCallResponse{StatusCode: http.StatusInternalServerError, Body: json.RawMessage(`{"error":"server_error"}`)}, nil
+		}
+		return management.ApiCallResponse{StatusCode: http.StatusOK, Body: json.RawMessage(`{"account":{"has_claude_pro":true}}`)}, nil
+	}}
+	usageFailSvc := NewService(usageFailClient).WithClaudeResetGrantsDelay(0)
+
+	usageFailedRes, err := usageFailSvc.RefreshCredentialQuotaWith(context.Background(), file, stalePrior, ReadOptions{
+		IsClaudeProfileFresh:     true,
+		IsClaudeResetGrantsFresh: true,
+		ClaudeResetGrants:        &ClaudeResetGrantsState{Grants: []ClaudeResetGrant{{ID: "grant-1"}}, Observed: true, Error: ""},
+	})
+	if err != nil {
+		t.Fatalf("usage failure error: %v", err)
+	}
+	if usageFailedRes.Status != "stale" || usageFailedRes.ObservedAtMS != priorObservedAtMS ||
+		!usageFailedRes.ResetGrantsObserved || len(usageFailedRes.ResetGrants) != 1 || usageFailedRes.ResetGrants[0].ID != "grant-1" ||
+		usageFailedRes.ResetGrantsError != "" {
+		t.Fatalf("usage failure result = status:%q observed_at_ms:%d grants:%+v observed:%v err:%q, want stale at %d with grant-1 and empty error",
+			usageFailedRes.Status, usageFailedRes.ObservedAtMS, usageFailedRes.ResetGrants, usageFailedRes.ResetGrantsObserved, usageFailedRes.ResetGrantsError, priorObservedAtMS)
+	}
+
+	// Observed empty gate state also prevents old-grant from reappearing when primary usage fails.
+	usageFailedEmptyRes, err := usageFailSvc.RefreshCredentialQuotaWith(context.Background(), file, stalePrior, ReadOptions{
+		IsClaudeProfileFresh:     true,
+		IsClaudeResetGrantsFresh: true,
+		ClaudeResetGrants:        &ClaudeResetGrantsState{Grants: []ClaudeResetGrant{}, Observed: true, Error: ""},
+	})
+	if err != nil {
+		t.Fatalf("usage failure empty-grants error: %v", err)
+	}
+	if usageFailedEmptyRes.Status != "stale" || usageFailedEmptyRes.ObservedAtMS != priorObservedAtMS ||
+		!usageFailedEmptyRes.ResetGrantsObserved || len(usageFailedEmptyRes.ResetGrants) != 0 ||
+		usageFailedEmptyRes.ResetGrantsError != "" {
+		t.Fatalf("usage failure empty result = status:%q observed_at_ms:%d grants:%+v observed:%v err:%q, want stale at %d with observed empty grants",
+			usageFailedEmptyRes.Status, usageFailedEmptyRes.ObservedAtMS, usageFailedEmptyRes.ResetGrants, usageFailedEmptyRes.ResetGrantsObserved, usageFailedEmptyRes.ResetGrantsError, priorObservedAtMS)
+	}
+
+	// A failure-only gate state (Observed: false) retains prior observed grants while surfacing the gate error.
+	priorWithoutErr := *stalePrior
+	priorWithoutErr.ResetGrantsError = ""
+	usageFailedCooldownRes, err := usageFailSvc.RefreshCredentialQuotaWith(context.Background(), file, &priorWithoutErr, ReadOptions{
+		IsClaudeProfileFresh:     true,
+		IsClaudeResetGrantsFresh: true,
+		ClaudeResetGrants:        &ClaudeResetGrantsState{Observed: false, Error: ClaudeResetGrantsErrorRateLimited},
+	})
+	if err != nil {
+		t.Fatalf("usage failure cooldown error: %v", err)
+	}
+	if usageFailedCooldownRes.Status != "stale" || usageFailedCooldownRes.ObservedAtMS != priorObservedAtMS ||
+		!usageFailedCooldownRes.ResetGrantsObserved || len(usageFailedCooldownRes.ResetGrants) != 1 || usageFailedCooldownRes.ResetGrants[0].ID != "old-grant" ||
+		usageFailedCooldownRes.ResetGrantsError != ClaudeResetGrantsErrorRateLimited {
+		t.Fatalf("usage failure cooldown result = status:%q observed_at_ms:%d grants:%+v observed:%v err:%q, want stale at %d retaining old-grant with rate_limited",
+			usageFailedCooldownRes.Status, usageFailedCooldownRes.ObservedAtMS, usageFailedCooldownRes.ResetGrants, usageFailedCooldownRes.ResetGrantsObserved, usageFailedCooldownRes.ResetGrantsError, priorObservedAtMS)
+	}
+}
