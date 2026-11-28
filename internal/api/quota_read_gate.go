@@ -64,6 +64,10 @@ func (g *quotaReadGates) claudeResetGrantsError(authIndex string) string {
 	return g.claudeGate().resetGrantsError(authIndex)
 }
 
+func (g *quotaReadGates) claudeResetGrantsErrorForFile(file management.AuthFile) string {
+	return g.claudeGate().resetGrantsErrorForFile(file)
+}
+
 // quotaProviderGate bounds one provider's reads and remembers its rate limits. It lives in
 // memory: a restart forgets a pause, and the first read after it learns the limit again.
 type quotaProviderGate struct {
@@ -76,9 +80,60 @@ type quotaProviderGate struct {
 	supplementary map[string]quotaSupplementaryReads
 }
 
+type quotaCredentialIdentity struct {
+	id      string
+	name    string
+	email   string
+	account string
+}
+
+func credentialIdentityOf(file management.AuthFile) quotaCredentialIdentity {
+	return quotaCredentialIdentity{
+		id:      strings.TrimSpace(file.ID),
+		name:    strings.TrimSpace(file.Name),
+		email:   strings.TrimSpace(file.Email),
+		account: strings.TrimSpace(file.Account),
+	}
+}
+
+func (id quotaCredentialIdentity) matches(other quotaCredentialIdentity) bool {
+	if id.id != "" && other.id != "" && id.id != other.id {
+		return false
+	}
+	if id.name != "" && other.name != "" && id.name != other.name {
+		return false
+	}
+	if id.email != "" && other.email != "" && !strings.EqualFold(id.email, other.email) {
+		return false
+	}
+	if id.account != "" && other.account != "" && id.account != other.account {
+		return false
+	}
+	return true
+}
+
+func (id quotaCredentialIdentity) merge(other quotaCredentialIdentity) quotaCredentialIdentity {
+	if id.id == "" {
+		id.id = other.id
+	}
+	if id.name == "" {
+		id.name = other.name
+	}
+	if id.email == "" {
+		id.email = other.email
+	}
+	if id.account == "" {
+		id.account = other.account
+	}
+	return id
+}
+
 type quotaSupplementaryReads struct {
+	identity              quotaCredentialIdentity
 	profileAtMS           int64
 	resetGrantsAtMS       int64
+	resetGrants           []quota.ClaudeResetGrant
+	resetGrantsObserved   bool
 	resetGrantsFailedAtMS int64
 	resetGrantsError      string
 }
@@ -124,33 +179,68 @@ func (g *quotaProviderGate) scheduledReadAt(authIndex string) int64 {
 	return max(g.pausedUntilMS, g.backoffs[authIndex].untilMS)
 }
 
-// readOptions leaves out the supplementary reads whose last answer is recent and still carried
-// by prior. A prior plan with no type came from a failed profile read and is read again.
-func (g *quotaProviderGate) readOptions(authIndex string, prior *quota.NormalizedQuota, nowMS int64) quota.ReadOptions {
-	if prior == nil {
-		return quota.ReadOptions{}
-	}
+// readOptions leaves out the supplementary reads whose last answer is recent. Profile reuse
+// requires a typed plan on prior; reset-grants reuse pairs the gate's freshness window with the
+// gate's last successful grant observation (and any active failure code) so a queued refresh
+// carrying an older prior snapshot cannot regress reset grants. When CPA swaps another
+// credential into the same auth_index, cached supplementary state for that index is dropped.
+func (g *quotaProviderGate) readOptions(authIndex string, file management.AuthFile, prior *quota.NormalizedQuota, nowMS int64) quota.ReadOptions {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	reads := g.supplementary[authIndex]
-	isResetGrantsFresh := (reads.resetGrantsAtMS > 0 && nowMS-reads.resetGrantsAtMS < QUOTA_CLAUDE_RESET_GRANTS_MAX_AGE.Milliseconds()) ||
-		(reads.resetGrantsFailedAtMS > 0 && nowMS-reads.resetGrantsFailedAtMS < QUOTA_CLAUDE_RESET_GRANTS_FAILURE_COOLDOWN.Milliseconds())
+	identity := credentialIdentityOf(file)
+	reads, ok := g.supplementary[authIndex]
+	if ok && !reads.identity.matches(identity) {
+		delete(g.supplementary, authIndex)
+		reads = quotaSupplementaryReads{}
+	}
+	isProfileFresh := prior != nil && prior.Plan != nil && prior.Plan.PlanType != "" &&
+		reads.profileAtMS > 0 && nowMS-reads.profileAtMS < QUOTA_CLAUDE_PROFILE_MAX_AGE.Milliseconds()
+	isResetGrantsSuccessFresh := reads.resetGrantsAtMS > 0 && nowMS-reads.resetGrantsAtMS < QUOTA_CLAUDE_RESET_GRANTS_MAX_AGE.Milliseconds()
+	isResetGrantsFailureFresh := reads.resetGrantsFailedAtMS > 0 && nowMS-reads.resetGrantsFailedAtMS < QUOTA_CLAUDE_RESET_GRANTS_FAILURE_COOLDOWN.Milliseconds()
+	isResetGrantsFresh := isResetGrantsSuccessFresh || isResetGrantsFailureFresh
+
+	var resetGrants *quota.ClaudeResetGrantsState
+	switch {
+	case reads.resetGrantsAtMS > 0:
+		resetGrants = &quota.ClaudeResetGrantsState{
+			Grants:   quota.CloneClaudeResetGrants(reads.resetGrants),
+			Observed: true,
+			Error:    reads.resetGrantsError,
+		}
+	case isResetGrantsFailureFresh:
+		state := &quota.ClaudeResetGrantsState{Error: reads.resetGrantsError}
+		if prior != nil && prior.ResetGrantsObserved {
+			state.Grants = quota.CloneClaudeResetGrants(prior.ResetGrants)
+			state.Observed = true
+		} else if reads.resetGrantsObserved {
+			state.Grants = quota.CloneClaudeResetGrants(reads.resetGrants)
+			state.Observed = true
+		}
+		resetGrants = state
+	}
 	return quota.ReadOptions{
-		IsClaudeProfileFresh:     prior.Plan != nil && prior.Plan.PlanType != "" && reads.profileAtMS > 0 && nowMS-reads.profileAtMS < QUOTA_CLAUDE_PROFILE_MAX_AGE.Milliseconds(),
+		IsClaudeProfileFresh:     isProfileFresh,
 		IsClaudeResetGrantsFresh: isResetGrantsFresh,
+		ClaudeResetGrants:        resetGrants,
 	}
 }
 
 // recordSupplementary stamps the supplementary reads a usable reading just made. A grants listing
-// that failed enters a short failure cooldown and keeps its error code rather than locking out
-// retries for the full hour-long success TTL.
-func (g *quotaProviderGate) recordSupplementary(authIndex string, options quota.ReadOptions, reading *quota.NormalizedQuota, nowMS int64) {
+// that failed enters a short failure cooldown and keeps its error code without discarding the
+// last successful grant list (also preserving any observed prior fallback during the first
+// cooldown after restart), while a successful observation updates both timestamp and grants.
+func (g *quotaProviderGate) recordSupplementary(authIndex string, file management.AuthFile, options quota.ReadOptions, reading *quota.NormalizedQuota, nowMS int64) {
 	if isUsable, _ := quota.ReadOutcome(reading, nil); !isUsable {
 		return
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	identity := credentialIdentityOf(file)
 	reads := g.supplementary[authIndex]
+	if !reads.identity.matches(identity) {
+		reads = quotaSupplementaryReads{}
+	}
+	reads.identity = reads.identity.merge(identity)
 	if !options.IsClaudeProfileFresh {
 		reads.profileAtMS = nowMS
 	}
@@ -158,8 +248,14 @@ func (g *quotaProviderGate) recordSupplementary(authIndex string, options quota.
 		if reading.ResetGrantsError != "" {
 			reads.resetGrantsFailedAtMS = nowMS
 			reads.resetGrantsError = reading.ResetGrantsError
-		} else {
+			if reads.resetGrantsAtMS == 0 && reading.ResetGrantsObserved {
+				reads.resetGrants = quota.CloneClaudeResetGrants(reading.ResetGrants)
+				reads.resetGrantsObserved = true
+			}
+		} else if reading.ResetGrantsObserved {
 			reads.resetGrantsAtMS = nowMS
+			reads.resetGrants = quota.CloneClaudeResetGrants(reading.ResetGrants)
+			reads.resetGrantsObserved = true
 			reads.resetGrantsFailedAtMS = 0
 			reads.resetGrantsError = ""
 		}
@@ -171,6 +267,20 @@ func (g *quotaProviderGate) resetGrantsError(authIndex string) string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.supplementary[authIndex].resetGrantsError
+}
+
+func (g *quotaProviderGate) resetGrantsErrorForFile(file management.AuthFile) string {
+	authIndex := strings.TrimSpace(file.AuthIndex)
+	if authIndex == "" {
+		return ""
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	reads, ok := g.supplementary[authIndex]
+	if !ok || !reads.identity.matches(credentialIdentityOf(file)) {
+		return ""
+	}
+	return reads.resetGrantsError
 }
 
 // observe updates the pacing from one read's outcome. A refused read pauses the provider and
@@ -217,8 +327,9 @@ func (g *quotaProviderGate) forgetExcept(current map[string]management.AuthFile)
 			delete(g.backoffs, authIndex)
 		}
 	}
-	for authIndex := range g.supplementary {
-		if _, ok := current[authIndex]; !ok {
+	for authIndex, reads := range g.supplementary {
+		file, ok := current[authIndex]
+		if !ok || !reads.identity.matches(credentialIdentityOf(file)) {
 			delete(g.supplementary, authIndex)
 		}
 	}
@@ -252,12 +363,12 @@ func (h *Handler) readThroughGate(ctx context.Context, svc *quota.Service, file 
 	if untilMS := gate.scheduledReadAt(authIndex); isAutomatic && untilMS > h.now().UnixMilli() {
 		return svc.DeferredReading(file, prior, time.UnixMilli(untilMS)), nil
 	}
-	options := gate.readOptions(authIndex, prior, h.now().UnixMilli())
+	options := gate.readOptions(authIndex, file, prior, h.now().UnixMilli())
 	reading, err := read(options)
 	if err == nil {
 		nowMS := h.now().UnixMilli()
 		gate.observe(authIndex, reading, nowMS)
-		gate.recordSupplementary(authIndex, options, reading, nowMS)
+		gate.recordSupplementary(authIndex, file, options, reading, nowMS)
 	}
 	return reading, err
 }
